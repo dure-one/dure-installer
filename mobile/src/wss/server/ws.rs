@@ -1,7 +1,7 @@
 //! WebSocket handshake and message handling for the HTTPS/WSS server.
 
-use asupersync::{Cx, io::AsyncWriteExt};
-use async_tungstenite::{WebSocketStream, asupersync::AsupersyncAdapter, tungstenite::Message};
+use async_tungstenite::{WebSocketStream, tungstenite::Message};
+use futures::io::AsyncWriteExt;
 use base64::Engine;
 use futures::{FutureExt, SinkExt, StreamExt};
 use std::io;
@@ -57,15 +57,14 @@ pub async fn perform_websocket_handshake<S: AsyncWriteExt + Unpin>(
 }
 
 pub async fn handle_websocket<S>(
-    cx: &Cx,
-    ws_stream: WebSocketStream<AsupersyncAdapter<S>>,
+    ws_stream: WebSocketStream<S>,
     peer_addr: std::net::SocketAddr,
     session_id: String,
     settings: ServerSettings,
     stats: Stats,
 ) -> io::Result<()>
 where
-    S: asupersync::io::AsyncReadExt + asupersync::io::AsyncWriteExt + Unpin + Send + 'static,
+    S: futures::io::AsyncRead + futures::io::AsyncWrite + Unpin + Send + 'static,
 {
     use crate::storage::models::session;
 
@@ -101,8 +100,8 @@ where
 
         let mut next_msg = ws_receiver.next().fuse();
         let mut ping_timer =
-            asupersync::time::sleep(cx.now(), Duration::from_secs(settings.ping_interval)).fuse();
-        let mut idle_timer = asupersync::time::sleep(cx.now(), remaining_timeout).fuse();
+            smol::Timer::after(Duration::from_secs(settings.ping_interval)).fuse();
+        let mut idle_timer = smol::Timer::after(remaining_timeout).fuse();
 
         futures::select! {
             msg = next_msg => {

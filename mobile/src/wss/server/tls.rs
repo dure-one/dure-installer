@@ -1,8 +1,9 @@
 //! TLS certificate and key loading for the HTTPS/WSS server.
 
-use asupersync::tls::{CertificateChain, PrivateKey, TlsAcceptor};
+use async_tls::TlsAcceptor;
 use std::io;
 use std::path::Path;
+use std::sync::Arc;
 
 fn tls_err(e: impl std::fmt::Display) -> io::Error {
     io::Error::other(e.to_string())
@@ -10,9 +11,30 @@ fn tls_err(e: impl std::fmt::Display) -> io::Error {
 
 /// Build a `TlsAcceptor` from PEM certificate + key files.
 pub fn create_acceptor(cert_path: &Path, key_path: &Path) -> io::Result<TlsAcceptor> {
-    let chain = CertificateChain::from_pem_file(cert_path).map_err(tls_err)?;
-    let key = PrivateKey::from_pem_file(key_path).map_err(tls_err)?;
-    TlsAcceptor::builder(chain, key).build().map_err(tls_err)
+    // Install the ring crypto provider
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // Load certificate chain
+    let cert_file = std::fs::File::open(cert_path)?;
+    let mut cert_reader = std::io::BufReader::new(cert_file);
+    let certs: Vec<_> = rustls_pemfile::certs(&mut cert_reader)
+        .collect::<Result<_, _>>()
+        .map_err(tls_err)?;
+
+    // Load private key
+    let key_file = std::fs::File::open(key_path)?;
+    let mut key_reader = std::io::BufReader::new(key_file);
+    let key = rustls_pemfile::private_key(&mut key_reader)
+        .map_err(tls_err)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "No private key found"))?;
+
+    // Build server config
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(tls_err)?;
+
+    Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 /// Generate a self-signed certificate + key for `domain` and write them to
