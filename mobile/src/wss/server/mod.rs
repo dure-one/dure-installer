@@ -431,13 +431,12 @@ async fn handle_connection(
                     perform_websocket_handshake(&mut plain_stream, &request, &settings.server_id)
                         .await?;
                 let ws_stream = WebSocketStream::from_raw_socket(
-                    AsupersyncAdapter::new(plain_stream),
+                    plain_stream,
                     Role::Server,
                     None,
                 )
                 .await;
                 handle_websocket(
-                    &cx,
                     ws_stream,
                     peer_addr,
                     session_id,
@@ -447,7 +446,6 @@ async fn handle_connection(
                 .await
             } else {
                 handle_https_request(
-                    &cx,
                     plain_stream,
                     request,
                     settings,

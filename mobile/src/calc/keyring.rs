@@ -83,11 +83,11 @@ pub fn get_default_kppubkey_path() -> Result<PathBuf> {
     Ok(get_config_dir()?.join(DEFAULT_KPPUBKEY_NAME))
 }
 
-/// Generate Ed25519 key pair if it doesn't exist
+/// Generate Ed25519 key pair if it doesn't exist (using go-webauthn)
 ///
 /// Uses go-webauthn crypto bridge to generate keys.
-/// Only available on desktop and Android (not WASM).
-#[cfg(not(target_arch = "wasm32"))]
+/// Available on desktop (except OpenBSD) and Android.
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "openbsd")))]
 pub fn ensure_kpkey_exists() -> Result<PathBuf> {
     let kpkey_path = get_default_kpkey_path()?;
     let kppubkey_path = get_default_kppubkey_path()?;
@@ -129,6 +129,22 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
     eprintln!("  KPPubKey:        {}", kppubkey_path.display());
 
     Ok(kpkey_path)
+}
+
+/// OpenBSD stub - key generation requires go-webauthn which is unavailable
+#[cfg(target_os = "openbsd")]
+pub fn ensure_kpkey_exists() -> Result<PathBuf> {
+    let kpkey_path = get_default_kpkey_path()?;
+
+    // If KPKey already exists, return it
+    if kpkey_path.exists() {
+        return Ok(kpkey_path);
+    }
+
+    anyhow::bail!(
+        "KPKey generation not supported on OpenBSD (go-webauthn unavailable). \
+         Please import a KPKey from another platform or generate manually."
+    );
 }
 
 /// WASM stub - key generation not supported

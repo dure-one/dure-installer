@@ -89,7 +89,8 @@ fn create_tls_connector_insecure() -> TlsConnector {
         .with_custom_certificate_verifier(Arc::new(AcceptAnyCert))
         .with_no_client_auth();
 
-    TlsConnector::from(Arc::new(config))
+    let arc_config: Arc<ClientConfig> = Arc::new(config);
+    TlsConnector::from(arc_config)
 }
 
 type WsStream = async_tungstenite::WebSocketStream<async_tls::client::TlsStream<TcpStream>>;
@@ -156,8 +157,8 @@ fn create_tls_connector() -> io::Result<TlsConnector> {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let mut root_store = rustls::RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs()
-        .map_err(|e| io::Error::other(format!("Load native certs: {}", e)))? {
+    let cert_result = rustls_native_certs::load_native_certs();
+    for cert in cert_result.certs {
         root_store.add(cert)
             .map_err(|e| io::Error::other(format!("Add cert: {}", e)))?;
     }
@@ -166,7 +167,8 @@ fn create_tls_connector() -> io::Result<TlsConnector> {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    Ok(TlsConnector::from(Arc::new(config)))
+    let arc_config: Arc<rustls::ClientConfig> = Arc::new(config);
+    Ok(TlsConnector::from(arc_config))
 }
 
 async fn https_get_request(
@@ -356,7 +358,7 @@ async fn handle_websocket_connection(
 
         // Wait for WS message or a 100 ms tick, whichever comes first.
         let mut recv_fut = ws_receiver.next().fuse();
-        let mut tick = smol::Timer::after(Duration::from_millis(100)).fuse();
+        let mut tick = FutureExt::fuse(smol::Timer::after(Duration::from_millis(100)));
 
         futures::select! {
             msg = recv_fut => {

@@ -98,10 +98,10 @@ where
             Duration::from_millis(1)
         };
 
-        let mut next_msg = ws_receiver.next().fuse();
+        let mut next_msg = FutureExt::fuse(ws_receiver.next());
         let mut ping_timer =
-            smol::Timer::after(Duration::from_secs(settings.ping_interval)).fuse();
-        let mut idle_timer = smol::Timer::after(remaining_timeout).fuse();
+            FutureExt::fuse(smol::Timer::after(Duration::from_secs(settings.ping_interval)));
+        let mut idle_timer = FutureExt::fuse(smol::Timer::after(remaining_timeout));
 
         futures::select! {
             msg = next_msg => {

@@ -34,7 +34,7 @@ pub fn create_acceptor(cert_path: &Path, key_path: &Path) -> io::Result<TlsAccep
         .with_single_cert(certs, key)
         .map_err(tls_err)?;
 
-    Ok(TlsAcceptor::from(Arc::new(config)))
+    Ok(TlsAcceptor::from(config))
 }
 
 /// Generate a self-signed certificate + key for `domain` and write them to

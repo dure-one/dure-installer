@@ -37,8 +37,13 @@ const GCP_SCOPES: &[&str] = &[
 // These credentials are embedded at compile-time from environment variables.
 // Development: Load from .env file via build.rs
 // CI/CD: Load from GitHub Secrets via build.rs
-const OAUTH_CLIENT_ID: &str = env!("GOOGLE_OAUTH_CLIENT_ID");
-const OAUTH_CLIENT_SECRET: &str = env!("GOOGLE_OAUTH_CLIENT_SECRET");
+fn get_oauth_client_id() -> &'static str {
+    option_env!("GOOGLE_OAUTH_CLIENT_ID").unwrap_or("")
+}
+
+fn get_oauth_client_secret() -> &'static str {
+    option_env!("GOOGLE_OAUTH_CLIENT_SECRET").unwrap_or("")
+}
 
 /// OAuth result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,8 +68,8 @@ impl OAuthHandler {
     /// - CI/CD: GitHub Secrets (via build.rs)
     pub fn default() -> Self {
         Self {
-            client_id: OAUTH_CLIENT_ID.to_string(),
-            client_secret: OAUTH_CLIENT_SECRET.to_string(),
+            client_id: get_oauth_client_id().to_string(),
+            client_secret: get_oauth_client_secret().to_string(),
         }
     }
 
