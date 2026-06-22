@@ -13,9 +13,6 @@ serde = ["dep:serde", "dep:serde_json"]
 spreadsheet = ["egui-material3/spreadsheet"]
 # GCP integration (disabled by default until dependencies are available)
 gcp = []
-# Asupersync TLS features
-asupersync-tls = ["asupersync/tls"]
-asupersync-native-roots = ["asupersync/tls-native-roots"]
 # Database backend features
 postgres = ["diesel/postgres", "diesel/returning_clauses_for_sqlite_3_35"]
 
@@ -103,13 +100,17 @@ diesel_migrations = "2.3"
 # libsqlite3-hotbundle provides bundled SQLite3MultipleCiphers with encryption support
 libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
 dotenvy = "0.15"
-# Asupersync async runtime (replaces async-std, async-tls, futures-util)
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", features = ["tls", "tls-native-roots"] }
+# Smol async runtime ecosystem
+smol = "2.0"
+async-executor = "1.13"
+async-io = "2.4"
+async-net = "2.0"
+async-tls = "0.13"  # rustls-based TLS for smol
 # OpenAPI / Swagger UI
 utoipa = { version="5.4.0", features = ["macros"] }
 utoipa-swagger-ui = { version="9.0.2", features = ["vendored"] }
-# WebSocket support with asupersync (custom fork)
-async-tungstenite = { git = "https://github.com/nikescar/async-tungstenite", features = ["asupersync-runtime"] }
+# WebSocket support with smol (using async-std runtime compatibility)
+async-tungstenite = { version = "0.28", features = ["async-std-runtime"] }
 futures = "0.3"
 rcgen = "0.13"
 # Keep rustls ecosystem (asupersync uses it internally)
