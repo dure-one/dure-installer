@@ -106,7 +106,7 @@ async-executor = "1.13"
 async-io = "2.4"
 async-net = "2.0"
 async-fs = "2.1"  # Async filesystem operations
-async-tls = "0.13"  # rustls-based TLS for smol
+futures-rustls = "0.26"  # rustls-based TLS for futures-based runtimes
 async-lock = "3.4"  # Async synchronization primitives for smol
 # OpenAPI / Swagger UI
 utoipa = { version="5.4.0", features = ["macros"] }

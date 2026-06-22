@@ -27,7 +27,7 @@ pub mod webauthn;
 pub mod ws;
 
 use async_net::{TcpListener, TcpStream};
-use async_tls::TlsAcceptor;
+use futures_rustls::TlsAcceptor;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;

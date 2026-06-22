@@ -19,10 +19,11 @@
 //! ```
 
 use async_net::TcpStream;
-use async_tls::TlsConnector;
+use futures_rustls::TlsConnector;
 use async_tungstenite::{client_async, tungstenite::Message};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{FutureExt, SinkExt, StreamExt};
+use rustls::pki_types::ServerName;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -33,7 +34,7 @@ use url::Url;
 fn create_tls_connector_insecure() -> TlsConnector {
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-    use rustls::{ClientConfig, DigitallySignedStruct, Error, SignatureScheme};
+    use rustls::{DigitallySignedStruct, Error, SignatureScheme};
 
     #[derive(Debug)]
     struct AcceptAnyCert;
@@ -84,7 +85,7 @@ fn create_tls_connector_insecure() -> TlsConnector {
     // Install the ring crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let config = ClientConfig::builder()
+    let config = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(AcceptAnyCert))
         .with_no_client_auth();
@@ -92,7 +93,7 @@ fn create_tls_connector_insecure() -> TlsConnector {
     TlsConnector::from(Arc::new(config))
 }
 
-type WsStream = async_tungstenite::WebSocketStream<async_tls::client::TlsStream<TcpStream>>;
+type WsStream = async_tungstenite::WebSocketStream<futures_rustls::client::TlsStream<TcpStream>>;
 
 /// Client mode
 #[derive(Debug, Clone, PartialEq)]
@@ -189,8 +190,10 @@ async fn https_get_request(
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let mut tls_stream = connector
-        .connect(host, tcp_stream)
+        .connect(server_name, tcp_stream)
         .await?;
     eprintln!("TLS handshake completed");
 
@@ -237,8 +240,10 @@ async fn https_post_request(
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let mut tls_stream = connector
-        .connect(host, tcp_stream)
+        .connect(server_name, tcp_stream)
         .await?;
     eprintln!("TLS handshake completed");
 
@@ -280,8 +285,10 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let tls_stream = connector
-        .connect(host, tcp_stream)
+        .connect(server_name, tcp_stream)
         .await?;
     eprintln!("TLS handshake completed");
 

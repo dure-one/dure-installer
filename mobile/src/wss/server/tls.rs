@@ -1,6 +1,6 @@
 //! TLS certificate and key loading for the HTTPS/WSS server.
 
-use async_tls::TlsAcceptor;
+use futures_rustls::TlsAcceptor;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ pub fn create_acceptor(cert_path: &Path, key_path: &Path) -> io::Result<TlsAccep
         .with_single_cert(certs, key)
         .map_err(tls_err)?;
 
-    Ok(TlsAcceptor::from(config))
+    Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 /// Generate a self-signed certificate + key for `domain` and write them to
