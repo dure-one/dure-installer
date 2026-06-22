@@ -26,11 +26,8 @@ pub mod tls;
 pub mod webauthn;
 pub mod ws;
 
-use asupersync::{
-    Cx,
-    net::{TcpListener, TcpStream},
-    tls::TlsAcceptor,
-};
+use async_net::{TcpListener, TcpStream};
+use futures_rustls::TlsAcceptor;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;
@@ -360,22 +357,20 @@ pub fn generate_session_id() -> String {
     format!("session-{}-{}", timestamp, random)
 }
 
-async fn stats_reporter(cx: Cx, stats: Stats, interval_secs: u64) {
+async fn stats_reporter(stats: Stats, interval_secs: u64) {
     loop {
-        asupersync::time::sleep(cx.now(), Duration::from_secs(interval_secs)).await;
+        smol::Timer::after(Duration::from_secs(interval_secs)).await;
         stats.print_stats();
     }
 }
 
 async fn handle_connection(
-    cx: Cx,
     stream: TcpStream,
     acceptor: Option<TlsAcceptor>,
     settings: ServerSettings,
     stats: Stats,
 ) -> io::Result<()> {
     use async_tungstenite::WebSocketStream;
-    use async_tungstenite::asupersync::AsupersyncAdapter;
     use async_tungstenite::tungstenite::protocol::Role;
 
     let peer_addr = stream.peer_addr()?;
@@ -406,13 +401,12 @@ async fn handle_connection(
                     perform_websocket_handshake(&mut tls_stream, &request, &settings.server_id)
                         .await?;
                 let ws_stream = WebSocketStream::from_raw_socket(
-                    AsupersyncAdapter::new(tls_stream),
+                    tls_stream,
                     Role::Server,
                     None,
                 )
                 .await;
                 handle_websocket(
-                    &cx,
                     ws_stream,
                     peer_addr,
                     session_id,
@@ -421,7 +415,7 @@ async fn handle_connection(
                 )
                 .await
             } else {
-                handle_https_request(&cx, tls_stream, request, settings, stats.clone(), peer_addr)
+                handle_https_request( tls_stream, request, settings, stats.clone(), peer_addr)
                     .await
             }
         } else {
@@ -437,13 +431,12 @@ async fn handle_connection(
                     perform_websocket_handshake(&mut plain_stream, &request, &settings.server_id)
                         .await?;
                 let ws_stream = WebSocketStream::from_raw_socket(
-                    AsupersyncAdapter::new(plain_stream),
+                    plain_stream,
                     Role::Server,
                     None,
                 )
                 .await;
                 handle_websocket(
-                    &cx,
                     ws_stream,
                     peer_addr,
                     session_id,
@@ -453,7 +446,6 @@ async fn handle_connection(
                 .await
             } else {
                 handle_https_request(
-                    &cx,
                     plain_stream,
                     request,
                     settings,
@@ -475,7 +467,6 @@ async fn handle_connection(
 /// This is the primary entry point — both `main()` and the CLI `wss server` command
 /// funnel through here.
 pub fn run_with_args(args: RunArgs) -> io::Result<()> {
-    use asupersync::runtime::RuntimeBuilder;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let _ = env_logger::builder().format_timestamp(None).try_init();
@@ -499,30 +490,13 @@ pub fn run_with_args(args: RunArgs) -> io::Result<()> {
     std::fs::write(&pid_path, format!("{}\n{}\n{}", pid, started_at, db_path))
         .map_err(|e| io::Error::other(format!("PID file: {}", e)))?;
 
-    let rt = RuntimeBuilder::new()
-        .build()
-        .map_err(|e| io::Error::other(format!("Runtime build failed: {}", e)))?;
-
-    // Channel used to propagate the server's io::Result back to the caller.
-    let (result_tx, result_rx) = std::sync::mpsc::channel::<io::Result<()>>();
-
-    let domain_clone = domain.clone();
-    rt.handle().spawn_with_cx(move |cx| async move {
-        let result = run_server_async(
-            cx,
-            domain_clone,
-            addr,
-            db_path,
-            stats_interval,
-            download_static,
-        )
-        .await;
-        let _ = result_tx.send(result);
-    });
-
-    let result = result_rx
-        .recv()
-        .map_err(|_| io::Error::other("Server task exited unexpectedly"))?;
+    let result = smol::block_on(run_server_async(
+        domain.clone(),
+        addr,
+        db_path,
+        stats_interval,
+        download_static,
+    ));
 
     // Remove PID file on clean exit or error.
     let _ = std::fs::remove_file(&pid_path);
@@ -531,14 +505,12 @@ pub fn run_with_args(args: RunArgs) -> io::Result<()> {
 }
 
 async fn run_server_async(
-    _cx: Cx,
     domain: String,
     addr: String,
     db_path: String,
     stats_interval: u64,
     download_static: bool,
 ) -> io::Result<()> {
-    use asupersync::runtime::Runtime;
 
     let db = db::open_db(&db_path)?;
     eprintln!("✓ Database opened: {}", db_path);
@@ -679,13 +651,11 @@ async fn run_server_async(
     let stats = Stats::new();
 
     // Spawn stats reporter as a background task.
-    let rt_handle =
-        Runtime::current_handle().ok_or_else(|| io::Error::other("No runtime handle"))?;
-
     let stats_clone = stats.clone();
-    rt_handle.spawn_with_cx(move |cx2| async move {
-        stats_reporter(cx2, stats_clone, stats_interval).await;
-    });
+    smol::spawn(async move {
+        stats_reporter(stats_clone, stats_interval).await;
+    })
+    .detach();
 
     let socket_addr = addr
         .to_socket_addrs()
@@ -727,12 +697,12 @@ async fn run_server_async(
                 let settings = server_settings.clone();
                 let stats = stats.clone();
 
-                rt_handle.spawn_with_cx(move |cx3| async move {
-                    if let Err(e) = handle_connection(cx3, stream, acceptor, settings, stats).await
-                    {
+                smol::spawn(async move {
+                    if let Err(e) = handle_connection(stream, acceptor, settings, stats).await {
                         eprintln!("Connection error: {}", e);
                     }
-                });
+                })
+                .detach();
             }
             Err(e) => eprintln!("Accept error: {}", e),
         }

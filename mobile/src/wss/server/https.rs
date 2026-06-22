@@ -1,9 +1,6 @@
 //! HTTPS request parsing and dispatch for the HTTPS/WSS server.
 
-use asupersync::{
-    Cx,
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use std::collections::HashMap;
 use std::io;
 
@@ -181,7 +178,6 @@ pub fn build_http_response(
 }
 
 pub async fn handle_https_request<S>(
-    _cx: &Cx,
     mut stream: S,
     request: HttpRequest,
     settings: ServerSettings,
@@ -189,7 +185,7 @@ pub async fn handle_https_request<S>(
     peer_addr: std::net::SocketAddr,
 ) -> io::Result<()>
 where
-    S: asupersync::io::AsyncReadExt + asupersync::io::AsyncWriteExt + Unpin,
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
 {
     use crate::storage::models::session;
 

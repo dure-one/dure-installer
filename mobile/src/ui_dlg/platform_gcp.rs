@@ -1514,7 +1514,7 @@ impl GcpWizard {
     /// Generate Ed25519 SSH key pair
     /// Returns (private_key_pem, public_key_openssh, raw_private, raw_public)
     fn generate_ssh_key_pair() -> Result<(String, String, Vec<u8>, Vec<u8>), String> {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "openbsd")))]
         {
             use go_webauthn::*;
             use pollster::block_on;
@@ -1533,9 +1533,9 @@ impl GcpWizard {
             Ok((private_key, public_key, gen_resp.private_key, gen_resp.public_key))
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_arch = "wasm32", target_os = "openbsd"))]
         {
-            Err("SSH key generation not supported on WASM".to_string())
+            Err("SSH key generation not supported on this platform (go-webauthn unavailable)".to_string())
         }
     }
 

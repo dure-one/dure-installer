@@ -18,14 +18,12 @@
 //! cargo run --bin wss-client -- --url https://example.com --mode post --path /webhook/test
 //! ```
 
-use asupersync::{
-    Cx,
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-    tls::TlsConnector,
-};
+use async_net::TcpStream;
+use futures_rustls::TlsConnector;
 use async_tungstenite::{client_async, tungstenite::Message};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{FutureExt, SinkExt, StreamExt};
+use rustls::pki_types::ServerName;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -36,7 +34,7 @@ use url::Url;
 fn create_tls_connector_insecure() -> TlsConnector {
     use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-    use rustls::{ClientConfig, DigitallySignedStruct, Error, SignatureScheme};
+    use rustls::{DigitallySignedStruct, Error, SignatureScheme};
 
     #[derive(Debug)]
     struct AcceptAnyCert;
@@ -84,20 +82,18 @@ fn create_tls_connector_insecure() -> TlsConnector {
         }
     }
 
-    // Install the ring crypto provider (no-op if already installed by asupersync)
+    // Install the ring crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let config = ClientConfig::builder()
+    let config = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(AcceptAnyCert))
         .with_no_client_auth();
 
-    TlsConnector::new(config)
+    TlsConnector::from(Arc::new(config))
 }
 
-type WsStream = async_tungstenite::WebSocketStream<
-    async_tungstenite::asupersync::AsupersyncAdapter<asupersync::tls::TlsStream<TcpStream>>,
->;
+type WsStream = async_tungstenite::WebSocketStream<futures_rustls::client::TlsStream<TcpStream>>;
 
 /// Client mode
 #[derive(Debug, Clone, PartialEq)]
@@ -157,11 +153,21 @@ impl Stats {
 }
 
 fn create_tls_connector() -> io::Result<TlsConnector> {
-    TlsConnector::builder()
-        .with_native_roots()
-        .map_err(|e| io::Error::other(format!("TLS roots: {}", e)))?
-        .build()
-        .map_err(|e| io::Error::other(format!("TLS build: {}", e)))
+    // Install the ring crypto provider
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let mut root_store = rustls::RootCertStore::empty();
+    let cert_result = rustls_native_certs::load_native_certs();
+    for cert in cert_result.certs {
+        root_store.add(cert)
+            .map_err(|e| io::Error::other(format!("Add cert: {}", e)))?;
+    }
+
+    let config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
+    Ok(TlsConnector::from(Arc::new(config)))
 }
 
 async fn https_get_request(
@@ -184,10 +190,11 @@ async fn https_get_request(
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let mut tls_stream = connector
-        .connect(host, tcp_stream)
-        .await
-        .map_err(|e| io::Error::other(e))?;
+        .connect(server_name, tcp_stream)
+        .await?;
     eprintln!("TLS handshake completed");
 
     let request = format!(
@@ -233,10 +240,11 @@ async fn https_post_request(
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let mut tls_stream = connector
-        .connect(host, tcp_stream)
-        .await
-        .map_err(|e| io::Error::other(e))?;
+        .connect(server_name, tcp_stream)
+        .await?;
     eprintln!("TLS handshake completed");
 
     let request = format!(
@@ -263,8 +271,6 @@ async fn https_post_request(
 }
 
 async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
-    use async_tungstenite::asupersync::AsupersyncAdapter;
-
     let url = Url::parse(url).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let host = url
         .host_str()
@@ -279,10 +285,11 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
     } else {
         create_tls_connector()?
     };
+    let server_name = ServerName::try_from(host.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
     let tls_stream = connector
-        .connect(host, tcp_stream)
-        .await
-        .map_err(|e| io::Error::other(e))?;
+        .connect(server_name, tcp_stream)
+        .await?;
     eprintln!("TLS handshake completed");
 
     let request = async_tungstenite::tungstenite::http::Request::builder()
@@ -300,7 +307,7 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
         .body(())
         .map_err(|e| io::Error::other(e))?;
 
-    let (ws_stream, _response) = client_async(request, AsupersyncAdapter::new(tls_stream))
+    let (ws_stream, _response) = client_async(request, tls_stream)
         .await
         .map_err(|e| io::Error::other(e))?;
 
@@ -309,7 +316,6 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
 }
 
 async fn handle_websocket_connection(
-    cx: &Cx,
     ws_stream: WsStream,
     stats: Arc<Stats>,
     should_exit: Arc<AtomicBool>,
@@ -357,7 +363,7 @@ async fn handle_websocket_connection(
 
         // Wait for WS message or a 100 ms tick, whichever comes first.
         let mut recv_fut = ws_receiver.next().fuse();
-        let mut tick = asupersync::time::sleep(cx.now(), Duration::from_millis(100)).fuse();
+        let mut tick = FutureExt::fuse(smol::Timer::after(Duration::from_millis(100)));
 
         futures::select! {
             msg = recv_fut => {
@@ -392,25 +398,12 @@ async fn handle_websocket_connection(
 }
 
 pub fn main() -> io::Result<()> {
-    use asupersync::runtime::RuntimeBuilder;
-
     let _ = env_logger::builder().format_timestamp(None).try_init();
 
-    let rt = RuntimeBuilder::new()
-        .build()
-        .map_err(|e| io::Error::other(format!("Runtime build failed: {}", e)))?;
-
-    let (tx, rx) = std::sync::mpsc::channel::<io::Result<()>>();
-    rt.handle().spawn_with_cx(move |cx| async move {
-        let result = run_client(cx).await;
-        let _ = tx.send(result);
-    });
-
-    rx.recv()
-        .map_err(|_| io::Error::other("Client task exited unexpectedly"))?
+    smol::block_on(run_client())
 }
 
-async fn run_client(cx: Cx) -> io::Result<()> {
+async fn run_client() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     let mut url = String::from("https://localhost:443");
@@ -494,7 +487,7 @@ async fn run_client(cx: Cx) -> io::Result<()> {
                 Ok(ws_stream) => {
                     stats.total_connections.fetch_add(1, Ordering::Relaxed);
                     if let Err(e) =
-                        handle_websocket_connection(&cx, ws_stream, stats.clone(), should_exit)
+                        handle_websocket_connection(ws_stream, stats.clone(), should_exit)
                             .await
                     {
                         eprintln!("WebSocket error: {}", e);
@@ -517,8 +510,6 @@ pub fn run_with_args(
     body: String,
     insecure: bool,
 ) -> io::Result<()> {
-    use asupersync::runtime::RuntimeBuilder;
-
     let _ = env_logger::builder().format_timestamp(None).try_init();
 
     let client_mode = match mode {
@@ -527,12 +518,7 @@ pub fn run_with_args(
         _ => ClientMode::WebSocket,
     };
 
-    let rt = RuntimeBuilder::new()
-        .build()
-        .map_err(|e| io::Error::other(format!("Runtime build failed: {}", e)))?;
-
-    let (tx, rx) = std::sync::mpsc::channel::<io::Result<()>>();
-    rt.handle().spawn_with_cx(move |cx| async move {
+    smol::block_on(async move {
         let stats = Arc::new(Stats::new());
         let result = match client_mode {
             ClientMode::HttpGet => {
@@ -561,7 +547,7 @@ pub fn run_with_args(
                 match connect_websocket(&url, insecure).await {
                     Ok(ws_stream) => {
                         stats.total_connections.fetch_add(1, Ordering::Relaxed);
-                        handle_websocket_connection(&cx, ws_stream, stats.clone(), should_exit)
+                        handle_websocket_connection(ws_stream, stats.clone(), should_exit)
                             .await
                     }
                     Err(e) => Err(e),
@@ -569,9 +555,6 @@ pub fn run_with_args(
             }
         };
         stats.print_stats();
-        let _ = tx.send(result);
-    });
-
-    rx.recv()
-        .map_err(|_| io::Error::other("Client task exited unexpectedly"))?
+        result
+    })
 }

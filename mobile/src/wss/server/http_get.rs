@@ -13,7 +13,9 @@
 //! The build process (`build.wasm.sh`) creates compressed versions of WASM and JS files.
 //! The server automatically selects the best available compression based on client support.
 
-use asupersync::{fs, io::AsyncWriteExt};
+use async_fs as fs;
+use futures::io::AsyncWriteExt;
+use futures::StreamExt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -79,7 +81,8 @@ pub async fn download_static_files(dir: &Path) -> io::Result<()> {
     let extracted_dir = dir.join("dure-wasm-main");
     if fs::metadata(&extracted_dir).await.is_ok() {
         let mut entries = fs::read_dir(&extracted_dir).await?;
-        while let Some(entry) = entries.next_entry().await? {
+        while let Some(entry_result) = entries.next().await {
+            let entry = entry_result?;
             let dest = dir.join(entry.file_name());
             fs::rename(entry.path(), dest).await?;
         }
