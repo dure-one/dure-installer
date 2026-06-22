@@ -303,11 +303,12 @@ pub fn stop_server(domain: &str) -> Result<()> {
 
 /// Generate a unique session ID
 pub fn generate_session_id() -> String {
+    use rand::Rng;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let random = std::process::id();
+    let random: u32 = rand::thread_rng().r#gen();
     format!("session-{}-{}", timestamp, random)
 }
 

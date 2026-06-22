@@ -121,16 +121,26 @@ pub fn clear_whitelist(conn: &mut SqliteConnection) -> Result<usize> {
 mod tests {
     use super::*;
     use crate::calc::db;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn setup_test_db() -> diesel::SqliteConnection {
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-nft-{}-{}.db", std::process::id(), test_id);
+        db::set_db_path(test_db);
+        db::establish_connection()
+    }
 
     #[test]
     fn test_init_table() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_nft_table(&mut conn).unwrap();
     }
 
     #[test]
     fn test_add_and_list_ips() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_nft_table(&mut conn).unwrap();
 
         let ip1 = WhitelistedIp::new("192.168.1.1".to_string(), "Office".to_string());
@@ -145,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_remove_ip() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_nft_table(&mut conn).unwrap();
 
         let ip = WhitelistedIp::new("192.168.1.1".to_string(), "Test".to_string());

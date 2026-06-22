@@ -108,11 +108,12 @@ impl Session {
 
 /// Generate a unique session ID
 pub fn generate_session_id() -> String {
+    use rand::Rng;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let random = std::process::id();
+    let random: u32 = rand::thread_rng().r#gen();
     format!("session-{}-{}", timestamp, random)
 }
 
@@ -172,7 +173,7 @@ mod tests {
         );
 
         let old_last_seen = session.last_seen;
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_secs(1));
         session.touch();
 
         assert!(session.last_seen > old_last_seen);

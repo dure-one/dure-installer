@@ -158,10 +158,24 @@ pub fn get_site(domain: &str) -> Result<Option<SiteConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::calc::db;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     #[test]
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn test_site_operations() {
+        // Setup unique test database
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-site-calc-{}-{}.db", std::process::id(), test_id);
+        db::set_db_path(test_db.clone());
+
+        // Initialize table
+        let mut conn = db::establish_connection();
+        crate::storage::models::site::init_sites_table(&mut conn).unwrap();
+        drop(conn);
+
         // Add site
         add_site("test.example.com".to_string(), "test-pubkey".to_string()).unwrap();
 

@@ -142,7 +142,7 @@ fn main() -> Result<()> {
     }
 
     // Initialize global tray event handlers (one-time setup)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
     dure::tray::init_tray_event_handlers();
 
     let force_gui = args.iter().any(|arg| arg == "--gui");
@@ -183,40 +183,49 @@ fn main() -> Result<()> {
 
         run_gui_mode()?;
     } else if force_tray {
-        // Tray mode (explicitly requested via --tray flag)
-        log::info!("Running in tray mode (--tray flag)");
+        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+        {
+            // Tray mode (explicitly requested via --tray flag)
+            log::info!("Running in tray mode (--tray flag)");
 
-        // Hide console window on Windows
-        #[cfg(target_os = "windows")]
-        hide_console();
+            // Hide console window on Windows
+            #[cfg(target_os = "windows")]
+            hide_console();
 
-        // Start tray mode on separate thread
-        log::info!("*** Starting tray mode on separate thread ***");
-        let tray_handle = dure::tray::run_tray_mode()?;
+            // Start tray mode on separate thread
+            log::info!("*** Starting tray mode on separate thread ***");
+            let tray_handle = dure::tray::run_tray_mode()?;
 
-        // Wait for tray actions
-        loop {
-            log::info!("*** Waiting for tray action ***");
-            match tray_handle.recv_action() {
-                Some(dure::tray::TrayExitAction::Quit) => {
-                    log::info!("*** Received Quit action, exiting application ***");
-                    break;
-                }
-                Some(dure::tray::TrayExitAction::OpenGui) => {
-                    log::info!("*** Received OpenGui action, opening GUI window ***");
-                    log::info!("*** (Tray will continue running in background) ***");
-                    run_gui_mode()?;
-                    log::info!("*** GUI closed ***");
-                }
-                None => {
-                    log::warn!("*** Tray thread ended unexpectedly ***");
-                    break;
+            // Wait for tray actions
+            loop {
+                log::info!("*** Waiting for tray action ***");
+                match tray_handle.recv_action() {
+                    Some(dure::tray::TrayExitAction::Quit) => {
+                        log::info!("*** Received Quit action, exiting application ***");
+                        break;
+                    }
+                    Some(dure::tray::TrayExitAction::OpenGui) => {
+                        log::info!("*** Received OpenGui action, opening GUI window ***");
+                        log::info!("*** (Tray will continue running in background) ***");
+                        run_gui_mode()?;
+                        log::info!("*** GUI closed ***");
+                    }
+                    None => {
+                        log::warn!("*** Tray thread ended unexpectedly ***");
+                        break;
+                    }
                 }
             }
-        }
 
-        log::info!("*** Joining tray thread ***");
-        tray_handle.join()?;
+            log::info!("*** Joining tray thread ***");
+            tray_handle.join()?;
+        }
+        #[cfg(target_os = "openbsd")]
+        {
+            // Tray mode not available on OpenBSD - run GUI mode instead
+            log::info!("Tray mode not available on OpenBSD (--tray flag), running GUI mode");
+            run_gui_mode()?;
+        }
     } else if std::io::stdout().is_terminal() {
         // Terminal mode - run CLI interface
         log::info!("Running in CLI mode (terminal detected)");
@@ -224,40 +233,49 @@ fn main() -> Result<()> {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         dure::cli::run_cli_mode()?;
     } else {
-        // Tray mode (default for double-click on Windows - no terminal, no flags)
-        log::info!("Running in tray mode (default - no terminal detected)");
+        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+        {
+            // Tray mode (default for double-click on Windows - no terminal, no flags)
+            log::info!("Running in tray mode (default - no terminal detected)");
 
-        // Hide console window on Windows
-        #[cfg(target_os = "windows")]
-        hide_console();
+            // Hide console window on Windows
+            #[cfg(target_os = "windows")]
+            hide_console();
 
-        // Start tray mode on separate thread
-        log::info!("*** Starting tray mode on separate thread ***");
-        let tray_handle = dure::tray::run_tray_mode()?;
+            // Start tray mode on separate thread
+            log::info!("*** Starting tray mode on separate thread ***");
+            let tray_handle = dure::tray::run_tray_mode()?;
 
-        // Wait for tray actions
-        loop {
-            log::info!("*** Waiting for tray action ***");
-            match tray_handle.recv_action() {
-                Some(dure::tray::TrayExitAction::Quit) => {
-                    log::info!("*** Received Quit action, exiting application ***");
-                    break;
-                }
-                Some(dure::tray::TrayExitAction::OpenGui) => {
-                    log::info!("*** Received OpenGui action, opening GUI window ***");
-                    log::info!("*** (Tray will continue running in background) ***");
-                    run_gui_mode()?;
-                    log::info!("*** GUI closed ***");
-                }
-                None => {
-                    log::warn!("*** Tray thread ended unexpectedly ***");
-                    break;
+            // Wait for tray actions
+            loop {
+                log::info!("*** Waiting for tray action ***");
+                match tray_handle.recv_action() {
+                    Some(dure::tray::TrayExitAction::Quit) => {
+                        log::info!("*** Received Quit action, exiting application ***");
+                        break;
+                    }
+                    Some(dure::tray::TrayExitAction::OpenGui) => {
+                        log::info!("*** Received OpenGui action, opening GUI window ***");
+                        log::info!("*** (Tray will continue running in background) ***");
+                        run_gui_mode()?;
+                        log::info!("*** GUI closed ***");
+                    }
+                    None => {
+                        log::warn!("*** Tray thread ended unexpectedly ***");
+                        break;
+                    }
                 }
             }
-        }
 
-        log::info!("*** Joining tray thread ***");
-        tray_handle.join()?;
+            log::info!("*** Joining tray thread ***");
+            tray_handle.join()?;
+        }
+        #[cfg(target_os = "openbsd")]
+        {
+            // Tray mode not available on OpenBSD - run GUI mode instead
+            log::info!("Tray mode not available on OpenBSD, running GUI mode");
+            run_gui_mode()?;
+        }
     }
 
     Ok(())

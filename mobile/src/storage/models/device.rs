@@ -187,10 +187,20 @@ mod tests {
     use super::*;
     use crate::calc::db;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn setup_test_db() -> diesel::SqliteConnection {
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-device-{}-{}.db", std::process::id(), test_id);
+        db::set_db_path(test_db);
+        db::establish_connection()
+    }
 
     #[test]
     fn test_store_and_get_device() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -216,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_get_device_by_session() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

@@ -112,3 +112,12 @@ pub fn check_user_mismatch() -> (String, String, bool) {
 pub fn check_user_mismatch() -> (String, String, bool) {
     ("n/a".to_string(), "n/a".to_string(), false)
 }
+
+/// Check if desktop user and runtime user are different (OpenBSD)
+#[cfg(target_os = "openbsd")]
+pub fn check_user_mismatch() -> (String, String, bool) {
+    let current_user = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "unknown".to_string());
+    (current_user.clone(), current_user, false)
+}

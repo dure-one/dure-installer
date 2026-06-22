@@ -83,10 +83,23 @@ pub fn execute_site_del(domain: String) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     #[test]
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn test_site_commands() {
+        // Setup unique test database
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-site-cli-{}-{}.db", std::process::id(), test_id);
+        crate::calc::db::set_db_path(test_db.clone());
+
+        // Initialize table
+        let mut conn = crate::calc::db::establish_connection();
+        crate::storage::models::site::init_sites_table(&mut conn).unwrap();
+        drop(conn);
+
         // Test add
         execute_site_add(
             "test.example.com".to_string(),

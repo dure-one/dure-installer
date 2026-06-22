@@ -707,14 +707,14 @@ mod tests {
         let mut config = NsConfig::default();
         config
             .add_domain(
-                "example.com".to_string(),
                 "cloudflare".to_string(),
+                "example.com".to_string(),
                 "token123".to_string(),
             )
             .unwrap();
 
-        assert_eq!(config.domains.len(), 1);
-        assert_eq!(config.domains[0].domain, "example.com");
+        assert_eq!(config.providers.get("cloudflare").unwrap().domains.len(), 1);
+        assert_eq!(config.providers.get("cloudflare").unwrap().domains[0].domain, "example.com");
     }
 
     #[test]
@@ -722,16 +722,16 @@ mod tests {
         let mut config = NsConfig::default();
         config
             .add_domain(
-                "example.com".to_string(),
                 "cloudflare".to_string(),
+                "example.com".to_string(),
                 "token123".to_string(),
             )
             .unwrap();
         config
-            .add_record("example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
+            .add_record("cloudflare", "example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
             .unwrap();
 
-        let domain = config.get_domain("example.com").unwrap();
+        let domain = config.get_domain("cloudflare", "example.com").unwrap();
         assert_eq!(domain.records.len(), 1);
         assert_eq!(domain.records[0].record_type, RecordType::A);
         assert_eq!(domain.records[0].name, "@");
@@ -743,13 +743,13 @@ mod tests {
         let mut config = NsConfig::default();
         config
             .add_domain(
-                "example.com".to_string(),
                 "cloudflare".to_string(),
+                "example.com".to_string(),
                 "token123".to_string(),
             )
             .unwrap();
         config
-            .add_record("example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
+            .add_record("cloudflare", "example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
             .unwrap();
 
         let yaml = config.to_yaml().unwrap();
@@ -757,7 +757,7 @@ mod tests {
         assert!(yaml.contains("cloudflare"));
 
         let loaded = NsConfig::from_yaml(&yaml).unwrap();
-        assert_eq!(loaded.domains.len(), 1);
-        assert_eq!(loaded.domains[0].domain, "example.com");
+        assert_eq!(loaded.providers.get("cloudflare").unwrap().domains.len(), 1);
+        assert_eq!(loaded.providers.get("cloudflare").unwrap().domains[0].domain, "example.com");
     }
 }

@@ -13,9 +13,6 @@ serde = ["dep:serde", "dep:serde_json"]
 spreadsheet = ["egui-material3/spreadsheet"]
 # GCP integration (disabled by default until dependencies are available)
 gcp = []
-# Asupersync TLS features
-asupersync-tls = ["asupersync/tls"]
-asupersync-native-roots = ["asupersync/tls-native-roots"]
 # Database backend features
 postgres = ["diesel/postgres", "diesel/returning_clauses_for_sqlite_3_35"]
 
@@ -77,11 +74,11 @@ asyncapi-rust = "0.2"
 schemars = { version = "1.2", features = ["derive", "chrono04"] }
 serde_yaml = "0.9"
 
-# Desktop-only dependencies
+# Desktop-only dependencies (all desktop platforms including OpenBSD)
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
-go-webauthn = { path = "../crates/go-webauthn" }
-pollster = "0.4"  # Runtime-agnostic async executor for go-webauthn
-tray-icon = { version = "0.18", default-features = false }
+# Temporarily disabled: Go c-archive mode unsupported on OpenBSD
+# go-webauthn = { path = "../crates/go-webauthn" }
+# pollster = "0.4"  # Runtime-agnostic async executor for go-webauthn
 tao = "0.33"
 trash = "5.2"
 num_cpus = "1.17"
@@ -103,16 +100,22 @@ diesel_migrations = "2.3"
 # libsqlite3-hotbundle provides bundled SQLite3MultipleCiphers with encryption support
 libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
 dotenvy = "0.15"
-# Asupersync async runtime (replaces async-std, async-tls, futures-util)
-asupersync = { git = "https://github.com/Dicklesworthstone/asupersync", features = ["tls", "tls-native-roots"] }
+# Smol async runtime ecosystem
+smol = "2.0"
+async-executor = "1.13"
+async-io = "2.4"
+async-net = "2.0"
+async-fs = "2.1"  # Async filesystem operations
+futures-rustls = "0.26"  # rustls-based TLS for futures-based runtimes
+async-lock = "3.4"  # Async synchronization primitives for smol
 # OpenAPI / Swagger UI
 utoipa = { version="5.4.0", features = ["macros"] }
 utoipa-swagger-ui = { version="9.0.2", features = ["vendored"] }
-# WebSocket support with asupersync (custom fork)
-async-tungstenite = { git = "https://github.com/nikescar/async-tungstenite", features = ["asupersync-runtime"] }
+# WebSocket support with smol (using async-std runtime compatibility)
+async-tungstenite = { version = "0.28", features = ["async-std-runtime"] }
 futures = "0.3"
 rcgen = "0.13"
-# Keep rustls ecosystem (asupersync uses it internally)
+# Keep rustls ecosystem
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 rustls-native-certs = "0.8"
@@ -125,6 +128,10 @@ webauthn-rs = { version = "0.5.0", features = ["danger-allow-state-serialisation
 uuid = { version = "1.11", features = ["v4", "serde"] }
 urlencoding = "2.1"
 darkhttpd-sys = { path = "../crates/darkhttpd-sys" }
+
+# Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
+[target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
+tray-icon = { version = "0.18", default-features = false }
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]

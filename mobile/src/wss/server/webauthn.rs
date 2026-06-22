@@ -4,7 +4,7 @@
 //! Registration and authentication endpoints allow clients to register
 //! security keys and authenticate using them.
 
-use asupersync::{Cx, sync::Mutex};
+use async_lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -109,16 +109,11 @@ impl WebAuthnState {
     /// Returns the creation challenge to send to the client
     pub async fn start_registration(
         &self,
-        cx: &Cx,
         session_id: String,
         username: String,
     ) -> Result<CreationChallengeResponse, AuthError> {
         let user_unique_id = {
-            let users_guard = self
-                .users
-                .lock(cx)
-                .await
-                .map_err(|_| AuthError::LockError)?;
+            let users_guard = self.users.lock().await;
             users_guard
                 .name_to_id
                 .get(&username)
@@ -128,11 +123,7 @@ impl WebAuthnState {
 
         // Get existing credentials to exclude
         let exclude_credentials = {
-            let users_guard = self
-                .users
-                .lock(cx)
-                .await
-                .map_err(|_| AuthError::LockError)?;
+            let users_guard = self.users.lock().await;
             users_guard
                 .keys
                 .get(&user_unique_id)
@@ -147,11 +138,7 @@ impl WebAuthnState {
         )?;
 
         // Store registration state in session
-        let mut sessions_guard = self
-            .sessions
-            .lock(cx)
-            .await
-            .map_err(|_| AuthError::LockError)?;
+        let mut sessions_guard = self.sessions.lock().await;
         sessions_guard
             .reg_states
             .insert(session_id, (username, user_unique_id, reg_state));
@@ -164,17 +151,12 @@ impl WebAuthnState {
     /// Verifies the registration credential and stores the passkey
     pub async fn finish_registration(
         &self,
-        cx: &Cx,
         session_id: String,
         reg: RegisterPublicKeyCredential,
     ) -> Result<(), AuthError> {
         // Retrieve registration state from session
         let (username, user_unique_id, reg_state) = {
-            let mut sessions_guard = self
-                .sessions
-                .lock(cx)
-                .await
-                .map_err(|_| AuthError::LockError)?;
+            let mut sessions_guard = self.sessions.lock().await;
             sessions_guard
                 .reg_states
                 .remove(&session_id)
@@ -187,11 +169,7 @@ impl WebAuthnState {
             .finish_passkey_registration(&reg, &reg_state)?;
 
         // Store passkey
-        let mut users_guard = self
-            .users
-            .lock(cx)
-            .await
-            .map_err(|_| AuthError::LockError)?;
+        let mut users_guard = self.users.lock().await;
         users_guard
             .keys
             .entry(user_unique_id)
@@ -208,15 +186,10 @@ impl WebAuthnState {
     /// Returns the request challenge to send to the client
     pub async fn start_authentication(
         &self,
-        cx: &Cx,
         session_id: String,
         username: String,
     ) -> Result<RequestChallengeResponse, AuthError> {
-        let users_guard = self
-            .users
-            .lock(cx)
-            .await
-            .map_err(|_| AuthError::LockError)?;
+        let users_guard = self.users.lock().await;
 
         // Look up user ID from username
         let user_unique_id = users_guard
@@ -239,11 +212,7 @@ impl WebAuthnState {
         drop(users_guard);
 
         // Store authentication state in session
-        let mut sessions_guard = self
-            .sessions
-            .lock(cx)
-            .await
-            .map_err(|_| AuthError::LockError)?;
+        let mut sessions_guard = self.sessions.lock().await;
         sessions_guard
             .auth_states
             .insert(session_id, (user_unique_id, auth_state));
@@ -256,17 +225,12 @@ impl WebAuthnState {
     /// Verifies the authentication credential
     pub async fn finish_authentication(
         &self,
-        cx: &Cx,
         session_id: String,
         auth: PublicKeyCredential,
     ) -> Result<Uuid, AuthError> {
         // Retrieve authentication state from session
         let (user_unique_id, auth_state) = {
-            let mut sessions_guard = self
-                .sessions
-                .lock(cx)
-                .await
-                .map_err(|_| AuthError::LockError)?;
+            let mut sessions_guard = self.sessions.lock().await;
             sessions_guard
                 .auth_states
                 .remove(&session_id)
@@ -279,11 +243,7 @@ impl WebAuthnState {
             .finish_passkey_authentication(&auth, &auth_state)?;
 
         // Update credential counter
-        let mut users_guard = self
-            .users
-            .lock(cx)
-            .await
-            .map_err(|_| AuthError::LockError)?;
+        let mut users_guard = self.users.lock().await;
         users_guard
             .keys
             .get_mut(&user_unique_id)

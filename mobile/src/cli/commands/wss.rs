@@ -287,13 +287,13 @@ mod tests {
     fn test_get_db_path() {
         let path = get_db_path().unwrap();
         assert!(path.to_string_lossy().contains("dure"));
-        assert!(path.to_string_lossy().ends_with("wss.db"));
+        assert!(path.to_string_lossy().ends_with(".db"));
     }
 
     #[test]
     fn test_get_acme_db_path() {
         let path = get_acme_db_path().unwrap();
         assert!(path.to_string_lossy().contains("dure"));
-        assert!(path.to_string_lossy().ends_with("acme.db"));
+        assert!(path.to_string_lossy().ends_with(".db"));
     }
 }

@@ -267,20 +267,25 @@ mod tests {
     #[cfg(not(target_family = "wasm"))]
     #[test]
     fn test_db_path() {
-        set_db_path("test.db".to_string());
-        assert_eq!(get_db_path(), "test.db");
+        set_db_path("test-dure.db".to_string());
+        assert_eq!(get_db_path(), "test-dure.db");
+        // Reset to default
+        set_db_path("dure.db".to_string());
     }
 
     #[cfg(not(any(feature = "postgres", target_family = "wasm")))]
     #[test]
     fn test_establish_connection() {
-        use tempfile::NamedTempFile;
-        let temp = NamedTempFile::new().unwrap();
-        let path = temp.path().to_str().unwrap().to_string();
-        set_db_path(path);
+        use tempfile::tempdir;
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("test-dure-connection.db");
+        set_db_path(path.to_str().unwrap().to_string());
 
         let conn = establish_connection();
         // If we got here, connection was established successfully
         drop(conn);
+
+        // Reset to default
+        set_db_path("dure.db".to_string());
     }
 }

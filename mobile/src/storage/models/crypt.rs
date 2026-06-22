@@ -122,16 +122,26 @@ pub fn delete_device_keys(conn: &mut SqliteConnection, device_id: &str) -> Resul
 mod tests {
     use super::*;
     use crate::calc::db;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn setup_test_db() -> diesel::SqliteConnection {
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-crypt-{}-{}.db", std::process::id(), test_id);
+        db::set_db_path(test_db);
+        db::establish_connection()
+    }
 
     #[test]
     fn test_init_table() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_crypt_table(&mut conn).unwrap();
     }
 
     #[test]
     fn test_store_and_get_keys() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_crypt_table(&mut conn).unwrap();
 
         let keys = DeviceKeys {
@@ -154,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_delete_keys() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_crypt_table(&mut conn).unwrap();
 
         let keys = DeviceKeys {
