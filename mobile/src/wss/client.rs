@@ -89,8 +89,7 @@ fn create_tls_connector_insecure() -> TlsConnector {
         .with_custom_certificate_verifier(Arc::new(AcceptAnyCert))
         .with_no_client_auth();
 
-    let arc_config: Arc<ClientConfig> = Arc::new(config);
-    TlsConnector::from(arc_config)
+    TlsConnector::from(Arc::new(config))
 }
 
 type WsStream = async_tungstenite::WebSocketStream<async_tls::client::TlsStream<TcpStream>>;
@@ -167,8 +166,7 @@ fn create_tls_connector() -> io::Result<TlsConnector> {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let arc_config: Arc<rustls::ClientConfig> = Arc::new(config);
-    Ok(TlsConnector::from(arc_config))
+    Ok(TlsConnector::from(Arc::new(config)))
 }
 
 async fn https_get_request(
