@@ -26,11 +26,8 @@ pub mod tls;
 pub mod webauthn;
 pub mod ws;
 
-use asupersync::{
-    Cx,
-    net::{TcpListener, TcpStream},
-    tls::TlsAcceptor,
-};
+use async_net::{TcpListener, TcpStream};
+use async_tls::TlsAcceptor;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;
