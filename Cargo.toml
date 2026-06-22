@@ -46,3 +46,6 @@ opt-level = 2         # Good optimization without being too slow
 incremental = true    # Enable incremental compilation
 strip = "symbols"     # Still strip symbols to reduce size
 
+[patch.crates-io]
+monoio = { path = "/tmp/monoio-patch/monoio" }
+
