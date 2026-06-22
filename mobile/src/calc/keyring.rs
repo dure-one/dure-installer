@@ -591,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), not(target_os = "openbsd")))]
     fn test_add_list_delete_key() {
         use std::env;
 

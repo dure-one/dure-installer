@@ -14,10 +14,7 @@
 //! ```
 
 use serde_json::json;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use tungstenite::{Message, WebSocket, connect};
-use url::Url;
+use async_tungstenite::tungstenite::{Message, connect};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("WebSocket Auth Client Example");
@@ -27,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let url = "ws://localhost:8443/ws";
     println!("Connecting to {}...", url);
 
-    let (mut socket, response) = connect(Url::parse(url)?)?;
+    let (mut socket, response) = connect(url)?;
     println!("Connected! Response status: {}", response.status());
     println!("Headers:");
     for (name, value) in response.headers() {

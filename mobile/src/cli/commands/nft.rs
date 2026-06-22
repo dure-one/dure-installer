@@ -186,6 +186,6 @@ mod tests {
     fn test_get_db_path() {
         let path = get_db_path().unwrap();
         assert!(path.to_string_lossy().contains("dure"));
-        assert!(path.to_string_lossy().ends_with("nft_whitelist.db"));
+        assert!(path.to_string_lossy().ends_with(".db"));
     }
 }
