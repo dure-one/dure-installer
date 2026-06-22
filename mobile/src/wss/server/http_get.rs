@@ -13,7 +13,8 @@
 //! The build process (`build.wasm.sh`) creates compressed versions of WASM and JS files.
 //! The server automatically selects the best available compression based on client support.
 
-use asupersync::{fs, io::AsyncWriteExt};
+use async_fs as fs;
+use futures::io::AsyncWriteExt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;

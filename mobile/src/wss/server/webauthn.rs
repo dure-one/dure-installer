@@ -4,7 +4,7 @@
 //! Registration and authentication endpoints allow clients to register
 //! security keys and authenticate using them.
 
-use asupersync::{Cx, sync::Mutex};
+use async_lock::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -109,14 +109,13 @@ impl WebAuthnState {
     /// Returns the creation challenge to send to the client
     pub async fn start_registration(
         &self,
-        cx: &Cx,
         session_id: String,
         username: String,
     ) -> Result<CreationChallengeResponse, AuthError> {
         let user_unique_id = {
             let users_guard = self
                 .users
-                .lock(cx)
+                .lock()
                 .await
                 .map_err(|_| AuthError::LockError)?;
             users_guard
@@ -130,7 +129,7 @@ impl WebAuthnState {
         let exclude_credentials = {
             let users_guard = self
                 .users
-                .lock(cx)
+                .lock()
                 .await
                 .map_err(|_| AuthError::LockError)?;
             users_guard
@@ -164,7 +163,6 @@ impl WebAuthnState {
     /// Verifies the registration credential and stores the passkey
     pub async fn finish_registration(
         &self,
-        cx: &Cx,
         session_id: String,
         reg: RegisterPublicKeyCredential,
     ) -> Result<(), AuthError> {
@@ -172,7 +170,7 @@ impl WebAuthnState {
         let (username, user_unique_id, reg_state) = {
             let mut sessions_guard = self
                 .sessions
-                .lock(cx)
+                .lock()
                 .await
                 .map_err(|_| AuthError::LockError)?;
             sessions_guard
@@ -208,7 +206,6 @@ impl WebAuthnState {
     /// Returns the request challenge to send to the client
     pub async fn start_authentication(
         &self,
-        cx: &Cx,
         session_id: String,
         username: String,
     ) -> Result<RequestChallengeResponse, AuthError> {
@@ -256,7 +253,6 @@ impl WebAuthnState {
     /// Verifies the authentication credential
     pub async fn finish_authentication(
         &self,
-        cx: &Cx,
         session_id: String,
         auth: PublicKeyCredential,
     ) -> Result<Uuid, AuthError> {
@@ -264,7 +260,7 @@ impl WebAuthnState {
         let (user_unique_id, auth_state) = {
             let mut sessions_guard = self
                 .sessions
-                .lock(cx)
+                .lock()
                 .await
                 .map_err(|_| AuthError::LockError)?;
             sessions_guard
