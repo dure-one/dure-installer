@@ -175,10 +175,20 @@ pub fn update_site_status(conn: &mut SqliteConnection, domain: &str, status: &st
 mod tests {
     use super::*;
     use crate::calc::db;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    fn setup_test_db() -> diesel::SqliteConnection {
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!("test-dure-site-{}-{}.db", std::process::id(), test_id);
+        db::set_db_path(test_db);
+        db::establish_connection()
+    }
 
     #[test]
     fn test_site_crud() {
-        let mut conn = db::establish_connection();
+        let mut conn = setup_test_db();
         init_sites_table(&mut conn).unwrap();
 
         // Create
