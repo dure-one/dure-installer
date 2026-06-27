@@ -6,9 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
+	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -205,8 +208,29 @@ var (
 )
 
 func main() {
-	// Write startup confirmation to stderr (won't interfere with JSON-RPC on stdout)
-	fmt.Fprintln(os.Stderr, "go-webauthn JSON-RPC server starting...")
+	// Parse command-line flags
+	debugMode := flag.Bool("debug", false, "Enable debug logging")
+	flag.Parse()
+
+	if *debugMode {
+		EnableDebugMode()
+	}
+
+	// Log startup
+	Info("go-webauthn JSON-RPC server starting", map[string]interface{}{
+		"version":    Version,
+		"go_version": runtime.Version(),
+		"debug_mode": *debugMode,
+	})
+
+	// Start background cleanup goroutine
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			CleanupRateLimiters()
+		}
+	}()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	encoder := json.NewEncoder(os.Stdout)
@@ -216,20 +240,83 @@ func main() {
 
 		var req Request
 		if err := json.Unmarshal(line, &req); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse request: %v\n", err)
+			LogError("Failed to parse request", map[string]interface{}{
+				"error": err.Error(),
+			})
 			continue
 		}
 
-		resp := handleRequest(&req)
+		// Handle request with logging and metrics
+		resp := handleRequestWithInstrumentation(&req)
+
 		if err := encoder.Encode(resp); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to encode response: %v\n", err)
+			LogError("Failed to encode response", map[string]interface{}{
+				"error":      err.Error(),
+				"request_id": req.ID,
+			})
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Scanner error: %v\n", err)
+		LogError("Scanner error", map[string]interface{}{
+			"error": err.Error(),
+		})
 		os.Exit(1)
 	}
+}
+
+// handleRequestWithInstrumentation wraps handleRequest with logging, metrics, and rate limiting
+func handleRequestWithInstrumentation(req *Request) *Response {
+	start := time.Now()
+
+	// Log request
+	LogRequest(req.Method, req.ID)
+
+	// Extract username for rate limiting
+	username := extractUsername(req)
+
+	// Check rate limit (skip for system endpoints)
+	if !isSystemEndpoint(req.Method) && !CheckRateLimit(username, req.Method) {
+		LogError("Rate limit exceeded", map[string]interface{}{
+			"username": username,
+			"method":   req.Method,
+		})
+		return &Response{
+			ID: req.ID,
+			Error: &ErrorObj{
+				Code:    ErrRateLimitExceeded,
+				Message: "Rate limit exceeded - too many requests",
+			},
+		}
+	}
+
+	// Handle request
+	resp := handleRequest(req)
+
+	// Record metrics
+	duration := time.Since(start)
+	success := resp.Error == nil
+	RecordRequest(req.Method, duration, success)
+	LogResponse(req.Method, req.ID, duration, success)
+
+	return resp
+}
+
+// isSystemEndpoint checks if a method is a system endpoint (exempt from rate limiting)
+func isSystemEndpoint(method string) bool {
+	return method == "health" || method == "metrics" || method == "version"
+}
+
+// extractUsername extracts username from request params
+func extractUsername(req *Request) string {
+	var params map[string]interface{}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return "anonymous"
+	}
+	if username, ok := params["username"].(string); ok {
+		return username
+	}
+	return "anonymous"
 }
 
 // WebAuthn state management
@@ -417,6 +504,31 @@ func handleRequest(req *Request) *Response {
 
 	case "chacha20.decrypt":
 		result, err := handleChaCha20Decrypt(req.Params)
+		if err != nil {
+			resp.Error = &ErrorObj{Code: -32603, Message: err.Error()}
+		} else {
+			resp.Result = result
+		}
+
+	// System endpoints
+	case "health":
+		result, err := handleHealth()
+		if err != nil {
+			resp.Error = &ErrorObj{Code: -32603, Message: err.Error()}
+		} else {
+			resp.Result = result
+		}
+
+	case "metrics":
+		result, err := handleMetrics()
+		if err != nil {
+			resp.Error = &ErrorObj{Code: -32603, Message: err.Error()}
+		} else {
+			resp.Result = result
+		}
+
+	case "version":
+		result, err := handleVersion()
 		if err != nil {
 			resp.Error = &ErrorObj{Code: -32603, Message: err.Error()}
 		} else {
@@ -1150,5 +1262,47 @@ func handleWebAuthnDeleteCredential(params json.RawMessage) (*WebAuthnDeleteCred
 
 	return &WebAuthnDeleteCredentialResult{
 		Success: true,
+	}, nil
+}
+
+// System endpoint handlers
+
+// Version information
+const (
+	Version   = "2.0.0"
+	BuildDate = "2026-06-26"
+)
+
+type HealthResult struct {
+	Status  string  `json:"status"`
+	Uptime  float64 `json:"uptime_seconds"`
+	Version string  `json:"version"`
+}
+
+type VersionResult struct {
+	Version   string `json:"version"`
+	GoVersion string `json:"go_version"`
+	BuildDate string `json:"build_date"`
+}
+
+func handleHealth() (*HealthResult, error) {
+	metrics := GetMetrics()
+	return &HealthResult{
+		Status:  "ok",
+		Uptime:  metrics.UptimeSeconds,
+		Version: Version,
+	}, nil
+}
+
+func handleMetrics() (*MetricsSnapshot, error) {
+	metrics := GetMetrics()
+	return &metrics, nil
+}
+
+func handleVersion() (*VersionResult, error) {
+	return &VersionResult{
+		Version:   Version,
+		GoVersion: runtime.Version(),
+		BuildDate: BuildDate,
 	}, nil
 }

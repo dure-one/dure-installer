@@ -13,7 +13,7 @@ mkdir -p bin
 
 # Build from go directory (where go.mod is)
 cd go
-go build -o ../bin/go-webauthn-cli ../cmd/main.go
+go build -o ../bin/go-webauthn-cli ../cmd/*.go
 
 echo "✅ Built successfully: $SCRIPT_DIR/bin/go-webauthn-cli"
 
