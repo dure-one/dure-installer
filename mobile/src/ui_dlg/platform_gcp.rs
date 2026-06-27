@@ -1514,28 +1514,27 @@ impl GcpWizard {
     /// Generate Ed25519 SSH key pair
     /// Returns (private_key_pem, public_key_openssh, raw_private, raw_public)
     fn generate_ssh_key_pair() -> Result<(String, String, Vec<u8>, Vec<u8>), String> {
-        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "openbsd")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
-            use go_webauthn::*;
-            use pollster::block_on;
+            use go_webauthn_client::GoWebAuthnClient;
 
-            let gen_req = Ed25519GenerateKeyRequest {};
-            let gen_resp = block_on(crypto_ed25519_generate_key(&gen_req));
+            let mut client = GoWebAuthnClient::new(None)
+                .map_err(|e| format!("Failed to create WebAuthn client: {}", e))?;
 
-            if !gen_resp.success {
-                return Err(format!("Failed to generate key: {}", gen_resp.error));
-            }
+            let keypair = client
+                .ed25519_generate_key()
+                .map_err(|e| format!("Failed to generate key: {}", e))?;
 
             // Convert to SSH format
-            let private_key = Self::ed25519_to_openssh_private(&gen_resp.private_key, &gen_resp.public_key)?;
-            let public_key = Self::ed25519_to_openssh_public(&gen_resp.public_key)?;
+            let private_key = Self::ed25519_to_openssh_private(&keypair.private_key, &keypair.public_key)?;
+            let public_key = Self::ed25519_to_openssh_public(&keypair.public_key)?;
 
-            Ok((private_key, public_key, gen_resp.private_key, gen_resp.public_key))
+            Ok((private_key, public_key, keypair.private_key, keypair.public_key))
         }
 
-        #[cfg(any(target_arch = "wasm32", target_os = "openbsd"))]
+        #[cfg(target_arch = "wasm32")]
         {
-            Err("SSH key generation not supported on this platform (go-webauthn unavailable)".to_string())
+            Err("SSH key generation not supported on WASM".to_string())
         }
     }
 
@@ -1824,5 +1823,205 @@ echo "Dure VM initialization completed at $(date)"
         // Can only contain lowercase letters, numbers, and hyphens
         name.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_project_id() {
+        let wizard = GcpWizard::new("test-platform".to_string());
+
+        // Valid project IDs
+        assert!(wizard.validate_project_id("my-project"));
+        assert!(wizard.validate_project_id("project123"));
+        assert!(wizard.validate_project_id("a".repeat(30).as_str()));
+
+        // Invalid: too short
+        assert!(!wizard.validate_project_id("short"));
+
+        // Invalid: too long
+        assert!(!wizard.validate_project_id(&"a".repeat(31)));
+
+        // Invalid: doesn't start with letter
+        assert!(!wizard.validate_project_id("123project"));
+        assert!(!wizard.validate_project_id("-project"));
+
+        // Invalid: uppercase
+        assert!(!wizard.validate_project_id("MyProject"));
+
+        // Invalid: special characters
+        assert!(!wizard.validate_project_id("my_project"));
+        assert!(!wizard.validate_project_id("my.project"));
+    }
+
+    #[test]
+    fn test_validate_instance_name() {
+        let wizard = GcpWizard::new("test-platform".to_string());
+
+        // Valid instance names
+        assert!(wizard.validate_instance_name("my-instance"));
+        assert!(wizard.validate_instance_name("instance123"));
+        assert!(wizard.validate_instance_name("a"));
+
+        // Invalid: empty
+        assert!(!wizard.validate_instance_name(""));
+
+        // Invalid: too long
+        assert!(!wizard.validate_instance_name(&"a".repeat(64)));
+
+        // Invalid: doesn't start with letter
+        assert!(!wizard.validate_instance_name("123instance"));
+
+        // Invalid: uppercase
+        assert!(!wizard.validate_instance_name("MyInstance"));
+    }
+
+    #[test]
+    fn test_write_string() {
+        let mut buf = Vec::new();
+        GcpWizard::write_string(&mut buf, b"test");
+
+        // Should write length (4 bytes) + data
+        assert_eq!(buf.len(), 8);
+        assert_eq!(&buf[0..4], &[0, 0, 0, 4]); // Length = 4 in big-endian
+        assert_eq!(&buf[4..8], b"test");
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_ed25519_to_openssh_public() {
+        // Valid 32-byte public key
+        let public_key = vec![1u8; 32];
+        let result = GcpWizard::ed25519_to_openssh_public(&public_key);
+
+        assert!(result.is_ok());
+        let ssh_key = result.unwrap();
+
+        // Should start with "ssh-ed25519 "
+        assert!(ssh_key.starts_with("ssh-ed25519 "));
+
+        // Should end with " dure-vm-key"
+        assert!(ssh_key.ends_with(" dure-vm-key"));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_ed25519_to_openssh_public_invalid_length() {
+        // Invalid key length (not 32 bytes)
+        let public_key = vec![1u8; 30];
+        let result = GcpWizard::ed25519_to_openssh_public(&public_key);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must be 32 bytes"));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_ed25519_to_openssh_private() {
+        // Valid keys (32-byte private, 32-byte public)
+        let private_key = vec![1u8; 32];
+        let public_key = vec![2u8; 32];
+
+        let result = GcpWizard::ed25519_to_openssh_private(&private_key, &public_key);
+
+        assert!(result.is_ok());
+        let ssh_key = result.unwrap();
+
+        // Should start with PEM header
+        assert!(ssh_key.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----"));
+
+        // Should end with PEM footer
+        assert!(ssh_key.ends_with("-----END OPENSSH PRIVATE KEY-----\n"));
+
+        // Should contain base64 data
+        assert!(ssh_key.contains('\n'));
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_ed25519_to_openssh_private_64byte_key() {
+        // Valid 64-byte private key (should use first 32 bytes)
+        let private_key = vec![1u8; 64];
+        let public_key = vec![2u8; 32];
+
+        let result = GcpWizard::ed25519_to_openssh_private(&private_key, &public_key);
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_ed25519_to_openssh_private_invalid_lengths() {
+        // Invalid private key length
+        let private_key = vec![1u8; 30];
+        let public_key = vec![2u8; 32];
+
+        let result = GcpWizard::ed25519_to_openssh_private(&private_key, &public_key);
+        assert!(result.is_err());
+
+        // Invalid public key length
+        let private_key = vec![1u8; 32];
+        let public_key = vec![2u8; 30];
+
+        let result = GcpWizard::ed25519_to_openssh_private(&private_key, &public_key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_generate_ssh_key_pair() {
+        // This test requires go-webauthn-cli to be built
+        // Run with: PATH="$PWD/crates/go-webauthn/bin:$PATH" cargo test test_generate_ssh_key_pair -- --ignored --nocapture
+
+        let result = GcpWizard::generate_ssh_key_pair();
+
+        // Should succeed
+        assert!(result.is_ok(), "Failed to generate SSH key pair: {:?}", result);
+
+        let (private_key, public_key, raw_private, raw_public) = result.unwrap();
+
+        // Check private key format
+        assert!(private_key.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----"));
+        assert!(private_key.ends_with("-----END OPENSSH PRIVATE KEY-----\n"));
+
+        // Check public key format
+        assert!(public_key.starts_with("ssh-ed25519 "));
+        assert!(public_key.ends_with(" dure-vm-key"));
+
+        // Check raw key lengths
+        assert_eq!(raw_public.len(), 32, "Public key should be 32 bytes");
+        assert_eq!(raw_private.len(), 64, "Private key should be 64 bytes");
+    }
+
+    #[test]
+    #[cfg(target_arch = "wasm32")]
+    fn test_generate_ssh_key_pair_wasm() {
+        let result = GcpWizard::generate_ssh_key_pair();
+
+        // Should fail on WASM
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not supported on WASM"));
+    }
+
+    #[test]
+    fn test_generate_startup_script() {
+        let ssh_key = "ssh-ed25519 AAAAC3... test@example.com";
+        let script = GcpWizard::generate_startup_script(ssh_key);
+
+        // Should be a bash script
+        assert!(script.starts_with("#!/bin/bash"));
+
+        // Should contain the SSH key
+        assert!(script.contains(ssh_key));
+
+        // Should set up SSH
+        assert!(script.contains("mkdir -p /root/.ssh"));
+        assert!(script.contains("authorized_keys"));
+
+        // Should create swap
+        assert!(script.contains("swap"));
     }
 }

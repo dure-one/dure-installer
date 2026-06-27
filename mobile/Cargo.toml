@@ -76,9 +76,8 @@ serde_yaml = "0.9"
 
 # Desktop-only dependencies (all desktop platforms including OpenBSD)
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
-# Temporarily disabled: Go c-archive mode unsupported on OpenBSD
-# go-webauthn = { path = "../crates/go-webauthn" }
-# pollster = "0.4"  # Runtime-agnostic async executor for go-webauthn
+# go-webauthn client (CLI-based, works on OpenBSD)
+go-webauthn-client = { path = "../crates/go-webauthn-client" }
 tao = "0.33"
 trash = "5.2"
 num_cpus = "1.17"
