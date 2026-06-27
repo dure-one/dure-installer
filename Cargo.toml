@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "mobile",
     "crates/darkhttpd-sys",
+    "crates/go-webauthn-client",
 ]
 exclude = [
     "crates/asyncapi-gen",  # Standalone workspace for AsyncAPI generation

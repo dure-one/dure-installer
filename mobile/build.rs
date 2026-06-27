@@ -12,7 +12,11 @@ fn main() {
     // Embed OAuth credentials at compile time
     // Load from .env file if it exists (development)
     // Or from environment variables (CI/CD with GitHub Secrets)
-    let _ = dotenvy::dotenv(); // Ignore error if .env doesn't exist
+
+    // Try workspace root first (../.env), then current dir (.env)
+    if dotenvy::from_filename("../.env").is_err() {
+        let _ = dotenvy::dotenv(); // Fallback to current dir
+    }
 
     // Read from environment and pass to rustc
     if let Ok(client_id) = std::env::var("GOOGLE_OAUTH_CLIENT_ID") {

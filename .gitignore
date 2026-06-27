@@ -132,3 +132,4 @@ dure.db
 /.lego
 /mobile/src/**/*.stub
 /mobile/src/**/*.md
+crates/go-webauthn/bin/
