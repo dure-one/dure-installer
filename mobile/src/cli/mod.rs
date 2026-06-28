@@ -6,7 +6,10 @@ pub mod commands;
 
 #[derive(Parser)]
 #[command(name = "dure")]
-#[command(about = "Dure - Distributed E-commerce Platform", long_about = None)]
+#[command(
+    about = "Dure - Distributed E-commerce Platform",
+    long_about = "Dure - Distributed E-commerce Platform\n\nUse 'dure info' to see commands organized by category"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -14,32 +17,24 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Audit trail management (show action history, clear logs)
-    Audit {
-        #[command(subcommand)]
-        command: AuditCommands,
-    },
-    /// DNS lookup with caching (A, AAAA, TXT records)
-    /// DNS Client operations
-    Dns {
-        #[command(subcommand)]
-        command: DnsCommands,
-    },
-    /// Cryptographic operations (encrypt/decrypt)
-    Crypt {
-        #[command(subcommand)]
-        command: CryptCommands,
-    },
-    /// Key management (password manager with KeePass)
-    Key {
-        #[command(subcommand)]
-        command: KeyCommands,
-    },
+    // ==================== Hosting Control Commands ====================
     /// DNS nameserver record management
     Ns {
         #[command(subcommand)]
         command: NsCommands,
     },
+    /// Platform management (GCP, Firebase, Supabase)
+    Platform {
+        #[command(subcommand)]
+        command: PlatformCommands,
+    },
+    /// Hosting management (domain, DNS, VM, service)
+    Hosting {
+        #[command(subcommand)]
+        command: HostingCommands,
+    },
+
+    // ==================== Server Control Commands ====================
     /// ACME SSL certificate management
     Acme {
         #[command(subcommand)]
@@ -55,30 +50,44 @@ pub enum Commands {
         #[command(subcommand)]
         command: WssCommands,
     },
-    /// Hosting management (domain, DNS, VM, service)
-    Hosting {
+    /// Webhook management and monitoring
+    Webhook {
         #[command(subcommand)]
-        command: HostingCommands,
+        command: WebhookCommands,
     },
-    /// Platform management (GCP, Firebase, Supabase)
-    Platform {
+
+    // ==================== Client Commands ====================
+    /// DNS lookup with caching (A, AAAA, TXT records)
+    Dns {
         #[command(subcommand)]
-        command: PlatformCommands,
+        command: DnsCommands,
     },
-    /// Site management for site-to-site communication
-    Site {
+    /// Key management (password manager with KeePass)
+    Key {
         #[command(subcommand)]
-        command: SiteCommands,
+        command: KeyCommands,
     },
     /// SSH host management
     Ssh {
         #[command(subcommand)]
         command: SshCommands,
     },
-    /// Webhook management and monitoring
-    Webhook {
+    /// Audit trail management (show action history, clear logs)
+    Audit {
         #[command(subcommand)]
-        command: WebhookCommands,
+        command: AuditCommands,
+    },
+
+    // ==================== Common/Utility Commands ====================
+    /// Cryptographic operations (encrypt/decrypt)
+    Crypt {
+        #[command(subcommand)]
+        command: CryptCommands,
+    },
+    /// Site management for site-to-site communication
+    Site {
+        #[command(subcommand)]
+        command: SiteCommands,
     },
     /// Show diagnostic metadata about the workspace
     Info,
@@ -786,22 +795,28 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             println!("  Version: {}", env!("CARGO_PKG_VERSION"));
             println!("  Mode: CLI");
             println!();
-            println!("Available commands:");
-            println!("  audit - Audit trail management (show/clear)");
-            println!("  dns <a|aaaa|txt> <domain> - DNS lookup with caching");
-            println!("  acme - SSL certificate management");
-            println!("  ns - DNS nameserver record management");
-            println!("  nft - NFTables firewall management (SSH whitelist)");
-            println!("  wss - WebSocket Secure server management");
-            println!("  webhook - Webhook management and monitoring");
-            println!("  crypt - Cryptographic operations (encrypt/decrypt)");
-            println!("  key - Key management (export/import with KeePass)");
-            println!("  hosting - Hosting management (domain, DNS, VM, service)");
+            println!("Hosting Control Commands:");
+            println!("  ns       - DNS nameserver record management");
             println!("  platform - Platform management (GCP, Firebase, Supabase)");
-            println!("  site - Site management for site-to-site communication");
-            println!("  ssh - SSH host management");
-            println!("  info - Show this information");
-            println!("  init - Initialize workspace");
+            println!("  hosting  - Hosting management (domain, DNS, VM, service)");
+            println!();
+            println!("Server Control Commands:");
+            println!("  acme     - SSL certificate management");
+            println!("  nft      - NFTables firewall management (SSH whitelist)");
+            println!("  wss      - WebSocket Secure server management");
+            println!("  webhook  - Webhook management and monitoring");
+            println!();
+            println!("Client Commands:");
+            println!("  dns      - DNS lookup with caching (A, AAAA, TXT records)");
+            println!("  key      - Key management (password manager with KeePass)");
+            println!("  ssh      - SSH host management");
+            println!("  audit    - Audit trail management (show/clear)");
+            println!();
+            println!("Common/Utility Commands:");
+            println!("  crypt    - Cryptographic operations (encrypt/decrypt)");
+            println!("  site     - Site management for site-to-site communication");
+            println!("  info     - Show this information");
+            println!("  init     - Initialize workspace");
         }
         Commands::Init { prefix, force } => {
             println!("Initializing Dure workspace...");
