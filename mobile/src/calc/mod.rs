@@ -11,6 +11,8 @@ pub mod gcp;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod gcp_rest;
 pub mod hosting;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod hosting_gcp;
 pub mod keyring;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod lego;
