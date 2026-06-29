@@ -36,11 +36,9 @@ pub fn get_current_ip() -> Result<String> {
 /// Check if an IP is in any of the CIDR ranges
 pub fn ip_in_ranges(ip: &str, ranges: &[String]) -> bool {
     // Simple check: exact match or 0.0.0.0/0
-    ranges.iter().any(|range| {
-        range == ip
-            || range == &format!("{}/32", ip)
-            || range == "0.0.0.0/0"
-    })
+    ranges
+        .iter()
+        .any(|range| range == ip || range == &format!("{}/32", ip) || range == "0.0.0.0/0")
 }
 
 /// GCP REST API client using ureq
@@ -134,6 +132,24 @@ impl GcpRestClient {
             Err(ureq::Error::Status(code, response)) => {
                 let body = response.into_string().unwrap_or_default();
                 Err(anyhow::anyhow!("HTTP {} error for {}: {}", code, url, body))
+            }
+            Err(ureq::Error::Transport(transport)) => {
+                Err(anyhow::anyhow!("Network error for {}: {}", url, transport))
+            }
+        }
+    }
+
+    /// Make authenticated PATCH request
+    fn patch(&self, url: &str, body: &str) -> Result<ureq::Response> {
+        match ureq::patch(url)
+            .set("Authorization", &format!("Bearer {}", self.access_token))
+            .set("Content-Type", "application/json")
+            .send_string(body)
+        {
+            Ok(response) => Ok(response),
+            Err(ureq::Error::Status(code, response)) => {
+                let body = response.into_string().unwrap_or_default();
+                Err(anyhow::anyhow!("HTTP {} error for {}:\n{}", code, url, body))
             }
             Err(ureq::Error::Transport(transport)) => {
                 Err(anyhow::anyhow!("Network error for {}: {}", url, transport))
@@ -901,9 +917,9 @@ impl InstanceRequest {
             }],
             tags: Some(Tags {
                 items: vec![
-                    "dure".to_string(),          // Dure firewall rule
-                    "http-server".to_string(),   // Allow HTTP
-                    "https-server".to_string(),  // Allow HTTPS
+                    "dure".to_string(),         // Dure firewall rule
+                    "http-server".to_string(),  // Allow HTTP
+                    "https-server".to_string(), // Allow HTTPS
                 ],
             }),
             metadata: None,
@@ -978,7 +994,10 @@ impl GcpRestClient {
         project_id: &str,
         filter_name: Option<&str>,
     ) -> Result<ListFirewallsResponse> {
-        let mut url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+        let mut url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
 
         if let Some(name) = filter_name {
             url.push_str(&format!("?filter=name%3D{}", urlencoding::encode(name)));
@@ -994,7 +1013,10 @@ impl GcpRestClient {
         project_id: &str,
         firewall_data: &FirewallRequest,
     ) -> Result<Operation> {
-        let url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+        let url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
 
         let response = ureq::post(&url)
             .set("Authorization", &format!("Bearer {}", self.access_token))
@@ -1009,7 +1031,10 @@ impl GcpRestClient {
 
     /// List firewall rules for a project
     pub fn list_firewall_rules(&self, project_id: &str) -> Result<Vec<FirewallRule>> {
-        let url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+        let url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
 
         let response = self.get(&url)?;
         let list_response: FirewallListResponse = response.into_json()?;
@@ -1025,9 +1050,9 @@ impl GcpRestClient {
             // Check if rule allows SSH (port 22)
             let allows_ssh = rule.allowed.iter().any(|a| {
                 a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports.as_ref().map_or(false, |ports| {
-                        ports.iter().any(|p| p == "22")
-                    })
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
             });
 
             if allows_ssh {
@@ -1050,9 +1075,9 @@ impl GcpRestClient {
         let ssh_rule = rules.iter().find(|rule| {
             rule.allowed.iter().any(|a| {
                 a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports.as_ref().map_or(false, |ports| {
-                        ports.iter().any(|p| p == "22")
-                    })
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
             })
         });
 
@@ -1063,20 +1088,26 @@ impl GcpRestClient {
 
             if !updated_ranges.contains(&ip_cidr) {
                 updated_ranges.push(ip_cidr);
+
+                let body = serde_json::json!({
+                    "sourceRanges": updated_ranges,
+                });
+
+                let url = format!(
+                    "{}/projects/{}/global/firewalls/{}",
+                    GCP_COMPUTE_API_BASE, project_id, rule.name
+                );
+
+                eprintln!("DEBUG: Updating firewall rule '{}' with IP: {}", rule.name, ip);
+                eprintln!("DEBUG: PATCH URL: {}", url);
+                eprintln!("DEBUG: Body: {}", body.to_string());
+
+                let response = self.patch(&url, &body.to_string())?;
+                let response_text = response.into_string().unwrap_or_default();
+                eprintln!("DEBUG: Response: {}", response_text);
+            } else {
+                eprintln!("DEBUG: IP {} already in firewall rule '{}'", ip, rule.name);
             }
-
-            let body = serde_json::json!({
-                "name": rule.name,
-                "allowed": rule.allowed,
-                "sourceRanges": updated_ranges,
-            });
-
-            let url = format!(
-                "{}/projects/{}/global/firewalls/{}",
-                GCP_COMPUTE_API_BASE, project_id, rule.name
-            );
-
-            self.post(&url, &body.to_string())?;
         } else {
             // Create new SSH rule
             let body = serde_json::json!({
@@ -1087,11 +1118,21 @@ impl GcpRestClient {
                 }],
                 "sourceRanges": [format!("{}/32", ip)],
                 "direction": "INGRESS",
+                "network": "global/networks/default",
             });
 
-            let url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+            let url = format!(
+                "{}/projects/{}/global/firewalls",
+                GCP_COMPUTE_API_BASE, project_id
+            );
 
-            self.post(&url, &body.to_string())?;
+            eprintln!("DEBUG: Creating new firewall rule 'allow-ssh-dure' with IP: {}", ip);
+            eprintln!("DEBUG: POST URL: {}", url);
+            eprintln!("DEBUG: Body: {}", body.to_string());
+
+            let response = self.post(&url, &body.to_string())?;
+            let response_text = response.into_string().unwrap_or_default();
+            eprintln!("DEBUG: Response: {}", response_text);
         }
 
         Ok(())
@@ -1190,7 +1231,11 @@ impl GcpRestClient {
                     return Err(anyhow::anyhow!("BigQuery API error: {}", error_msg));
                 }
             }
-            return Err(anyhow::anyhow!("BigQuery API error (HTTP {}): {}", status, body_text));
+            return Err(anyhow::anyhow!(
+                "BigQuery API error (HTTP {}): {}",
+                status,
+                body_text
+            ));
         }
 
         // Parse successful response
@@ -1244,11 +1289,36 @@ impl GcpRestClient {
                     records.push(BillingRecord {
                         day: row.f[0].v.clone().unwrap_or_default(),
                         service: row.f[1].v.clone().unwrap_or_default(),
-                        list_cost: row.f[2].v.clone().unwrap_or_default().parse().unwrap_or(0.0),
-                        negotiated_savings: row.f[3].v.clone().unwrap_or_default().parse().unwrap_or(0.0),
-                        discounts: row.f[4].v.clone().unwrap_or_default().parse().unwrap_or(0.0),
-                        promotions: row.f[5].v.clone().unwrap_or_default().parse().unwrap_or(0.0),
-                        subtotal: row.f[6].v.clone().unwrap_or_default().parse().unwrap_or(0.0),
+                        list_cost: row.f[2]
+                            .v
+                            .clone()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or(0.0),
+                        negotiated_savings: row.f[3]
+                            .v
+                            .clone()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or(0.0),
+                        discounts: row.f[4]
+                            .v
+                            .clone()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or(0.0),
+                        promotions: row.f[5]
+                            .v
+                            .clone()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or(0.0),
+                        subtotal: row.f[6]
+                            .v
+                            .clone()
+                            .unwrap_or_default()
+                            .parse()
+                            .unwrap_or(0.0),
                     });
                 }
             }
@@ -1725,10 +1795,7 @@ mod tests {
 
     #[test]
     fn test_check_ip_in_ranges() {
-        let ranges = vec![
-            "10.0.0.0/8".to_string(),
-            "117.53.222.116/32".to_string(),
-        ];
+        let ranges = vec!["10.0.0.0/8".to_string(), "117.53.222.116/32".to_string()];
 
         assert!(ip_in_ranges("117.53.222.116", &ranges));
         assert!(!ip_in_ranges("192.168.1.1", &ranges));
