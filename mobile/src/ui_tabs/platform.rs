@@ -48,6 +48,14 @@ pub struct PlatformTab {
     restart_vm_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     restart_vm_confirmation_text: String,
+
+    // Regenerate VM dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_regenerate_vm_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    regenerate_vm_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    regenerate_vm_confirmation_text: String,
 }
 
 impl Default for PlatformTab {
@@ -67,6 +75,9 @@ impl Default for PlatformTab {
             restart_vm_platform_name: String::new(),
             restart_vm_name: String::new(),
             restart_vm_confirmation_text: String::new(),
+            show_regenerate_vm_dialog: false,
+            regenerate_vm_platform_name: String::new(),
+            regenerate_vm_confirmation_text: String::new(),
         }
     }
 }
@@ -276,6 +287,54 @@ impl PlatformTab {
             }
         }
 
+        // Render Regenerate VM confirmation dialog
+        if let Some(()) = render_regenerate_vm_dialog(
+            ui.ctx(),
+            &mut self.show_regenerate_vm_dialog,
+            &self.regenerate_vm_platform_name,
+            &mut self.regenerate_vm_confirmation_text,
+        ) {
+            // User confirmed - execute VM regeneration
+            if let Ok(mut config) = load_config() {
+                // Find the mutable platform
+                if let Some(platform) = config.platforms.iter_mut()
+                    .find(|p| p.name == self.regenerate_vm_platform_name)
+                {
+                    if let Some(access_token) = &platform.gcp_oauth_access_token {
+                        if platform.gcp_selected_project_id.is_some() {
+                            // Determine zone from first VM or use default
+                            let zone = platform.vms.first()
+                                .map(|vm| vm.zone.clone())
+                                .unwrap_or_else(|| "us-central1-a".to_string());
+
+                            // Call regenerate_vm function
+                            let client = GcpRestClient::new(access_token.clone());
+                            match crate::calc::hosting_gcp::regenerate_vm(&client, platform, &zone) {
+                                Ok(msg) => {
+                                    println!("✓ {}", msg);
+                                    // Save updated config
+                                    if let Ok(config_path) = get_config_path() {
+                                        let _ = config.save(&config_path);
+                                    }
+                                    // Force reload to update table
+                                    self.loaded = false;
+                                }
+                                Err(e) => {
+                                    eprintln!("✗ Failed to regenerate VM: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("✗ No project selected for platform");
+                        }
+                    } else {
+                        eprintln!("✗ No OAuth token found for platform");
+                    }
+                } else {
+                    eprintln!("✗ Platform not found: {}", self.regenerate_vm_platform_name);
+                }
+            }
+        }
+
         // Render table
         egui::ScrollArea::vertical()
             .max_height(600.0)
@@ -287,15 +346,20 @@ impl PlatformTab {
     }
 }
 
-/// Load application config
+/// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
-fn load_config() -> Result<AppConfig, String> {
+fn get_config_path() -> Result<std::path::PathBuf, String> {
     use directories::ProjectDirs;
 
     let proj_dirs = ProjectDirs::from("pe", "nikescar", "dure")
         .ok_or_else(|| "Failed to get project directories".to_string())?;
-    let config_path = proj_dirs.config_dir().join("config.yml");
+    Ok(proj_dirs.config_dir().join("config.yml"))
+}
 
+/// Load application config
+#[cfg(not(target_arch = "wasm32"))]
+fn load_config() -> Result<AppConfig, String> {
+    let config_path = get_config_path()?;
     Ok(AppConfig::load_or_default(&config_path))
 }
 
@@ -328,6 +392,59 @@ fn spawn_ssh_test(vm: &VmInstance) -> Promise<Result<SshConnectionResult, String
         test_connection(&ssh_config)
             .map_err(|e| format!("Timeout: {}", e))
     })
+}
+
+/// Render regenerate VM confirmation dialog
+fn render_regenerate_vm_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    platform_name: &str,
+    confirmation_text: &mut String,
+) -> Option<()> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Regenerate VM")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label("⚠️  This will DELETE ALL VMs in this project and create a fresh one.");
+            ui.label("All data on existing VMs will be permanently lost.");
+            ui.add_space(8.0);
+
+            ui.label(format!("Platform: {}", platform_name));
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Type 'regenerate' to confirm:");
+                ui.text_edit_singleline(confirmation_text);
+            });
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(confirmation_text == "regenerate", |ui| {
+                    if ui.button("Confirm Regenerate").clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+            });
+        });
+
+    if confirmed {
+        Some(())
+    } else {
+        None
+    }
 }
 
 /// Render restart VM confirmation dialog
@@ -569,7 +686,9 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
                     platform_tab.delete_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Regenerate VM")).clicked() {
-                    // TODO: Show regenerate confirmation
+                    platform_tab.show_regenerate_vm_dialog = true;
+                    platform_tab.regenerate_vm_platform_name = platform_name.clone();
+                    platform_tab.regenerate_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Restart VM")).clicked() {
                     platform_tab.show_restart_vm_dialog = true;
