@@ -5,21 +5,163 @@ use egui_material3::MaterialButton;
 
 use crate::config::{AppConfig, CloudPlatformConfig, VmInstance};
 
-/// Platform tab state (placeholder for Phase 1)
+/// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlatformTab {
-    // Will be fully implemented in later tasks
+    #[cfg_attr(feature = "serde", serde(skip))]
+    rows: Vec<PlatformRow>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    loaded: bool,
 }
 
 impl Default for PlatformTab {
     fn default() -> Self {
-        Self {}
+        Self {
+            rows: Vec::new(),
+            loaded: false,
+        }
     }
 }
 
 impl PlatformTab {
-    pub fn ui(&mut self, _ui: &mut egui::Ui) {
-        // Will be implemented in Task 9
+    /// Render the platform tab UI
+    pub fn ui(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Cloud Platforms");
+        ui.add_space(4.0);
+        ui.label("Manage GCP platforms and VMs with inline actions.");
+        ui.add_space(8.0);
+
+        // Action buttons
+        ui.horizontal(|ui| {
+            if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                // TODO: Show add platform dialog
+            }
+
+            if ui.add(MaterialButton::outlined("Refresh Status")).clicked() {
+                // TODO: Trigger refresh
+                self.loaded = false; // Force reload
+            }
+        });
+
+        ui.add_space(8.0);
+
+        // Load platforms if not loaded
+        if !self.loaded {
+            if let Ok(config) = load_config() {
+                self.rows = build_platform_rows(&config.platforms);
+                self.loaded = true;
+            }
+        }
+
+        // Render table
+        egui::ScrollArea::vertical()
+            .max_height(600.0)
+            .show(ui, |ui| {
+                render_table(ui, &self.rows);
+            });
+    }
+}
+
+/// Load application config
+#[cfg(not(target_arch = "wasm32"))]
+fn load_config() -> Result<AppConfig, String> {
+    use directories::ProjectDirs;
+
+    let proj_dirs = ProjectDirs::from("pe", "nikescar", "dure")
+        .ok_or_else(|| "Failed to get project directories".to_string())?;
+    let config_path = proj_dirs.config_dir().join("config.yml");
+
+    Ok(AppConfig::load_or_default(&config_path))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_config() -> Result<AppConfig, String> {
+    // WASM not supported for this feature
+    Err("Platform tab not available on WASM".to_string())
+}
+
+/// Render the platform table
+fn render_table(ui: &mut egui::Ui, rows: &[PlatformRow]) {
+    use egui::{Grid, RichText};
+
+    // Table header
+    Grid::new("platform_table_header")
+        .num_columns(3)
+        .striped(false)
+        .show(ui, |ui| {
+            ui.label(RichText::new("Platform Name").strong());
+            ui.label(RichText::new("Status").strong());
+            ui.label(RichText::new("Actions").strong());
+            ui.end_row();
+        });
+
+    ui.separator();
+
+    // Table rows
+    Grid::new("platform_table_body")
+        .num_columns(3)
+        .striped(true)
+        .show(ui, |ui| {
+            for row in rows {
+                render_row(ui, row);
+            }
+        });
+}
+
+/// Render a single table row
+fn render_row(ui: &mut egui::Ui, row: &PlatformRow) {
+    match row {
+        PlatformRow::Account { platform_name, email, project_count, vm_count } => {
+            ui.label(format!("GCP: {}", email));
+            ui.label(format!("{} Projects", project_count));
+            ui.label(""); // No actions for account row
+            ui.end_row();
+        }
+
+        PlatformRow::Project { project_id, vm_count, current_ip, firewall_whitelisted, .. } => {
+            ui.label(format!("  ├─ {}", project_id));
+
+            let firewall_text = if *firewall_whitelisted {
+                format!("{} VM\n✓ GCP Firewall Whitelisted({})",
+                    vm_count,
+                    current_ip.as_deref().unwrap_or("unknown"))
+            } else {
+                format!("{} VM\n✗ GCP Firewall Not Whitelisted", vm_count)
+            };
+            ui.label(firewall_text);
+
+            if ui.add(MaterialButton::outlined("Update Firewall")).clicked() {
+                // TODO: Show update firewall confirmation
+            }
+            ui.end_row();
+        }
+
+        PlatformRow::Vm { vm_name, ssh_status, .. } => {
+            ui.label(format!("  └─── {}", vm_name));
+
+            let ssh_text = match ssh_status {
+                SshStatus::Testing => "🔄 SSH Connection Testing...".to_string(),
+                SshStatus::Available => "✓ SSH Connection OK(:22)".to_string(),
+                SshStatus::Failed(err) => format!("✗ SSH Connection Failed(:22) - {}", err),
+            };
+            ui.label(ssh_text);
+
+            ui.horizontal(|ui| {
+                if ui.add(MaterialButton::outlined("Delete VM")).clicked() {
+                    // TODO: Show delete confirmation
+                }
+                if ui.add(MaterialButton::outlined("Regenerate VM")).clicked() {
+                    // TODO: Show regenerate confirmation
+                }
+                if ui.add(MaterialButton::outlined("Restart VM")).clicked() {
+                    // TODO: Show restart confirmation
+                }
+                if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+                    // TODO: Trigger refresh
+                }
+            });
+            ui.end_row();
+        }
     }
 }
 
