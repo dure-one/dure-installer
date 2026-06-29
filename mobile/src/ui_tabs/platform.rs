@@ -78,6 +78,12 @@ pub struct PlatformTab {
     regenerate_vm_platform_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     regenerate_vm_confirmation_text: String,
+
+    // Add Platform dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_add_platform_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_name: String,
 }
 
 impl Default for PlatformTab {
@@ -107,6 +113,8 @@ impl Default for PlatformTab {
             show_regenerate_vm_dialog: false,
             regenerate_vm_platform_name: String::new(),
             regenerate_vm_confirmation_text: String::new(),
+            show_add_platform_dialog: false,
+            add_platform_name: String::new(),
         }
     }
 }
@@ -154,7 +162,8 @@ impl PlatformTab {
         // Action buttons
         ui.horizontal(|ui| {
             if ui.add(MaterialButton::filled("Add Platform")).clicked() {
-                // TODO: Show add platform dialog
+                self.show_add_platform_dialog = true;
+                self.add_platform_name.clear();
             }
 
             if ui.add(MaterialButton::outlined("Refresh Status")).clicked() {
@@ -357,6 +366,43 @@ impl PlatformTab {
         // Remove completed tasks
         for key in completed_tasks {
             self.ssh_test_tasks.remove(&key);
+        }
+
+        // Render Add Platform dialog
+        if let Some(name) = render_add_platform_dialog(
+            ui.ctx(),
+            &mut self.show_add_platform_dialog,
+            &mut self.add_platform_name,
+        ) {
+            // User confirmed - add new platform
+            if let Ok(mut config) = load_config() {
+                // Create new GCP platform
+                let new_platform = CloudPlatformConfig {
+                    name,
+                    platform_type: "gcp".to_string(),
+                    ..Default::default()
+                };
+
+                config.platforms.push(new_platform);
+
+                // Save config
+                if let Ok(config_path) = get_config_path() {
+                    match config.save(&config_path) {
+                        Ok(_) => {
+                            self.set_success("Platform added successfully. Use OAuth to connect.".to_string());
+                            let _ = crate::calc::audit::push_cli("system", "platform_tab", "add_platform", &self.add_platform_name);
+                            self.loaded = false; // Force reload
+                        }
+                        Err(e) => {
+                            self.set_error(format!("Failed to save platform: {}", e));
+                        }
+                    }
+                } else {
+                    self.set_error("Failed to get config path".to_string());
+                }
+            } else {
+                self.set_error("Failed to load config".to_string());
+            }
         }
 
         // Render Update Firewall confirmation dialog
@@ -752,6 +798,56 @@ fn render_delete_vm_dialog(
 
     if confirmed {
         Some(())
+    } else {
+        None
+    }
+}
+
+/// Render add platform dialog
+fn render_add_platform_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    platform_name: &mut String,
+) -> Option<String> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Add GCP Platform")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label("Add a new GCP platform for managing cloud resources.");
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Platform Name:");
+                ui.text_edit_singleline(platform_name);
+            });
+
+            ui.add_space(4.0);
+            ui.label("Note: After adding, use OAuth to connect to your Google account.");
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(!platform_name.is_empty(), |ui| {
+                    if ui.button("Add Platform").clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+            });
+        });
+
+    if confirmed {
+        Some(platform_name.clone())
     } else {
         None
     }
