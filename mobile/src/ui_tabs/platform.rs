@@ -436,16 +436,76 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .column("Platform", 200.0, false)
                 .column("Type", 100.0, false)
-                .column("Steps", 600.0, false);
+                .column("Steps", 400.0, false)
+                .column("Actions", 500.0, false);
 
             for row in self.rows.iter() {
                 let row_for_cells = row.clone();
                 let row_for_drawer = row.clone();
+                let row_for_actions = row.clone();
 
                 table = table.row(move |r| {
                     r.cell(&row_for_cells.platform_name)
                         .cell(&row_for_cells.platform_type)
                         .cell(&format_steps(&row_for_cells))
+                        .widget_cell(move |ui| {
+                            ui.horizontal(|ui| {
+                                // Update Firewall
+                                if ui.add_enabled(row_for_actions.project_selected,
+                                    MaterialButton::text("Update Firewall")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_update_firewall"),
+                                        row_for_actions.platform_name.clone()
+                                    ));
+                                }
+
+                                // Select Project
+                                if ui.add_enabled(row_for_actions.gcp_connected,
+                                    MaterialButton::text("Select Project")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_select_project"),
+                                        row_for_actions.platform_name.clone()
+                                    ));
+                                }
+
+                                // Delete VM
+                                if ui.add_enabled(row_for_actions.has_vm,
+                                    MaterialButton::text("Delete VM")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_delete_vm"),
+                                        (row_for_actions.platform_name.clone(),
+                                         row_for_actions.vm_name.clone().unwrap_or_default(),
+                                         row_for_actions.vm_zone.clone().unwrap_or_default())
+                                    ));
+                                }
+
+                                // Regen VM
+                                if ui.add_enabled(row_for_actions.has_vm,
+                                    MaterialButton::text("Regen VM")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_regen_vm"),
+                                        row_for_actions.platform_name.clone()
+                                    ));
+                                }
+
+                                // Restart VM
+                                if ui.add_enabled(row_for_actions.has_vm,
+                                    MaterialButton::text("Restart VM")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_restart_vm"),
+                                        row_for_actions.platform_name.clone()
+                                    ));
+                                }
+
+                                // Delete Platform
+                                if ui.add(MaterialButton::text("Delete")).clicked() {
+                                    ui.data_mut(|d| d.insert_temp(
+                                        egui::Id::new("platform_action_delete_platform"),
+                                        row_for_actions.platform_name.clone()
+                                    ));
+                                }
+                            });
+                        })
                         .drawer(move |ui| {
                             render_drawer_content(ui, &row_for_drawer);
                         })
@@ -453,6 +513,67 @@ impl PlatformTab {
             }
 
             table.show(ui);
+
+            // Process pending actions from button clicks
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            {
+                if let Some(platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))) {
+                    // Find platform and get project_id
+                    if let Ok((app_config, _)) = load_config() {
+                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                            if let Some(project_id) = &platform.gcp_selected_project_id {
+                                self.update_firewall(platform_name, project_id.clone());
+                            }
+                        }
+                    }
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_update_firewall")));
+                }
+
+                if let Some(platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_select_project"))) {
+                    self.show_select_project_dialog(platform_name);
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_select_project")));
+                }
+
+                if let Some((platform_name, vm_name, vm_zone)) = ui.data(|d|
+                    d.get_temp::<(String, String, String)>(egui::Id::new("platform_action_delete_vm"))) {
+                    self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
+                    ui.data_mut(|d| d.remove::<(String, String, String)>(egui::Id::new("platform_action_delete_vm")));
+                }
+
+                if let Some(platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_regen_vm"))) {
+                    // Find platform and get vm_name
+                    if let Ok((app_config, _)) = load_config() {
+                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                            if let Some(vm) = platform.vms.first() {
+                                self.regenerate_vm(platform_name, vm.name.clone());
+                            }
+                        }
+                    }
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_regen_vm")));
+                }
+
+                if let Some(platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_restart_vm"))) {
+                    // Find platform and get vm_name
+                    if let Ok((app_config, _)) = load_config() {
+                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                            if let Some(vm) = platform.vms.first() {
+                                self.restart_vm(platform_name, vm.name.clone());
+                            }
+                        }
+                    }
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_restart_vm")));
+                }
+            }
+
+            if let Some(platform_name) = ui.data(|d|
+                d.get_temp::<String>(egui::Id::new("platform_action_delete_platform"))) {
+                self.show_delete_platform_confirmation(platform_name);
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_delete_platform")));
+            }
         }
 
         // Add platform dialog
