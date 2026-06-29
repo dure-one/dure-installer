@@ -15,9 +15,9 @@ use crate::ui_dlg::platform_gcp::GcpWizard;
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlatformTab {
     selected_row: Option<usize>,
-    /// Cached VM rows (platform_name, vm_name, details, status, vm_id, zone, project_id)
+    /// Cached platform/project/VM rows (platform_name, status, actions)
     #[cfg_attr(feature = "serde", serde(skip))]
-    rows: Vec<[String; 7]>,
+    rows: Vec<[String; 3]>,
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -105,10 +105,9 @@ impl Default for PlatformTab {
     fn default() -> Self {
         let spreadsheet = {
             let columns = vec![
-                text_column("Platform Name", 150.0),
-                text_column("VM Name", 180.0),
-                text_column("Details", 350.0),
-                text_column("Status", 120.0),
+                text_column("Platform Name", 400.0),
+                text_column("Status", 300.0),
+                text_column("Actions", 250.0),
             ];
 
             // Create spreadsheet with theme-aware settings
@@ -263,14 +262,13 @@ impl PlatformTab {
                 if ui.add(delete_button).clicked() {
                     if let Some(idx) = selected_row_idx {
                         if idx < self.rows.len() {
-                            // Get VM info from row (indices: 0=platform, 1=vm_name, 5=zone)
                             let platform_name = self.rows[idx][0].clone();
-                            let vm_name = self.rows[idx][1].clone();
-                            let zone = self.rows[idx][5].clone();
+                            let row_type = &self.rows[idx][1];
 
-                            // Only delete if VM name is not empty
-                            if !vm_name.is_empty() {
-                                self.show_delete_vm_confirmation(platform_name, vm_name, zone);
+                            // Only delete if it's a VM row
+                            if let Some(vm_name) = row_type.strip_prefix("vm:") {
+                                let zone = self.rows[idx][2].clone();
+                                self.show_delete_vm_confirmation(platform_name, vm_name.to_string(), zone);
                             }
                         }
                     }
@@ -299,11 +297,14 @@ impl PlatformTab {
             if let Some(idx) = selected_row_idx {
                 if idx < self.rows.len() {
                     let platform = &self.rows[idx][0];
-                    let vm = &self.rows[idx][1];
-                    if vm.is_empty() {
-                        ui.label(format!("│ Selected: {} (platform)", platform));
+                    let row_type = &self.rows[idx][1];
+
+                    if let Some(vm_name) = row_type.strip_prefix("vm:") {
+                        ui.label(format!("│ Selected: {} / {}", platform, vm_name));
+                    } else if let Some(project_id) = row_type.strip_prefix("project:") {
+                        ui.label(format!("│ Selected: {} / {}", platform, project_id));
                     } else {
-                        ui.label(format!("│ Selected: {} / {}", platform, vm));
+                        ui.label(format!("│ Selected: {} (account)", platform));
                     }
                 }
             }
@@ -392,55 +393,64 @@ impl PlatformTab {
                 Ok((app_config, _)) => {
                     let mut data_rows = Vec::new();
 
-                    // Iterate through all platforms (GCP, Firebase, Supabase)
+                    // Build hierarchical rows: Account → Project → VMs
                     for platform in &app_config.platforms {
-                        // Format platform name with connected email
-                        let platform_display = if let Some(email) = &platform.gcp_connected_email {
-                            format!("{}({})", platform.name, email)
-                        } else {
-                            platform.name.clone()
-                        };
+                        // Only show GCP platforms for now
+                        if platform.platform_type != "gcp" {
+                            continue;
+                        }
 
-                        if platform.vms.is_empty() {
-                            // Platform has no VMs - show one row with empty VM name
-                            let details = self.format_platform_details(platform, None);
+                        let email = platform.gcp_connected_email.as_deref().unwrap_or("Not connected");
+
+                        // Account row: "GCP: email" | "N Projects" | ""
+                        let account_name = format!("GCP: {}", email);
+                        let project_count = "Loading..."; // TODO: fetch from API
+
+                        self.rows.push([
+                            platform.name.clone(), // Internal platform name
+                            format!("account:{}", platform.name), // Row type marker
+                            String::new(), // Empty for internal use
+                        ]);
+
+                        data_rows.push(vec![
+                            account_name,
+                            project_count.to_string(),
+                            String::new(), // No actions for account row
+                        ]);
+
+                        // Project row (only if project is selected)
+                        if let Some(project_id) = &platform.gcp_selected_project_id {
+                            let project_name = format!("  ├─ {}", project_id);
+                            let vm_count = platform.vms.len();
+                            let firewall_status = format!("{} VM\n✗ GCP Firewall Not Whitelisted", vm_count);
 
                             self.rows.push([
-                                platform.name.clone(),   // Platform name (internal)
-                                String::new(),           // Empty VM name
-                                details.clone(),         // Details
-                                String::new(),           // Empty status
-                                String::new(),           // Empty VM ID
-                                String::new(),           // Empty zone
-                                String::new(),           // Empty project
+                                platform.name.clone(),
+                                format!("project:{}", project_id),
+                                String::new(),
                             ]);
 
                             data_rows.push(vec![
-                                platform_display,
-                                String::new(),
-                                details,
-                                String::new(),
+                                project_name,
+                                firewall_status,
+                                String::new(), // Actions will be rendered as buttons
                             ]);
-                        } else {
-                            // Show each VM as a row
+
+                            // VM rows
                             for vm in &platform.vms {
-                                let details = self.format_vm_details(platform, vm);
+                                let vm_name = format!("  └─── {}", vm.name);
+                                let ssh_status = "🔄 SSH Connection Testing...".to_string();
 
                                 self.rows.push([
-                                    platform.name.clone(), // Platform name (internal)
-                                    vm.name.clone(),       // VM name
-                                    details.clone(),       // Details
-                                    vm.status.clone(),     // Status
-                                    vm.instance_id.clone(), // Store VM ID for operations
-                                    vm.zone.clone(),       // Store zone for deletion
-                                    vm.gcp_project_id.clone(), // Store project for reference
+                                    platform.name.clone(),
+                                    format!("vm:{}", vm.name),
+                                    vm.zone.clone(), // Store zone for operations
                                 ]);
 
                                 data_rows.push(vec![
-                                    platform_display.clone(),
-                                    vm.name.clone(),
-                                    details,
-                                    vm.status.clone(),
+                                    vm_name,
+                                    ssh_status,
+                                    String::new(), // Actions will be rendered as buttons
                                 ]);
                             }
                         }
@@ -450,10 +460,9 @@ impl PlatformTab {
                     if let Some(spreadsheet) = &mut self.spreadsheet {
                         // Recreate spreadsheet with fresh data to avoid duplicates
                         let columns = vec![
-                            text_column("Platform Name", 150.0),
-                            text_column("VM Name", 180.0),
-                            text_column("Details", 350.0),
-                            text_column("Status", 120.0),
+                            text_column("Platform Name", 400.0),
+                            text_column("Status", 300.0),
+                            text_column("Actions", 250.0),
                         ];
 
                         if let Ok(mut new_spreadsheet) =
