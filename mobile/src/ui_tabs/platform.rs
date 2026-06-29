@@ -450,9 +450,11 @@ impl PlatformTab {
                         .cell(&format_steps(&row_for_cells))
                         .widget_cell(move |ui| {
                             ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+
                                 // Update Firewall
                                 if ui.add_enabled(row_for_actions.project_selected,
-                                    MaterialButton::text("Update Firewall")).clicked() {
+                                    MaterialButton::outlined("Update Firewall").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_update_firewall"),
                                         row_for_actions.platform_name.clone()
@@ -461,7 +463,7 @@ impl PlatformTab {
 
                                 // Select Project
                                 if ui.add_enabled(row_for_actions.gcp_connected,
-                                    MaterialButton::text("Select Project")).clicked() {
+                                    MaterialButton::outlined("Select Project").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_select_project"),
                                         row_for_actions.platform_name.clone()
@@ -470,7 +472,7 @@ impl PlatformTab {
 
                                 // Delete VM
                                 if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::text("Delete VM")).clicked() {
+                                    MaterialButton::outlined("Delete VM").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_delete_vm"),
                                         (row_for_actions.platform_name.clone(),
@@ -481,7 +483,7 @@ impl PlatformTab {
 
                                 // Regen VM
                                 if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::text("Regen VM")).clicked() {
+                                    MaterialButton::outlined("Regen VM").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_regen_vm"),
                                         row_for_actions.platform_name.clone()
@@ -490,7 +492,7 @@ impl PlatformTab {
 
                                 // Restart VM
                                 if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::text("Restart VM")).clicked() {
+                                    MaterialButton::outlined("Restart VM").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_restart_vm"),
                                         row_for_actions.platform_name.clone()
@@ -498,7 +500,7 @@ impl PlatformTab {
                                 }
 
                                 // Delete Platform
-                                if ui.add(MaterialButton::text("Delete")).clicked() {
+                                if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
                                     ui.data_mut(|d| d.insert_temp(
                                         egui::Id::new("platform_action_delete_platform"),
                                         row_for_actions.platform_name.clone()
