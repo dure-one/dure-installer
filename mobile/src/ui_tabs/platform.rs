@@ -697,7 +697,9 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
                     platform_tab.restart_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                    // TODO: Trigger refresh
+                    // Force reload of platform data and re-trigger SSH tests
+                    platform_tab.loaded = false;
+                    platform_tab.ssh_test_tasks.clear();
                 }
             });
             ui.end_row();
