@@ -78,6 +78,10 @@ pub struct PlatformTab {
         Option<poll_promise::Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_connected_email: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_project_list: Vec<(String, String)>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_selected_project: Option<usize>,
 
     // Init progress state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -160,6 +164,8 @@ impl Default for PlatformTab {
             add_platform_oauth_result: None,
             add_platform_oauth_promise: None,
             add_platform_connected_email: None,
+            add_platform_project_list: Vec::new(),
+            add_platform_selected_project: None,
             init_in_progress: false,
             init_platform_name: None,
             init_progress_log: Vec::new(),
@@ -391,7 +397,25 @@ impl PlatformTab {
                                         ui.spacing_mut().item_spacing.x = 2.0;
                                         ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
-                                        // Update Firewall
+                                        // 0. Refresh
+                                        if ui.add(MaterialButton::outlined("Refresh").small()).on_hover_text("Refresh platform data").clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_refresh"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
+
+                                        // 1. Add VM
+                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                            MaterialButton::outlined("Add VM").small()).on_hover_text("Add VM").clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_add_vm"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
+
+                                        // 2. Firewall
                                         if ui.add_enabled(row_for_actions.project_selected,
                                             MaterialButton::outlined("Firewall").small()).on_hover_text("Update Firewall").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
@@ -400,16 +424,16 @@ impl PlatformTab {
                                             ));
                                         }
 
-                                        // Select Project
-                                        if ui.add_enabled(row_for_actions.gcp_connected,
-                                            MaterialButton::outlined("Project").small()).on_hover_text("Select Project").clicked() {
+                                        // 3. Restart
+                                        if ui.add_enabled(row_for_actions.has_vm,
+                                            MaterialButton::outlined("Restart").small()).on_hover_text("Restart VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_select_project"),
+                                                egui::Id::new("platform_action_restart_vm"),
                                                 row_for_actions.platform_name.clone()
                                             ));
                                         }
 
-                                        // Delete VM
+                                        // 4. Del VM
                                         if ui.add_enabled(row_for_actions.has_vm,
                                             MaterialButton::outlined("Del VM").small()).on_hover_text("Delete VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
@@ -420,7 +444,7 @@ impl PlatformTab {
                                             ));
                                         }
 
-                                        // Regen VM
+                                        // 5. Regen
                                         if ui.add_enabled(row_for_actions.has_vm,
                                             MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
@@ -429,26 +453,7 @@ impl PlatformTab {
                                             ));
                                         }
 
-                                        // Restart VM
-                                        if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Restart").small()).on_hover_text("Restart VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_restart_vm"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
-                                        }
-
-                                        // Add VM
-                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                                        if ui.add_enabled(row_for_actions.gcp_connected,
-                                            MaterialButton::outlined("Add VM").small()).on_hover_text("Add VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_add_vm"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
-                                        }
-
-                                        // Estimated Billing
+                                        // 6. Billing
                                         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
                                         if ui.add_enabled(row_for_actions.gcp_connected,
                                             MaterialButton::outlined("Billing").small()).on_hover_text("Estimated Billing").clicked() {
@@ -458,7 +463,7 @@ impl PlatformTab {
                                             ));
                                         }
 
-                                        // Delete Platform
+                                        // 7. Delete
                                         if ui.add(MaterialButton::outlined("Delete").small()).on_hover_text("Delete Platform").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_delete_platform"),
@@ -477,6 +482,13 @@ impl PlatformTab {
             table.show(ui);
 
             // Process pending actions from button clicks
+            // Refresh action (available on all platforms)
+            if let Some(_platform_name) = ui.data(|d|
+                d.get_temp::<String>(egui::Id::new("platform_action_refresh"))) {
+                self.loaded = false;
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_refresh")));
+            }
+
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             {
                 if let Some(platform_name) = ui.data(|d|
@@ -490,12 +502,6 @@ impl PlatformTab {
                         }
                     }
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_update_firewall")));
-                }
-
-                if let Some(platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_select_project"))) {
-                    self.show_select_project_dialog(platform_name);
-                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_select_project")));
                 }
 
                 if let Some((platform_name, vm_name, vm_zone)) = ui.data(|d|
@@ -846,6 +852,55 @@ impl PlatformTab {
                             egui::Color32::from_rgb(72, 187, 120),
                             format!("✓ Connected as: {}", email),
                         );
+
+                        ui.add_space(8.0);
+
+                        // Fetch projects if not already fetched
+                        if self.add_platform_project_list.is_empty() {
+                            if let Some(oauth_result) = &self.add_platform_oauth_result {
+                                use crate::calc::gcp_rest::GcpRestClient;
+                                let client = GcpRestClient::new(oauth_result.access_token.clone());
+                                match client.list_projects(None) {
+                                    Ok(project_list) => {
+                                        self.add_platform_project_list = project_list
+                                            .projects
+                                            .into_iter()
+                                            .filter(|p| p.is_active())
+                                            .map(|p| (p.id().to_string(), p.display_name().to_string()))
+                                            .collect();
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to fetch projects: {}", e);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show project selection
+                        ui.label(format!(
+                            "Select Project ({} available):",
+                            self.add_platform_project_list.len()
+                        ));
+                        ui.add_space(4.0);
+
+                        egui::ScrollArea::vertical()
+                            .max_height(200.0)
+                            .show(ui, |ui| {
+                                for (idx, (project_id, project_name)) in
+                                    self.add_platform_project_list.iter().enumerate()
+                                {
+                                    let is_selected = self.add_platform_selected_project == Some(idx);
+                                    if ui
+                                        .selectable_label(
+                                            is_selected,
+                                            format!("{} ({})", project_name, project_id),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.add_platform_selected_project = Some(idx);
+                                    }
+                                }
+                            });
                     } else if self.add_platform_oauth_promise.is_some() {
                         ui.spinner();
                         ui.label("Waiting for authorization...");
@@ -875,11 +930,14 @@ impl PlatformTab {
                         self.add_platform_oauth_result = None;
                         self.add_platform_oauth_promise = None;
                         self.add_platform_connected_email = None;
+                        self.add_platform_project_list.clear();
+                        self.add_platform_selected_project = None;
                     }
 
                     let can_add = !self.add_platform_name.is_empty()
                         && (self.add_platform_type != "gcp"
-                            || self.add_platform_connected_email.is_some());
+                            || (self.add_platform_connected_email.is_some()
+                                && self.add_platform_selected_project.is_some()));
 
                     ui.add_enabled_ui(can_add, |ui| {
                         if ui.button("Add").clicked() {
@@ -888,6 +946,8 @@ impl PlatformTab {
                             self.add_platform_oauth_result = None;
                             self.add_platform_oauth_promise = None;
                             self.add_platform_connected_email = None;
+                            self.add_platform_project_list.clear();
+                            self.add_platform_selected_project = None;
                         }
                     });
 
@@ -898,6 +958,10 @@ impl PlatformTab {
                             && self.add_platform_connected_email.is_none()
                         {
                             ui.label("⚠ Connect to Google Cloud first");
+                        } else if self.add_platform_type == "gcp"
+                            && self.add_platform_selected_project.is_none()
+                        {
+                            ui.label("⚠ Select a project");
                         }
                     }
                 });
@@ -930,20 +994,24 @@ impl PlatformTab {
                     }
 
                     // Create new platform with OAuth info if GCP
-                    let (oauth_access, oauth_refresh, oauth_expiry, connected_email) =
+                    let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
                         if self.add_platform_type == "gcp" {
                             if let Some(oauth) = &self.add_platform_oauth_result {
+                                let project_id = self.add_platform_selected_project
+                                    .and_then(|idx| self.add_platform_project_list.get(idx))
+                                    .map(|(id, _)| id.clone());
                                 (
                                     Some(oauth.access_token.clone()),
                                     Some(oauth.refresh_token.clone()),
                                     Some(oauth.expires_at as i64),
                                     self.add_platform_connected_email.clone(),
+                                    project_id,
                                 )
                             } else {
-                                (None, None, None, None)
+                                (None, None, None, None, None)
                             }
                         } else {
-                            (None, None, None, None)
+                            (None, None, None, None, None)
                         };
 
                     let platform = CloudPlatformConfig {
@@ -953,7 +1021,7 @@ impl PlatformTab {
                         gcp_oauth_refresh_token: oauth_refresh,
                         gcp_oauth_token_expiry: oauth_expiry,
                         gcp_connected_email: connected_email,
-                        gcp_selected_project_id: None,
+                        gcp_selected_project_id: selected_project,
                         firebase_project_id: None,
                         firebase_api_key: None,
                         supabase_project_ref: None,
