@@ -38,6 +38,16 @@ pub struct PlatformTab {
     delete_vm_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_vm_confirmation_text: String,
+
+    // Restart VM dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_restart_vm_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    restart_vm_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    restart_vm_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    restart_vm_confirmation_text: String,
 }
 
 impl Default for PlatformTab {
@@ -53,6 +63,10 @@ impl Default for PlatformTab {
             delete_vm_platform_name: String::new(),
             delete_vm_name: String::new(),
             delete_vm_confirmation_text: String::new(),
+            show_restart_vm_dialog: false,
+            restart_vm_platform_name: String::new(),
+            restart_vm_name: String::new(),
+            restart_vm_confirmation_text: String::new(),
         }
     }
 }
@@ -219,6 +233,49 @@ impl PlatformTab {
             }
         }
 
+        // Render Restart VM confirmation dialog
+        if let Some(()) = render_restart_vm_dialog(
+            ui.ctx(),
+            &mut self.show_restart_vm_dialog,
+            &self.restart_vm_name,
+            &mut self.restart_vm_confirmation_text,
+        ) {
+            // User confirmed - execute VM restart
+            if let Ok(config) = load_config() {
+                // Find the platform and VM
+                let platform = config.platforms.iter()
+                    .find(|p| p.name == self.restart_vm_platform_name);
+
+                if let Some(platform) = platform {
+                    if let Some(access_token) = &platform.gcp_oauth_access_token {
+                        let vm = platform.vms.iter()
+                            .find(|v| v.name == self.restart_vm_name);
+
+                        if let Some(vm) = vm {
+                            // Call restart_vm function
+                            let client = GcpRestClient::new(access_token.clone());
+                            match crate::calc::hosting_gcp::restart_vm(&client, vm) {
+                                Ok(msg) => {
+                                    println!("✓ {}", msg);
+                                    // Force reload to update SSH status
+                                    self.loaded = false;
+                                }
+                                Err(e) => {
+                                    eprintln!("✗ Failed to restart VM: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("✗ VM not found: {}", self.restart_vm_name);
+                        }
+                    } else {
+                        eprintln!("✗ No OAuth token found for platform");
+                    }
+                } else {
+                    eprintln!("✗ Platform not found: {}", self.restart_vm_platform_name);
+                }
+            }
+        }
+
         // Render table
         egui::ScrollArea::vertical()
             .max_height(600.0)
@@ -271,6 +328,59 @@ fn spawn_ssh_test(vm: &VmInstance) -> Promise<Result<SshConnectionResult, String
         test_connection(&ssh_config)
             .map_err(|e| format!("Timeout: {}", e))
     })
+}
+
+/// Render restart VM confirmation dialog
+fn render_restart_vm_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    vm_name: &str,
+    confirmation_text: &mut String,
+) -> Option<()> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Restart VM")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label("This will reset (hard reboot) the VM instance.");
+            ui.label("Any unsaved data will be lost.");
+            ui.add_space(8.0);
+
+            ui.label(format!("VM: {}", vm_name));
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Type 'restart' to confirm:");
+                ui.text_edit_singleline(confirmation_text);
+            });
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(confirmation_text == "restart", |ui| {
+                    if ui.button("Confirm Restart").clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+            });
+        });
+
+    if confirmed {
+        Some(())
+    } else {
+        None
+    }
 }
 
 /// Render delete VM confirmation dialog
@@ -462,7 +572,10 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
                     // TODO: Show regenerate confirmation
                 }
                 if ui.add(MaterialButton::outlined("Restart VM")).clicked() {
-                    // TODO: Show restart confirmation
+                    platform_tab.show_restart_vm_dialog = true;
+                    platform_tab.restart_vm_platform_name = platform_name.clone();
+                    platform_tab.restart_vm_name = vm_name.clone();
+                    platform_tab.restart_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Refresh")).clicked() {
                     // TODO: Trigger refresh
