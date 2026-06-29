@@ -84,6 +84,10 @@ pub struct PlatformTab {
     show_add_platform_dialog: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_oauth_promise: Option<Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_oauth_result: Option<crate::api::gcp_oauth::OAuthResult>,
 }
 
 impl Default for PlatformTab {
@@ -115,6 +119,8 @@ impl Default for PlatformTab {
             regenerate_vm_confirmation_text: String::new(),
             show_add_platform_dialog: false,
             add_platform_name: String::new(),
+            add_platform_oauth_promise: None,
+            add_platform_oauth_result: None,
         }
     }
 }
@@ -369,17 +375,27 @@ impl PlatformTab {
         }
 
         // Render Add Platform dialog
-        if let Some(name) = render_add_platform_dialog(
+        if let Some((name, oauth)) = render_add_platform_dialog(
             ui.ctx(),
             &mut self.show_add_platform_dialog,
             &mut self.add_platform_name,
+            &mut self.add_platform_oauth_promise,
+            &mut self.add_platform_oauth_result,
         ) {
-            // User confirmed - add new platform
+            // User confirmed - add new platform with OAuth credentials
             if let Ok(mut config) = load_config() {
-                // Create new GCP platform
+                // Fetch user email from GCP
+                let client = GcpRestClient::new(oauth.access_token.clone());
+                let email = client.get_user_info().ok().and_then(|info| info.email);
+
+                // Create new GCP platform with OAuth credentials
                 let new_platform = CloudPlatformConfig {
                     name,
                     platform_type: "gcp".to_string(),
+                    gcp_oauth_access_token: Some(oauth.access_token),
+                    gcp_oauth_refresh_token: Some(oauth.refresh_token),
+                    gcp_oauth_token_expiry: Some(oauth.expires_at as i64),
+                    gcp_connected_email: email,
                     ..Default::default()
                 };
 
@@ -389,9 +405,11 @@ impl PlatformTab {
                 if let Ok(config_path) = get_config_path() {
                     match config.save(&config_path) {
                         Ok(_) => {
-                            self.set_success("Platform added successfully. Use OAuth to connect.".to_string());
+                            self.set_success("Platform added and connected to Google Cloud successfully!".to_string());
                             let _ = crate::calc::audit::push_cli("system", "platform_tab", "add_platform", &self.add_platform_name);
                             self.loaded = false; // Force reload
+                            // Clear OAuth state for next time
+                            self.add_platform_oauth_result = None;
                         }
                         Err(e) => {
                             self.set_error(format!("Failed to save platform: {}", e));
@@ -803,12 +821,15 @@ fn render_delete_vm_dialog(
     }
 }
 
-/// Render add platform dialog
+/// Render add platform dialog with OAuth
+/// Returns Some(platform_name, oauth_result) when user confirms with valid OAuth
 fn render_add_platform_dialog(
     ctx: &egui::Context,
     show: &mut bool,
     platform_name: &mut String,
-) -> Option<String> {
+    oauth_promise: &mut Option<Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
+    oauth_result: &mut Option<crate::api::gcp_oauth::OAuthResult>,
+) -> Option<(String, crate::api::gcp_oauth::OAuthResult)> {
     if !*show {
         return None;
     }
@@ -827,8 +848,52 @@ fn render_add_platform_dialog(
                 ui.text_edit_singleline(platform_name);
             });
 
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(8.0);
+
+            // OAuth section
+            ui.label("Google Cloud Authentication:");
             ui.add_space(4.0);
-            ui.label("Note: After adding, use OAuth to connect to your Google account.");
+
+            // Check OAuth promise status
+            if let Some(promise) = oauth_promise {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(oauth) => {
+                            *oauth_result = Some(oauth.clone());
+                            *oauth_promise = None;
+                        }
+                        Err(e) => {
+                            ui.colored_label(egui::Color32::from_rgb(220, 50, 50), format!("✗ OAuth failed: {}", e));
+                            *oauth_promise = None;
+                        }
+                    }
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Connecting to Google... (check your browser)");
+                    });
+                }
+            }
+
+            // Show OAuth status and button
+            if let Some(oauth) = oauth_result {
+                ui.colored_label(egui::Color32::from_rgb(72, 187, 120), "✓ Connected to Google Cloud");
+                ui.add_space(4.0);
+                ui.label("Ready to add platform.");
+            } else if oauth_promise.is_none() {
+                if ui.add(MaterialButton::outlined("Connect to Google")).clicked() {
+                    // Start OAuth flow
+                    use crate::api::gcp_oauth::OAuthHandler;
+                    let handler = OAuthHandler::default();
+                    *oauth_promise = Some(Promise::spawn_thread("gcp_oauth_add_platform", move || {
+                        handler.run_oauth_flow().map_err(|e| e.to_string())
+                    }));
+                }
+                ui.add_space(4.0);
+                ui.colored_label(egui::Color32::GRAY, "Click to authorize Dure to access your GCP account");
+            }
 
             ui.add_space(8.0);
 
@@ -837,17 +902,28 @@ fn render_add_platform_dialog(
                     *show = false;
                 }
 
-                ui.add_enabled_ui(!platform_name.is_empty(), |ui| {
-                    if ui.button("Add Platform").clicked() {
+                let can_add = !platform_name.is_empty() && oauth_result.is_some();
+                ui.add_enabled_ui(can_add, |ui| {
+                    if ui.add(MaterialButton::filled("Add Platform")).clicked() {
                         confirmed = true;
                         *show = false;
                     }
                 });
+
+                if !can_add && platform_name.is_empty() {
+                    ui.label("⚠ Enter platform name");
+                } else if !can_add {
+                    ui.label("⚠ Connect to Google first");
+                }
             });
         });
 
     if confirmed {
-        Some(platform_name.clone())
+        if let Some(oauth) = oauth_result.take() {
+            Some((platform_name.clone(), oauth))
+        } else {
+            None
+        }
     } else {
         None
     }
