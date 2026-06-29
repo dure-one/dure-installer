@@ -217,6 +217,104 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
     Ok((app_config, config_path))
 }
 
+/// Format connection progress steps with status indicators
+fn format_steps(row: &PlatformRow) -> String {
+    let gcp = if row.gcp_connected { "✓" } else { "✗" };
+    let proj = if row.project_selected { "✓" } else { "✗" };
+    let vm = if row.vm_created { "✓" } else { "✗" };
+    let ssh = if row.ssh_ready { "✓" } else { "✗" };
+
+    format!(
+        "{} GCP Connected → {} Project Created → {} VM Created → {} SSH Connected",
+        gcp, proj, vm, ssh
+    )
+}
+
+/// Compute firewall whitelist status for a platform
+fn compute_firewall_status(platform: &CloudPlatformConfig) -> String {
+    if let Some(project_id) = &platform.gcp_selected_project_id {
+        if let Some(access_token) = &platform.gcp_oauth_access_token {
+            use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+
+            let client = GcpRestClient::new(access_token.clone());
+
+            match get_current_ip() {
+                Ok(current_ip) => {
+                    match client.check_ip_whitelisted(project_id, &current_ip) {
+                        Ok(true) => format!("✓ Whitelisted ({})", current_ip),
+                        Ok(false) => "✗ Not whitelisted".to_string(),
+                        Err(_) => "? Status unknown".to_string(),
+                    }
+                }
+                Err(_) => "? Failed to get IP".to_string(),
+            }
+        } else {
+            "Not connected".to_string()
+        }
+    } else {
+        "No project".to_string()
+    }
+}
+
+/// Compute SSH readiness status for a platform's VM
+fn compute_ssh_status(platform: &CloudPlatformConfig) -> String {
+    if let Some(vm) = platform.vms.first() {
+        if vm.external_ip.is_some() {
+            "✓ Ready".to_string()
+        } else {
+            "? No external IP".to_string()
+        }
+    } else {
+        "No VM".to_string()
+    }
+}
+
+/// Fetch total project count from GCP API
+fn fetch_project_count(platform: &CloudPlatformConfig) -> usize {
+    if let Some(access_token) = &platform.gcp_oauth_access_token {
+        use crate::calc::gcp_rest::GcpRestClient;
+        let client = GcpRestClient::new(access_token.clone());
+
+        match client.list_projects(None) {
+            Ok(list) => list.projects.len(),
+            Err(e) => {
+                eprintln!("Failed to fetch project count: {}", e);
+                0
+            }
+        }
+    } else {
+        0
+    }
+}
+
+/// Render drawer content showing platform hierarchy
+fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
+    ui.add_space(8.0);
+
+    // Level 1: Email + project count
+    if let Some(email) = &row.email {
+        ui.label(format!("{} ({} projects total)", email, row.total_project_count));
+    } else {
+        ui.label("Not connected");
+    }
+
+    // Level 2: Selected project
+    if let Some(project_id) = &row.selected_project_id {
+        ui.label(format!("  └─ {} (selected)", project_id));
+
+        // Level 3: VM details
+        if let Some(vm_name) = &row.vm_name {
+            ui.label(format!("     └─ VM: {}", vm_name));
+            ui.label(format!("        • Firewall: {}", row.firewall_status));
+            ui.label(format!("        • SSH: {}", row.ssh_status));
+        } else {
+            ui.label("     └─ No VM created");
+        }
+    } else {
+        ui.label("  └─ No project selected");
+    }
+}
+
 impl PlatformTab {
     /// Render the platform tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui) {
