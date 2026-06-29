@@ -1,8 +1,8 @@
 //! Platform tab - Platform configuration and management
 
 use eframe::egui;
-use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
-use egui_material3::MaterialButton;
+use egui_material3::{data_table, MaterialButton};
+use std::collections::HashSet;
 
 use crate::calc::audit;
 use crate::calc::gcp_rest::BillingRecord;
@@ -11,22 +11,51 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
+/// Platform row data for data table
+#[derive(Clone, Debug)]
+struct PlatformRow {
+    // Identity
+    platform_name: String,        // Internal platform name from config
+    platform_type: String,        // "GCP"
+
+    // Connection state flags (for Steps column)
+    gcp_connected: bool,          // Has OAuth access token
+    project_selected: bool,       // Has gcp_selected_project_id
+    vm_created: bool,             // vms.len() > 0
+    ssh_ready: bool,              // VM has external_ip.is_some()
+
+    // Drawer content data
+    email: Option<String>,        // Connected Google account
+    total_project_count: usize,   // Fetched from GCP API
+    selected_project_id: Option<String>,
+    vm_name: Option<String>,      // First VM name
+    firewall_status: String,      // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
+    ssh_status: String,           // "✓ Ready" or "? No external IP"
+
+    // Action button state
+    has_vm: bool,                 // Enable/disable VM operation buttons
+    vm_zone: Option<String>,      // For VM operations (delete, restart, regen)
+}
+
 /// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlatformTab {
-    selected_row: Option<usize>,
-    /// Cached platform/project/VM rows (platform_name, status, actions)
+    /// Platform rows for data table
     #[cfg_attr(feature = "serde", serde(skip))]
-    rows: Vec<[String; 3]>,
+    rows: Vec<PlatformRow>,
+
+    /// Selection state for each row
+    #[cfg_attr(feature = "serde", serde(skip))]
+    row_selection: Vec<bool>,
+
+    /// Track which rows have drawers expanded (all open by default)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    drawer_expanded: HashSet<usize>,
+
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
-
-    // Spreadsheet
-    #[cfg_attr(feature = "serde", serde(skip))]
-    spreadsheet: Option<MaterialSpreadsheet>,
-    row_selection_enabled: bool,
 
     // Add dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -113,34 +142,12 @@ pub struct PlatformTab {
 
 impl Default for PlatformTab {
     fn default() -> Self {
-        let spreadsheet = {
-            let columns = vec![
-                text_column("Platform Name", 400.0),
-                text_column("Status", 300.0),
-                text_column("Actions", 250.0),
-            ];
-
-            // Create spreadsheet with theme-aware settings
-            MaterialSpreadsheet::new("vm_spreadsheet", columns)
-                .ok()
-                .map(|mut s| {
-                    // Enable striped rows for Material Design theme colors
-                    s.set_striped(true);
-                    // Enable row selection
-                    s.set_row_selection_enabled(true);
-                    // Enable selection for better visual feedback
-                    s.set_allow_selection(true);
-                    s
-                })
-        };
-
         Self {
-            selected_row: None,
             rows: Vec::new(),
+            row_selection: Vec::new(),
+            drawer_expanded: HashSet::new(),
             loaded: false,
             load_error: None,
-            spreadsheet,
-            row_selection_enabled: true,
             show_add_dialog: false,
             add_platform_name: String::new(),
             add_platform_type: "gcp".to_string(),
@@ -463,17 +470,17 @@ impl PlatformTab {
 
     fn load_rows(&mut self) {
         self.rows.clear();
+        self.row_selection.clear();
+        self.drawer_expanded.clear();
         self.load_error = None;
 
         #[cfg(not(target_arch = "wasm32"))]
         {
             match load_config() {
                 Ok((app_config, _)) => {
-                    let mut data_rows = Vec::new();
-
-                    // Build hierarchical rows: Account → Project → VMs
                     eprintln!("DEBUG: Building rows for {} platforms", app_config.platforms.len());
-                    for platform in &app_config.platforms {
+
+                    for (platform_idx, platform) in app_config.platforms.iter().enumerate() {
                         // Only show GCP platforms for now
                         if platform.platform_type != "gcp" {
                             eprintln!("DEBUG: Skipping non-GCP platform: {}", platform.name);
