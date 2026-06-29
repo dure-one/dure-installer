@@ -20,6 +20,8 @@ pub mod nft;
 pub mod ns;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod platform;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod platform_gcp;
 pub mod session;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod site;
