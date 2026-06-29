@@ -33,6 +33,16 @@ pub fn get_current_ip() -> Result<String> {
     Ok(ip)
 }
 
+/// Check if an IP is in any of the CIDR ranges
+pub fn ip_in_ranges(ip: &str, ranges: &[String]) -> bool {
+    // Simple check: exact match or 0.0.0.0/0
+    ranges.iter().any(|range| {
+        range == ip
+            || range == &format!("{}/32", ip)
+            || range == "0.0.0.0/0"
+    })
+}
+
 /// GCP REST API client using ureq
 pub struct GcpRestClient {
     access_token: String,
@@ -744,6 +754,20 @@ pub struct Project {
     pub labels: std::collections::HashMap<String, String>,
 }
 
+/// GCP Firewall Rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallRule {
+    pub name: String,
+    pub allowed: Vec<FirewallAllowed>,
+    #[serde(rename = "sourceRanges")]
+    pub source_ranges: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FirewallListResponse {
+    items: Option<Vec<FirewallRule>>,
+}
+
 /// OAuth2 user info response
 #[derive(Debug, Deserialize)]
 pub struct UserInfo {
@@ -907,7 +931,7 @@ pub struct FirewallRequest {
     pub source_ranges: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirewallAllowed {
     #[serde(rename = "IPProtocol")]
     pub ip_protocol: String, // "tcp", "udp", "icmp", "all"
@@ -962,6 +986,96 @@ impl GcpRestClient {
 
         // Wait for global operation to complete
         self.wait_for_global_operation(project_id, &operation.name)
+    }
+
+    /// List firewall rules for a project
+    pub fn list_firewall_rules(&self, project_id: &str) -> Result<Vec<FirewallRule>> {
+        let url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+
+        let response = self.get(&url)?;
+        let list_response: FirewallListResponse = response.into_json()?;
+
+        Ok(list_response.items.unwrap_or_default())
+    }
+
+    /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
+    pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
+        let rules = self.list_firewall_rules(project_id)?;
+
+        for rule in rules {
+            // Check if rule allows SSH (port 22)
+            let allows_ssh = rule.allowed.iter().any(|a| {
+                a.ip_protocol.to_lowercase() == "tcp"
+                    && a.ports.as_ref().map_or(false, |ports| {
+                        ports.iter().any(|p| p == "22")
+                    })
+            });
+
+            if allows_ssh {
+                if let Some(ranges) = &rule.source_ranges {
+                    if ip_in_ranges(ip, ranges) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Add an IP to the SSH firewall whitelist
+    pub fn add_ip_to_firewall(&self, project_id: &str, ip: &str) -> Result<()> {
+        let rules = self.list_firewall_rules(project_id)?;
+
+        // Find existing SSH rule or create new one
+        let ssh_rule = rules.iter().find(|rule| {
+            rule.allowed.iter().any(|a| {
+                a.ip_protocol.to_lowercase() == "tcp"
+                    && a.ports.as_ref().map_or(false, |ports| {
+                        ports.iter().any(|p| p == "22")
+                    })
+            })
+        });
+
+        if let Some(rule) = ssh_rule {
+            // Update existing rule
+            let mut updated_ranges = rule.source_ranges.clone().unwrap_or_default();
+            let ip_cidr = format!("{}/32", ip);
+
+            if !updated_ranges.contains(&ip_cidr) {
+                updated_ranges.push(ip_cidr);
+            }
+
+            let body = serde_json::json!({
+                "name": rule.name,
+                "allowed": rule.allowed,
+                "sourceRanges": updated_ranges,
+            });
+
+            let url = format!(
+                "{}/projects/{}/global/firewalls/{}",
+                GCP_COMPUTE_API_BASE, project_id, rule.name
+            );
+
+            self.post(&url, &body.to_string())?;
+        } else {
+            // Create new SSH rule
+            let body = serde_json::json!({
+                "name": "allow-ssh-dure",
+                "allowed": [{
+                    "IPProtocol": "tcp",
+                    "ports": ["22"]
+                }],
+                "sourceRanges": [format!("{}/32", ip)],
+                "direction": "INGRESS",
+            });
+
+            let url = format!("{}/projects/{}/global/firewalls", GCP_COMPUTE_API_BASE, project_id);
+
+            self.post(&url, &body.to_string())?;
+        }
+
+        Ok(())
     }
 
     /// List BigQuery datasets
@@ -1573,5 +1687,31 @@ mod tests {
 
         assert_eq!(project.project_id, "test-project-123");
         assert_eq!(project.display_name, Some("Test Project".to_string()));
+    }
+
+    #[test]
+    fn test_firewall_rule_structure() {
+        let rule = FirewallRule {
+            name: "allow-ssh".to_string(),
+            allowed: vec![FirewallAllowed {
+                ip_protocol: "tcp".to_string(),
+                ports: Some(vec!["22".to_string()]),
+            }],
+            source_ranges: Some(vec!["0.0.0.0/0".to_string()]),
+        };
+
+        assert_eq!(rule.name, "allow-ssh");
+        assert_eq!(rule.allowed[0].ip_protocol, "tcp");
+    }
+
+    #[test]
+    fn test_check_ip_in_ranges() {
+        let ranges = vec![
+            "10.0.0.0/8".to_string(),
+            "117.53.222.116/32".to_string(),
+        ];
+
+        assert!(ip_in_ranges("117.53.222.116", &ranges));
+        assert!(!ip_in_ranges("192.168.1.1", &ranges));
     }
 }
