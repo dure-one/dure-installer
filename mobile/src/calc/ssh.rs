@@ -364,4 +364,20 @@ mod tests {
         let result = parse_ssh_host("invalid-host");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_ssh_config_with_keyring_domain() {
+        let config = SshHostConfig {
+            host: "user@example.com".to_string(),
+            password: None,
+            private_key_path: None,
+            keyring_domain: Some("gcp.test.vm".to_string()),
+            port: 22,
+            initialized: false,
+            last_status: None,
+        };
+
+        assert_eq!(config.keyring_domain, Some("gcp.test.vm".to_string()));
+        assert!(config.private_key_path.is_none());
+    }
 }
