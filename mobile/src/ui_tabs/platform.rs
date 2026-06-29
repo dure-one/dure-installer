@@ -28,6 +28,16 @@ pub struct PlatformTab {
     firewall_project_id: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     firewall_confirmation_text: String,
+
+    // Delete VM dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_delete_vm_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_confirmation_text: String,
 }
 
 impl Default for PlatformTab {
@@ -39,6 +49,10 @@ impl Default for PlatformTab {
             show_update_firewall_dialog: false,
             firewall_project_id: String::new(),
             firewall_confirmation_text: String::new(),
+            show_delete_vm_dialog: false,
+            delete_vm_platform_name: String::new(),
+            delete_vm_name: String::new(),
+            delete_vm_confirmation_text: String::new(),
         }
     }
 }
@@ -123,7 +137,7 @@ impl PlatformTab {
             self.ssh_test_tasks.remove(&key);
         }
 
-        // Render confirmation dialog
+        // Render Update Firewall confirmation dialog
         if let Some(()) = render_update_firewall_dialog(
             ui.ctx(),
             &mut self.show_update_firewall_dialog,
@@ -158,6 +172,49 @@ impl PlatformTab {
                     } else {
                         eprintln!("✗ Platform not found for project {}", self.firewall_project_id);
                     }
+                }
+            }
+        }
+
+        // Render Delete VM confirmation dialog
+        if let Some(()) = render_delete_vm_dialog(
+            ui.ctx(),
+            &mut self.show_delete_vm_dialog,
+            &self.delete_vm_name,
+            &mut self.delete_vm_confirmation_text,
+        ) {
+            // User confirmed - execute VM deletion
+            if let Ok(config) = load_config() {
+                // Find the platform and VM
+                let platform = config.platforms.iter()
+                    .find(|p| p.name == self.delete_vm_platform_name);
+
+                if let Some(platform) = platform {
+                    if let Some(access_token) = &platform.gcp_oauth_access_token {
+                        let vm = platform.vms.iter()
+                            .find(|v| v.name == self.delete_vm_name);
+
+                        if let Some(vm) = vm {
+                            // Call delete_vm function
+                            let client = GcpRestClient::new(access_token.clone());
+                            match crate::calc::hosting_gcp::delete_vm(&client, vm) {
+                                Ok(msg) => {
+                                    println!("✓ {}", msg);
+                                    // Force reload to update table
+                                    self.loaded = false;
+                                }
+                                Err(e) => {
+                                    eprintln!("✗ Failed to delete VM: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("✗ VM not found: {}", self.delete_vm_name);
+                        }
+                    } else {
+                        eprintln!("✗ No OAuth token found for platform");
+                    }
+                } else {
+                    eprintln!("✗ Platform not found: {}", self.delete_vm_platform_name);
                 }
             }
         }
@@ -214,6 +271,59 @@ fn spawn_ssh_test(vm: &VmInstance) -> Promise<Result<SshConnectionResult, String
         test_connection(&ssh_config)
             .map_err(|e| format!("Timeout: {}", e))
     })
+}
+
+/// Render delete VM confirmation dialog
+fn render_delete_vm_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    vm_name: &str,
+    confirmation_text: &mut String,
+) -> Option<()> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Delete VM")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label("⚠️  This will permanently delete the VM instance.");
+            ui.label("All data on the VM will be lost.");
+            ui.add_space(8.0);
+
+            ui.label(format!("VM: {}", vm_name));
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Type 'delete' to confirm:");
+                ui.text_edit_singleline(confirmation_text);
+            });
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(confirmation_text == "delete", |ui| {
+                    if ui.button("Confirm Delete").clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+            });
+        });
+
+    if confirmed {
+        Some(())
+    } else {
+        None
+    }
 }
 
 /// Render update firewall confirmation dialog
@@ -331,7 +441,7 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
             ui.end_row();
         }
 
-        PlatformRow::Vm { vm_name, ssh_status, .. } => {
+        PlatformRow::Vm { platform_name, vm_name, ssh_status, .. } => {
             ui.label(format!("  └─── {}", vm_name));
 
             let ssh_text = match ssh_status {
@@ -343,7 +453,10 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
 
             ui.horizontal(|ui| {
                 if ui.add(MaterialButton::outlined("Delete VM")).clicked() {
-                    // TODO: Show delete confirmation
+                    platform_tab.show_delete_vm_dialog = true;
+                    platform_tab.delete_vm_platform_name = platform_name.clone();
+                    platform_tab.delete_vm_name = vm_name.clone();
+                    platform_tab.delete_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Regenerate VM")).clicked() {
                     // TODO: Show regenerate confirmation
