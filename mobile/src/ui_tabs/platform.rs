@@ -99,6 +99,16 @@ pub struct PlatformTab {
     billing_table: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     billing_project_id: String,
+
+    // Select Project dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_select_project_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_list: Vec<(String, String)>, // (project_id, project_name)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_selected: Option<usize>,
 }
 
 impl Default for PlatformTab {
@@ -160,6 +170,10 @@ impl Default for PlatformTab {
             billing_dataset: String::new(),
             billing_table: String::new(),
             billing_project_id: String::new(),
+            show_select_project_dialog: false,
+            select_project_platform_name: String::new(),
+            select_project_list: Vec::new(),
+            select_project_selected: None,
         }
     }
 }
@@ -220,6 +234,32 @@ impl PlatformTab {
             }
 
             ui.add_space(8.0);
+
+            // Select Project button - enabled when account row is selected
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            {
+                let is_account_selected = if let Some(idx) = selected_row_idx {
+                    idx < self.rows.len() && self.rows[idx][1].starts_with("account:")
+                } else {
+                    false
+                };
+
+                let select_project_button = MaterialButton::outlined("Select Project");
+                let select_project_button = if is_account_selected {
+                    select_project_button
+                } else {
+                    select_project_button.enabled(false)
+                };
+
+                if ui.add(select_project_button).clicked() {
+                    if let Some(idx) = selected_row_idx {
+                        if idx < self.rows.len() {
+                            let platform_name = self.rows[idx][0].clone();
+                            self.show_select_project_dialog(platform_name);
+                        }
+                    }
+                }
+            }
 
             // Add VM button - always enabled if we have at least one platform
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -293,16 +333,48 @@ impl PlatformTab {
                 self.load_error = None;
             }
 
-            // Show selected info
+            // Show selected info and row-specific actions
             if let Some(idx) = selected_row_idx {
                 if idx < self.rows.len() {
-                    let platform = &self.rows[idx][0];
-                    let row_type = &self.rows[idx][1];
+                    let platform = self.rows[idx][0].clone();
+                    let row_type = self.rows[idx][1].clone();
+                    let extra_data = self.rows[idx][2].clone();
 
                     if let Some(vm_name) = row_type.strip_prefix("vm:") {
+                        let vm_name = vm_name.to_string();
                         ui.label(format!("│ Selected: {} / {}", platform, vm_name));
+
+                        // VM-specific action buttons
+                        ui.horizontal(|ui| {
+                            ui.add_space(16.0);
+                            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                            {
+                                if ui.add(MaterialButton::outlined("Delete VM")).clicked() {
+                                    self.show_delete_vm_confirmation(platform.clone(), vm_name.clone(), extra_data.clone());
+                                }
+                                if ui.add(MaterialButton::outlined("Regenerate")).clicked() {
+                                    self.regenerate_vm(platform.clone(), vm_name.clone());
+                                }
+                                if ui.add(MaterialButton::outlined("Restart VM")).clicked() {
+                                    self.restart_vm(platform.clone(), vm_name.clone());
+                                }
+                                if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+                                    self.loaded = false;
+                                    self.load_error = None;
+                                }
+                            }
+                        });
                     } else if let Some(project_id) = row_type.strip_prefix("project:") {
+                        let project_id = project_id.to_string();
                         ui.label(format!("│ Selected: {} / {}", platform, project_id));
+
+                        // Project-specific action buttons
+                        ui.horizontal(|ui| {
+                            ui.add_space(16.0);
+                            if ui.add(MaterialButton::outlined("Update Firewall")).clicked() {
+                                self.update_firewall(platform.clone(), project_id.clone());
+                            }
+                        });
                     } else {
                         ui.label(format!("│ Selected: {} (account)", platform));
                     }
@@ -347,6 +419,12 @@ impl PlatformTab {
         // Delete Platform dialog
         if self.show_delete_platform_dialog {
             self.render_delete_platform_dialog(ui.ctx());
+        }
+
+        // Select Project dialog
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        if self.show_select_project_dialog {
+            self.render_select_project_dialog(ui.ctx());
         }
 
         // Delete VM dialog
@@ -394,11 +472,15 @@ impl PlatformTab {
                     let mut data_rows = Vec::new();
 
                     // Build hierarchical rows: Account → Project → VMs
+                    eprintln!("DEBUG: Building rows for {} platforms", app_config.platforms.len());
                     for platform in &app_config.platforms {
                         // Only show GCP platforms for now
                         if platform.platform_type != "gcp" {
+                            eprintln!("DEBUG: Skipping non-GCP platform: {}", platform.name);
                             continue;
                         }
+                        eprintln!("DEBUG: Processing GCP platform: {}, selected_project: {:?}, vm_count: {}",
+                            platform.name, platform.gcp_selected_project_id, platform.vms.len());
 
                         let email = platform.gcp_connected_email.as_deref().unwrap_or("Not connected");
 
@@ -424,16 +506,35 @@ impl PlatformTab {
                         ]);
 
                         data_rows.push(vec![
-                            account_name,
+                            account_name.clone(),
                             project_count.to_string(),
                             String::new(), // No actions for account row
                         ]);
+                        eprintln!("DEBUG: Added account row: {}", account_name);
 
                         // Project row (only if project is selected)
                         if let Some(project_id) = &platform.gcp_selected_project_id {
                             let project_name = format!("  ├─ {}", project_id);
                             let vm_count = platform.vms.len();
-                            let firewall_status = format!("{} VM\n✗ GCP Firewall Not Whitelisted", vm_count);
+
+                            // Fetch current IP and check firewall whitelist status
+                            let firewall_status = if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+                                let client = GcpRestClient::new(access_token.clone());
+
+                                match get_current_ip() {
+                                    Ok(current_ip) => {
+                                        match client.check_ip_whitelisted(project_id, &current_ip) {
+                                            Ok(true) => format!("{} VM • ✓ Firewall ({})", vm_count, current_ip),
+                                            Ok(false) => format!("{} VM • ✗ Firewall Not Whitelisted", vm_count),
+                                            Err(_) => format!("{} VM • ? Firewall Status Unknown", vm_count),
+                                        }
+                                    }
+                                    Err(_) => format!("{} VM • Failed to get current IP", vm_count),
+                                }
+                            } else {
+                                format!("{} VM • Not connected", vm_count)
+                            };
 
                             self.rows.push([
                                 platform.name.clone(),
@@ -444,13 +545,19 @@ impl PlatformTab {
                             data_rows.push(vec![
                                 project_name,
                                 firewall_status,
-                                String::new(), // Actions will be rendered as buttons
+                                "Update Firewall".to_string(),
                             ]);
 
                             // VM rows
                             for vm in &platform.vms {
                                 let vm_name = format!("  └─── {}", vm.name);
-                                let ssh_status = "🔄 SSH Connection Testing...".to_string();
+
+                                // SSH status - simplified for now
+                                let ssh_status = if vm.external_ip.is_some() {
+                                    "🔄 SSH Connection Testing...".to_string()
+                                } else {
+                                    "? No External IP".to_string()
+                                };
 
                                 self.rows.push([
                                     platform.name.clone(),
@@ -461,13 +568,14 @@ impl PlatformTab {
                                 data_rows.push(vec![
                                     vm_name,
                                     ssh_status,
-                                    String::new(), // Actions will be rendered as buttons
+                                    "Delete • Regenerate • Restart • Refresh".to_string(),
                                 ]);
                             }
                         }
                     }
 
                     // Clear and update spreadsheet with fresh data
+                    eprintln!("DEBUG: Created {} self.rows and {} data_rows", self.rows.len(), data_rows.len());
                     if let Some(spreadsheet) = &mut self.spreadsheet {
                         // Recreate spreadsheet with fresh data to avoid duplicates
                         let columns = vec![
@@ -483,7 +591,8 @@ impl PlatformTab {
                             new_spreadsheet.set_striped(true);
                             new_spreadsheet.set_row_selection_enabled(self.row_selection_enabled);
                             new_spreadsheet.set_allow_selection(true);
-                            new_spreadsheet.init_with_data(data_rows);
+                            new_spreadsheet.init_with_data(data_rows.clone());
+                            eprintln!("DEBUG: Spreadsheet initialized with {} rows", data_rows.len());
                             *spreadsheet = new_spreadsheet;
                         }
                     }
@@ -860,6 +969,233 @@ impl PlatformTab {
         self.gcp_wizard = Some(wizard);
     }
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn restart_vm(&mut self, platform_name: String, vm_name: String) {
+        use crate::calc::gcp_rest::GcpRestClient;
+        use crate::calc::hosting_gcp;
+
+        // Load config
+        let (app_config, config_path) = match load_config() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Failed to load config: {}", e);
+                self.load_error = Some(format!("Failed to load config: {}", e));
+                return;
+            }
+        };
+
+        // Find platform
+        let platform = match app_config.platforms.iter().find(|p| p.name == platform_name) {
+            Some(p) => p,
+            None => {
+                eprintln!("Platform not found: {}", platform_name);
+                self.load_error = Some(format!("Platform not found: {}", platform_name));
+                return;
+            }
+        };
+
+        // Find VM
+        let vm = match platform.vms.iter().find(|v| v.name == vm_name) {
+            Some(v) => v,
+            None => {
+                eprintln!("VM not found: {}", vm_name);
+                self.load_error = Some(format!("VM not found: {}", vm_name));
+                return;
+            }
+        };
+
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                eprintln!("No access token for platform: {}", platform_name);
+                self.load_error = Some("OAuth not connected".to_string());
+                return;
+            }
+        };
+
+        // Create GCP client
+        let client = GcpRestClient::new(access_token);
+
+        // Restart VM
+        match hosting_gcp::restart_vm(&client, vm) {
+            Ok(message) => {
+                eprintln!("✓ {}", message);
+                self.loaded = false;
+                self.load_error = None;
+            }
+            Err(e) => {
+                eprintln!("Failed to restart VM: {}", e);
+                self.load_error = Some(format!("Failed to restart VM: {}", e));
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn regenerate_vm(&mut self, platform_name: String, vm_name: String) {
+        use crate::calc::gcp_rest::GcpRestClient;
+        use crate::calc::hosting_gcp;
+
+        // Load config
+        let (mut app_config, config_path) = match load_config() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Failed to load config: {}", e);
+                self.load_error = Some(format!("Failed to load config: {}", e));
+                return;
+            }
+        };
+
+        // Find platform (mutable)
+        let platform = match app_config.platforms.iter_mut().find(|p| p.name == platform_name) {
+            Some(p) => p,
+            None => {
+                eprintln!("Platform not found: {}", platform_name);
+                self.load_error = Some(format!("Platform not found: {}", platform_name));
+                return;
+            }
+        };
+
+        // Find VM to get zone
+        let zone = match platform.vms.iter().find(|v| v.name == vm_name) {
+            Some(v) => v.zone.clone(),
+            None => {
+                eprintln!("VM not found: {}", vm_name);
+                self.load_error = Some(format!("VM not found: {}", vm_name));
+                return;
+            }
+        };
+
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                eprintln!("No access token for platform: {}", platform_name);
+                self.load_error = Some("OAuth not connected".to_string());
+                return;
+            }
+        };
+
+        // Create GCP client
+        let client = GcpRestClient::new(access_token);
+
+        // Regenerate VM
+        match hosting_gcp::regenerate_vm(&client, platform, &zone) {
+            Ok(message) => {
+                eprintln!("✓ {}", message);
+
+                // Save updated config
+                if let Err(e) = app_config.save(&config_path) {
+                    eprintln!("Failed to save config: {}", e);
+                    self.load_error = Some(format!("Failed to save config: {}", e));
+                } else {
+                    self.loaded = false;
+                    self.load_error = None;
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to regenerate VM: {}", e);
+                self.load_error = Some(format!("Failed to regenerate VM: {}", e));
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn update_firewall(&mut self, platform_name: String, project_id: String) {
+        use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+
+        // Get current IP
+        let current_ip = match get_current_ip() {
+            Ok(ip) => ip,
+            Err(e) => {
+                eprintln!("Failed to get current IP: {}", e);
+                self.load_error = Some(format!("Failed to get current IP: {}", e));
+                return;
+            }
+        };
+
+        // Load config to get access token
+        let (app_config, _) = match load_config() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Failed to load config: {}", e);
+                self.load_error = Some(format!("Failed to load config: {}", e));
+                return;
+            }
+        };
+
+        // Find platform
+        let platform = match app_config.platforms.iter().find(|p| p.name == platform_name) {
+            Some(p) => p,
+            None => {
+                eprintln!("Platform not found: {}", platform_name);
+                self.load_error = Some(format!("Platform not found: {}", platform_name));
+                return;
+            }
+        };
+
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                eprintln!("No access token for platform: {}", platform_name);
+                self.load_error = Some("OAuth not connected".to_string());
+                return;
+            }
+        };
+
+        // Create GCP client
+        let client = GcpRestClient::new(access_token);
+
+        // Add IP to firewall
+        match client.add_ip_to_firewall(&project_id, &current_ip) {
+            Ok(()) => {
+                eprintln!("✓ Successfully added {} to firewall whitelist", current_ip);
+                // Refresh to show updated status
+                self.loaded = false;
+                self.load_error = None;
+            }
+            Err(e) => {
+                eprintln!("Failed to update firewall: {}", e);
+                self.load_error = Some(format!("Failed to update firewall: {}", e));
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn show_select_project_dialog(&mut self, platform_name: String) {
+        use crate::calc::gcp_rest::GcpRestClient;
+
+        self.select_project_platform_name = platform_name.clone();
+        self.select_project_list.clear();
+        self.select_project_selected = None;
+
+        // Load projects from GCP
+        if let Ok((app_config, _)) = load_config() {
+            if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                if let Some(access_token) = &platform.gcp_oauth_access_token {
+                    let client = GcpRestClient::new(access_token.clone());
+                    match client.list_projects(None) {
+                        Ok(list) => {
+                            for project in list.projects {
+                                self.select_project_list.push((
+                                    project.project_id.clone(),
+                                    project.name.clone().unwrap_or_else(|| project.project_id.clone()),
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to load projects: {}", e);
+                            self.load_error = Some(format!("Failed to load projects: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+
+        self.show_select_project_dialog = true;
+    }
+
     fn show_delete_vm_confirmation(
         &mut self,
         platform_name: String,
@@ -1188,6 +1524,92 @@ impl PlatformTab {
 
         if !open {
             self.show_delete_platform_dialog = false;
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn render_select_project_dialog(&mut self, ctx: &egui::Context) {
+        let mut open = self.show_select_project_dialog;
+
+        egui::Window::new("Select GCP Project")
+            .open(&mut open)
+            .resizable(false)
+            .collapsible(false)
+            .default_width(500.0)
+            .show(ctx, |ui| {
+                ui.heading("Select Project");
+                ui.add_space(8.0);
+
+                if self.select_project_list.is_empty() {
+                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), "No projects found");
+                } else {
+                    ui.label(format!("Found {} projects:", self.select_project_list.len()));
+                    ui.add_space(8.0);
+
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            for (idx, (project_id, project_name)) in self.select_project_list.iter().enumerate() {
+                                let is_selected = self.select_project_selected == Some(idx);
+                                if ui.selectable_label(is_selected, format!("{} ({})", project_name, project_id)).clicked() {
+                                    self.select_project_selected = Some(idx);
+                                }
+                            }
+                        });
+                }
+
+                ui.add_space(12.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Cancel").clicked() {
+                        self.show_select_project_dialog = false;
+                    }
+
+                    let select_enabled = self.select_project_selected.is_some();
+                    let select_button = MaterialButton::filled("Select");
+                    let select_button = if select_enabled {
+                        select_button
+                    } else {
+                        select_button.enabled(false)
+                    };
+
+                    if ui.add(select_button).clicked() {
+                        self.execute_select_project();
+                        self.show_select_project_dialog = false;
+                    }
+                });
+            });
+
+        if !open {
+            self.show_select_project_dialog = false;
+        }
+    }
+
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn execute_select_project(&mut self) {
+        if let Some(selected_idx) = self.select_project_selected {
+            if selected_idx < self.select_project_list.len() {
+                let (project_id, _) = &self.select_project_list[selected_idx];
+                let platform_name = self.select_project_platform_name.clone();
+
+                // Update config with selected project
+                if let Ok((mut app_config, config_path)) = load_config() {
+                    if let Some(platform) = app_config.platforms.iter_mut().find(|p| p.name == platform_name) {
+                        platform.gcp_selected_project_id = Some(project_id.clone());
+
+                        // Save config
+                        if let Err(e) = app_config.save(&config_path) {
+                            eprintln!("Failed to save config: {}", e);
+                            self.load_error = Some(format!("Failed to save config: {}", e));
+                        } else {
+                            eprintln!("✓ Selected project: {}", project_id);
+                            // Refresh the spreadsheet
+                            self.loaded = false;
+                            self.load_error = None;
+                        }
+                    }
+                }
+            }
         }
     }
 
