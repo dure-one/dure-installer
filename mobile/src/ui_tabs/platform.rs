@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::config::{AppConfig, CloudPlatformConfig, VmInstance, SshHostConfig};
 use crate::calc::ssh::{test_connection, SshConnectionResult};
-use crate::calc::gcp_rest::get_current_ip;
+use crate::calc::gcp_rest::{get_current_ip, GcpRestClient};
 
 /// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -132,9 +132,33 @@ impl PlatformTab {
         ) {
             // User confirmed - execute firewall update
             if let Ok(ip) = get_current_ip() {
-                // TODO: Get OAuth token from config
-                // TODO: Call GcpRestClient::add_ip_to_firewall()
-                println!("Updating firewall for {} with IP {}", self.firewall_project_id, ip);
+                // Get OAuth token from config
+                if let Ok(config) = load_config() {
+                    // Find the platform with this project
+                    let platform = config.platforms.iter()
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.firewall_project_id));
+
+                    if let Some(platform) = platform {
+                        if let Some(access_token) = &platform.gcp_oauth_access_token {
+                            // Call GCP API to update firewall
+                            let client = GcpRestClient::new(access_token.clone());
+                            match client.add_ip_to_firewall(&self.firewall_project_id, &ip) {
+                                Ok(_) => {
+                                    println!("✓ Firewall updated for {} with IP {}", self.firewall_project_id, ip);
+                                    // Force reload to show updated status
+                                    self.loaded = false;
+                                }
+                                Err(e) => {
+                                    eprintln!("✗ Failed to update firewall: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("✗ No OAuth token found for platform");
+                        }
+                    } else {
+                        eprintln!("✗ Platform not found for project {}", self.firewall_project_id);
+                    }
+                }
             }
         }
 
