@@ -62,6 +62,7 @@ md5 = "0.7"
 
 # Cryptography
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+ed25519-dalek = "2"
 chacha20poly1305 = "0.10"
 base64 = "0.22"
 sha1 = "0.10"
