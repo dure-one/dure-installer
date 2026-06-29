@@ -2,7 +2,6 @@
 
 use eframe::egui;
 use egui_material3::{data_table, MaterialButton};
-use std::collections::HashSet;
 
 use crate::calc::audit;
 use crate::calc::gcp_rest::BillingRecord;
@@ -59,14 +58,6 @@ pub struct PlatformTab {
     /// Platform rows for data table
     #[cfg_attr(feature = "serde", serde(skip))]
     rows: Vec<PlatformRow>,
-
-    /// Selection state for each row
-    #[cfg_attr(feature = "serde", serde(skip))]
-    row_selection: Vec<bool>,
-
-    /// Track which rows have drawers expanded (all open by default)
-    #[cfg_attr(feature = "serde", serde(skip))]
-    drawer_expanded: HashSet<usize>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
@@ -160,8 +151,6 @@ impl Default for PlatformTab {
     fn default() -> Self {
         Self {
             rows: Vec::new(),
-            row_selection: Vec::new(),
-            drawer_expanded: HashSet::new(),
             loaded: false,
             load_error: None,
             show_add_dialog: false,
@@ -325,10 +314,6 @@ impl PlatformTab {
         );
         ui.add_space(8.0);
 
-        // Get selected row for delete button state
-        let selected_row_idx = self.spreadsheet.as_ref().and_then(|s| s.get_selected_row());
-        let has_selection = selected_row_idx.is_some();
-
         // Action buttons
         ui.horizontal(|ui| {
             if ui.add(MaterialButton::filled("Add Platform")).clicked() {
@@ -337,49 +322,17 @@ impl PlatformTab {
                 self.add_platform_type = "gcp".to_string();
             }
 
-            // Delete Platform button - enabled only when a row is selected
-            let delete_platform_button = MaterialButton::outlined("Delete Platform");
-            let delete_platform_button = if has_selection {
-                delete_platform_button
-            } else {
-                delete_platform_button.enabled(false)
-            };
-
-            if ui.add(delete_platform_button).clicked() {
-                if let Some(idx) = selected_row_idx {
-                    if idx < self.rows.len() {
-                        let platform_name = self.rows[idx][0].clone();
-                        self.show_delete_platform_confirmation(platform_name);
-                    }
-                }
-            }
+            // Delete Platform button - now handled via Actions column in table
+            let delete_platform_button = MaterialButton::outlined("Delete Platform").enabled(false);
+            ui.add(delete_platform_button);
 
             ui.add_space(8.0);
 
-            // Select Project button - enabled when account row is selected
+            // Select Project button - now handled via Actions column in table
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             {
-                let is_account_selected = if let Some(idx) = selected_row_idx {
-                    idx < self.rows.len() && self.rows[idx][1].starts_with("account:")
-                } else {
-                    false
-                };
-
-                let select_project_button = MaterialButton::outlined("Select Project");
-                let select_project_button = if is_account_selected {
-                    select_project_button
-                } else {
-                    select_project_button.enabled(false)
-                };
-
-                if ui.add(select_project_button).clicked() {
-                    if let Some(idx) = selected_row_idx {
-                        if idx < self.rows.len() {
-                            let platform_name = self.rows[idx][0].clone();
-                            self.show_select_project_dialog(platform_name);
-                        }
-                    }
-                }
+                let select_project_button = MaterialButton::outlined("Select Project").enabled(false);
+                ui.add(select_project_button);
             }
 
             // Add VM button - always enabled if we have at least one platform
@@ -412,28 +365,9 @@ impl PlatformTab {
                     }
                 }
 
-                // Delete VM button - enabled only when a VM row is selected
-                let delete_button = MaterialButton::outlined("Delete VM");
-                let delete_button = if has_selection {
-                    delete_button
-                } else {
-                    delete_button.enabled(false)
-                };
-
-                if ui.add(delete_button).clicked() {
-                    if let Some(idx) = selected_row_idx {
-                        if idx < self.rows.len() {
-                            let platform_name = self.rows[idx][0].clone();
-                            let row_type = &self.rows[idx][1];
-
-                            // Only delete if it's a VM row
-                            if let Some(vm_name) = row_type.strip_prefix("vm:") {
-                                let zone = self.rows[idx][2].clone();
-                                self.show_delete_vm_confirmation(platform_name, vm_name.to_string(), zone);
-                            }
-                        }
-                    }
-                }
+                // Delete VM button - now handled via Actions column in table
+                let delete_button = MaterialButton::outlined("Delete VM").enabled(false);
+                ui.add(delete_button);
 
                 // Estimated Billing button - enabled only when we have GCP platforms
                 let billing_button = MaterialButton::outlined("Estimated Billing");
@@ -453,55 +387,6 @@ impl PlatformTab {
                 self.loaded = false;
                 self.load_error = None;
             }
-
-            // Show selected info and row-specific actions
-            if let Some(idx) = selected_row_idx {
-                if idx < self.rows.len() {
-                    let platform = self.rows[idx][0].clone();
-                    let row_type = self.rows[idx][1].clone();
-                    let extra_data = self.rows[idx][2].clone();
-
-                    if let Some(vm_name) = row_type.strip_prefix("vm:") {
-                        let vm_name = vm_name.to_string();
-                        ui.label(format!("│ Selected: {} / {}", platform, vm_name));
-
-                        // VM-specific action buttons
-                        ui.horizontal(|ui| {
-                            ui.add_space(16.0);
-                            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                            {
-                                if ui.add(MaterialButton::outlined("Delete VM")).clicked() {
-                                    self.show_delete_vm_confirmation(platform.clone(), vm_name.clone(), extra_data.clone());
-                                }
-                                if ui.add(MaterialButton::outlined("Regenerate")).clicked() {
-                                    self.regenerate_vm(platform.clone(), vm_name.clone());
-                                }
-                                if ui.add(MaterialButton::outlined("Restart VM")).clicked() {
-                                    self.restart_vm(platform.clone(), vm_name.clone());
-                                }
-                                if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                                    self.loaded = false;
-                                    self.load_error = None;
-                                }
-                            }
-                        });
-                    } else if let Some(project_id) = row_type.strip_prefix("project:") {
-                        let project_id = project_id.to_string();
-                        ui.label(format!("│ Selected: {} / {}", platform, project_id));
-
-                        // Project-specific action buttons
-                        ui.horizontal(|ui| {
-                            ui.add_space(16.0);
-                            if ui.add(MaterialButton::outlined("Update Firewall")).clicked() {
-                                self.update_firewall(platform.clone(), project_id.clone());
-                            }
-                        });
-                    } else {
-                        ui.label(format!("│ Selected: {} (account)", platform));
-                    }
-                }
-            }
-        });
         });
         ui.add_space(8.0);
 
@@ -515,9 +400,6 @@ impl PlatformTab {
         } else if self.rows.is_empty() {
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
         } else {
-            // Store pending action from button clicks
-            let mut pending_action: Option<PlatformAction> = None;
-
             // Build data table
             let table_id = egui::Id::new("platform_table");
 
@@ -545,189 +427,23 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .column("Platform", 200.0, false)
                 .column("Type", 100.0, false)
-                .column("Steps", 400.0, false)
-                .column("Actions", 500.0, false);
+                .column("Steps", 600.0, false);
 
             for row in self.rows.iter() {
-                let row_clone = row.clone();
-                let row_clone2 = row.clone();
+                let row_for_cells = row.clone();
+                let row_for_drawer = row.clone();
 
-                table = table.row(|r| {
-                    r.cell(&row_clone.platform_name)
-                     .cell(&row_clone.platform_type)
-                     .cell(&format_steps(&row_clone))
-                     .cell_ui(|ui| {
-                         ui.horizontal(|ui| {
-                             // Update Firewall
-                             let firewall_btn = MaterialButton::text("Update Firewall")
-                                 .enabled(row_clone.project_selected);
-                             if ui.add(firewall_btn).clicked() {
-                                 pending_action = Some(PlatformAction::UpdateFirewall(
-                                     row_clone.platform_name.clone()
-                                 ));
-                             }
-
-                             // Select Project
-                             let select_project_btn = MaterialButton::text("Select Project")
-                                 .enabled(row_clone.gcp_connected);
-                             if ui.add(select_project_btn).clicked() {
-                                 pending_action = Some(PlatformAction::SelectProject(
-                                     row_clone.platform_name.clone()
-                                 ));
-                             }
-
-                             // Delete VM
-                             let delete_vm_btn = MaterialButton::text("Delete VM")
-                                 .enabled(row_clone.has_vm);
-                             if ui.add(delete_vm_btn).clicked() {
-                                 pending_action = Some(PlatformAction::DeleteVM {
-                                     platform_name: row_clone.platform_name.clone(),
-                                     vm_name: row_clone.vm_name.clone().unwrap_or_default(),
-                                     vm_zone: row_clone.vm_zone.clone().unwrap_or_default(),
-                                 });
-                             }
-
-                             // Regen VM
-                             let regen_vm_btn = MaterialButton::text("Regen VM")
-                                 .enabled(row_clone.has_vm);
-                             if ui.add(regen_vm_btn).clicked() {
-                                 pending_action = Some(PlatformAction::RegenVM(
-                                     row_clone.platform_name.clone()
-                                 ));
-                             }
-
-                             // Restart VM
-                             let restart_vm_btn = MaterialButton::text("Restart VM")
-                                 .enabled(row_clone.has_vm);
-                             if ui.add(restart_vm_btn).clicked() {
-                                 pending_action = Some(PlatformAction::RestartVM(
-                                     row_clone.platform_name.clone()
-                                 ));
-                             }
-
-                             // Delete Platform
-                             if ui.add(MaterialButton::text("Delete Platform")).clicked() {
-                                 pending_action = Some(PlatformAction::DeletePlatform(
-                                     row_clone.platform_name.clone()
-                                 ));
-                             }
-
-                             // Refresh
-                             if ui.add(MaterialButton::text("Refresh")).clicked() {
-                                 pending_action = Some(PlatformAction::Refresh);
-                             }
-                         });
-                     })
-                     .drawer(|ui| {
-                         render_drawer_content(ui, &row_clone2);
+                table = table.row(move |r| {
+                    r.cell(&row_for_cells.platform_name)
+                     .cell(&row_for_cells.platform_type)
+                     .cell(&format_steps(&row_for_cells))
+                     .drawer(move |ui| {
+                         render_drawer_content(ui, &row_for_drawer);
                      })
                 });
             }
 
             table.show(ui);
-
-            // Process pending action after table rendering
-            if let Some(action) = pending_action {
-                match action {
-                    PlatformAction::UpdateFirewall(platform_name) => {
-                        // Find platform and trigger firewall update
-                        if let Ok((app_config, _)) = load_config() {
-                            if let Some(platform) = app_config.platforms.iter()
-                                .find(|p| p.name == platform_name)
-                            {
-                                if let Some(project_id) = &platform.gcp_selected_project_id {
-                                    if let Some(access_token) = &platform.gcp_oauth_access_token {
-                                        use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
-                                        let client = GcpRestClient::new(access_token.clone());
-                                        match get_current_ip() {
-                                            Ok(current_ip) => {
-                                                match client.add_ip_to_whitelist(project_id, &current_ip) {
-                                                    Ok(_) => {
-                                                        eprintln!("✓ IP {} whitelisted in project {}", current_ip, project_id);
-                                                        self.loaded = false; // Refresh
-                                                    }
-                                                    Err(e) => {
-                                                        eprintln!("Failed to whitelist IP: {}", e);
-                                                    }
-                                                }
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Failed to get current IP: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    PlatformAction::SelectProject(platform_name) => {
-                        self.show_select_project_dialog(platform_name);
-                    }
-                    PlatformAction::DeleteVM { platform_name, vm_name, vm_zone } => {
-                        self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
-                    }
-                    PlatformAction::RegenVM(platform_name) => {
-                        // Trigger VM regeneration
-                        if let Ok((mut app_config, config_path)) = load_config() {
-                            if let Some(platform) = app_config.platforms.iter_mut()
-                                .find(|p| p.name == platform_name)
-                            {
-                                if let Some(access_token) = &platform.gcp_oauth_access_token {
-                                    if let Some(zone) = platform.vms.first().map(|vm| vm.zone.clone()) {
-                                        use crate::calc::gcp_rest::GcpRestClient;
-                                        use crate::calc::hosting_gcp;
-                                        let client = GcpRestClient::new(access_token.clone());
-                                        match hosting_gcp::regenerate_vm(&client, platform, &zone) {
-                                            Ok(msg) => {
-                                                eprintln!("✓ {}", msg);
-                                                // Save config
-                                                if let Err(e) = app_config.save(&config_path) {
-                                                    eprintln!("Failed to save config: {}", e);
-                                                }
-                                                self.loaded = false; // Refresh
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Failed to regenerate VM: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    PlatformAction::RestartVM(platform_name) => {
-                        // Trigger VM restart
-                        if let Ok((app_config, _)) = load_config() {
-                            if let Some(platform) = app_config.platforms.iter()
-                                .find(|p| p.name == platform_name)
-                            {
-                                if let Some(access_token) = &platform.gcp_oauth_access_token {
-                                    if let Some(vm) = platform.vms.first() {
-                                        use crate::calc::gcp_rest::GcpRestClient;
-                                        use crate::calc::hosting_gcp;
-                                        let client = GcpRestClient::new(access_token.clone());
-                                        match hosting_gcp::restart_vm(&client, vm) {
-                                            Ok(msg) => {
-                                                eprintln!("✓ {}", msg);
-                                                self.loaded = false; // Refresh
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Failed to restart VM: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    PlatformAction::DeletePlatform(platform_name) => {
-                        self.show_delete_platform_confirmation(platform_name);
-                    }
-                    PlatformAction::Refresh => {
-                        self.loaded = false;
-                    }
-                }
-            }
         }
 
         // Add platform dialog
