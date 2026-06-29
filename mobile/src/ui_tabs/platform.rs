@@ -35,6 +35,14 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     project_count_tasks: HashMap<String, Promise<Result<usize, String>>>,
 
+    // Status message for user feedback
+    #[cfg_attr(feature = "serde", serde(skip))]
+    status_message: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    status_is_error: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    status_timestamp: Option<std::time::Instant>,
+
     // Confirmation dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
     show_update_firewall_dialog: bool,
@@ -82,6 +90,9 @@ impl Default for PlatformTab {
             current_ip: None,
             firewall_check_tasks: HashMap::new(),
             project_count_tasks: HashMap::new(),
+            status_message: None,
+            status_is_error: false,
+            status_timestamp: None,
             show_update_firewall_dialog: false,
             firewall_project_id: String::new(),
             firewall_confirmation_text: String::new(),
@@ -101,12 +112,44 @@ impl Default for PlatformTab {
 }
 
 impl PlatformTab {
+    /// Set success status message
+    fn set_success(&mut self, message: String) {
+        self.status_message = Some(message);
+        self.status_is_error = false;
+        self.status_timestamp = Some(std::time::Instant::now());
+    }
+
+    /// Set error status message
+    fn set_error(&mut self, message: String) {
+        self.status_message = Some(message);
+        self.status_is_error = true;
+        self.status_timestamp = Some(std::time::Instant::now());
+    }
+
     /// Render the platform tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Cloud Platforms");
         ui.add_space(4.0);
         ui.label("Manage GCP platforms and VMs with inline actions.");
         ui.add_space(8.0);
+
+        // Status message display (auto-clear after 10 seconds)
+        if let Some(msg) = &self.status_message {
+            if let Some(timestamp) = self.status_timestamp {
+                if timestamp.elapsed().as_secs() > 10 {
+                    self.status_message = None;
+                    self.status_timestamp = None;
+                } else {
+                    let color = if self.status_is_error {
+                        egui::Color32::from_rgb(220, 50, 50)
+                    } else {
+                        egui::Color32::from_rgb(50, 180, 50)
+                    };
+                    ui.colored_label(color, msg);
+                    ui.add_space(4.0);
+                }
+            }
+        }
 
         // Action buttons
         ui.horizontal(|ui| {
@@ -337,19 +380,21 @@ impl PlatformTab {
                             let client = GcpRestClient::new(access_token.clone());
                             match client.add_ip_to_firewall(&self.firewall_project_id, &ip) {
                                 Ok(_) => {
-                                    println!("✓ Firewall updated for {} with IP {}", self.firewall_project_id, ip);
+                                    self.set_success(format!("Firewall updated for {} with IP {}", self.firewall_project_id, ip));
+                                    // Audit log
+                                    let _ = crate::calc::audit::push_cli("system", "platform_tab", "firewall_update", &format!("{}:{}", self.firewall_project_id, ip));
                                     // Force reload to show updated status
                                     self.loaded = false;
                                 }
                                 Err(e) => {
-                                    eprintln!("✗ Failed to update firewall: {}", e);
+                                    self.set_error(format!("Failed to update firewall: {}", e));
                                 }
                             }
                         } else {
-                            eprintln!("✗ No OAuth token found for platform");
+                            self.set_error("No OAuth token found for platform".to_string());
                         }
                     } else {
-                        eprintln!("✗ Platform not found for project {}", self.firewall_project_id);
+                        self.set_error(format!("Platform not found for project {}", self.firewall_project_id));
                     }
                 }
             }
@@ -378,22 +423,24 @@ impl PlatformTab {
                             let client = GcpRestClient::new(access_token.clone());
                             match crate::calc::hosting_gcp::delete_vm(&client, vm) {
                                 Ok(msg) => {
-                                    println!("✓ {}", msg);
+                                    self.set_success(msg.clone());
+                                    // Audit log
+                                    let _ = crate::calc::audit::push_cli("system", "platform_tab", "vm_delete", &self.delete_vm_name);
                                     // Force reload to update table
                                     self.loaded = false;
                                 }
                                 Err(e) => {
-                                    eprintln!("✗ Failed to delete VM: {}", e);
+                                    self.set_error(format!("Failed to delete VM: {}", e));
                                 }
                             }
                         } else {
-                            eprintln!("✗ VM not found: {}", self.delete_vm_name);
+                            self.set_error(format!("VM not found: {}", self.delete_vm_name));
                         }
                     } else {
-                        eprintln!("✗ No OAuth token found for platform");
+                        self.set_error("No OAuth token found for platform".to_string());
                     }
                 } else {
-                    eprintln!("✗ Platform not found: {}", self.delete_vm_platform_name);
+                    self.set_error(format!("Platform not found: {}", self.delete_vm_platform_name));
                 }
             }
         }
@@ -421,22 +468,24 @@ impl PlatformTab {
                             let client = GcpRestClient::new(access_token.clone());
                             match crate::calc::hosting_gcp::restart_vm(&client, vm) {
                                 Ok(msg) => {
-                                    println!("✓ {}", msg);
+                                    self.set_success(msg.clone());
+                                    // Audit log
+                                    let _ = crate::calc::audit::push_cli("system", "platform_tab", "vm_restart", &self.restart_vm_name);
                                     // Force reload to update SSH status
                                     self.loaded = false;
                                 }
                                 Err(e) => {
-                                    eprintln!("✗ Failed to restart VM: {}", e);
+                                    self.set_error(format!("Failed to restart VM: {}", e));
                                 }
                             }
                         } else {
-                            eprintln!("✗ VM not found: {}", self.restart_vm_name);
+                            self.set_error(format!("VM not found: {}", self.restart_vm_name));
                         }
                     } else {
-                        eprintln!("✗ No OAuth token found for platform");
+                        self.set_error("No OAuth token found for platform".to_string());
                     }
                 } else {
-                    eprintln!("✗ Platform not found: {}", self.restart_vm_platform_name);
+                    self.set_error(format!("Platform not found: {}", self.restart_vm_platform_name));
                 }
             }
         }
@@ -465,7 +514,8 @@ impl PlatformTab {
                             let client = GcpRestClient::new(access_token.clone());
                             match crate::calc::hosting_gcp::regenerate_vm(&client, platform, &zone) {
                                 Ok(msg) => {
-                                    println!("✓ {}", msg);
+                                    self.set_success(msg.clone());
+                                    let _ = crate::calc::audit::push_cli("system", "platform_tab", "regenerate_vm", &format!("{}:{}", self.regenerate_vm_platform_name, zone));
                                     // Save updated config
                                     if let Ok(config_path) = get_config_path() {
                                         let _ = config.save(&config_path);
@@ -474,17 +524,17 @@ impl PlatformTab {
                                     self.loaded = false;
                                 }
                                 Err(e) => {
-                                    eprintln!("✗ Failed to regenerate VM: {}", e);
+                                    self.set_error(format!("Failed to regenerate VM: {}", e));
                                 }
                             }
                         } else {
-                            eprintln!("✗ No project selected for platform");
+                            self.set_error("No project selected for platform".to_string());
                         }
                     } else {
-                        eprintln!("✗ No OAuth token found for platform");
+                        self.set_error("No OAuth token found for platform".to_string());
                     }
                 } else {
-                    eprintln!("✗ Platform not found: {}", self.regenerate_vm_platform_name);
+                    self.set_error(format!("Platform not found: {}", self.regenerate_vm_platform_name));
                 }
             }
         }
