@@ -437,7 +437,7 @@ impl PlatformTab {
                 .column("Platform", 200.0, false)
                 .column("Type", 100.0, false)
                 .column("Steps", 400.0, false)
-                .column("Actions", 500.0, false);
+                .column("Operations", 500.0, false);
 
             for row in self.rows.iter() {
                 let row_for_cells = row.clone();
