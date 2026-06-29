@@ -88,6 +88,18 @@ pub struct PlatformTab {
     add_platform_oauth_promise: Option<Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_oauth_result: Option<crate::api::gcp_oauth::OAuthResult>,
+
+    // Select Project dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_select_project_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_platform_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_selected: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_list: Vec<crate::calc::gcp_rest::Project>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_loading: bool,
 }
 
 impl Default for PlatformTab {
@@ -121,6 +133,11 @@ impl Default for PlatformTab {
             add_platform_name: String::new(),
             add_platform_oauth_promise: None,
             add_platform_oauth_result: None,
+            show_select_project_dialog: false,
+            select_project_platform_name: String::new(),
+            select_project_selected: String::new(),
+            select_project_list: Vec::new(),
+            select_project_loading: false,
         }
     }
 }
@@ -417,6 +434,66 @@ impl PlatformTab {
                     }
                 } else {
                     self.set_error("Failed to get config path".to_string());
+                }
+            } else {
+                self.set_error("Failed to load config".to_string());
+            }
+        }
+
+        // Load projects for Select Project dialog
+        if self.show_select_project_dialog && self.select_project_loading && self.select_project_list.is_empty() {
+            if let Ok(config) = load_config() {
+                if let Some(platform) = config.platforms.iter().find(|p| p.name == self.select_project_platform_name) {
+                    if let Some(access_token) = &platform.gcp_oauth_access_token {
+                        let client = GcpRestClient::new(access_token.clone());
+                        match client.list_projects(None) {
+                            Ok(list) => {
+                                self.select_project_list = list.projects;
+                                self.select_project_loading = false;
+                            }
+                            Err(e) => {
+                                self.set_error(format!("Failed to load projects: {}", e));
+                                self.select_project_loading = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Render Select Project dialog
+        if let Some(project_id) = render_select_project_dialog(
+            ui.ctx(),
+            &mut self.show_select_project_dialog,
+            &self.select_project_platform_name,
+            &mut self.select_project_selected,
+            &mut self.select_project_list,
+            &mut self.select_project_loading,
+        ) {
+            // User confirmed - save selected project
+            if let Ok(mut config) = load_config() {
+                if let Some(platform) = config.platforms.iter_mut()
+                    .find(|p| p.name == self.select_project_platform_name)
+                {
+                    platform.gcp_selected_project_id = Some(project_id.clone());
+
+                    // Save config
+                    if let Ok(config_path) = get_config_path() {
+                        match config.save(&config_path) {
+                            Ok(_) => {
+                                self.set_success(format!("Selected project: {}", project_id));
+                                let _ = crate::calc::audit::push_cli("system", "platform_tab", "select_project", &format!("{}:{}", self.select_project_platform_name, project_id));
+                                self.loaded = false; // Force reload to show project/VM rows
+                            }
+                            Err(e) => {
+                                self.set_error(format!("Failed to save project selection: {}", e));
+                            }
+                        }
+                    } else {
+                        self.set_error("Failed to get config path".to_string());
+                    }
+                } else {
+                    self.set_error(format!("Platform not found: {}", self.select_project_platform_name));
                 }
             } else {
                 self.set_error("Failed to load config".to_string());
@@ -821,6 +898,80 @@ fn render_delete_vm_dialog(
     }
 }
 
+/// Render select project dialog
+/// Returns Some(project_id) when user confirms selection
+fn render_select_project_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    platform_name: &str,
+    selected_project: &mut String,
+    project_list: &mut Vec<crate::calc::gcp_rest::Project>,
+    loading: &mut bool,
+) -> Option<String> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Select GCP Project")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label(format!("Select which GCP project to use for '{}':", platform_name));
+            ui.add_space(8.0);
+
+            if *loading && project_list.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Loading projects...");
+                });
+            } else if project_list.is_empty() {
+                ui.colored_label(egui::Color32::from_rgb(220, 50, 50), "No projects found");
+            } else {
+                egui::ComboBox::from_label("Project")
+                    .selected_text(selected_project.as_str())
+                    .show_ui(ui, |ui| {
+                        for project in project_list.iter() {
+                            let display = if project.display_name() != project.project_id {
+                                format!("{} ({})", project.display_name(), project.project_id)
+                            } else {
+                                project.project_id.clone()
+                            };
+                            if ui.selectable_label(*selected_project == project.project_id, &display).clicked() {
+                                *selected_project = project.project_id.clone();
+                            }
+                        }
+                    });
+            }
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(!selected_project.is_empty(), |ui| {
+                    if ui.add(MaterialButton::filled("Select")).clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+
+                if selected_project.is_empty() && !project_list.is_empty() {
+                    ui.label("⚠ Choose a project");
+                }
+            });
+        });
+
+    if confirmed {
+        Some(selected_project.clone())
+    } else {
+        None
+    }
+}
+
 /// Render add platform dialog with OAuth
 /// Returns Some(platform_name, oauth_result) when user confirms with valid OAuth
 fn render_add_platform_dialog(
@@ -1020,7 +1171,14 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
         PlatformRow::Account { platform_name, email, project_count, vm_count } => {
             ui.label(format!("GCP: {}", email));
             ui.label(format!("{} Projects", project_count));
-            ui.label(""); // No actions for account row
+
+            if ui.add(MaterialButton::outlined("Select Project")).clicked() {
+                platform_tab.show_select_project_dialog = true;
+                platform_tab.select_project_platform_name = platform_name.clone();
+                platform_tab.select_project_selected.clear();
+                platform_tab.select_project_list.clear();
+                platform_tab.select_project_loading = true;
+            }
             ui.end_row();
         }
 
