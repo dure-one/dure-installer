@@ -502,34 +502,232 @@ impl PlatformTab {
                 }
             }
         });
+        });
         ui.add_space(8.0);
 
-        // Lazy-load from DB on first render or after refresh
+        // Table rendering
         if !self.loaded {
             self.load_rows();
-            self.loaded = true;
         }
 
-        if let Some(err) = &self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("⚠ {err}"));
-            ui.add_space(4.0);
-        }
+        if let Some(error) = &self.load_error {
+            ui.colored_label(egui::Color32::from_rgb(255, 0, 0), format!("Error: {}", error));
+        } else if self.rows.is_empty() {
+            ui.label("No platforms configured. Click 'Add Platform' to get started.");
+        } else {
+            // Store pending action from button clicks
+            let mut pending_action: Option<PlatformAction> = None;
 
-        // Platform spreadsheet - fill remaining space
-        if let Some(spreadsheet) = &mut self.spreadsheet {
-            let available_height = ui.available_height();
+            // Build data table
+            let table_id = egui::Id::new("platform_table");
 
-            ui.group(|ui| {
-                // Set the group to fill available space
-                ui.set_min_height(available_height - 20.0); // Leave some padding
-                ui.set_width(ui.available_width());
-
-                egui::ScrollArea::vertical()
-                    .max_height(available_height - 20.0)
-                    .show(ui, |ui| {
-                        spreadsheet.show(ui);
-                    });
+            // Initialize drawer state (all open by default on first load)
+            use egui_material3::datatable::DataTableState;
+            let state: DataTableState = ui.data_mut(|d| {
+                let existing = d.get_persisted::<DataTableState>(table_id);
+                match existing {
+                    Some(state) => state,
+                    None => {
+                        // First load - initialize with all drawers open
+                        let mut state = DataTableState::default();
+                        state.drawer_open_rows = (0..self.rows.len()).collect();
+                        state
+                    }
+                }
             });
+
+            // Store state back
+            ui.data_mut(|d| d.insert_persisted(table_id, state));
+
+            let mut table = data_table()
+                .id(table_id)
+                .allow_selection(false)
+                .allow_drawer(true)
+                .column("Platform", 200.0, false)
+                .column("Type", 100.0, false)
+                .column("Steps", 400.0, false)
+                .column("Actions", 500.0, false);
+
+            for row in self.rows.iter() {
+                let row_clone = row.clone();
+                let row_clone2 = row.clone();
+
+                table = table.row(|r| {
+                    r.cell(&row_clone.platform_name)
+                     .cell(&row_clone.platform_type)
+                     .cell(&format_steps(&row_clone))
+                     .cell_ui(|ui| {
+                         ui.horizontal(|ui| {
+                             // Update Firewall
+                             let firewall_btn = MaterialButton::text("Update Firewall")
+                                 .enabled(row_clone.project_selected);
+                             if ui.add(firewall_btn).clicked() {
+                                 pending_action = Some(PlatformAction::UpdateFirewall(
+                                     row_clone.platform_name.clone()
+                                 ));
+                             }
+
+                             // Select Project
+                             let select_project_btn = MaterialButton::text("Select Project")
+                                 .enabled(row_clone.gcp_connected);
+                             if ui.add(select_project_btn).clicked() {
+                                 pending_action = Some(PlatformAction::SelectProject(
+                                     row_clone.platform_name.clone()
+                                 ));
+                             }
+
+                             // Delete VM
+                             let delete_vm_btn = MaterialButton::text("Delete VM")
+                                 .enabled(row_clone.has_vm);
+                             if ui.add(delete_vm_btn).clicked() {
+                                 pending_action = Some(PlatformAction::DeleteVM {
+                                     platform_name: row_clone.platform_name.clone(),
+                                     vm_name: row_clone.vm_name.clone().unwrap_or_default(),
+                                     vm_zone: row_clone.vm_zone.clone().unwrap_or_default(),
+                                 });
+                             }
+
+                             // Regen VM
+                             let regen_vm_btn = MaterialButton::text("Regen VM")
+                                 .enabled(row_clone.has_vm);
+                             if ui.add(regen_vm_btn).clicked() {
+                                 pending_action = Some(PlatformAction::RegenVM(
+                                     row_clone.platform_name.clone()
+                                 ));
+                             }
+
+                             // Restart VM
+                             let restart_vm_btn = MaterialButton::text("Restart VM")
+                                 .enabled(row_clone.has_vm);
+                             if ui.add(restart_vm_btn).clicked() {
+                                 pending_action = Some(PlatformAction::RestartVM(
+                                     row_clone.platform_name.clone()
+                                 ));
+                             }
+
+                             // Delete Platform
+                             if ui.add(MaterialButton::text("Delete Platform")).clicked() {
+                                 pending_action = Some(PlatformAction::DeletePlatform(
+                                     row_clone.platform_name.clone()
+                                 ));
+                             }
+
+                             // Refresh
+                             if ui.add(MaterialButton::text("Refresh")).clicked() {
+                                 pending_action = Some(PlatformAction::Refresh);
+                             }
+                         });
+                     })
+                     .drawer(|ui| {
+                         render_drawer_content(ui, &row_clone2);
+                     })
+                });
+            }
+
+            table.show(ui);
+
+            // Process pending action after table rendering
+            if let Some(action) = pending_action {
+                match action {
+                    PlatformAction::UpdateFirewall(platform_name) => {
+                        // Find platform and trigger firewall update
+                        if let Ok((app_config, _)) = load_config() {
+                            if let Some(platform) = app_config.platforms.iter()
+                                .find(|p| p.name == platform_name)
+                            {
+                                if let Some(project_id) = &platform.gcp_selected_project_id {
+                                    if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                        use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+                                        let client = GcpRestClient::new(access_token.clone());
+                                        match get_current_ip() {
+                                            Ok(current_ip) => {
+                                                match client.add_ip_to_whitelist(project_id, &current_ip) {
+                                                    Ok(_) => {
+                                                        eprintln!("✓ IP {} whitelisted in project {}", current_ip, project_id);
+                                                        self.loaded = false; // Refresh
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!("Failed to whitelist IP: {}", e);
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Failed to get current IP: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PlatformAction::SelectProject(platform_name) => {
+                        self.show_select_project_dialog(platform_name);
+                    }
+                    PlatformAction::DeleteVM { platform_name, vm_name, vm_zone } => {
+                        self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
+                    }
+                    PlatformAction::RegenVM(platform_name) => {
+                        // Trigger VM regeneration
+                        if let Ok((mut app_config, config_path)) = load_config() {
+                            if let Some(platform) = app_config.platforms.iter_mut()
+                                .find(|p| p.name == platform_name)
+                            {
+                                if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                    if let Some(zone) = platform.vms.first().map(|vm| vm.zone.clone()) {
+                                        use crate::calc::gcp_rest::GcpRestClient;
+                                        use crate::calc::hosting_gcp;
+                                        let client = GcpRestClient::new(access_token.clone());
+                                        match hosting_gcp::regenerate_vm(&client, platform, &zone) {
+                                            Ok(msg) => {
+                                                eprintln!("✓ {}", msg);
+                                                // Save config
+                                                if let Err(e) = app_config.save(&config_path) {
+                                                    eprintln!("Failed to save config: {}", e);
+                                                }
+                                                self.loaded = false; // Refresh
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Failed to regenerate VM: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PlatformAction::RestartVM(platform_name) => {
+                        // Trigger VM restart
+                        if let Ok((app_config, _)) = load_config() {
+                            if let Some(platform) = app_config.platforms.iter()
+                                .find(|p| p.name == platform_name)
+                            {
+                                if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                    if let Some(vm) = platform.vms.first() {
+                                        use crate::calc::gcp_rest::GcpRestClient;
+                                        use crate::calc::hosting_gcp;
+                                        let client = GcpRestClient::new(access_token.clone());
+                                        match hosting_gcp::restart_vm(&client, vm) {
+                                            Ok(msg) => {
+                                                eprintln!("✓ {}", msg);
+                                                self.loaded = false; // Refresh
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Failed to restart VM: {}", e);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    PlatformAction::DeletePlatform(platform_name) => {
+                        self.show_delete_platform_confirmation(platform_name);
+                    }
+                    PlatformAction::Refresh => {
+                        self.loaded = false;
+                    }
+                }
+            }
         }
 
         // Add platform dialog
