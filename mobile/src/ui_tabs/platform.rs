@@ -409,6 +409,11 @@ impl PlatformTab {
         } else if self.rows.is_empty() {
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
         } else {
+            // Calculate responsive column widths
+            let available_width = ui.available_width();
+            let base_width = 800.0; // Base design width
+            let width_ratio = (available_width / base_width).min(1.5).max(0.8);
+
             // Build data table
             let table_id = egui::Id::new("platform_table");
 
@@ -434,12 +439,12 @@ impl PlatformTab {
                 .id(table_id)
                 .allow_selection(false)
                 .allow_drawer(true)
-                .column("Platform", 200.0, false)
-                .column("Type", 100.0, false)
-                .column("Steps", 400.0, false)
-                .column("Operations", 500.0, false);
+                .column("Platform", 150.0 * width_ratio, false)
+                .column("Type", 80.0 * width_ratio, false)
+                .column("Steps", 250.0 * width_ratio, false)
+                .column("Operations", 320.0 * width_ratio, false);
 
-            for row in self.rows.iter() {
+            for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
                 let row_for_drawer = row.clone();
                 let row_for_actions = row.clone();
@@ -449,64 +454,69 @@ impl PlatformTab {
                         .cell(&row_for_cells.platform_type)
                         .cell(&format_steps(&row_for_cells))
                         .widget_cell(move |ui| {
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 4.0;
+                            egui::ScrollArea::horizontal()
+                                .id_salt(format!("operations_scroll_{}", idx))
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 4.0;
 
-                                // Update Firewall
-                                if ui.add_enabled(row_for_actions.project_selected,
-                                    MaterialButton::outlined("Update Firewall").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_update_firewall"),
-                                        row_for_actions.platform_name.clone()
-                                    ));
-                                }
+                                        // Update Firewall
+                                        if ui.add_enabled(row_for_actions.project_selected,
+                                            MaterialButton::outlined("Update Firewall").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_update_firewall"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
 
-                                // Select Project
-                                if ui.add_enabled(row_for_actions.gcp_connected,
-                                    MaterialButton::outlined("Select Project").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_select_project"),
-                                        row_for_actions.platform_name.clone()
-                                    ));
-                                }
+                                        // Select Project
+                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                            MaterialButton::outlined("Select Project").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_select_project"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
 
-                                // Delete VM
-                                if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::outlined("Delete VM").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_delete_vm"),
-                                        (row_for_actions.platform_name.clone(),
-                                         row_for_actions.vm_name.clone().unwrap_or_default(),
-                                         row_for_actions.vm_zone.clone().unwrap_or_default())
-                                    ));
-                                }
+                                        // Delete VM
+                                        if ui.add_enabled(row_for_actions.has_vm,
+                                            MaterialButton::outlined("Delete VM").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_delete_vm"),
+                                                (row_for_actions.platform_name.clone(),
+                                                 row_for_actions.vm_name.clone().unwrap_or_default(),
+                                                 row_for_actions.vm_zone.clone().unwrap_or_default())
+                                            ));
+                                        }
 
-                                // Regen VM
-                                if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::outlined("Regen VM").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_regen_vm"),
-                                        row_for_actions.platform_name.clone()
-                                    ));
-                                }
+                                        // Regen VM
+                                        if ui.add_enabled(row_for_actions.has_vm,
+                                            MaterialButton::outlined("Regen VM").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_regen_vm"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
 
-                                // Restart VM
-                                if ui.add_enabled(row_for_actions.has_vm,
-                                    MaterialButton::outlined("Restart VM").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_restart_vm"),
-                                        row_for_actions.platform_name.clone()
-                                    ));
-                                }
+                                        // Restart VM
+                                        if ui.add_enabled(row_for_actions.has_vm,
+                                            MaterialButton::outlined("Restart VM").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_restart_vm"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
 
-                                // Delete Platform
-                                if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("platform_action_delete_platform"),
-                                        row_for_actions.platform_name.clone()
-                                    ));
-                                }
-                            });
+                                        // Delete Platform
+                                        if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_delete_platform"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
+                                    });
+                                });
                         })
                         .drawer(move |ui| {
                             render_drawer_content(ui, &row_for_drawer);
