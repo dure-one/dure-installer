@@ -35,6 +35,7 @@ pub struct CloudPlatformConfig {
     pub gcp_oauth_refresh_token: Option<String>,
     pub gcp_oauth_token_expiry: Option<i64>, // Unix timestamp
     pub gcp_connected_email: Option<String>, // Connected Google account email
+    pub gcp_selected_project_id: Option<String>, // Selected GCP project for this platform
 
     // Firebase specific
     pub firebase_project_id: Option<String>,
@@ -247,5 +248,60 @@ impl AppConfig {
     #[cfg(target_arch = "wasm32")]
     pub fn load_or_default(_path: &PathBuf) -> Self {
         Self::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cloud_platform_config_with_selected_project() {
+        let config = CloudPlatformConfig {
+            name: "test-gcp".to_string(),
+            platform_type: "gcp".to_string(),
+            gcp_selected_project_id: Some("dure".to_string()),
+            gcp_connected_email: None,
+            gcp_oauth_access_token: None,
+            gcp_oauth_refresh_token: None,
+            gcp_oauth_token_expiry: None,
+            firebase_project_id: None,
+            firebase_api_key: None,
+            supabase_project_ref: None,
+            supabase_api_url: None,
+            supabase_anon_key: None,
+            api_token: None,
+            service_account_json: None,
+            vms: vec![],
+        };
+
+        assert_eq!(config.gcp_selected_project_id, Some("dure".to_string()));
+    }
+
+    #[test]
+    fn test_config_serialization_with_selected_project() {
+        let config = CloudPlatformConfig {
+            name: "test".to_string(),
+            platform_type: "gcp".to_string(),
+            gcp_selected_project_id: Some("project-123".to_string()),
+            gcp_connected_email: None,
+            gcp_oauth_access_token: None,
+            gcp_oauth_refresh_token: None,
+            gcp_oauth_token_expiry: None,
+            firebase_project_id: None,
+            firebase_api_key: None,
+            supabase_project_ref: None,
+            supabase_api_url: None,
+            supabase_anon_key: None,
+            api_token: None,
+            service_account_json: None,
+            vms: vec![],
+        };
+
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        assert!(yaml.contains("gcp_selected_project_id: project-123"));
+
+        let deserialized: CloudPlatformConfig = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(deserialized.gcp_selected_project_id, Some("project-123".to_string()));
     }
 }

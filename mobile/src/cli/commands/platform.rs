@@ -97,6 +97,7 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
         gcp_oauth_refresh_token: None,
         gcp_oauth_token_expiry: None,
         gcp_connected_email: None,
+        gcp_selected_project_id: None,
         firebase_project_id: None,
         firebase_api_key: None,
         supabase_project_ref: None,
