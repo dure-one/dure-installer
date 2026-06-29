@@ -1071,14 +1071,9 @@ impl GcpRestClient {
     pub fn add_ip_to_firewall(&self, project_id: &str, ip: &str) -> Result<()> {
         let rules = self.list_firewall_rules(project_id)?;
 
-        // Find existing SSH rule or create new one
+        // Find specifically the "allow-ssh-dure" rule
         let ssh_rule = rules.iter().find(|rule| {
-            rule.allowed.iter().any(|a| {
-                a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports
-                        .as_ref()
-                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
-            })
+            rule.name == "allow-ssh-dure"
         });
 
         if let Some(rule) = ssh_rule {
