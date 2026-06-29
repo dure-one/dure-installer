@@ -459,11 +459,12 @@ impl PlatformTab {
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
-                                        ui.spacing_mut().item_spacing.x = 4.0;
+                                        ui.spacing_mut().item_spacing.x = 2.0;
+                                        ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
                                         // Update Firewall
                                         if ui.add_enabled(row_for_actions.project_selected,
-                                            MaterialButton::outlined("Update Firewall").small()).clicked() {
+                                            MaterialButton::outlined("Firewall").small()).on_hover_text("Update Firewall").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_update_firewall"),
                                                 row_for_actions.platform_name.clone()
@@ -472,7 +473,7 @@ impl PlatformTab {
 
                                         // Select Project
                                         if ui.add_enabled(row_for_actions.gcp_connected,
-                                            MaterialButton::outlined("Select Project").small()).clicked() {
+                                            MaterialButton::outlined("Project").small()).on_hover_text("Select Project").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_select_project"),
                                                 row_for_actions.platform_name.clone()
@@ -481,7 +482,7 @@ impl PlatformTab {
 
                                         // Delete VM
                                         if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Delete VM").small()).clicked() {
+                                            MaterialButton::outlined("Del VM").small()).on_hover_text("Delete VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_delete_vm"),
                                                 (row_for_actions.platform_name.clone(),
@@ -492,7 +493,7 @@ impl PlatformTab {
 
                                         // Regen VM
                                         if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Regen VM").small()).clicked() {
+                                            MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_regen_vm"),
                                                 row_for_actions.platform_name.clone()
@@ -501,7 +502,7 @@ impl PlatformTab {
 
                                         // Restart VM
                                         if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Restart VM").small()).clicked() {
+                                            MaterialButton::outlined("Restart").small()).on_hover_text("Restart VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_restart_vm"),
                                                 row_for_actions.platform_name.clone()
@@ -509,7 +510,7 @@ impl PlatformTab {
                                         }
 
                                         // Delete Platform
-                                        if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+                                        if ui.add(MaterialButton::outlined("Delete").small()).on_hover_text("Delete Platform").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_delete_platform"),
                                                 row_for_actions.platform_name.clone()
