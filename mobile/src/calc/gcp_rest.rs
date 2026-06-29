@@ -242,6 +242,25 @@ impl GcpRestClient {
         Ok(operation)
     }
 
+    /// Reset (hard reboot) VM instance
+    ///
+    /// API: POST /projects/{project}/zones/{zone}/instances/{instance}/reset
+    pub fn reset_instance(
+        &self,
+        project_id: &str,
+        zone: &str,
+        instance_name: &str,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances/{}/reset",
+            GCP_COMPUTE_API_BASE, project_id, zone, instance_name
+        );
+
+        let response = self.post(&url, "")?;
+        let operation: Operation = response.into_json()?;
+        Ok(operation)
+    }
+
     /// Wait for operation to complete
     ///
     /// API: GET /projects/{project}/zones/{zone}/operations/{operation}
