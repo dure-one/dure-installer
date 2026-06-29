@@ -317,83 +317,11 @@ impl PlatformTab {
         ui.add_space(8.0);
 
         // Action buttons
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::filled("Add Platform")).clicked() {
-                self.show_add_dialog = true;
-                self.add_platform_name.clear();
-                self.add_platform_type = "gcp".to_string();
-            }
-
-            // Delete Platform button - now handled via Actions column in table
-            let delete_platform_button = MaterialButton::outlined("Delete Platform").enabled(false);
-            ui.add(delete_platform_button);
-
-            ui.add_space(8.0);
-
-            // Select Project button - now handled via Actions column in table
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            {
-                let select_project_button =
-                    MaterialButton::outlined("Select Project").enabled(false);
-                ui.add(select_project_button);
-            }
-
-            // Add VM button - always enabled if we have at least one platform
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            {
-                // Check if we have any GCP platforms
-                let has_gcp_platform = if let Ok((app_config, _)) = load_config() {
-                    app_config
-                        .platforms
-                        .iter()
-                        .any(|p| p.platform_type == "gcp")
-                } else {
-                    false
-                };
-
-                let add_vm_button = MaterialButton::outlined("Add VM");
-                let add_vm_button = if has_gcp_platform {
-                    add_vm_button
-                } else {
-                    add_vm_button.enabled(false)
-                };
-
-                if ui.add(add_vm_button).clicked() {
-                    // Find first GCP platform
-                    if let Ok((app_config, _)) = load_config() {
-                        if let Some(platform) = app_config
-                            .platforms
-                            .iter()
-                            .find(|p| p.platform_type == "gcp")
-                        {
-                            self.show_gcp_wizard(platform.name.clone());
-                        }
-                    }
-                }
-
-                // Delete VM button - now handled via Actions column in table
-                let delete_button = MaterialButton::outlined("Delete VM").enabled(false);
-                ui.add(delete_button);
-
-                // Estimated Billing button - enabled only when we have GCP platforms
-                let billing_button = MaterialButton::outlined("Estimated Billing");
-                let billing_button = if has_gcp_platform {
-                    billing_button
-                } else {
-                    billing_button.enabled(false)
-                };
-
-                if ui.add(billing_button).clicked() {
-                    self.show_billing_dialog = true;
-                    self.fetch_billing_data();
-                }
-            }
-
-            if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                self.loaded = false;
-                self.load_error = None;
-            }
-        });
+        if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+            self.show_add_dialog = true;
+            self.add_platform_name.clear();
+            self.add_platform_type = "gcp".to_string();
+        }
         ui.add_space(8.0);
 
         // Table rendering
@@ -510,6 +438,26 @@ impl PlatformTab {
                                             ));
                                         }
 
+                                        // Add VM
+                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                            MaterialButton::outlined("Add VM").small()).on_hover_text("Add VM").clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_add_vm"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
+
+                                        // Estimated Billing
+                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                            MaterialButton::outlined("Billing").small()).on_hover_text("Estimated Billing").clicked() {
+                                            ui.data_mut(|d| d.insert_temp(
+                                                egui::Id::new("platform_action_billing"),
+                                                row_for_actions.platform_name.clone()
+                                            ));
+                                        }
+
                                         // Delete Platform
                                         if ui.add(MaterialButton::outlined("Delete").small()).on_hover_text("Delete Platform").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
@@ -580,6 +528,19 @@ impl PlatformTab {
                         }
                     }
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_restart_vm")));
+                }
+
+                if let Some(platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_add_vm"))) {
+                    self.show_gcp_wizard(platform_name);
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
+                }
+
+                if let Some(_platform_name) = ui.data(|d|
+                    d.get_temp::<String>(egui::Id::new("platform_action_billing"))) {
+                    self.show_billing_dialog = true;
+                    self.fetch_billing_data();
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_billing")));
                 }
             }
 
