@@ -21,6 +21,20 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     ssh_test_tasks: HashMap<String, Promise<Result<SshConnectionResult, String>>>,
 
+    // Background data fetching
+    #[cfg_attr(feature = "serde", serde(skip))]
+    current_ip_task: Option<Promise<Result<String, String>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    current_ip: Option<String>,
+
+    // Firewall status checks: key = "{platform_name}:{project_id}"
+    #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_check_tasks: HashMap<String, Promise<Result<bool, String>>>,
+
+    // Project count fetch: key = platform_name
+    #[cfg_attr(feature = "serde", serde(skip))]
+    project_count_tasks: HashMap<String, Promise<Result<usize, String>>>,
+
     // Confirmation dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
     show_update_firewall_dialog: bool,
@@ -64,6 +78,10 @@ impl Default for PlatformTab {
             rows: Vec::new(),
             loaded: false,
             ssh_test_tasks: HashMap::new(),
+            current_ip_task: None,
+            current_ip: None,
+            firewall_check_tasks: HashMap::new(),
+            project_count_tasks: HashMap::new(),
             show_update_firewall_dialog: false,
             firewall_project_id: String::new(),
             firewall_confirmation_text: String::new(),
@@ -97,8 +115,13 @@ impl PlatformTab {
             }
 
             if ui.add(MaterialButton::outlined("Refresh Status")).clicked() {
-                // TODO: Trigger refresh
-                self.loaded = false; // Force reload
+                // Force reload and clear all background tasks
+                self.loaded = false;
+                self.current_ip_task = None;
+                self.current_ip = None;
+                self.firewall_check_tasks.clear();
+                self.project_count_tasks.clear();
+                self.ssh_test_tasks.clear();
             }
         });
 
@@ -110,6 +133,137 @@ impl PlatformTab {
                 self.rows = build_platform_rows(&config.platforms);
                 self.loaded = true;
             }
+        }
+
+        // Spawn current IP fetch task if not already running
+        if self.current_ip_task.is_none() && self.current_ip.is_none() {
+            self.current_ip_task = Some(Promise::spawn_thread("fetch_ip", || {
+                get_current_ip().map_err(|e| e.to_string())
+            }));
+        }
+
+        // Check if IP fetch completed
+        if let Some(task) = &self.current_ip_task {
+            if let Some(result) = task.ready() {
+                if let Ok(ip) = result {
+                    self.current_ip = Some(ip.clone());
+
+                    // Update all Project rows with the new IP
+                    for row in &mut self.rows {
+                        if let PlatformRow::Project { current_ip, .. } = row {
+                            *current_ip = Some(ip.clone());
+                        }
+                    }
+                }
+                self.current_ip_task = None;
+            }
+        }
+
+        // Spawn firewall check tasks for projects (only if we have IP)
+        if let Some(ip) = &self.current_ip {
+            for row in &self.rows {
+                if let PlatformRow::Project { platform_name, project_id, .. } = row {
+                    let key = format!("{}:{}", platform_name, project_id);
+
+                    if !self.firewall_check_tasks.contains_key(&key) {
+                        // Get OAuth token from config
+                        if let Ok(config) = load_config() {
+                            if let Some(platform) = config.platforms.iter()
+                                .find(|p| &p.name == platform_name)
+                            {
+                                if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                    let client = GcpRestClient::new(access_token.clone());
+                                    let project_id = project_id.clone();
+                                    let ip = ip.clone();
+
+                                    let task = Promise::spawn_thread("firewall_check", move || {
+                                        client.check_ip_whitelisted(&project_id, &ip)
+                                            .map_err(|e| e.to_string())
+                                    });
+
+                                    self.firewall_check_tasks.insert(key, task);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check completed firewall check tasks
+        let mut completed_firewall_tasks = Vec::new();
+
+        for (key, task) in &self.firewall_check_tasks {
+            if let Some(result) = task.ready() {
+                // Update the Project row firewall status
+                for row in &mut self.rows {
+                    if let PlatformRow::Project { platform_name, project_id, firewall_whitelisted, .. } = row {
+                        let row_key = format!("{}:{}", platform_name, project_id);
+                        if row_key == *key {
+                            if let Ok(whitelisted) = result {
+                                *firewall_whitelisted = *whitelisted;
+                            }
+                        }
+                    }
+                }
+                completed_firewall_tasks.push(key.clone());
+            }
+        }
+
+        // Remove completed tasks
+        for key in completed_firewall_tasks {
+            self.firewall_check_tasks.remove(&key);
+        }
+
+        // Spawn project count fetch tasks for Account rows
+        for row in &self.rows {
+            if let PlatformRow::Account { platform_name, .. } = row {
+                if !self.project_count_tasks.contains_key(platform_name) {
+                    // Get OAuth token from config
+                    if let Ok(config) = load_config() {
+                        if let Some(platform) = config.platforms.iter()
+                            .find(|p| &p.name == platform_name)
+                        {
+                            if let Some(access_token) = &platform.gcp_oauth_access_token {
+                                let client = GcpRestClient::new(access_token.clone());
+                                let platform_name = platform_name.clone();
+
+                                let task = Promise::spawn_thread("project_count", move || {
+                                    client.list_projects(None)
+                                        .map(|list| list.projects.len())
+                                        .map_err(|e| e.to_string())
+                                });
+
+                                self.project_count_tasks.insert(platform_name, task);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check completed project count tasks
+        let mut completed_project_tasks = Vec::new();
+
+        for (platform_name, task) in &self.project_count_tasks {
+            if let Some(result) = task.ready() {
+                // Update the Account row project count
+                for row in &mut self.rows {
+                    if let PlatformRow::Account { platform_name: row_platform, project_count, .. } = row {
+                        if row_platform == platform_name {
+                            if let Ok(count) = result {
+                                *project_count = *count;
+                            }
+                        }
+                    }
+                }
+                completed_project_tasks.push(platform_name.clone());
+            }
+        }
+
+        // Remove completed tasks
+        for key in completed_project_tasks {
+            self.project_count_tasks.remove(&key);
         }
 
         // Spawn SSH tests for VMs that don't have active tasks
@@ -697,8 +851,12 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformT
                     platform_tab.restart_vm_confirmation_text.clear();
                 }
                 if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                    // Force reload of platform data and re-trigger SSH tests
+                    // Force reload of platform data and re-trigger all background tasks
                     platform_tab.loaded = false;
+                    platform_tab.current_ip_task = None;
+                    platform_tab.current_ip = None;
+                    platform_tab.firewall_check_tasks.clear();
+                    platform_tab.project_count_tasks.clear();
                     platform_tab.ssh_test_tasks.clear();
                 }
             });
