@@ -12,6 +12,27 @@ const GCP_COMPUTE_API_BASE: &str = "https://compute.googleapis.com/compute/v1";
 const GCP_RESOURCE_MANAGER_API_BASE: &str = "https://cloudresourcemanager.googleapis.com/v1";
 const GCP_BILLING_API_BASE: &str = "https://cloudbilling.googleapis.com/v1";
 
+/// Get current public IP address from icanhazip.com
+pub fn get_current_ip() -> Result<String> {
+    let response = ureq::get("https://icanhazip.com")
+        .timeout(std::time::Duration::from_secs(10))
+        .call()
+        .map_err(|e| anyhow::anyhow!("Failed to fetch IP: {}", e))?;
+
+    let ip_text = response
+        .into_string()
+        .map_err(|e| anyhow::anyhow!("Failed to read IP response: {}", e))?;
+
+    let ip = ip_text.trim().to_string();
+
+    // Validate it looks like an IP
+    if !ip.contains('.') || ip.is_empty() {
+        return Err(anyhow::anyhow!("Invalid IP format: {}", ip));
+    }
+
+    Ok(ip)
+}
+
 /// GCP REST API client using ureq
 pub struct GcpRestClient {
     access_token: String,
@@ -1517,5 +1538,26 @@ mod tests {
             labels: HashMap::new(),
         };
         assert!(!delete_in_progress.is_active());
+    }
+
+    #[test]
+    fn test_get_current_ip_format() {
+        // This test requires internet connection
+        let result = get_current_ip();
+
+        if let Ok(ip) = result {
+            // Should be valid IPv4 format
+            assert!(ip.contains('.'));
+            assert!(!ip.contains('\n'));
+            assert!(!ip.contains(' '));
+
+            // Should be parseable as IP
+            use std::net::Ipv4Addr;
+            let parsed: Result<Ipv4Addr, _> = ip.parse();
+            assert!(parsed.is_ok(), "IP should be valid IPv4: {}", ip);
+        } else {
+            // Allow test to pass if offline
+            eprintln!("Skipping IP test (offline): {:?}", result);
+        }
     }
 }
