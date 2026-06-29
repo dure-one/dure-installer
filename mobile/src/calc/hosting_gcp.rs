@@ -89,17 +89,106 @@ pub fn regenerate_vm(
     platform: &mut CloudPlatformConfig,
     zone: &str,
 ) -> Result<String> {
+    use crate::calc::gcp_rest::{InstanceRequest, AttachedDisk, InitializeParams, NetworkInterface, AccessConfig, Metadata, MetadataItem};
+    use crate::calc::keyring;
+
     // Delete all existing VMs
     let vm_count = platform.vms.len();
     for vm in &platform.vms {
         delete_vm(client, vm)?;
     }
+    platform.vms.clear();
 
-    // TODO: Create new VM with default config
-    // TODO: Generate SSH keypair and add to VM metadata
-    // TODO: Store private key in keyring
+    // Get project ID
+    let project_id = platform.gcp_selected_project_id.as_ref()
+        .context("No project selected")?;
 
-    Ok(format!("{} VMs deleted, new VM creation pending", vm_count))
+    // Generate Ed25519 SSH keypair
+    let (public_key, private_key_bytes) = generate_ssh_keypair()?;
+
+    // Generate VM name
+    let vm_name = format!("dure-vm-{}", chrono::Utc::now().timestamp());
+    let keyring_domain = format!("gcp.{}.{}", platform.name, vm_name);
+
+    // Store private key in keyring
+    let kdbx_path = keyring::get_default_kdbx_path()?;
+    let kpkey_path = keyring::get_default_kpkey_path()?;
+    keyring::add_key_with_ssh(
+        &kdbx_path,
+        Some(&kpkey_path),
+        &keyring_domain,
+        "generated_user",
+        "",
+        Some(&private_key_bytes),
+        Some(&format!("SSH key for GCP VM {}", vm_name)),
+    )?;
+
+    // Create VM instance request
+    let machine_type = format!("zones/{}/machineTypes/e2-micro", zone);
+    let instance = InstanceRequest {
+        name: vm_name.clone(),
+        machine_type,
+        disks: vec![AttachedDisk {
+            boot: true,
+            auto_delete: true,
+            initialize_params: InitializeParams {
+                source_image: "projects/debian-cloud/global/images/family/debian-12".to_string(),
+                disk_size_gb: "10".to_string(),
+            },
+        }],
+        network_interfaces: vec![NetworkInterface {
+            network: "global/networks/default".to_string(),
+            access_configs: Some(vec![AccessConfig {
+                type_: "ONE_TO_ONE_NAT".to_string(),
+                name: "External NAT".to_string(),
+            }]),
+        }],
+        tags: None,
+        metadata: Some(Metadata {
+            items: vec![MetadataItem {
+                key: "ssh-keys".to_string(),
+                value: format!("generated_user:{}", public_key),
+            }],
+        }),
+    };
+
+    // Create VM
+    let operation = client.create_instance(project_id, zone, &instance)?;
+
+    // Wait for VM creation to complete (120 second timeout)
+    client.wait_for_operation(project_id, zone, &operation.name, 120)?;
+
+    // Fetch VM details to get IP addresses
+    let vm_instance = client.get_instance(project_id, zone, &vm_name)?;
+
+    // Extract external IP
+    let external_ip = vm_instance.network_interfaces.first()
+        .and_then(|ni| ni.access_configs.first())
+        .and_then(|ac| ac.nat_ip.clone());
+
+    // Extract internal IP
+    let internal_ip = vm_instance.network_interfaces.first()
+        .and_then(|ni| ni.network_ip.clone());
+
+    // Add VM to platform config
+    platform.vms.push(VmInstance {
+        name: vm_name.clone(),
+        instance_id: vm_instance.id,
+        zone: zone.to_string(),
+        gcp_region: zone.rsplitn(2, '-').nth(1)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| zone.to_string()),
+        gcp_project_id: project_id.clone(),
+        machine_type: "e2-micro".to_string(),
+        status: vm_instance.status,
+        external_ip,
+        internal_ip,
+        gcp_billing_account: None,
+        created_at: chrono::Utc::now().timestamp(),
+        ssh_key_name: Some(keyring_domain),
+    });
+
+    Ok(format!("{} VMs deleted, new VM '{}' created successfully", vm_count, vm_name))
 }
 
 #[cfg(test)]
