@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 use crate::config::{AppConfig, CloudPlatformConfig, VmInstance, SshHostConfig};
 use crate::calc::ssh::{test_connection, SshConnectionResult};
+use crate::calc::gcp_rest::get_current_ip;
 
 /// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -19,6 +20,14 @@ pub struct PlatformTab {
     // Background SSH tests: key = "{platform_name}:{vm_name}"
     #[cfg_attr(feature = "serde", serde(skip))]
     ssh_test_tasks: HashMap<String, Promise<Result<SshConnectionResult, String>>>,
+
+    // Confirmation dialog state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_update_firewall_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_project_id: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_confirmation_text: String,
 }
 
 impl Default for PlatformTab {
@@ -27,6 +36,9 @@ impl Default for PlatformTab {
             rows: Vec::new(),
             loaded: false,
             ssh_test_tasks: HashMap::new(),
+            show_update_firewall_dialog: false,
+            firewall_project_id: String::new(),
+            firewall_confirmation_text: String::new(),
         }
     }
 }
@@ -111,11 +123,28 @@ impl PlatformTab {
             self.ssh_test_tasks.remove(&key);
         }
 
+        // Render confirmation dialog
+        if let Some(()) = render_update_firewall_dialog(
+            ui.ctx(),
+            &mut self.show_update_firewall_dialog,
+            &self.firewall_project_id,
+            &mut self.firewall_confirmation_text,
+        ) {
+            // User confirmed - execute firewall update
+            if let Ok(ip) = get_current_ip() {
+                // TODO: Get OAuth token from config
+                // TODO: Call GcpRestClient::add_ip_to_firewall()
+                println!("Updating firewall for {} with IP {}", self.firewall_project_id, ip);
+            }
+        }
+
         // Render table
         egui::ScrollArea::vertical()
             .max_height(600.0)
-            .show(ui, |ui| {
-                render_table(ui, &self.rows);
+            .show(ui, |ui_inner| {
+                // Need to split borrow to pass both rows and self
+                let rows_clone = self.rows.clone();
+                render_table(ui_inner, &rows_clone, self);
             });
     }
 }
@@ -163,8 +192,65 @@ fn spawn_ssh_test(vm: &VmInstance) -> Promise<Result<SshConnectionResult, String
     })
 }
 
+/// Render update firewall confirmation dialog
+fn render_update_firewall_dialog(
+    ctx: &egui::Context,
+    show: &mut bool,
+    project_id: &str,
+    confirmation_text: &mut String,
+) -> Option<()> {
+    if !*show {
+        return None;
+    }
+
+    let mut confirmed = false;
+
+    egui::Window::new("Update GCP Firewall")
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.label("This will add your current IP to the GCP firewall");
+            ui.label("whitelist for SSH access (port 22).");
+            ui.add_space(8.0);
+
+            ui.label(format!("Project: {}", project_id));
+
+            if let Ok(ip) = get_current_ip() {
+                ui.label(format!("Current IP: {}", ip));
+            }
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Type 'update' to confirm:");
+                ui.text_edit_singleline(confirmation_text);
+            });
+
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Cancel").clicked() {
+                    *show = false;
+                }
+
+                ui.add_enabled_ui(confirmation_text == "update", |ui| {
+                    if ui.button("Confirm").clicked() {
+                        confirmed = true;
+                        *show = false;
+                    }
+                });
+            });
+        });
+
+    if confirmed {
+        Some(())
+    } else {
+        None
+    }
+}
+
 /// Render the platform table
-fn render_table(ui: &mut egui::Ui, rows: &[PlatformRow]) {
+fn render_table(ui: &mut egui::Ui, rows: &[PlatformRow], platform_tab: &mut PlatformTab) {
     use egui::{Grid, RichText};
 
     // Table header
@@ -186,13 +272,13 @@ fn render_table(ui: &mut egui::Ui, rows: &[PlatformRow]) {
         .striped(true)
         .show(ui, |ui| {
             for row in rows {
-                render_row(ui, row);
+                render_row(ui, row, platform_tab);
             }
         });
 }
 
 /// Render a single table row
-fn render_row(ui: &mut egui::Ui, row: &PlatformRow) {
+fn render_row(ui: &mut egui::Ui, row: &PlatformRow, platform_tab: &mut PlatformTab) {
     match row {
         PlatformRow::Account { platform_name, email, project_count, vm_count } => {
             ui.label(format!("GCP: {}", email));
@@ -214,7 +300,9 @@ fn render_row(ui: &mut egui::Ui, row: &PlatformRow) {
             ui.label(firewall_text);
 
             if ui.add(MaterialButton::outlined("Update Firewall")).clicked() {
-                // TODO: Show update firewall confirmation
+                platform_tab.show_update_firewall_dialog = true;
+                platform_tab.firewall_project_id = project_id.clone();
+                platform_tab.firewall_confirmation_text.clear();
             }
             ui.end_row();
         }
