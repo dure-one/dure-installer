@@ -404,7 +404,18 @@ impl PlatformTab {
 
                         // Account row: "GCP: email" | "N Projects" | ""
                         let account_name = format!("GCP: {}", email);
-                        let project_count = "Loading..."; // TODO: fetch from API
+
+                        // Fetch project count from GCP API
+                        let project_count = if let Some(access_token) = &platform.gcp_oauth_access_token {
+                            use crate::calc::gcp_rest::GcpRestClient;
+                            let client = GcpRestClient::new(access_token.clone());
+                            match client.list_projects(None) {
+                                Ok(list) => format!("{} Projects", list.projects.len()),
+                                Err(_) => "Error loading projects".to_string(),
+                            }
+                        } else {
+                            "Not connected".to_string()
+                        };
 
                         self.rows.push([
                             platform.name.clone(), // Internal platform name
