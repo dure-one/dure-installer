@@ -2,8 +2,11 @@
 
 use eframe::egui;
 use egui_material3::MaterialButton;
+use poll_promise::Promise;
+use std::collections::HashMap;
 
-use crate::config::{AppConfig, CloudPlatformConfig, VmInstance};
+use crate::config::{AppConfig, CloudPlatformConfig, VmInstance, SshHostConfig};
+use crate::calc::ssh::{test_connection, SshConnectionResult};
 
 /// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -12,6 +15,10 @@ pub struct PlatformTab {
     rows: Vec<PlatformRow>,
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
+    // Background SSH tests: key = "{platform_name}:{vm_name}"
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_test_tasks: HashMap<String, Promise<Result<SshConnectionResult, String>>>,
 }
 
 impl Default for PlatformTab {
@@ -19,6 +26,7 @@ impl Default for PlatformTab {
         Self {
             rows: Vec::new(),
             loaded: false,
+            ssh_test_tasks: HashMap::new(),
         }
     }
 }
@@ -53,6 +61,56 @@ impl PlatformTab {
             }
         }
 
+        // Spawn SSH tests for VMs that don't have active tasks
+        for row in &self.rows {
+            if let PlatformRow::Vm { platform_name, vm_name, .. } = row {
+                let key = format!("{}:{}", platform_name, vm_name);
+
+                if !self.ssh_test_tasks.contains_key(&key) {
+                    // Find the VM in config to spawn test
+                    if let Ok(config) = load_config() {
+                        for platform in &config.platforms {
+                            if &platform.name == platform_name {
+                                if let Some(vm) = platform.vms.iter()
+                                    .find(|v| &v.name == vm_name)
+                                {
+                                    let task = spawn_ssh_test(vm);
+                                    self.ssh_test_tasks.insert(key.clone(), task);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check completed SSH tasks and update row status
+        let mut completed_tasks = Vec::new();
+
+        for (key, task) in &self.ssh_test_tasks {
+            if let Some(result) = task.ready() {
+                // Find the VM row and update its status
+                for row in &mut self.rows {
+                    if let PlatformRow::Vm { platform_name, vm_name, ssh_status, .. } = row {
+                        let row_key = format!("{}:{}", platform_name, vm_name);
+                        if row_key == *key {
+                            *ssh_status = match result {
+                                Ok(conn_result) if conn_result.success => SshStatus::Available,
+                                Ok(_) => SshStatus::Failed("Auth failed".to_string()),
+                                Err(e) => SshStatus::Failed(e.clone()),
+                            };
+                        }
+                    }
+                }
+                completed_tasks.push(key.clone());
+            }
+        }
+
+        // Remove completed tasks
+        for key in completed_tasks {
+            self.ssh_test_tasks.remove(&key);
+        }
+
         // Render table
         egui::ScrollArea::vertical()
             .max_height(600.0)
@@ -78,6 +136,31 @@ fn load_config() -> Result<AppConfig, String> {
 fn load_config() -> Result<AppConfig, String> {
     // WASM not supported for this feature
     Err("Platform tab not available on WASM".to_string())
+}
+
+/// Spawn SSH test for a VM
+fn spawn_ssh_test(vm: &VmInstance) -> Promise<Result<SshConnectionResult, String>> {
+    let vm = vm.clone();
+
+    Promise::spawn_thread("ssh_test", move || {
+        // Build SSH config from VM
+        let external_ip = vm.external_ip
+            .ok_or_else(|| "No external IP".to_string())?;
+
+        let ssh_config = SshHostConfig {
+            host: format!("generated_user@{}", external_ip),
+            port: 22,
+            password: None,
+            private_key_path: None,
+            keyring_domain: vm.ssh_key_name.clone(),
+            initialized: false,
+            last_status: None,
+        };
+
+        // Test connection
+        test_connection(&ssh_config)
+            .map_err(|e| format!("Timeout: {}", e))
+    })
 }
 
 /// Render the platform table
