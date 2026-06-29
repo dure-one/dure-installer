@@ -1716,7 +1716,7 @@ impl PlatformTab {
                     };
 
                     if ui.add(select_button).clicked() {
-                        self.execute_select_project();
+                        self.execute_select_project(ctx);
                         self.show_select_project_dialog = false;
                     }
                 });
@@ -1728,7 +1728,7 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn execute_select_project(&mut self) {
+    fn execute_select_project(&mut self, ctx: &egui::Context) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {
                 let (project_id, _) = &self.select_project_list[selected_idx];
@@ -1749,9 +1749,11 @@ impl PlatformTab {
                             self.load_error = Some(format!("Failed to save config: {}", e));
                         } else {
                             eprintln!("✓ Selected project: {}", project_id);
-                            // Refresh the spreadsheet
+                            // Refresh the table
                             self.loaded = false;
                             self.load_error = None;
+                            // Request repaint to ensure UI updates
+                            ctx.request_repaint();
                         }
                     }
                 }
