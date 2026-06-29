@@ -757,6 +757,7 @@ impl PlatformTab {
                         gcp_oauth_refresh_token: oauth_refresh,
                         gcp_oauth_token_expiry: oauth_expiry,
                         gcp_connected_email: connected_email,
+                        gcp_selected_project_id: None,
                         firebase_project_id: None,
                         firebase_api_key: None,
                         supabase_project_ref: None,
