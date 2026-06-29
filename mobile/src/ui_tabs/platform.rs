@@ -37,6 +37,22 @@ struct PlatformRow {
     vm_zone: Option<String>,      // For VM operations (delete, restart, regen)
 }
 
+/// Actions that can be triggered from platform table rows
+#[derive(Debug, Clone)]
+enum PlatformAction {
+    UpdateFirewall(String),  // platform_name
+    SelectProject(String),   // platform_name
+    DeleteVM {
+        platform_name: String,
+        vm_name: String,
+        vm_zone: String,
+    },
+    RegenVM(String),         // platform_name
+    RestartVM(String),       // platform_name
+    DeletePlatform(String),  // platform_name
+    Refresh,                 // Refresh table data
+}
+
 /// Platform tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct PlatformTab {
