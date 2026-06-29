@@ -584,8 +584,6 @@ impl PlatformTab {
 
     fn load_rows(&mut self) {
         self.rows.clear();
-        self.row_selection.clear();
-        self.drawer_expanded.clear();
         self.load_error = None;
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -594,134 +592,60 @@ impl PlatformTab {
                 Ok((app_config, _)) => {
                     eprintln!("DEBUG: Building rows for {} platforms", app_config.platforms.len());
 
-                    for (platform_idx, platform) in app_config.platforms.iter().enumerate() {
+                    for platform in app_config.platforms.iter() {
                         // Only show GCP platforms for now
                         if platform.platform_type != "gcp" {
                             eprintln!("DEBUG: Skipping non-GCP platform: {}", platform.name);
                             continue;
                         }
+
                         eprintln!("DEBUG: Processing GCP platform: {}, selected_project: {:?}, vm_count: {}",
                             platform.name, platform.gcp_selected_project_id, platform.vms.len());
 
-                        let email = platform.gcp_connected_email.as_deref().unwrap_or("Not connected");
+                        let row = PlatformRow {
+                            platform_name: platform.name.clone(),
+                            platform_type: "GCP".to_string(),
 
-                        // Account row: "GCP: email" | "N Projects" | ""
-                        let account_name = format!("GCP: {}", email);
+                            // Compute state flags
+                            gcp_connected: platform.gcp_oauth_access_token.is_some(),
+                            project_selected: platform.gcp_selected_project_id.is_some(),
+                            vm_created: !platform.vms.is_empty(),
+                            ssh_ready: platform.vms.first()
+                                .and_then(|vm| vm.external_ip.as_ref())
+                                .is_some(),
 
-                        // Fetch project count from GCP API
-                        let project_count = if let Some(access_token) = &platform.gcp_oauth_access_token {
-                            use crate::calc::gcp_rest::GcpRestClient;
-                            let client = GcpRestClient::new(access_token.clone());
-                            match client.list_projects(None) {
-                                Ok(list) => format!("{} Projects", list.projects.len()),
-                                Err(_) => "Error loading projects".to_string(),
-                            }
-                        } else {
-                            "Not connected".to_string()
+                            // Extract drawer data
+                            email: platform.gcp_connected_email.clone(),
+                            total_project_count: fetch_project_count(platform),
+                            selected_project_id: platform.gcp_selected_project_id.clone(),
+                            vm_name: platform.vms.first().map(|vm| vm.name.clone()),
+                            firewall_status: compute_firewall_status(platform),
+                            ssh_status: compute_ssh_status(platform),
+
+                            // Action button state
+                            has_vm: !platform.vms.is_empty(),
+                            vm_zone: platform.vms.first().map(|vm| vm.zone.clone()),
                         };
 
-                        self.rows.push([
-                            platform.name.clone(), // Internal platform name
-                            format!("account:{}", platform.name), // Row type marker
-                            String::new(), // Empty for internal use
-                        ]);
+                        eprintln!("DEBUG: Created row: {} - connected:{} project:{} vm:{}",
+                            row.platform_name, row.gcp_connected, row.project_selected, row.vm_created);
 
-                        data_rows.push(vec![
-                            account_name.clone(),
-                            project_count.to_string(),
-                            String::new(), // No actions for account row
-                        ]);
-                        eprintln!("DEBUG: Added account row: {}", account_name);
-
-                        // Project row (only if project is selected)
-                        if let Some(project_id) = &platform.gcp_selected_project_id {
-                            let project_name = format!("  ├─ {}", project_id);
-                            let vm_count = platform.vms.len();
-
-                            // Fetch current IP and check firewall whitelist status
-                            let firewall_status = if let Some(access_token) = &platform.gcp_oauth_access_token {
-                                use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
-                                let client = GcpRestClient::new(access_token.clone());
-
-                                match get_current_ip() {
-                                    Ok(current_ip) => {
-                                        match client.check_ip_whitelisted(project_id, &current_ip) {
-                                            Ok(true) => format!("{} VM • ✓ Firewall ({})", vm_count, current_ip),
-                                            Ok(false) => format!("{} VM • ✗ Firewall Not Whitelisted", vm_count),
-                                            Err(_) => format!("{} VM • ? Firewall Status Unknown", vm_count),
-                                        }
-                                    }
-                                    Err(_) => format!("{} VM • Failed to get current IP", vm_count),
-                                }
-                            } else {
-                                format!("{} VM • Not connected", vm_count)
-                            };
-
-                            self.rows.push([
-                                platform.name.clone(),
-                                format!("project:{}", project_id),
-                                String::new(),
-                            ]);
-
-                            data_rows.push(vec![
-                                project_name,
-                                firewall_status,
-                                "Update Firewall".to_string(),
-                            ]);
-
-                            // VM rows
-                            for vm in &platform.vms {
-                                let vm_name = format!("  └─── {}", vm.name);
-
-                                // SSH status - simplified for now
-                                let ssh_status = if vm.external_ip.is_some() {
-                                    "🔄 SSH Connection Testing...".to_string()
-                                } else {
-                                    "? No External IP".to_string()
-                                };
-
-                                self.rows.push([
-                                    platform.name.clone(),
-                                    format!("vm:{}", vm.name),
-                                    vm.zone.clone(), // Store zone for operations
-                                ]);
-
-                                data_rows.push(vec![
-                                    vm_name,
-                                    ssh_status,
-                                    "Delete • Regenerate • Restart • Refresh".to_string(),
-                                ]);
-                            }
-                        }
+                        self.rows.push(row);
                     }
 
-                    // Clear and update spreadsheet with fresh data
-                    eprintln!("DEBUG: Created {} self.rows and {} data_rows", self.rows.len(), data_rows.len());
-                    if let Some(spreadsheet) = &mut self.spreadsheet {
-                        // Recreate spreadsheet with fresh data to avoid duplicates
-                        let columns = vec![
-                            text_column("Platform Name", 400.0),
-                            text_column("Status", 300.0),
-                            text_column("Actions", 250.0),
-                        ];
-
-                        if let Ok(mut new_spreadsheet) =
-                            MaterialSpreadsheet::new("vm_spreadsheet", columns)
-                        {
-                            // Apply theme-aware settings
-                            new_spreadsheet.set_striped(true);
-                            new_spreadsheet.set_row_selection_enabled(self.row_selection_enabled);
-                            new_spreadsheet.set_allow_selection(true);
-                            new_spreadsheet.init_with_data(data_rows.clone());
-                            eprintln!("DEBUG: Spreadsheet initialized with {} rows", data_rows.len());
-                            *spreadsheet = new_spreadsheet;
-                        }
-                    }
+                    self.loaded = true;
+                    eprintln!("DEBUG: Loaded {} platform rows", self.rows.len());
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {e}"));
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    eprintln!("DEBUG: Config load error: {}", e);
                 }
             }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.load_error = Some("WASM platform not supported".to_string());
         }
     }
 
