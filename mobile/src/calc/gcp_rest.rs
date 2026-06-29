@@ -1560,4 +1560,18 @@ mod tests {
             eprintln!("Skipping IP test (offline): {:?}", result);
         }
     }
+
+    #[test]
+    fn test_project_structure() {
+        let project = Project {
+            name: Some("projects/test-project-123".to_string()),
+            project_id: "test-project-123".to_string(),
+            display_name: Some("Test Project".to_string()),
+            state: Some("ACTIVE".to_string()),
+            labels: std::collections::HashMap::new(),
+        };
+
+        assert_eq!(project.project_id, "test-project-123");
+        assert_eq!(project.display_name, Some("Test Project".to_string()));
+    }
 }
