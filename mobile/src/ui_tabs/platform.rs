@@ -410,8 +410,9 @@ impl PlatformTab {
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
         } else {
             // Calculate responsive column widths
-            let available_width = ui.available_width();
-            let base_width = 800.0; // Base design width
+            // Reserve space for borders, padding, and scrollbar
+            let available_width = ui.available_width() - 40.0;
+            let base_width = 740.0; // Base design width (reduced to fit with borders)
             let width_ratio = (available_width / base_width).min(1.5).max(0.8);
 
             // Build data table
@@ -442,7 +443,7 @@ impl PlatformTab {
                 .column("Platform", 150.0 * width_ratio, false)
                 .column("Type", 80.0 * width_ratio, false)
                 .column("Steps", 250.0 * width_ratio, false)
-                .column("Operations", 320.0 * width_ratio, false);
+                .column("Operations", 260.0 * width_ratio, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
