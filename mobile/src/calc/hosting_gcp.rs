@@ -3,9 +3,9 @@
 //! Handles VM lifecycle management including creation, deletion,
 //! restart, regeneration, and SSH key generation.
 
-use anyhow::{Context, Result};
 use crate::calc::gcp_rest::GcpRestClient;
 use crate::config::{CloudPlatformConfig, VmInstance};
+use anyhow::{Context, Result};
 
 /// Generate Ed25519 SSH keypair
 pub fn generate_ssh_keypair() -> Result<(String, Vec<u8>)> {
@@ -31,10 +31,8 @@ pub fn generate_ssh_keypair() -> Result<(String, Vec<u8>)> {
     public_key_ssh.extend_from_slice(&(32u32).to_be_bytes()); // length of key
     public_key_ssh.extend_from_slice(&public_key_bytes);
 
-    let public_key_b64 = base64::Engine::encode(
-        &base64::engine::general_purpose::STANDARD,
-        &public_key_ssh
-    );
+    let public_key_b64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &public_key_ssh);
     let public_key = format!("ssh-ed25519 {} dure@generated", public_key_b64);
 
     // Private key as raw bytes (will be stored in keyring)
@@ -46,19 +44,10 @@ pub fn generate_ssh_keypair() -> Result<(String, Vec<u8>)> {
 /// Delete a VM instance
 pub fn delete_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String> {
     // Call GCP API to delete instance
-    let operation = client.delete_instance(
-        &vm.gcp_project_id,
-        &vm.zone,
-        &vm.name,
-    )?;
+    let operation = client.delete_instance(&vm.gcp_project_id, &vm.zone, &vm.name)?;
 
     // Poll operation status until complete (60 second timeout)
-    client.wait_for_operation(
-        &vm.gcp_project_id,
-        &vm.zone,
-        &operation.name,
-        60,
-    )?;
+    client.wait_for_operation(&vm.gcp_project_id, &vm.zone, &operation.name, 60)?;
 
     Ok(format!("VM {} deleted successfully", vm.name))
 }
@@ -66,19 +55,10 @@ pub fn delete_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String> {
 /// Restart a VM instance
 pub fn restart_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String> {
     // Call GCP API to reset (hard reboot) instance
-    let operation = client.reset_instance(
-        &vm.gcp_project_id,
-        &vm.zone,
-        &vm.name,
-    )?;
+    let operation = client.reset_instance(&vm.gcp_project_id, &vm.zone, &vm.name)?;
 
     // Poll operation status until complete (60 second timeout)
-    client.wait_for_operation(
-        &vm.gcp_project_id,
-        &vm.zone,
-        &operation.name,
-        60,
-    )?;
+    client.wait_for_operation(&vm.gcp_project_id, &vm.zone, &operation.name, 60)?;
 
     Ok(format!("VM {} restarted successfully", vm.name))
 }
@@ -89,7 +69,10 @@ pub fn regenerate_vm(
     platform: &mut CloudPlatformConfig,
     zone: &str,
 ) -> Result<String> {
-    use crate::calc::gcp_rest::{InstanceRequest, AttachedDisk, InitializeParams, NetworkInterface, AccessConfig, Metadata, MetadataItem};
+    use crate::calc::gcp_rest::{
+        AccessConfig, AttachedDisk, InitializeParams, InstanceRequest, Metadata, MetadataItem,
+        NetworkInterface,
+    };
     use crate::calc::keyring;
 
     // Delete all existing VMs
@@ -100,7 +83,9 @@ pub fn regenerate_vm(
     platform.vms.clear();
 
     // Get project ID
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .context("No project selected")?;
 
     // Generate Ed25519 SSH keypair
@@ -111,8 +96,24 @@ pub fn regenerate_vm(
     let keyring_domain = format!("gcp.{}.{}", platform.name, vm_name);
 
     // Store private key in keyring
-    let kdbx_path = keyring::get_default_kdbx_path()?;
+    eprintln!("DEBUG: Initializing keyring for SSH key storage...");
+
+    // Ensure KeePass database exists (will create KPKey if needed)
+    let kdbx_path = match keyring::ensure_kdbx_exists() {
+        Ok(path) => {
+            eprintln!("DEBUG: KeePass database ready at: {}", path.display());
+            path
+        }
+        Err(e) => {
+            eprintln!("DEBUG: Failed to initialize KeePass database: {}", e);
+            return Err(e).context("Failed to initialize KeePass database");
+        }
+    };
+
     let kpkey_path = keyring::get_default_kpkey_path()?;
+    eprintln!("DEBUG: KPKey path: {}", kpkey_path.display());
+    eprintln!("DEBUG: Storing SSH key with domain: {}", keyring_domain);
+
     keyring::add_key_with_ssh(
         &kdbx_path,
         Some(&kpkey_path),
@@ -121,7 +122,12 @@ pub fn regenerate_vm(
         "",
         Some(&private_key_bytes),
         Some(&format!("SSH key for GCP VM {}", vm_name)),
-    )?;
+    )
+    .map_err(|e| {
+        eprintln!("DEBUG: Failed to add key to keyring: {}", e);
+        e
+    })
+    .context("Failed to store SSH key")?;
 
     // Create VM instance request
     let machine_type = format!("zones/{}/machineTypes/e2-micro", zone);
@@ -162,12 +168,16 @@ pub fn regenerate_vm(
     let vm_instance = client.get_instance(project_id, zone, &vm_name)?;
 
     // Extract external IP
-    let external_ip = vm_instance.network_interfaces.first()
+    let external_ip = vm_instance
+        .network_interfaces
+        .first()
         .and_then(|ni| ni.access_configs.first())
         .and_then(|ac| ac.nat_ip.clone());
 
     // Extract internal IP
-    let internal_ip = vm_instance.network_interfaces.first()
+    let internal_ip = vm_instance
+        .network_interfaces
+        .first()
         .and_then(|ni| ni.network_ip.clone());
 
     // Add VM to platform config
@@ -175,7 +185,9 @@ pub fn regenerate_vm(
         name: vm_name.clone(),
         instance_id: vm_instance.id,
         zone: zone.to_string(),
-        gcp_region: zone.rsplitn(2, '-').nth(1)
+        gcp_region: zone
+            .rsplitn(2, '-')
+            .nth(1)
             .map(|s| s.to_string())
             .unwrap_or_else(|| zone.to_string()),
         gcp_project_id: project_id.clone(),
@@ -188,7 +200,10 @@ pub fn regenerate_vm(
         ssh_key_name: Some(keyring_domain),
     });
 
-    Ok(format!("{} VMs deleted, new VM '{}' created successfully", vm_count, vm_name))
+    Ok(format!(
+        "{} VMs deleted, new VM '{}' created successfully",
+        vm_count, vm_name
+    ))
 }
 
 #[cfg(test)]
@@ -203,14 +218,21 @@ mod tests {
         let (public_key, private_key) = result.unwrap();
 
         // Public key should start with ssh-ed25519
-        assert!(public_key.starts_with("ssh-ed25519"),
-            "Public key should start with ssh-ed25519, got: {}", public_key);
+        assert!(
+            public_key.starts_with("ssh-ed25519"),
+            "Public key should start with ssh-ed25519, got: {}",
+            public_key
+        );
 
         // Private key should be non-empty
         assert!(!private_key.is_empty(), "Private key should not be empty");
 
         // Private key should be 32 bytes for Ed25519
-        assert_eq!(private_key.len(), 32, "Ed25519 private key should be exactly 32 bytes");
+        assert_eq!(
+            private_key.len(),
+            32,
+            "Ed25519 private key should be exactly 32 bytes"
+        );
     }
 
     #[test]

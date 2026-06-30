@@ -11,8 +11,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 mod webauthn_tests {
     use go_webauthn_client::{
-        GoWebAuthnClient, WebAuthnSignupBeginParams, WebAuthnSigninBeginParams,
-        WebAuthnPasskeyLoginBeginParams, WebAuthnListCredentialsParams,
+        GoWebAuthnClient, WebAuthnListCredentialsParams, WebAuthnPasskeyLoginBeginParams,
+        WebAuthnSigninBeginParams, WebAuthnSignupBeginParams,
     };
 
     #[test]
@@ -28,8 +28,7 @@ mod webauthn_tests {
     #[test]
     #[ignore]
     fn test_ed25519_key_generation() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let result = client.ed25519_generate_key();
         assert!(result.is_ok(), "Failed to generate key: {:?}", result);
@@ -37,8 +36,16 @@ mod webauthn_tests {
         let keypair = result.unwrap();
 
         // Ed25519 keys should have specific lengths
-        assert_eq!(keypair.public_key.len(), 32, "Public key should be 32 bytes");
-        assert_eq!(keypair.private_key.len(), 64, "Private key should be 64 bytes");
+        assert_eq!(
+            keypair.public_key.len(),
+            32,
+            "Public key should be 32 bytes"
+        );
+        assert_eq!(
+            keypair.private_key.len(),
+            64,
+            "Private key should be 64 bytes"
+        );
 
         // Keys should not be all zeros
         assert!(
@@ -54,8 +61,7 @@ mod webauthn_tests {
     #[test]
     #[ignore]
     fn test_ed25519_sign_and_verify() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         // Generate key pair
         let keypair = client
@@ -91,8 +97,7 @@ mod webauthn_tests {
     #[test]
     #[ignore]
     fn test_chacha20_encrypt_decrypt() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let key = vec![1u8; 32]; // 32-byte key
         let nonce = vec![2u8; 24]; // 24-byte nonce
@@ -121,8 +126,7 @@ mod webauthn_tests {
     #[test]
     #[ignore]
     fn test_chacha20_with_additional_data() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let key = vec![1u8; 32];
         let nonce = vec![2u8; 24];
@@ -143,16 +147,19 @@ mod webauthn_tests {
 
         // Decrypt with different additional data should fail
         let wrong_additional_data = b"wrong";
-        let result = client.chacha20_decrypt(&key, &nonce, &ciphertext, Some(wrong_additional_data));
+        let result =
+            client.chacha20_decrypt(&key, &nonce, &ciphertext, Some(wrong_additional_data));
 
-        assert!(result.is_err(), "Decryption with wrong additional data should fail");
+        assert!(
+            result.is_err(),
+            "Decryption with wrong additional data should fail"
+        );
     }
 
     #[test]
     #[ignore]
     fn test_webauthn_signup_begin() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let params = WebAuthnSignupBeginParams {
             rp_display_name: "Test App".to_string(),
@@ -179,18 +186,23 @@ mod webauthn_tests {
             .expect("Challenge should be valid JSON");
 
         // Should contain publicKey (WebAuthn structure)
-        assert!(parsed.get("publicKey").is_some(), "Challenge should have publicKey");
+        assert!(
+            parsed.get("publicKey").is_some(),
+            "Challenge should have publicKey"
+        );
 
         // Should have challenge field
         let public_key = parsed.get("publicKey").unwrap();
-        assert!(public_key.get("challenge").is_some(), "Should have challenge");
+        assert!(
+            public_key.get("challenge").is_some(),
+            "Should have challenge"
+        );
     }
 
     #[test]
     #[ignore]
     fn test_webauthn_signin_begin_no_user() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let params = WebAuthnSigninBeginParams {
             username: "nonexistent@example.com".to_string(),
@@ -212,8 +224,7 @@ mod webauthn_tests {
     #[test]
     #[ignore]
     fn test_webauthn_passkey_login_begin() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         let params = WebAuthnPasskeyLoginBeginParams {
             rp_display_name: "Test App".to_string(),
@@ -222,7 +233,11 @@ mod webauthn_tests {
         };
 
         let result = client.webauthn_passkey_login_begin(params);
-        assert!(result.is_ok(), "Failed to begin passkey login: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to begin passkey login: {:?}",
+            result
+        );
 
         let login_result = result.unwrap();
 
@@ -237,17 +252,22 @@ mod webauthn_tests {
             .expect("Challenge should be valid JSON");
 
         // Should contain publicKey for WebAuthn
-        assert!(parsed.get("publicKey").is_some(), "Challenge should have publicKey");
+        assert!(
+            parsed.get("publicKey").is_some(),
+            "Challenge should have publicKey"
+        );
 
         let public_key = parsed.get("publicKey").unwrap();
-        assert!(public_key.get("challenge").is_some(), "Should have challenge");
+        assert!(
+            public_key.get("challenge").is_some(),
+            "Should have challenge"
+        );
     }
 
     #[test]
     #[ignore]
     fn test_webauthn_credentials_list_empty() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         // First initialize WebAuthn by calling signup.begin
         let signup_params = WebAuthnSignupBeginParams {
@@ -260,7 +280,8 @@ mod webauthn_tests {
         };
 
         // This initializes WebAuthn state
-        let _ = client.webauthn_signup_begin(signup_params)
+        let _ = client
+            .webauthn_signup_begin(signup_params)
             .expect("Signup begin should succeed");
 
         // Now list credentials
@@ -271,27 +292,35 @@ mod webauthn_tests {
         let result = client.webauthn_list_credentials(params);
 
         // For a new user (registration not completed), should return empty list
-        assert!(result.is_ok(), "Listing credentials should succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Listing credentials should succeed: {:?}",
+            result
+        );
 
         let creds = result.unwrap();
-        assert_eq!(creds.credentials.len(), 0, "New user should have no credentials");
+        assert_eq!(
+            creds.credentials.len(),
+            0,
+            "New user should have no credentials"
+        );
     }
 
     #[test]
     #[ignore]
     fn test_multiple_clients() {
         // Test that multiple clients can be created and used independently
-        let mut client1 = GoWebAuthnClient::new(None)
-            .expect("Failed to create client 1");
+        let mut client1 = GoWebAuthnClient::new(None).expect("Failed to create client 1");
 
-        let mut client2 = GoWebAuthnClient::new(None)
-            .expect("Failed to create client 2");
+        let mut client2 = GoWebAuthnClient::new(None).expect("Failed to create client 2");
 
         // Generate keys with both clients
-        let key1 = client1.ed25519_generate_key()
+        let key1 = client1
+            .ed25519_generate_key()
             .expect("Failed to generate key with client 1");
 
-        let key2 = client2.ed25519_generate_key()
+        let key2 = client2
+            .ed25519_generate_key()
             .expect("Failed to generate key with client 2");
 
         // Keys should be different (extremely unlikely to be the same)
@@ -303,27 +332,25 @@ mod webauthn_tests {
     #[ignore]
     fn test_client_process_lifecycle() {
         // Create client
-        let client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         // Client should spawn a process
         // When client is dropped, process should be killed
         drop(client);
 
         // Create a new client - should work fine
-        let mut client2 = GoWebAuthnClient::new(None)
-            .expect("Failed to create second client");
+        let mut client2 = GoWebAuthnClient::new(None).expect("Failed to create second client");
 
         // Should still be able to use it
-        let _key = client2.ed25519_generate_key()
+        let _key = client2
+            .ed25519_generate_key()
             .expect("Failed to generate key with second client");
     }
 
     #[test]
     #[ignore]
     fn test_error_handling_invalid_key_length() {
-        let mut client = GoWebAuthnClient::new(None)
-            .expect("Failed to create client");
+        let mut client = GoWebAuthnClient::new(None).expect("Failed to create client");
 
         // Try to sign with invalid key length
         let invalid_key = vec![1u8; 10]; // Too short

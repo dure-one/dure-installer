@@ -6,6 +6,7 @@
 //! API Reference: https://cloud.google.com/compute/docs/reference/rest/v1
 
 use anyhow::Result;
+use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 const GCP_COMPUTE_API_BASE: &str = "https://compute.googleapis.com/compute/v1";
@@ -715,7 +716,8 @@ pub struct OperationError {
 
 #[derive(Debug, Deserialize)]
 pub struct ErrorDetail {
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
     pub message: String,
 }
 
@@ -1238,41 +1240,62 @@ impl GcpRestClient {
         Ok(result)
     }
 
-    /// Get billing data for the current month
+    /// Get billing data by month using BigQuery billing export
+    ///
+    /// This method queries the detailed cost data exported to BigQuery to calculate
+    /// monthly total costs including all credits.
+    ///
+    /// Returns billing data for the last 3 months plus the current month (4 months total).
+    ///
+    /// To enable billing export:
+    /// 1. Go to GCP Console → Billing → Billing export
+    /// 2. Select "Detailed cost data" tab
+    /// 3. Select or create a BigQuery dataset
+    /// 4. Wait a few hours for data to populate
     pub fn get_current_month_billing(
         &self,
         project_id: &str,
         dataset_id: &str,
         table_id: &str,
     ) -> Result<Vec<BillingRecord>> {
-        // Get current month in YYYYMM format
         let now = chrono::Utc::now();
-        let invoice_month = now.format("%Y%m").to_string();
-        let first_day_of_month = now.format("%Y-%m-01").to_string();
 
+        // Calculate date range: 3 months back from start of current month
+        let three_months_ago = if now.month() > 3 {
+            chrono::NaiveDate::from_ymd_opt(now.year(), now.month() - 3, 1)
+                .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap())
+        } else {
+            // Handle year boundary (e.g., if current month is Jan, Feb, or Mar)
+            let new_year = now.year() - 1;
+            let new_month = (now.month() + 12 - 3) % 12;
+            let new_month = if new_month == 0 { 12 } else { new_month };
+            chrono::NaiveDate::from_ymd_opt(new_year, new_month, 1)
+                .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap())
+        };
+
+        let start_date = three_months_ago.format("%Y-%m-%d").to_string();
+        let end_date = now.format("%Y-%m-%d").to_string();
+
+        // Query for monthly billing totals with currency (last 3 months + current)
+        // This retrieves the actual currency from the billing data
         let query = format!(
             r#"
             SELECT
-              DATE(TIMESTAMP_TRUNC(usage_start_time, Day, 'US/Pacific')) AS Day,
-              service.description AS Service,
-              SUM(CAST(cost_at_list AS NUMERIC)) AS ListCost,
-              SUM(CAST(cost AS NUMERIC)) - SUM(CAST(cost_at_list AS NUMERIC)) AS NegotiatedSavings,
-              SUM(IFNULL((SELECT SUM(CAST(c.amount AS numeric)) FROM UNNEST(credits) c WHERE c.type IN ('SUSTAINED_USAGE_DISCOUNT', 'DISCOUNT', 'SPENDING_BASED_DISCOUNT', 'COMMITTED_USAGE_DISCOUNT', 'FREE_TIER', 'COMMITTED_USAGE_DISCOUNT_DOLLAR_BASE', 'SUBSCRIPTION_BENEFIT', 'RESELLER_MARGIN')), 0)) AS Discounts,
-              SUM(IFNULL((SELECT SUM(CAST(c.amount AS numeric)) FROM UNNEST(credits) c WHERE c.type IN ('CREDIT_TYPE_UNSPECIFIED', 'PROMOTION')), 0)) AS Promotions,
-              SUM(CAST(cost_at_list AS NUMERIC)) + SUM(IFNULL((SELECT SUM(CAST(c.amount AS numeric)) FROM UNNEST(credits) c WHERE c.type IN ('SUSTAINED_USAGE_DISCOUNT', 'DISCOUNT', 'SPENDING_BASED_DISCOUNT', 'COMMITTED_USAGE_DISCOUNT', 'FREE_TIER', 'COMMITTED_USAGE_DISCOUNT_DOLLAR_BASE', 'SUBSCRIPTION_BENEFIT', 'RESELLER_MARGIN')), 0)) + SUM(CAST(cost AS NUMERIC)) - SUM(CAST(cost_at_list AS NUMERIC))+ SUM(IFNULL((SELECT SUM(CAST(c.amount AS numeric)) FROM UNNEST(credits) c WHERE c.type IN ('CREDIT_TYPE_UNSPECIFIED', 'PROMOTION')), 0)) AS Subtotal
+              FORMAT_DATE('%Y-%m', DATE(usage_start_time)) AS month,
+              currency,
+              ROUND(SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)), 2) AS total_net_cost
             FROM
               `{}.{}.{}`
             WHERE
-              invoice.month = '{}' AND
-              DATE(TIMESTAMP_TRUNC(usage_start_time, Day, 'US/Pacific')) >= '{}'
+              DATE(usage_start_time) >= '{}'
+              AND DATE(usage_start_time) <= '{}'
+              AND cost IS NOT NULL
             GROUP BY
-              Day,
-              service.description
+              month, currency
             ORDER BY
-              Day DESC,
-              Subtotal DESC
+              month DESC, currency
             "#,
-            project_id, dataset_id, table_id, invoice_month, first_day_of_month
+            project_id, dataset_id, table_id, start_date, end_date
         );
 
         let response = self.query_bigquery(project_id, &query)?;
@@ -1280,40 +1303,16 @@ impl GcpRestClient {
         let mut records = Vec::new();
         if let Some(rows) = response.rows {
             for row in rows {
-                if row.f.len() >= 7 {
+                if row.f.len() >= 3 {
+                    let month = row.f[0].v.clone().unwrap_or_default();
+                    let currency = row.f[1].v.clone().unwrap_or_else(|| "USD".to_string());
+                    let cost_str = row.f[2].v.clone().unwrap_or_else(|| "0.0".to_string());
+                    let total_net_cost: f64 = cost_str.parse().unwrap_or(0.0);
+
                     records.push(BillingRecord {
-                        day: row.f[0].v.clone().unwrap_or_default(),
-                        service: row.f[1].v.clone().unwrap_or_default(),
-                        list_cost: row.f[2]
-                            .v
-                            .clone()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or(0.0),
-                        negotiated_savings: row.f[3]
-                            .v
-                            .clone()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or(0.0),
-                        discounts: row.f[4]
-                            .v
-                            .clone()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or(0.0),
-                        promotions: row.f[5]
-                            .v
-                            .clone()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or(0.0),
-                        subtotal: row.f[6]
-                            .v
-                            .clone()
-                            .unwrap_or_default()
-                            .parse()
-                            .unwrap_or(0.0),
+                        month,
+                        currency,
+                        total_net_cost,
                     });
                 }
             }
@@ -1360,13 +1359,9 @@ pub struct BigQueryCell {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BillingRecord {
-    pub day: String,
-    pub service: String,
-    pub list_cost: f64,
-    pub negotiated_savings: f64,
-    pub discounts: f64,
-    pub promotions: f64,
-    pub subtotal: f64,
+    pub month: String,
+    pub currency: String,
+    pub total_net_cost: f64,
 }
 
 #[cfg(test)]

@@ -43,7 +43,7 @@ pub struct ManagedZone {
 /// DNSSEC configuration
 #[derive(Debug, Serialize)]
 struct DnssecConfig {
-    state: String,  // "on" or "off"
+    state: String, // "on" or "off"
 }
 
 /// Managed zone creation request
@@ -124,11 +124,7 @@ impl GcpDnsClient {
     }
 
     /// Get a managed zone by name
-    pub fn get_managed_zone(
-        &self,
-        project_id: &str,
-        managed_zone: &str,
-    ) -> Result<ManagedZone> {
+    pub fn get_managed_zone(&self, project_id: &str, managed_zone: &str) -> Result<ManagedZone> {
         let url = format!(
             "{}/projects/{}/managedZones/{}",
             API_BASE, project_id, managed_zone
@@ -147,11 +143,7 @@ impl GcpDnsClient {
     }
 
     /// Create a new managed zone with DNSSEC enabled
-    pub fn create_managed_zone(
-        &self,
-        project_id: &str,
-        domain: &str,
-    ) -> Result<ManagedZone> {
+    pub fn create_managed_zone(&self, project_id: &str, domain: &str) -> Result<ManagedZone> {
         let url = format!("{}/projects/{}/managedZones", API_BASE, project_id);
 
         // Convert domain to zone name format (replace dots with hyphens)

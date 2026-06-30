@@ -23,13 +23,13 @@ use std::net::{TcpListener, TcpStream};
 
 /// Required GCP OAuth scopes (from Outline-apps)
 const GCP_SCOPES: &[&str] = &[
-    "https://www.googleapis.com/auth/userinfo.email",           // ✅ Safe - just email
-    "https://www.googleapis.com/auth/compute",                  // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#compute
-    "https://www.googleapis.com/auth/cloudplatformprojects",    // https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/list
-    "https://www.googleapis.com/auth/cloud-billing",            // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#cloudbilling
-    "https://www.googleapis.com/auth/service.management",       // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#servicemanagement
+    "https://www.googleapis.com/auth/userinfo.email", // ✅ Safe - just email
+    "https://www.googleapis.com/auth/compute", // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#compute
+    "https://www.googleapis.com/auth/cloudplatformprojects", // https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/list
+    "https://www.googleapis.com/auth/cloud-billing", // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#cloudbilling
+    "https://www.googleapis.com/auth/service.management", // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#servicemanagement
     "https://www.googleapis.com/auth/cloud-platform.read-only", // 🟡 BROAD - read everything
-    "https://www.googleapis.com/auth/ndev.clouddns.readwrite",  // ✅ NEEDED - DNS management
+    "https://www.googleapis.com/auth/ndev.clouddns.readwrite", // ✅ NEEDED - DNS management
 ];
 
 // Note: For native apps, the "client secret" is not actually a secret.

@@ -1,8 +1,8 @@
 //! SSH tab - SSH host configuration and management
 
 use eframe::egui;
-use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
 use egui_material3::MaterialButton;
+use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
 use crate::calc::audit;
 use crate::calc::ssh;
@@ -527,13 +527,11 @@ impl SshTab {
 
             // Load config and get host config
             let host_config_clone = match load_config() {
-                Ok((app_config, _)) => {
-                    app_config
-                        .ssh_hosts
-                        .iter()
-                        .find(|h| h.host == host)
-                        .cloned()
-                }
+                Ok((app_config, _)) => app_config
+                    .ssh_hosts
+                    .iter()
+                    .find(|h| h.host == host)
+                    .cloned(),
                 Err(e) => {
                     self.init_progress_log
                         .push(format!("✗ Failed to load config: {e}"));
@@ -551,8 +549,7 @@ impl SshTab {
 
             // Spawn initialization in background thread
             let promise = poll_promise::Promise::spawn_thread("ssh_init", move || {
-                ssh::initialize_host(&host_config)
-                    .map_err(|e| format!("{}", e))
+                ssh::initialize_host(&host_config).map_err(|e| format!("{}", e))
             });
 
             self.init_promise = Some(promise);
@@ -567,13 +564,11 @@ impl SshTab {
 
             // Load config and get host config
             let host_config_clone = match load_config() {
-                Ok((app_config, _)) => {
-                    app_config
-                        .ssh_hosts
-                        .iter()
-                        .find(|h| h.host == host)
-                        .cloned()
-                }
+                Ok((app_config, _)) => app_config
+                    .ssh_hosts
+                    .iter()
+                    .find(|h| h.host == host)
+                    .cloned(),
                 Err(e) => {
                     self.test_result = Some(Err(format!("Failed to load config: {e}")));
                     self.test_in_progress = false;
@@ -589,8 +584,7 @@ impl SshTab {
 
             // Spawn connection test in background thread
             let promise = poll_promise::Promise::spawn_thread("ssh_test", move || {
-                ssh::test_connection(&host_config)
-                    .map_err(|e| format!("{}", e))
+                ssh::test_connection(&host_config).map_err(|e| format!("{}", e))
             });
 
             self.test_promise = Some(promise);
@@ -627,7 +621,11 @@ impl SshTab {
                 match result {
                     Ok(msg) => {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("✓").color(egui::Color32::GREEN).size(20.0));
+                            ui.label(
+                                egui::RichText::new("✓")
+                                    .color(egui::Color32::GREEN)
+                                    .size(20.0),
+                            );
                             ui.label(egui::RichText::new("Connection successful").strong());
                         });
                         ui.add_space(8.0);
@@ -635,7 +633,11 @@ impl SshTab {
                     }
                     Err(msg) => {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("✗").color(egui::Color32::RED).size(20.0));
+                            ui.label(
+                                egui::RichText::new("✗")
+                                    .color(egui::Color32::RED)
+                                    .size(20.0),
+                            );
                             ui.label(egui::RichText::new("Connection failed").strong());
                         });
                         ui.add_space(8.0);
@@ -674,7 +676,9 @@ impl SshTab {
 
                                     match app_config.save(&config_path) {
                                         Ok(_) => {
-                                            eprintln!("✓ SSH host initialized, refreshing spreadsheet");
+                                            eprintln!(
+                                                "✓ SSH host initialized, refreshing spreadsheet"
+                                            );
                                             self.loaded = false; // Trigger reload
                                             self.init_progress_log
                                                 .push("✓ Configuration saved".to_string());
@@ -729,7 +733,10 @@ impl SshTab {
         ui.add_space(8.0);
 
         let can_close = self.init_promise.is_none();
-        if ui.add_enabled(can_close, egui::Button::new("Close")).clicked() {
+        if ui
+            .add_enabled(can_close, egui::Button::new("Close"))
+            .clicked()
+        {
             self.init_in_progress = false;
             self.init_host = None;
             self.init_progress_log.clear();

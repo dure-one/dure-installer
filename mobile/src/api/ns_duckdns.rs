@@ -44,9 +44,7 @@ impl DuckDnsClient {
         txt: Option<&str>,
     ) -> Result<()> {
         // Extract subdomain from full domain if needed
-        let subdomain = domain
-            .strip_suffix(".duckdns.org")
-            .unwrap_or(domain);
+        let subdomain = domain.strip_suffix(".duckdns.org").unwrap_or(domain);
 
         let mut url = format!(
             "https://www.duckdns.org/update?domains={}&token={}",

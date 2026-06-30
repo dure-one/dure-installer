@@ -21,15 +21,20 @@ struct PlatformRow {
     gcp_connected: bool,    // Has OAuth access token
     project_selected: bool, // Has gcp_selected_project_id
     vm_created: bool,       // vms.len() > 0
+    firewall_updated: bool, // Current IP is whitelisted
     ssh_ready: bool,        // VM has external_ip.is_some()
 
     // Drawer content data
-    email: Option<String>,      // Connected Google account
-    total_project_count: usize, // Fetched from GCP API
+    email: Option<String>,           // Connected Google account
+    total_project_count: usize,      // Fetched from GCP API
     selected_project_id: Option<String>,
-    vm_name: Option<String>, // First VM name
-    firewall_status: String, // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
-    ssh_status: String,      // "✓ Ready" or "? No external IP"
+    vm_name: Option<String>,         // First VM name
+    vm_external_ip: Option<String>,  // First VM external IP
+    ssh_private_key: Option<String>, // SSH private key from KeePass
+    ssh_public_key: Option<String>,  // Derived SSH public key for verification
+    ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
+    firewall_status: String,         // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
+    ssh_status: String,              // "✓ Ready" or "? No external IP"
 
     // Action button state
     has_vm: bool,            // Enable/disable VM operation buttons
@@ -150,6 +155,12 @@ pub struct PlatformTab {
     select_project_list: Vec<(String, String)>, // (project_id, project_name)
     #[cfg_attr(feature = "serde", serde(skip))]
     select_project_selected: Option<usize>,
+
+    // SSH connection test state (per platform)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_test_promises: std::collections::HashMap<String, poll_promise::Promise<Result<crate::calc::ssh::SshConnectionResult, String>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_test_results: std::collections::HashMap<String, Result<crate::calc::ssh::SshConnectionResult, String>>,
 }
 
 impl Default for PlatformTab {
@@ -193,6 +204,8 @@ impl Default for PlatformTab {
             select_project_platform_name: String::new(),
             select_project_list: Vec::new(),
             select_project_selected: None,
+            ssh_test_promises: std::collections::HashMap::new(),
+            ssh_test_results: std::collections::HashMap::new(),
         }
     }
 }
@@ -218,24 +231,29 @@ fn format_steps(row: &PlatformRow) -> String {
     let gcp = if row.gcp_connected { "✓" } else { "✗" };
     let proj = if row.project_selected { "✓" } else { "✗" };
     let vm = if row.vm_created { "✓" } else { "✗" };
+    let firewall = if row.firewall_updated { "✓" } else { "✗" };
     let ssh = if row.ssh_ready { "✓" } else { "✗" };
 
     format!(
-        "{} GCP Connected → {} Project Created → {} VM Created → {} SSH Connected",
-        gcp, proj, vm, ssh
+        "{} GCP Connected → {} Project Created → {} VM Created → {} Firewall Rules Updated → {} SSH Connected",
+        gcp, proj, vm, firewall, ssh
     )
 }
 
 /// Compute firewall whitelist status for a platform
-fn compute_firewall_status(platform: &CloudPlatformConfig) -> String {
-    if let Some(project_id) = &platform.gcp_selected_project_id {
-        if let Some(access_token) = &platform.gcp_oauth_access_token {
+///
+/// # Arguments
+/// * `access_token` - Valid (non-expired) OAuth access token
+/// * `project_id` - GCP project ID to check
+fn compute_firewall_status(access_token: Option<&str>, project_id: Option<&str>) -> String {
+    if let Some(project) = project_id {
+        if let Some(token) = access_token {
             use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
 
-            let client = GcpRestClient::new(access_token.clone());
+            let client = GcpRestClient::new(token.to_string());
 
             match get_current_ip() {
-                Ok(current_ip) => match client.check_ip_whitelisted(project_id, &current_ip) {
+                Ok(current_ip) => match client.check_ip_whitelisted(project, &current_ip) {
                     Ok(true) => format!("✓ Whitelisted ({})", current_ip),
                     Ok(false) => "✗ Not whitelisted".to_string(),
                     Err(_) => "? Status unknown".to_string(),
@@ -251,23 +269,337 @@ fn compute_firewall_status(platform: &CloudPlatformConfig) -> String {
 }
 
 /// Compute SSH readiness status for a platform's VM
-fn compute_ssh_status(platform: &CloudPlatformConfig) -> String {
+///
+/// # Arguments
+/// * `platform` - Platform configuration
+/// * `test_result` - Optional SSH connection test result
+fn compute_ssh_status(
+    platform: &CloudPlatformConfig,
+    test_result: Option<&Result<crate::calc::ssh::SshConnectionResult, String>>,
+) -> String {
+    // If we have a test result, show it
+    if let Some(result) = test_result {
+        return match result {
+            Ok(conn_result) => {
+                if conn_result.success {
+                    "✓ Connected".to_string()
+                } else {
+                    format!("✗ {}", conn_result.message)
+                }
+            }
+            Err(e) => format!("✗ Failed: {}", e),
+        };
+    }
+
+    // Otherwise, show basic readiness check
     if let Some(vm) = platform.vms.first() {
         if vm.external_ip.is_some() {
-            "✓ Ready".to_string()
+            "? Not tested".to_string()
         } else {
-            "? No external IP".to_string()
+            "✗ No external IP".to_string()
         }
     } else {
         "No VM".to_string()
     }
 }
 
+/// Helper function to write length-prefixed strings (SSH wire format)
+#[cfg(not(target_arch = "wasm32"))]
+fn write_ssh_string(buf: &mut Vec<u8>, data: &[u8]) {
+    buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    buf.extend_from_slice(data);
+}
+
+/// Convert raw Ed25519 private key bytes (32 bytes) to OpenSSH format
+#[cfg(not(target_arch = "wasm32"))]
+fn convert_ed25519_to_openssh(raw_bytes: &[u8]) -> Option<String> {
+    use ed25519_dalek::SigningKey;
+
+    // Check if it's raw 32-byte Ed25519 key
+    if raw_bytes.len() != 32 {
+        return None;
+    }
+
+    let signing_key = SigningKey::from_bytes(raw_bytes.try_into().ok()?);
+    let verifying_key = signing_key.verifying_key();
+
+    let mut key_blob = Vec::new();
+
+    // Magic bytes
+    key_blob.extend_from_slice(b"openssh-key-v1\0");
+
+    // Cipher name (none for unencrypted)
+    write_ssh_string(&mut key_blob, b"none");
+
+    // KDF name (none for unencrypted)
+    write_ssh_string(&mut key_blob, b"none");
+
+    // KDF options (empty for unencrypted)
+    write_ssh_string(&mut key_blob, b"");
+
+    // Number of keys (1)
+    key_blob.extend_from_slice(&1u32.to_be_bytes());
+
+    // Public key blob
+    let mut public_key_blob = Vec::new();
+    write_ssh_string(&mut public_key_blob, b"ssh-ed25519");
+    write_ssh_string(&mut public_key_blob, verifying_key.as_bytes());
+    write_ssh_string(&mut key_blob, &public_key_blob);
+
+    // Private key blob
+    let mut private_key_blob = Vec::new();
+
+    // Check bytes (same value twice for unencrypted keys)
+    let check = 0x12345678u32;
+    private_key_blob.extend_from_slice(&check.to_be_bytes());
+    private_key_blob.extend_from_slice(&check.to_be_bytes());
+
+    // Key type
+    write_ssh_string(&mut private_key_blob, b"ssh-ed25519");
+
+    // Public key
+    write_ssh_string(&mut private_key_blob, verifying_key.as_bytes());
+
+    // Private key (Ed25519 format: 32 bytes private + 32 bytes public)
+    let mut ed25519_keypair = Vec::new();
+    ed25519_keypair.extend_from_slice(raw_bytes);
+    ed25519_keypair.extend_from_slice(verifying_key.as_bytes());
+    write_ssh_string(&mut private_key_blob, &ed25519_keypair);
+
+    // Comment (empty)
+    write_ssh_string(&mut private_key_blob, b"");
+
+    // Padding (block size is 8 bytes)
+    let padding_len = 8 - (private_key_blob.len() % 8);
+    for i in 1..=padding_len {
+        private_key_blob.push(i as u8);
+    }
+
+    // Write private key blob
+    write_ssh_string(&mut key_blob, &private_key_blob);
+
+    // Base64 encode
+    let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &key_blob);
+
+    // Wrap in PEM format with 70-character lines
+    let mut result = String::from("-----BEGIN OPENSSH PRIVATE KEY-----\n");
+    for chunk in encoded.as_bytes().chunks(70) {
+        result.push_str(std::str::from_utf8(chunk).ok()?);
+        result.push('\n');
+    }
+    result.push_str("-----END OPENSSH PRIVATE KEY-----\n");
+
+    Some(result)
+}
+
+/// Read SSH string (length-prefixed) from buffer
+#[cfg(not(target_arch = "wasm32"))]
+fn read_ssh_string(data: &[u8], offset: &mut usize) -> Option<Vec<u8>> {
+    if *offset + 4 > data.len() {
+        return None;
+    }
+
+    let len = u32::from_be_bytes([data[*offset], data[*offset + 1], data[*offset + 2], data[*offset + 3]]) as usize;
+    *offset += 4;
+
+    if *offset + len > data.len() {
+        return None;
+    }
+
+    let result = data[*offset..*offset + len].to_vec();
+    *offset += len;
+    Some(result)
+}
+
+/// Extract public key from OpenSSH private key format
+#[cfg(not(target_arch = "wasm32"))]
+fn extract_pubkey_from_openssh(openssh_key: &str) -> Option<String> {
+    // Remove PEM headers and decode base64
+    let key_data = openssh_key
+        .lines()
+        .filter(|line| !line.contains("BEGIN") && !line.contains("END") && !line.trim().is_empty())
+        .collect::<String>();
+
+    let decoded = base64::Engine::decode(
+        &base64::engine::general_purpose::STANDARD,
+        key_data.as_bytes()
+    ).ok()?;
+
+    let mut offset = 0;
+
+    // Skip magic bytes "openssh-key-v1\0"
+    if decoded.len() < 15 || &decoded[0..15] != b"openssh-key-v1\0" {
+        return None;
+    }
+    offset = 15;
+
+    // Skip cipher name, kdf name, kdf options
+    read_ssh_string(&decoded, &mut offset)?;
+    read_ssh_string(&decoded, &mut offset)?;
+    read_ssh_string(&decoded, &mut offset)?;
+
+    // Skip number of keys (should be 1)
+    if offset + 4 > decoded.len() {
+        return None;
+    }
+    offset += 4;
+
+    // Read public key blob
+    let public_key_blob = read_ssh_string(&decoded, &mut offset)?;
+
+    // Encode as SSH public key
+    let public_key_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        &public_key_blob
+    );
+    Some(format!("ssh-ed25519 {} dure-generated", public_key_b64))
+}
+
+/// Derive SSH public key from raw Ed25519 private key bytes or OpenSSH format
+#[cfg(not(target_arch = "wasm32"))]
+fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
+    use ed25519_dalek::SigningKey;
+
+    // Try to interpret as OpenSSH format first
+    if let Ok(key_str) = String::from_utf8(raw_bytes.to_vec()) {
+        if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
+            eprintln!("DEBUG: Extracting public key from OpenSSH format");
+            return extract_pubkey_from_openssh(&key_str);
+        }
+    }
+
+    // Otherwise, treat as raw 32-byte Ed25519 key
+    if raw_bytes.len() != 32 {
+        eprintln!("DEBUG: Key is neither OpenSSH format nor raw 32 bytes (length: {})", raw_bytes.len());
+        return None;
+    }
+
+    let signing_key = SigningKey::from_bytes(raw_bytes.try_into().ok()?);
+    let verifying_key = signing_key.verifying_key();
+    let public_key_bytes = verifying_key.as_bytes();
+
+    // Encode in SSH public key format
+    let mut public_key_ssh = Vec::new();
+    write_ssh_string(&mut public_key_ssh, b"ssh-ed25519");
+    write_ssh_string(&mut public_key_ssh, public_key_bytes);
+
+    let public_key_b64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &public_key_ssh);
+    Some(format!("ssh-ed25519 {} dure-generated", public_key_b64))
+}
+
+/// Load SSH private key from KeePass database and derive public key
+///
+/// # Arguments
+/// * `keyring_domain` - The domain/identifier for the SSH key in KeePass
+///
+/// Returns (private_key, public_key)
+#[cfg(not(target_arch = "wasm32"))]
+fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+    use crate::calc::keyring;
+
+    let domain = match keyring_domain.as_ref() {
+        Some(d) => {
+            eprintln!("DEBUG: Loading SSH key for domain: {}", d);
+            d
+        }
+        None => {
+            eprintln!("DEBUG: No keyring domain provided");
+            return (None, None);
+        }
+    };
+
+    let kdbx_path = match keyring::get_default_kdbx_path() {
+        Ok(p) => {
+            eprintln!("DEBUG: KeePass DB path: {}", p.display());
+            p
+        }
+        Err(e) => {
+            eprintln!("DEBUG: Failed to get kdbx path: {}", e);
+            return (None, None);
+        }
+    };
+    let kpkey_path = match keyring::get_default_kpkey_path() {
+        Ok(p) => {
+            eprintln!("DEBUG: KPKey path: {}", p.display());
+            p
+        }
+        Err(e) => {
+            eprintln!("DEBUG: Failed to get kpkey path: {}", e);
+            return (None, None);
+        }
+    };
+
+    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
+        Ok(k) => {
+            eprintln!("DEBUG: Found {} keys in keyring", k.len());
+            for key in &k {
+                eprintln!("  - Domain: {}, Username: {}, Has SSH: {}",
+                    key.domain, key.username, key.ssh_key.is_some());
+            }
+            k
+        }
+        Err(e) => {
+            eprintln!("DEBUG: Failed to list keys: {}", e);
+            return (None, None);
+        }
+    };
+
+    // Find the key with matching domain
+    let key_entry = match keys.iter().find(|k| &k.domain == domain) {
+        Some(e) => {
+            eprintln!("DEBUG: Found matching key entry");
+            e
+        }
+        None => {
+            eprintln!("DEBUG: No key found for domain: {}", domain);
+            return (None, None);
+        }
+    };
+
+    // Try to get SSH key from binary attachment
+    if let Some(ssh_key_bytes) = &key_entry.ssh_key {
+        eprintln!("DEBUG: SSH key bytes length: {}", ssh_key_bytes.len());
+
+        // Derive public key from raw bytes
+        let public_key = derive_public_key_from_raw(ssh_key_bytes);
+        if let Some(ref pk) = public_key {
+            eprintln!("DEBUG: Derived public key: {}", pk);
+        } else {
+            eprintln!("DEBUG: Failed to derive public key");
+        }
+
+        // Try to interpret as UTF-8 string first (already in OpenSSH format)
+        if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
+            if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
+                eprintln!("DEBUG: Key already in OpenSSH format");
+                return (Some(key_str), public_key);
+            }
+        }
+
+        // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
+        eprintln!("DEBUG: Converting raw bytes to OpenSSH format");
+        let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
+        (private_key, public_key)
+    } else {
+        eprintln!("DEBUG: Key entry has no SSH key attachment");
+        (None, None)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_ssh_key_from_keyring(_keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+    (None, None)
+}
+
 /// Fetch total project count from GCP API
-fn fetch_project_count(platform: &CloudPlatformConfig) -> usize {
-    if let Some(access_token) = &platform.gcp_oauth_access_token {
+///
+/// # Arguments
+/// * `access_token` - Valid (non-expired) OAuth access token. Caller should use get_valid_access_token() to ensure token is fresh.
+fn fetch_project_count(access_token: Option<&str>) -> usize {
+    if let Some(token) = access_token {
         use crate::calc::gcp_rest::GcpRestClient;
-        let client = GcpRestClient::new(access_token.clone());
+        let client = GcpRestClient::new(token.to_string());
 
         match client.list_projects(None) {
             Ok(list) => list.projects.len(),
@@ -297,13 +629,71 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
     // Level 2: Selected project
     if let Some(project_id) = &row.selected_project_id {
-        ui.label(format!("  └─ {} (selected)", project_id));
+        ui.label(format!("  └─ Project: {} (selected)", project_id));
 
         // Level 3: VM details
         if let Some(vm_name) = &row.vm_name {
-            ui.label(format!("     └─ VM: {}", vm_name));
+            let vm_display = if let Some(external_ip) = &row.vm_external_ip {
+                format!("     └─ VM: {}({})", vm_name, external_ip)
+            } else {
+                format!("     └─ VM: {} (no external IP)", vm_name)
+            };
+            ui.label(vm_display);
             ui.label(format!("        • Firewall: {}", row.firewall_status));
             ui.label(format!("        • SSH: {}", row.ssh_status));
+
+            // Show derived public key for verification
+            // if let Some(public_key) = &row.ssh_public_key {
+            //     ui.add_space(4.0);
+            //     ui.label("        • Public Key (from keyring):");
+            //     egui::ScrollArea::horizontal()
+            //         .id_salt(format!("pubkey_{}", vm_name))
+            //         .max_width(ui.available_width() - 32.0)
+            //         .show(ui, |ui| {
+            //             ui.add(
+            //                 egui::TextEdit::singleline(&mut public_key.as_str())
+            //                     .font(egui::TextStyle::Monospace)
+            //                     .desired_width(f32::INFINITY)
+            //             );
+            //         });
+            //     ui.label("          (Compare this with /root/.ssh/authorized_keys on VM)");
+            // }
+
+            // Show SSH connection command if we have the key and external IP
+            if let (Some(external_ip), Some(ssh_key)) = (&row.vm_external_ip, &row.ssh_private_key) {
+                ui.add_space(4.0);
+                ui.label("        • SSH Connect:");
+
+                // Create temp file, set permissions, connect, then cleanup
+                let ssh_command = format!(
+                    "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
+                    ssh_key.trim(),
+                    external_ip
+                );
+
+                // Show in a scrollable, selectable text area
+                egui::ScrollArea::horizontal()
+                    .id_salt(format!("ssh_cmd_{}", vm_name))
+                    .max_width(ui.available_width() - 32.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut ssh_command.as_str())
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(3)
+                                .interactive(true)
+                        );
+                    });
+
+                ui.add_space(2.0);
+                ui.label("          (Copy and paste into terminal - key auto-deletes after use)");
+            } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
+                ui.add_space(4.0);
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 152, 0),
+                    "        ⚠ SSH key not found in keyring"
+                );
+            }
         } else {
             ui.label("     └─ No VM created");
         }
@@ -321,6 +711,21 @@ impl PlatformTab {
             "Manage cloud service platforms (GCP, Firebase, Supabase) for deployment and hosting.",
         );
         ui.add_space(8.0);
+
+        // Poll SSH test promises
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut completed = Vec::new();
+            for (platform_name, promise) in &self.ssh_test_promises {
+                if let Some(result) = promise.ready() {
+                    completed.push(platform_name.clone());
+                    self.ssh_test_results.insert(platform_name.clone(), result.clone());
+                }
+            }
+            for platform_name in completed {
+                self.ssh_test_promises.remove(&platform_name);
+            }
+        }
 
         // Action buttons
         if ui.add(MaterialButton::filled("Add Platform")).clicked() {
@@ -407,7 +812,7 @@ impl PlatformTab {
 
                                         // 1. Add VM
                                         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                        if ui.add_enabled(!row_for_actions.has_vm && row_for_actions.project_selected,
                                             MaterialButton::outlined("Add VM").small()).on_hover_text("Add VM").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_add_vm"),
@@ -416,7 +821,7 @@ impl PlatformTab {
                                         }
 
                                         // 2. Firewall
-                                        if ui.add_enabled(row_for_actions.project_selected,
+                                        if ui.add_enabled(row_for_actions.project_selected && !row_for_actions.firewall_updated,
                                             MaterialButton::outlined("Firewall").small()).on_hover_text("Update Firewall").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_update_firewall"),
@@ -455,7 +860,7 @@ impl PlatformTab {
 
                                         // 6. Billing
                                         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                                        if ui.add_enabled(row_for_actions.gcp_connected,
+                                        if ui.add_enabled(row_for_actions.project_selected,
                                             MaterialButton::outlined("Billing").small()).on_hover_text("Estimated Billing").clicked() {
                                             ui.data_mut(|d| d.insert_temp(
                                                 egui::Id::new("platform_action_billing"),
@@ -483,9 +888,14 @@ impl PlatformTab {
 
             // Process pending actions from button clicks
             // Refresh action (available on all platforms)
-            if let Some(_platform_name) = ui.data(|d|
+            if let Some(platform_name) = ui.data(|d|
                 d.get_temp::<String>(egui::Id::new("platform_action_refresh"))) {
                 self.loaded = false;
+
+                // Trigger SSH connection test for this platform
+                #[cfg(not(target_arch = "wasm32"))]
+                self.execute_test_connection(platform_name.clone());
+
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_refresh")));
             }
 
@@ -614,12 +1024,60 @@ impl PlatformTab {
         #[cfg(not(target_arch = "wasm32"))]
         {
             match load_config() {
-                Ok((app_config, _)) => {
-                    for platform in app_config.platforms.iter() {
+                Ok((mut app_config, config_path)) => {
+                    // Iterate by index to avoid borrow checker issues
+                    let platform_count = app_config.platforms.len();
+                    for idx in 0..platform_count {
                         // Only show GCP platforms for now
-                        if platform.platform_type != "gcp" {
+                        if app_config.platforms[idx].platform_type != "gcp" {
                             continue;
                         }
+
+                        // Get valid access token (refreshes if expired)
+                        // Note: get_valid_access_token() saves config if it refreshes the token
+                        let access_token = if app_config.platforms[idx].gcp_oauth_access_token.is_some() {
+                            match self.get_valid_access_token(&mut app_config, idx, &config_path) {
+                                Ok(token) => Some(token),
+                                Err(e) => {
+                                    eprintln!("Failed to get valid access token for platform '{}': {}",
+                                        app_config.platforms[idx].name, e);
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        };
+
+                        // Borrow platform after get_valid_access_token
+                        let platform = &app_config.platforms[idx];
+
+                        // Compute firewall status string (fresh fetch from GCP)
+                        let firewall_status_str = compute_firewall_status(
+                            access_token.as_deref(),
+                            platform.gcp_selected_project_id.as_deref()
+                        );
+
+                        // Compute SSH status and readiness flag
+                        let ssh_status_str = compute_ssh_status(
+                            platform,
+                            self.ssh_test_results.get(&platform.name)
+                        );
+
+                        // ssh_ready should match ssh_status: only true if actually connected
+                        let ssh_ready = if let Some(result) = self.ssh_test_results.get(&platform.name) {
+                            matches!(result, Ok(conn_result) if conn_result.success)
+                        } else {
+                            false
+                        };
+
+                        // Load SSH private key from KeePass if VM exists
+                        let (ssh_private_key, ssh_public_key, ssh_keyring_domain) = if let Some(vm) = platform.vms.first() {
+                            let keyring_domain = vm.ssh_key_name.clone();
+                            let (private_key, public_key) = load_ssh_key_from_keyring(&keyring_domain);
+                            (private_key, public_key, keyring_domain)
+                        } else {
+                            (None, None, None)
+                        };
 
                         let row = PlatformRow {
                             platform_name: platform.name.clone(),
@@ -629,19 +1087,20 @@ impl PlatformTab {
                             gcp_connected: platform.gcp_oauth_access_token.is_some(),
                             project_selected: platform.gcp_selected_project_id.is_some(),
                             vm_created: !platform.vms.is_empty(),
-                            ssh_ready: platform
-                                .vms
-                                .first()
-                                .and_then(|vm| vm.external_ip.as_ref())
-                                .is_some(),
+                            firewall_updated: firewall_status_str.starts_with("✓"),
+                            ssh_ready,
 
                             // Extract drawer data
                             email: platform.gcp_connected_email.clone(),
-                            total_project_count: fetch_project_count(platform),
+                            total_project_count: fetch_project_count(access_token.as_deref()),
                             selected_project_id: platform.gcp_selected_project_id.clone(),
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
-                            firewall_status: compute_firewall_status(platform),
-                            ssh_status: compute_ssh_status(platform),
+                            vm_external_ip: platform.vms.first().and_then(|vm| vm.external_ip.clone()),
+                            ssh_private_key,
+                            ssh_public_key,
+                            ssh_keyring_domain,
+                            firewall_status: firewall_status_str,
+                            ssh_status: ssh_status_str,
 
                             // Action button state
                             has_vm: !platform.vms.is_empty(),
@@ -649,6 +1108,17 @@ impl PlatformTab {
                         };
 
                         self.rows.push(row);
+
+                        // Trigger SSH connection test on first load if VM has external IP
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            if platform.vms.first().and_then(|vm| vm.external_ip.as_ref()).is_some()
+                                && !self.ssh_test_results.contains_key(&platform.name)
+                                && !self.ssh_test_promises.contains_key(&platform.name)
+                            {
+                                self.execute_test_connection(platform.name.clone());
+                            }
+                        }
                     }
 
                     self.loaded = true;
@@ -1605,6 +2075,75 @@ impl PlatformTab {
         Ok(oauth_result.access_token)
     }
 
+    /// Execute SSH connection test for a platform's VM
+    #[cfg(not(target_arch = "wasm32"))]
+    fn execute_test_connection(&mut self, platform_name: String) {
+        // Load config and find the VM for this platform
+        let (vm_host, keyring_domain) = match load_config() {
+            Ok((app_config, _)) => {
+                let platform = app_config
+                    .platforms
+                    .iter()
+                    .find(|p| p.name == platform_name);
+
+                if let Some(platform) = platform {
+                    if let Some(vm) = platform.vms.first() {
+                        if let Some(external_ip) = &vm.external_ip {
+                            // Construct SSH host from VM info
+                            let host = format!("root@{}", external_ip);
+                            (Some(host), vm.ssh_key_name.clone())
+                        } else {
+                            self.ssh_test_results.insert(
+                                platform_name,
+                                Err("VM has no external IP".to_string()),
+                            );
+                            return;
+                        }
+                    } else {
+                        self.ssh_test_results
+                            .insert(platform_name, Err("No VM found".to_string()));
+                        return;
+                    }
+                } else {
+                    self.ssh_test_results
+                        .insert(platform_name.clone(), Err("Platform not found".to_string()));
+                    return;
+                }
+            }
+            Err(e) => {
+                self.ssh_test_results.insert(
+                    platform_name,
+                    Err(format!("Failed to load config: {}", e)),
+                );
+                return;
+            }
+        };
+
+        let Some(host) = vm_host else {
+            return;
+        };
+
+        // Build SSH host config
+        let host_config = crate::config::SshHostConfig {
+            host: host.clone(),
+            password: None,
+            private_key_path: None,
+            keyring_domain,
+            port: 22,
+            initialized: false,
+            last_status: None,
+        };
+
+        // Spawn connection test in background thread
+        let platform_name_clone = platform_name.clone();
+        let promise = poll_promise::Promise::spawn_thread("ssh_test_platform", move || {
+            use crate::calc::ssh;
+            ssh::test_connection(&host_config).map_err(|e| format!("{}", e))
+        });
+
+        self.ssh_test_promises.insert(platform_name, promise);
+    }
+
     fn show_delete_platform_confirmation(&mut self, platform_name: String) {
         self.delete_platform_name = platform_name.clone();
 
@@ -1979,12 +2518,12 @@ impl PlatformTab {
     }
 
     fn render_billing_dialog(&mut self, ctx: &egui::Context) {
-        egui::Window::new("Estimated Billing")
+        egui::Window::new("Monthly Billing")
             .collapsible(false)
             .resizable(true)
-            .default_width(700.0)
+            .default_width(600.0)
             .show(ctx, |ui| {
-                ui.heading("Current Month Billing Estimate");
+                ui.heading("Monthly Total Cost (Last 3 Months)");
                 ui.add_space(8.0);
 
                 // Configuration section
@@ -2018,11 +2557,11 @@ impl PlatformTab {
                     ui.label(error);
                     ui.add_space(16.0);
 
-                    ui.label("To enable billing export:");
+                    ui.label("To enable BigQuery billing export:");
                     ui.label("1. Go to GCP Console → Billing → Billing export");
-                    ui.label("2. Enable 'Standard usage cost' or 'Detailed usage cost'");
-                    ui.label("3. Set project and dataset (e.g., 'billing_export')");
-                    ui.label("4. Wait a few hours for data to appear");
+                    ui.label("2. Select 'Detailed cost data' tab");
+                    ui.label("3. Select or create a BigQuery dataset");
+                    ui.label("4. Wait a few hours for data to populate");
                 } else if let Some(records) = &self.billing_data {
                     if records.is_empty() {
                         ui.label("No billing data found for the current month.");
@@ -2032,96 +2571,98 @@ impl PlatformTab {
                         ui.label("• No costs have been incurred yet this month");
                         ui.label("• Data is still being processed (can take up to 5 days)");
                     } else {
-                        // Calculate totals
-                        let total_subtotal: f64 = records.iter().map(|r| r.subtotal).sum();
-                        let total_list: f64 = records.iter().map(|r| r.list_cost).sum();
-                        let total_savings: f64 = records.iter().map(|r| r.negotiated_savings).sum();
-                        let total_discounts: f64 = records.iter().map(|r| r.discounts).sum();
-                        let total_promotions: f64 = records.iter().map(|r| r.promotions).sum();
-
-                        // Summary
-                        ui.horizontal(|ui| {
-                            ui.label("Total Cost:");
-                            ui.label(format!("${:.2}", total_subtotal));
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("List Cost:");
-                            ui.label(format!("${:.2}", total_list));
-                        });
-                        if total_savings.abs() > 0.01 {
-                            ui.horizontal(|ui| {
-                                ui.label("Negotiated Savings:");
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(72, 187, 120),
-                                    format!("${:.2}", total_savings),
-                                );
-                            });
-                        }
-                        if total_discounts.abs() > 0.01 {
-                            ui.horizontal(|ui| {
-                                ui.label("Discounts:");
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(72, 187, 120),
-                                    format!("${:.2}", total_discounts),
-                                );
-                            });
-                        }
-                        if total_promotions.abs() > 0.01 {
-                            ui.horizontal(|ui| {
-                                ui.label("Promotions:");
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(72, 187, 120),
-                                    format!("${:.2}", total_promotions),
-                                );
-                            });
-                        }
-
+                        // Display monthly totals
+                        ui.label(format!(
+                            "Monthly Total Net Cost (including all credits) - {} record(s):",
+                            records.len()
+                        ));
                         ui.add_space(8.0);
-                        ui.separator();
-                        ui.add_space(4.0);
-
-                        // Detailed breakdown
-                        ui.label("Daily Breakdown:");
-                        ui.add_space(4.0);
 
                         egui::ScrollArea::vertical()
                             .max_height(400.0)
                             .show(ui, |ui| {
-                                // Group by day
-                                let mut current_day = String::new();
                                 for record in records {
-                                    if record.day != current_day {
-                                        if !current_day.is_empty() {
-                                            ui.add_space(4.0);
-                                        }
-                                        current_day = record.day.clone();
-                                        ui.label(format!("📅 {}", record.day));
-                                        ui.separator();
-                                    }
+                                    ui.group(|ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.label(format!("📅 {} ({})", record.month, record.currency));
 
-                                    ui.horizontal(|ui| {
-                                        ui.label(format!("  {}", record.service));
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                ui.label(format!("${:.2}", record.subtotal));
-                                                ui.label(" | ");
-                                                if record.discounts.abs() > 0.01
-                                                    || record.promotions.abs() > 0.01
-                                                {
-                                                    ui.colored_label(
-                                                        egui::Color32::from_rgb(72, 187, 120),
-                                                        format!(
-                                                            "💰${:.2}",
-                                                            record.discounts + record.promotions
-                                                        ),
-                                                    );
-                                                    ui.label(" | ");
+                                            // Helper to format currency with thousand separators
+                                            let format_currency = |amount: f64, currency: &str| -> String {
+                                                // Determine if currency uses decimals
+                                                let uses_decimals = match currency {
+                                                    "KRW" | "JPY" | "VND" | "IDR" => false,
+                                                    _ => true,
+                                                };
+
+                                                // Get currency symbol
+                                                let symbol = match currency {
+                                                    "USD" => "$",
+                                                    "EUR" => "€",
+                                                    "GBP" => "£",
+                                                    "JPY" => "¥",
+                                                    "KRW" => "₩",
+                                                    "CNY" => "¥",
+                                                    "INR" => "₹",
+                                                    "AUD" => "A$",
+                                                    "CAD" => "C$",
+                                                    "SGD" => "S$",
+                                                    "HKD" => "HK$",
+                                                    "TWD" => "NT$",
+                                                    "THB" => "฿",
+                                                    "VND" => "₫",
+                                                    "IDR" => "Rp",
+                                                    "BRL" => "R$",
+                                                    _ => currency, // Fallback to currency code
+                                                };
+
+                                                if uses_decimals {
+                                                    format!("{}{:.2}", symbol, amount)
+                                                } else {
+                                                    let int_amount = amount as i64;
+                                                    let abs_amount = int_amount.abs();
+                                                    let formatted = abs_amount
+                                                        .to_string()
+                                                        .as_bytes()
+                                                        .rchunks(3)
+                                                        .rev()
+                                                        .map(std::str::from_utf8)
+                                                        .collect::<Result<Vec<&str>, _>>()
+                                                        .unwrap()
+                                                        .join(",");
+                                                    if int_amount < 0 {
+                                                        format!("-{}{}", symbol, formatted)
+                                                    } else {
+                                                        format!("{}{}", symbol, formatted)
+                                                    }
                                                 }
-                                                ui.label(format!("${:.2}", record.list_cost));
-                                            },
-                                        );
+                                            };
+
+                                            let (color, text) = if record.total_net_cost < 0.0 {
+                                                (
+                                                    egui::Color32::from_rgb(72, 187, 120),
+                                                    format!("{} (credit)", format_currency(record.total_net_cost, &record.currency))
+                                                )
+                                            } else if record.total_net_cost == 0.0 {
+                                                (
+                                                    egui::Color32::GRAY,
+                                                    format!("{} (no charges)", format_currency(0.0, &record.currency))
+                                                )
+                                            } else {
+                                                (
+                                                    egui::Color32::from_rgb(255, 200, 87),
+                                                    format_currency(record.total_net_cost, &record.currency)
+                                                )
+                                            };
+
+                                            ui.with_layout(
+                                                egui::Layout::right_to_left(egui::Align::Center),
+                                                |ui| {
+                                                    ui.colored_label(color, &text);
+                                                },
+                                            );
+                                        });
                                     });
+                                    ui.add_space(4.0);
                                 }
                             });
                     }

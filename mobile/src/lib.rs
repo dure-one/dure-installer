@@ -47,7 +47,10 @@ pub mod cli;
 pub mod install;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod install_stt;
-#[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+#[cfg(all(
+    not(any(target_os = "android", target_arch = "wasm32")),
+    not(target_os = "openbsd")
+))]
 pub mod tray;
 // WSS server/client (HTTPS + WebSocket Secure)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]

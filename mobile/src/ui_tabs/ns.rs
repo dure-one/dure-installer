@@ -1,14 +1,14 @@
 //! NS tab - Domain and DNS record management
 
 use eframe::egui;
-use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
 use egui_material3::MaterialButton;
+use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 use poll_promise::Promise;
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::calc::audit;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-use crate::calc::ns::{apply_record, NsConfig, RecordType};
+use crate::calc::ns::{NsConfig, RecordType, apply_record};
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
@@ -63,7 +63,8 @@ pub struct NsTab {
     add_gcp_oauth_result: Option<crate::api::gcp_oauth::OAuthResult>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_gcp_oauth_promise: Option<poll_promise::Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
+    add_gcp_oauth_promise:
+        Option<poll_promise::Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_gcp_connected_email: Option<String>,
@@ -306,8 +307,7 @@ fn add_gcp_account_to_config(
 ) -> Result<(), String> {
     use crate::calc::ns::GcpAccount;
 
-    let mut config = load_ns_config()
-        .map_err(|e| format!("Failed to load config: {}", e))?;
+    let mut config = load_ns_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
     let account = GcpAccount {
         access_token: oauth.access_token.clone(),
@@ -318,11 +318,11 @@ fn add_gcp_account_to_config(
         domains: Vec::new(),
     };
 
-    config.add_gcp_account(account)
+    config
+        .add_gcp_account(account)
         .map_err(|e| format!("Failed to add GCP account: {}", e))?;
 
-    save_ns_config(&config)
-        .map_err(|e| format!("Failed to save config: {}", e))?;
+    save_ns_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
 
     Ok(())
 }
@@ -342,15 +342,19 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             log.push("Calling Cloudflare API...".to_string());
             let client = ns_cloudflare::CloudflareClient::new(token.clone());
 
-            let zones = client.list_zones()
+            let zones = client
+                .list_zones()
                 .map_err(|e| format!("Error fetching domains: {}", e))?;
 
             log.push(format!("API call successful, found {} zones", zones.len()));
 
-            let mut config = load_ns_config()
-                .map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config =
+                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
 
-            log.push(format!("Loaded config with {} existing domains", config.total_domains()));
+            log.push(format!(
+                "Loaded config with {} existing domains",
+                config.total_domains()
+            ));
             let mut added_count = 0;
 
             for zone in zones {
@@ -358,22 +362,31 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
                 match client.get_records(&zone.id) {
                     Ok(records) => {
-                        let filtered_records: Vec<_> = records.iter()
+                        let filtered_records: Vec<_> = records
+                            .iter()
                             .filter(|r| {
                                 let rt = r.record_type.to_uppercase();
                                 rt == "A" || rt == "AAAA" || rt == "TXT"
                             })
                             .collect();
 
-                        log.push(format!("    Found {} DNS records (A/AAAA/TXT)", filtered_records.len()));
+                        log.push(format!(
+                            "    Found {} DNS records (A/AAAA/TXT)",
+                            filtered_records.len()
+                        ));
 
-                        match config.add_domain(provider.clone(), zone.name.clone(), token.clone()) {
+                        match config.add_domain(provider.clone(), zone.name.clone(), token.clone())
+                        {
                             Ok(_) => {
                                 added_count += 1;
 
-                                if let Some(domain_entry) = config.get_domain_mut(&provider, &zone.name) {
+                                if let Some(domain_entry) =
+                                    config.get_domain_mut(&provider, &zone.name)
+                                {
                                     for record in filtered_records {
-                                        let rec_type = RecordType::from_str(&record.record_type.to_lowercase());
+                                        let rec_type = RecordType::from_str(
+                                            &record.record_type.to_lowercase(),
+                                        );
                                         if let Some(rt) = rec_type {
                                             domain_entry.records.push(crate::calc::ns::DnsRecord {
                                                 record_type: rt,
@@ -383,7 +396,11 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                                             });
                                         }
                                     }
-                                    log.push(format!("    ✓ Added {} with {} records", zone.name, domain_entry.records.len()));
+                                    log.push(format!(
+                                        "    ✓ Added {} with {} records",
+                                        zone.name,
+                                        domain_entry.records.len()
+                                    ));
                                 }
                             }
                             Err(e) => {
@@ -392,22 +409,31 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                         }
                     }
                     Err(e) => {
-                        log.push(format!("    ⚠ Failed to fetch records for {}: {}", zone.name, e));
-                        let _ = config.add_domain(provider.clone(), zone.name.clone(), token.clone());
+                        log.push(format!(
+                            "    ⚠ Failed to fetch records for {}: {}",
+                            zone.name, e
+                        ));
+                        let _ =
+                            config.add_domain(provider.clone(), zone.name.clone(), token.clone());
                     }
                 }
             }
 
-            log.push(format!("Total in config now: {} entries", config.total_domains()));
+            log.push(format!(
+                "Total in config now: {} entries",
+                config.total_domains()
+            ));
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config)
-                    .map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
-                log.push(format!("✓ Added {} provider with {} entries", provider, added_count));
+                log.push(format!(
+                    "✓ Added {} provider with {} entries",
+                    provider, added_count
+                ));
             } else {
                 log.push("⚠ No new entries added (all already exist)".to_string());
             }
@@ -422,15 +448,22 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
             let client = ns_porkbun::PorkbunClient::new(api_key, secret_key);
 
-            let domains = client.list_domains()
+            let domains = client
+                .list_domains()
                 .map_err(|e| format!("Error fetching domains: {}", e))?;
 
-            log.push(format!("API call successful, found {} domains", domains.len()));
+            log.push(format!(
+                "API call successful, found {} domains",
+                domains.len()
+            ));
 
-            let mut config = load_ns_config()
-                .map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config =
+                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
 
-            log.push(format!("Loaded config with {} existing domains", config.total_domains()));
+            log.push(format!(
+                "Loaded config with {} existing domains",
+                config.total_domains()
+            ));
             let mut added_count = 0;
 
             for domain in domains {
@@ -438,22 +471,30 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
                 match client.get_records(&domain) {
                     Ok(records) => {
-                        let filtered_records: Vec<_> = records.iter()
+                        let filtered_records: Vec<_> = records
+                            .iter()
                             .filter(|r| {
                                 let rt = r.record_type.to_uppercase();
                                 rt == "A" || rt == "AAAA" || rt == "TXT"
                             })
                             .collect();
 
-                        log.push(format!("    Found {} DNS records (A/AAAA/TXT)", filtered_records.len()));
+                        log.push(format!(
+                            "    Found {} DNS records (A/AAAA/TXT)",
+                            filtered_records.len()
+                        ));
 
                         match config.add_domain(provider.clone(), domain.clone(), token.clone()) {
                             Ok(_) => {
                                 added_count += 1;
 
-                                if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
+                                if let Some(domain_entry) =
+                                    config.get_domain_mut(&provider, &domain)
+                                {
                                     for record in filtered_records {
-                                        let rec_type = RecordType::from_str(&record.record_type.to_lowercase());
+                                        let rec_type = RecordType::from_str(
+                                            &record.record_type.to_lowercase(),
+                                        );
                                         if let Some(rt) = rec_type {
                                             domain_entry.records.push(crate::calc::ns::DnsRecord {
                                                 record_type: rt,
@@ -463,7 +504,11 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                                             });
                                         }
                                     }
-                                    log.push(format!("    ✓ Added {} with {} records", domain, domain_entry.records.len()));
+                                    log.push(format!(
+                                        "    ✓ Added {} with {} records",
+                                        domain,
+                                        domain_entry.records.len()
+                                    ));
                                 }
                             }
                             Err(e) => {
@@ -472,22 +517,30 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                         }
                     }
                     Err(e) => {
-                        log.push(format!("    ⚠ Failed to fetch records for {}: {}", domain, e));
+                        log.push(format!(
+                            "    ⚠ Failed to fetch records for {}: {}",
+                            domain, e
+                        ));
                         let _ = config.add_domain(provider.clone(), domain.clone(), token.clone());
                     }
                 }
             }
 
-            log.push(format!("Total in config now: {} entries", config.total_domains()));
+            log.push(format!(
+                "Total in config now: {} entries",
+                config.total_domains()
+            ));
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config)
-                    .map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
-                log.push(format!("✓ Added {} provider with {} entries", provider, added_count));
+                log.push(format!(
+                    "✓ Added {} provider with {} entries",
+                    provider, added_count
+                ));
             } else {
                 log.push("⚠ No new entries added (all already exist)".to_string());
             }
@@ -497,18 +550,21 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
         "duckdns" => {
             log.push("DuckDNS domains cannot be auto-discovered. Saving provider for manual domain addition.".to_string());
 
-            let mut config = load_ns_config()
-                .map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config =
+                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
 
             let placeholder = format!("{} (provider)", provider);
-            config.add_domain(provider.clone(), placeholder.clone(), token.clone())
+            config
+                .add_domain(provider.clone(), placeholder.clone(), token.clone())
                 .map_err(|e| format!("Failed to add provider: {}", e))?;
 
-            save_ns_config(&config)
-                .map_err(|e| format!("Error saving config: {}", e))?;
+            save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
 
             let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
-            log.push(format!("✓ Added {} provider (add domains manually)", provider));
+            log.push(format!(
+                "✓ Added {} provider (add domains manually)",
+                provider
+            ));
 
             Ok(log)
         }
@@ -518,7 +574,10 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             // Parse token format: "access_token::project_id"
             let parts: Vec<&str> = token.split("::").collect();
             if parts.len() != 2 {
-                return Err("Error: Invalid GCP token format (expected access_token::project_id)".to_string());
+                return Err(
+                    "Error: Invalid GCP token format (expected access_token::project_id)"
+                        .to_string(),
+                );
             }
 
             let access_token = parts[0].to_string();
@@ -528,21 +587,31 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             let client = ns_gcp::GcpDnsClient::new(access_token);
 
             // List managed zones
-            let zones = client.list_managed_zones(&project_id)
+            let zones = client
+                .list_managed_zones(&project_id)
                 .map_err(|e| format!("Error fetching managed zones: {}", e))?;
 
-            log.push(format!("API call successful, found {} managed zones", zones.len()));
+            log.push(format!(
+                "API call successful, found {} managed zones",
+                zones.len()
+            ));
 
-            let mut config = load_ns_config()
-                .map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config =
+                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
 
-            log.push(format!("Loaded config with {} existing domains", config.total_domains()));
+            log.push(format!(
+                "Loaded config with {} existing domains",
+                config.total_domains()
+            ));
             let mut added_count = 0;
             let has_zones = !zones.is_empty();
 
             // If no zones found, add a placeholder to store OAuth info
             if !has_zones {
-                log.push("No managed zones found. Adding placeholder entry to store OAuth connection.".to_string());
+                log.push(
+                    "No managed zones found. Adding placeholder entry to store OAuth connection."
+                        .to_string(),
+                );
                 let placeholder = format!("gcloud ({})", project_id);
                 match config.add_domain(provider.clone(), placeholder.clone(), token.clone()) {
                     Ok(_) => {
@@ -564,37 +633,57 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                 match client.list_rrsets(&project_id, &zone.name) {
                     Ok(rrsets) => {
                         // Filter for A, AAAA, TXT records only
-                        let filtered_records: Vec<_> = rrsets.iter()
+                        let filtered_records: Vec<_> = rrsets
+                            .iter()
                             .filter(|r| {
                                 let rt = r.record_type.to_uppercase();
                                 rt == "A" || rt == "AAAA" || rt == "TXT"
                             })
                             .collect();
 
-                        log.push(format!("    Found {} DNS records (A/AAAA/TXT)", filtered_records.len()));
+                        log.push(format!(
+                            "    Found {} DNS records (A/AAAA/TXT)",
+                            filtered_records.len()
+                        ));
 
                         // Add or update domain
-                        match config.add_domain(provider.clone(), domain_name.to_string(), token.clone()) {
+                        match config.add_domain(
+                            provider.clone(),
+                            domain_name.to_string(),
+                            token.clone(),
+                        ) {
                             Ok(_) => {
                                 added_count += 1;
 
                                 // Add DNS records
-                                if let Some(domain_entry) = config.get_domain_mut(&provider, domain_name) {
+                                if let Some(domain_entry) =
+                                    config.get_domain_mut(&provider, domain_name)
+                                {
                                     for rrset in filtered_records {
-                                        let rec_type = RecordType::from_str(&rrset.record_type.to_lowercase());
+                                        let rec_type =
+                                            RecordType::from_str(&rrset.record_type.to_lowercase());
                                         if let Some(rt) = rec_type {
                                             // GCP returns multiple values in rrdatas array
                                             for value in &rrset.rrdatas {
-                                                domain_entry.records.push(crate::calc::ns::DnsRecord {
-                                                    record_type: rt.clone(),
-                                                    name: rrset.name.trim_end_matches('.').to_string(),
-                                                    value: value.clone(),
-                                                    ttl: Some(rrset.ttl),
-                                                });
+                                                domain_entry.records.push(
+                                                    crate::calc::ns::DnsRecord {
+                                                        record_type: rt.clone(),
+                                                        name: rrset
+                                                            .name
+                                                            .trim_end_matches('.')
+                                                            .to_string(),
+                                                        value: value.clone(),
+                                                        ttl: Some(rrset.ttl),
+                                                    },
+                                                );
                                             }
                                         }
                                     }
-                                    log.push(format!("    ✓ Added {} with {} records", domain_name, domain_entry.records.len()));
+                                    log.push(format!(
+                                        "    ✓ Added {} with {} records",
+                                        domain_name,
+                                        domain_entry.records.len()
+                                    ));
                                 }
                             }
                             Err(e) => {
@@ -603,27 +692,40 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
                         }
                     }
                     Err(e) => {
-                        log.push(format!("    ⚠ Failed to fetch records for {}: {}", domain_name, e));
+                        log.push(format!(
+                            "    ⚠ Failed to fetch records for {}: {}",
+                            domain_name, e
+                        ));
                         // Still add the domain even if records fetch fails
-                        let _ = config.add_domain(provider.clone(), domain_name.to_string(), token.clone());
+                        let _ = config.add_domain(
+                            provider.clone(),
+                            domain_name.to_string(),
+                            token.clone(),
+                        );
                     }
                 }
             }
 
-            log.push(format!("Total in config now: {} entries", config.total_domains()));
+            log.push(format!(
+                "Total in config now: {} entries",
+                config.total_domains()
+            ));
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config)
-                    .map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
 
                 if !has_zones {
-                    log.push(format!("✓ Added {} provider (no zones found, create zones in GCP Console)", provider));
+                    log.push(format!(
+                        "✓ Added {} provider (no zones found, create zones in GCP Console)",
+                        provider
+                    ));
                 } else {
-                    log.push(format!("✓ Added {} provider with {} managed zone{}",
+                    log.push(format!(
+                        "✓ Added {} provider with {} managed zone{}",
                         provider,
                         added_count,
                         if added_count == 1 { "" } else { "s" }
@@ -635,9 +737,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
             Ok(log)
         }
-        _ => {
-            Err(format!("Error: Unknown provider '{}'", provider))
-        }
+        _ => Err(format!("Error: Unknown provider '{}'", provider)),
     }
 }
 
@@ -689,7 +789,10 @@ impl NsTab {
             ui.label("Domains:");
             ui.add_space(8.0);
 
-            if ui.add(MaterialButton::filled("Add Nameserver Provider")).clicked() {
+            if ui
+                .add(MaterialButton::filled("Add Nameserver Provider"))
+                .clicked()
+            {
                 self.show_add_provider_dialog = true;
                 self.add_token.clear();
                 self.add_secret_key.clear();
@@ -745,9 +848,11 @@ impl NsTab {
                     let domain = self.domain_rows[selected_idx][0].clone();
                     let provider_display = self.domain_rows[selected_idx][1].clone();
                     // Extract provider identifier
-                    let provider = if provider_display.starts_with("Google Cloud (") && provider_display.ends_with(")") {
+                    let provider = if provider_display.starts_with("Google Cloud (")
+                        && provider_display.ends_with(")")
+                    {
                         // Extract email from "Google Cloud (email)" and format as "gcloud:email"
-                        let email = &provider_display[14..provider_display.len()-1];
+                        let email = &provider_display[14..provider_display.len() - 1];
                         format!("gcloud:{}", email)
                     } else {
                         // Regular provider
@@ -779,7 +884,8 @@ impl NsTab {
                 }
 
                 // Disable "Show Nameservers" button for DuckDNS
-                let is_duckdns = provider.to_lowercase() == "duckdns" || domain.ends_with(".duckdns.org");
+                let is_duckdns =
+                    provider.to_lowercase() == "duckdns" || domain.ends_with(".duckdns.org");
                 let nameservers_button = MaterialButton::outlined("Show Nameservers");
                 let nameservers_button = if is_duckdns {
                     nameservers_button.enabled(false)
@@ -863,7 +969,10 @@ impl NsTab {
         {
             match load_ns_config() {
                 Ok(config) => {
-                    self.add_progress(format!("Loading {} domains from config", config.total_domains()));
+                    self.add_progress(format!(
+                        "Loading {} domains from config",
+                        config.total_domains()
+                    ));
 
                     self.domain_rows = config
                         .iter_all_domains()
@@ -889,7 +998,7 @@ impl NsTab {
                     // Recreate spreadsheet with fresh data to avoid duplicates
                     let columns = vec![
                         text_column("Domain", 250.0),
-                        text_column("Provider", 200.0),  // Wider to show email for gcloud
+                        text_column("Provider", 200.0), // Wider to show email for gcloud
                         text_column("Records", 80.0),
                     ];
 
@@ -1081,7 +1190,8 @@ impl NsTab {
                         }
 
                         // Filter for active projects only
-                        let active_projects: Vec<_> = self.add_gcp_projects
+                        let active_projects: Vec<_> = self
+                            .add_gcp_projects
                             .iter()
                             .filter(|p| p.is_active())
                             .collect();
@@ -1132,10 +1242,13 @@ impl NsTab {
                                             project.project_id.clone()
                                         };
 
-                                        if ui.selectable_label(
-                                            self.add_gcp_project_id == project.project_id,
-                                            label,
-                                        ).clicked() {
+                                        if ui
+                                            .selectable_label(
+                                                self.add_gcp_project_id == project.project_id,
+                                                label,
+                                            )
+                                            .clicked()
+                                        {
                                             self.add_gcp_project_id = project.project_id.clone();
                                         }
                                     }
@@ -1144,7 +1257,8 @@ impl NsTab {
                             ui.add_space(4.0);
                             ui.colored_label(
                                 egui::Color32::GRAY,
-                                format!("ℹ Found {} active project{}",
+                                format!(
+                                    "ℹ Found {} active project{}",
                                     active_projects.len(),
                                     if active_projects.len() == 1 { "" } else { "s" }
                                 ),
@@ -1165,14 +1279,14 @@ impl NsTab {
                         ui.label("Waiting for authorization...");
                         ui.label("Please complete the OAuth flow in your browser.");
                     } else {
-                        if ui.add(MaterialButton::outlined("Connect to Google Cloud")).clicked() {
+                        if ui
+                            .add(MaterialButton::outlined("Connect to Google Cloud"))
+                            .clicked()
+                        {
                             self.start_gcp_oauth();
                         }
                         ui.add_space(4.0);
-                        ui.colored_label(
-                            egui::Color32::GRAY,
-                            "⚠ Connection required for GCP DNS",
-                        );
+                        ui.colored_label(egui::Color32::GRAY, "⚠ Connection required for GCP DNS");
                     }
 
                     ui.add_space(8.0);
@@ -1193,7 +1307,8 @@ impl NsTab {
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     let can_add = if self.add_provider_type == "gcloud" {
-                        self.add_gcp_connected_email.is_some() && !self.add_gcp_project_id.is_empty()
+                        self.add_gcp_connected_email.is_some()
+                            && !self.add_gcp_project_id.is_empty()
                     } else {
                         true
                     };
@@ -1259,7 +1374,8 @@ impl NsTab {
 
                 // Auto-select first account if available
                 if !self.add_domain_existing_gcp_accounts.is_empty() {
-                    self.add_domain_selected_gcp_account = self.add_domain_existing_gcp_accounts[0].clone();
+                    self.add_domain_selected_gcp_account =
+                        self.add_domain_existing_gcp_accounts[0].clone();
                 }
             }
         }
@@ -1357,7 +1473,8 @@ impl NsTab {
                 ui.horizontal(|ui| {
                     let can_add = !self.add_domain.is_empty()
                         && self.add_domain_provider != "porkbun"
-                        && (self.add_domain_provider != "gcloud" || !self.add_domain_existing_gcp_accounts.is_empty());
+                        && (self.add_domain_provider != "gcloud"
+                            || !self.add_domain_existing_gcp_accounts.is_empty());
                     let add_button = if can_add {
                         MaterialButton::filled("Add")
                     } else {
@@ -1482,7 +1599,9 @@ impl NsTab {
 
             // For GCP, create account first and use "gcloud:email" as provider
             let (provider_id, token) = if provider == "gcloud" {
-                if let (Some(oauth), Some(email)) = (&self.add_gcp_oauth_result, &self.add_gcp_connected_email) {
+                if let (Some(oauth), Some(email)) =
+                    (&self.add_gcp_oauth_result, &self.add_gcp_connected_email)
+                {
                     // Clone values to avoid borrow issues
                     let email = email.clone();
                     let oauth = oauth.clone();
@@ -1509,12 +1628,18 @@ impl NsTab {
                             // Add account if doesn't exist
                             if config.get_gcp_account(&email).is_none() {
                                 if let Err(e) = config.add_gcp_account(account) {
-                                    self.add_progress(format!("Error: Failed to add GCP account: {}", e));
+                                    self.add_progress(format!(
+                                        "Error: Failed to add GCP account: {}",
+                                        e
+                                    ));
                                     return;
                                 }
 
                                 if let Err(e) = save_ns_config(&config) {
-                                    self.add_progress(format!("Error: Failed to save config: {}", e));
+                                    self.add_progress(format!(
+                                        "Error: Failed to save config: {}",
+                                        e
+                                    ));
                                     return;
                                 }
 
@@ -1536,7 +1661,9 @@ impl NsTab {
                 }
             } else if provider == "porkbun" {
                 if self.add_token.is_empty() || self.add_secret_key.is_empty() {
-                    self.add_progress("Error: Both API Key and Secret Key are required for Porkbun".to_string());
+                    self.add_progress(
+                        "Error: Both API Key and Secret Key are required for Porkbun".to_string(),
+                    );
                     return;
                 }
                 let token = format!("{}::{}", self.add_token, self.add_secret_key);
@@ -1549,7 +1676,10 @@ impl NsTab {
                 (provider, self.add_token.clone())
             };
 
-            self.add_progress(format!("Starting background task to fetch domains from {}...", provider_id));
+            self.add_progress(format!(
+                "Starting background task to fetch domains from {}...",
+                provider_id
+            ));
 
             // Spawn background task
             let promise = Promise::spawn_thread("add-provider", move || {
@@ -1571,7 +1701,9 @@ impl NsTab {
             // For Porkbun, combine API key and secret key
             let token = if provider == "porkbun" {
                 if self.add_token.is_empty() || self.add_secret_key.is_empty() {
-                    self.add_progress("Error: Both API Key and Secret Key are required for Porkbun".to_string());
+                    self.add_progress(
+                        "Error: Both API Key and Secret Key are required for Porkbun".to_string(),
+                    );
                     return;
                 }
                 // Store as "apikey::secretkey"
@@ -1593,39 +1725,62 @@ impl NsTab {
                     let client = ns_cloudflare::CloudflareClient::new(token.clone());
                     match client.list_zones() {
                         Ok(zones) => {
-                            self.add_progress(format!("API call successful, found {} zones", zones.len()));
+                            self.add_progress(format!(
+                                "API call successful, found {} zones",
+                                zones.len()
+                            ));
 
                             // Fetch DNS records for each zone and add them to config
                             match load_ns_config() {
                                 Ok(mut config) => {
-                                    self.add_progress(format!("Loaded config with {} existing domains", config.total_domains()));
+                                    self.add_progress(format!(
+                                        "Loaded config with {} existing domains",
+                                        config.total_domains()
+                                    ));
                                     let mut added_count = 0;
 
                                     for zone in zones {
-                                        self.add_progress(format!("  Processing zone: {}", zone.name));
+                                        self.add_progress(format!(
+                                            "  Processing zone: {}",
+                                            zone.name
+                                        ));
 
                                         // Fetch DNS records for this zone
                                         match client.get_records(&zone.id) {
                                             Ok(records) => {
                                                 // Filter for A, AAAA, TXT records only
-                                                let filtered_records: Vec<_> = records.iter()
+                                                let filtered_records: Vec<_> = records
+                                                    .iter()
                                                     .filter(|r| {
                                                         let rt = r.record_type.to_uppercase();
                                                         rt == "A" || rt == "AAAA" || rt == "TXT"
                                                     })
                                                     .collect();
 
-                                                self.add_progress(format!("    Found {} DNS records (A/AAAA/TXT)", filtered_records.len()));
+                                                self.add_progress(format!(
+                                                    "    Found {} DNS records (A/AAAA/TXT)",
+                                                    filtered_records.len()
+                                                ));
 
                                                 // Add or update domain
-                                                match config.add_domain(provider.clone(), zone.name.clone(), token.clone()) {
+                                                match config.add_domain(
+                                                    provider.clone(),
+                                                    zone.name.clone(),
+                                                    token.clone(),
+                                                ) {
                                                     Ok(_) => {
                                                         added_count += 1;
 
                                                         // Add DNS records
-                                                        if let Some(domain_entry) = config.get_domain_mut(&provider, &zone.name) {
+                                                        if let Some(domain_entry) = config
+                                                            .get_domain_mut(&provider, &zone.name)
+                                                        {
                                                             for record in filtered_records {
-                                                                let rec_type = RecordType::from_str(&record.record_type.to_lowercase());
+                                                                let rec_type = RecordType::from_str(
+                                                                    &record
+                                                                        .record_type
+                                                                        .to_lowercase(),
+                                                                );
                                                                 if let Some(rt) = rec_type {
                                                                     domain_entry.records.push(crate::calc::ns::DnsRecord {
                                                                         record_type: rt,
@@ -1635,29 +1790,48 @@ impl NsTab {
                                                                     });
                                                                 }
                                                             }
-                                                            self.add_progress(format!("    ✓ Added {} with {} records", zone.name, domain_entry.records.len()));
+                                                            self.add_progress(format!(
+                                                                "    ✓ Added {} with {} records",
+                                                                zone.name,
+                                                                domain_entry.records.len()
+                                                            ));
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        self.add_progress(format!("    ⚠ Skipped {}: {}", zone.name, e));
+                                                        self.add_progress(format!(
+                                                            "    ⚠ Skipped {}: {}",
+                                                            zone.name, e
+                                                        ));
                                                     }
                                                 }
                                             }
                                             Err(e) => {
-                                                self.add_progress(format!("    ⚠ Failed to fetch records for {}: {}", zone.name, e));
+                                                self.add_progress(format!(
+                                                    "    ⚠ Failed to fetch records for {}: {}",
+                                                    zone.name, e
+                                                ));
                                                 // Still add the domain even if records fetch fails
-                                                let _ = config.add_domain(provider.clone(), zone.name.clone(), token.clone());
+                                                let _ = config.add_domain(
+                                                    provider.clone(),
+                                                    zone.name.clone(),
+                                                    token.clone(),
+                                                );
                                             }
                                         }
                                     }
 
-                                    self.add_progress(format!("Total in config now: {} entries", config.total_domains()));
+                                    self.add_progress(format!(
+                                        "Total in config now: {} entries",
+                                        config.total_domains()
+                                    ));
 
                                     if added_count > 0 {
                                         self.add_progress("Saving config...".to_string());
                                         match save_ns_config(&config) {
                                             Ok(_) => {
-                                                self.add_progress("✓ Config saved successfully".to_string());
+                                                self.add_progress(
+                                                    "✓ Config saved successfully".to_string(),
+                                                );
 
                                                 // Record audit event
                                                 let _ = audit::push_gui(
@@ -1673,16 +1847,24 @@ impl NsTab {
                                                 ));
 
                                                 // Reload the data
-                                                self.add_progress("Reloading UI data...".to_string());
+                                                self.add_progress(
+                                                    "Reloading UI data...".to_string(),
+                                                );
                                                 self.load_data();
                                                 self.add_progress("✓ UI refreshed".to_string());
                                             }
                                             Err(e) => {
-                                                self.add_progress(format!("❌ Error saving config: {}", e));
+                                                self.add_progress(format!(
+                                                    "❌ Error saving config: {}",
+                                                    e
+                                                ));
                                             }
                                         }
                                     } else {
-                                        self.add_progress("⚠ No new entries added (all already exist)".to_string());
+                                        self.add_progress(
+                                            "⚠ No new entries added (all already exist)"
+                                                .to_string(),
+                                        );
                                     }
                                 }
                                 Err(e) => {
@@ -1709,19 +1891,29 @@ impl NsTab {
                     match load_ns_config() {
                         Ok(mut config) => {
                             let placeholder = format!("{} (provider)", provider);
-                            match config.add_domain(provider.clone(), placeholder.clone(), token.clone()) {
-                                Ok(_) => {
-                                    match save_ns_config(&config) {
-                                        Ok(_) => {
-                                            let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
-                                            self.add_progress(format!("✓ Added {} provider (add domains manually)", provider));
-                                            self.load_data();
-                                        }
-                                        Err(e) => {
-                                            self.add_progress(format!("❌ Error saving config: {}", e));
-                                        }
+                            match config.add_domain(
+                                provider.clone(),
+                                placeholder.clone(),
+                                token.clone(),
+                            ) {
+                                Ok(_) => match save_ns_config(&config) {
+                                    Ok(_) => {
+                                        let _ = audit::push_gui(
+                                            "system",
+                                            "desktop",
+                                            "ns add provider",
+                                            &provider,
+                                        );
+                                        self.add_progress(format!(
+                                            "✓ Added {} provider (add domains manually)",
+                                            provider
+                                        ));
+                                        self.load_data();
                                     }
-                                }
+                                    Err(e) => {
+                                        self.add_progress(format!("❌ Error saving config: {}", e));
+                                    }
+                                },
                                 Err(e) => {
                                     self.add_progress(format!("⚠ Failed to add provider: {}", e));
                                 }
@@ -1743,19 +1935,29 @@ impl NsTab {
                     match load_ns_config() {
                         Ok(mut config) => {
                             let placeholder = format!("{} (provider)", provider);
-                            match config.add_domain(provider.clone(), placeholder.clone(), token.clone()) {
-                                Ok(_) => {
-                                    match save_ns_config(&config) {
-                                        Ok(_) => {
-                                            let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
-                                            self.add_progress(format!("✓ Added {} provider (add domains manually)", provider));
-                                            self.load_data();
-                                        }
-                                        Err(e) => {
-                                            self.add_progress(format!("❌ Error saving config: {}", e));
-                                        }
+                            match config.add_domain(
+                                provider.clone(),
+                                placeholder.clone(),
+                                token.clone(),
+                            ) {
+                                Ok(_) => match save_ns_config(&config) {
+                                    Ok(_) => {
+                                        let _ = audit::push_gui(
+                                            "system",
+                                            "desktop",
+                                            "ns add provider",
+                                            &provider,
+                                        );
+                                        self.add_progress(format!(
+                                            "✓ Added {} provider (add domains manually)",
+                                            provider
+                                        ));
+                                        self.load_data();
                                     }
-                                }
+                                    Err(e) => {
+                                        self.add_progress(format!("❌ Error saving config: {}", e));
+                                    }
+                                },
                                 Err(e) => {
                                     self.add_progress(format!("⚠ Failed to add provider: {}", e));
                                 }
@@ -1774,7 +1976,9 @@ impl NsTab {
                     let (api_key, secret_key) = match parse_porkbun_credentials(&token) {
                         Some((k, s)) => (k, s),
                         None => {
-                            self.add_progress("❌ Error: Invalid Porkbun credentials format".to_string());
+                            self.add_progress(
+                                "❌ Error: Invalid Porkbun credentials format".to_string(),
+                            );
                             return;
                         }
                     };
@@ -1784,39 +1988,62 @@ impl NsTab {
                     // Fetch all domains
                     match client.list_domains() {
                         Ok(domains) => {
-                            self.add_progress(format!("API call successful, found {} domains", domains.len()));
+                            self.add_progress(format!(
+                                "API call successful, found {} domains",
+                                domains.len()
+                            ));
 
                             // Fetch DNS records for each domain and add them to config
                             match load_ns_config() {
                                 Ok(mut config) => {
-                                    self.add_progress(format!("Loaded config with {} existing domains", config.total_domains()));
+                                    self.add_progress(format!(
+                                        "Loaded config with {} existing domains",
+                                        config.total_domains()
+                                    ));
                                     let mut added_count = 0;
 
                                     for domain in domains {
-                                        self.add_progress(format!("  Processing domain: {}", domain));
+                                        self.add_progress(format!(
+                                            "  Processing domain: {}",
+                                            domain
+                                        ));
 
                                         // Fetch DNS records for this domain
                                         match client.get_records(&domain) {
                                             Ok(records) => {
                                                 // Filter for A, AAAA, TXT records only
-                                                let filtered_records: Vec<_> = records.iter()
+                                                let filtered_records: Vec<_> = records
+                                                    .iter()
                                                     .filter(|r| {
                                                         let rt = r.record_type.to_uppercase();
                                                         rt == "A" || rt == "AAAA" || rt == "TXT"
                                                     })
                                                     .collect();
 
-                                                self.add_progress(format!("    Found {} DNS records (A/AAAA/TXT)", filtered_records.len()));
+                                                self.add_progress(format!(
+                                                    "    Found {} DNS records (A/AAAA/TXT)",
+                                                    filtered_records.len()
+                                                ));
 
                                                 // Add or update domain
-                                                match config.add_domain(provider.clone(), domain.clone(), token.clone()) {
+                                                match config.add_domain(
+                                                    provider.clone(),
+                                                    domain.clone(),
+                                                    token.clone(),
+                                                ) {
                                                     Ok(_) => {
                                                         added_count += 1;
 
                                                         // Add DNS records
-                                                        if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
+                                                        if let Some(domain_entry) = config
+                                                            .get_domain_mut(&provider, &domain)
+                                                        {
                                                             for record in filtered_records {
-                                                                let rec_type = RecordType::from_str(&record.record_type.to_lowercase());
+                                                                let rec_type = RecordType::from_str(
+                                                                    &record
+                                                                        .record_type
+                                                                        .to_lowercase(),
+                                                                );
                                                                 if let Some(rt) = rec_type {
                                                                     domain_entry.records.push(crate::calc::ns::DnsRecord {
                                                                         record_type: rt,
@@ -1826,29 +2053,48 @@ impl NsTab {
                                                                     });
                                                                 }
                                                             }
-                                                            self.add_progress(format!("    ✓ Added {} with {} records", domain, domain_entry.records.len()));
+                                                            self.add_progress(format!(
+                                                                "    ✓ Added {} with {} records",
+                                                                domain,
+                                                                domain_entry.records.len()
+                                                            ));
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        self.add_progress(format!("    ⚠ Skipped {}: {}", domain, e));
+                                                        self.add_progress(format!(
+                                                            "    ⚠ Skipped {}: {}",
+                                                            domain, e
+                                                        ));
                                                     }
                                                 }
                                             }
                                             Err(e) => {
-                                                self.add_progress(format!("    ⚠ Failed to fetch records for {}: {}", domain, e));
+                                                self.add_progress(format!(
+                                                    "    ⚠ Failed to fetch records for {}: {}",
+                                                    domain, e
+                                                ));
                                                 // Still add the domain even if records fetch fails
-                                                let _ = config.add_domain(provider.clone(), domain.clone(), token.clone());
+                                                let _ = config.add_domain(
+                                                    provider.clone(),
+                                                    domain.clone(),
+                                                    token.clone(),
+                                                );
                                             }
                                         }
                                     }
 
-                                    self.add_progress(format!("Total in config now: {} entries", config.total_domains()));
+                                    self.add_progress(format!(
+                                        "Total in config now: {} entries",
+                                        config.total_domains()
+                                    ));
 
                                     if added_count > 0 {
                                         self.add_progress("Saving config...".to_string());
                                         match save_ns_config(&config) {
                                             Ok(_) => {
-                                                self.add_progress("✓ Config saved successfully".to_string());
+                                                self.add_progress(
+                                                    "✓ Config saved successfully".to_string(),
+                                                );
 
                                                 // Record audit event
                                                 let _ = audit::push_gui(
@@ -1864,16 +2110,24 @@ impl NsTab {
                                                 ));
 
                                                 // Reload the data
-                                                self.add_progress("Reloading UI data...".to_string());
+                                                self.add_progress(
+                                                    "Reloading UI data...".to_string(),
+                                                );
                                                 self.load_data();
                                                 self.add_progress("✓ UI refreshed".to_string());
                                             }
                                             Err(e) => {
-                                                self.add_progress(format!("❌ Error saving config: {}", e));
+                                                self.add_progress(format!(
+                                                    "❌ Error saving config: {}",
+                                                    e
+                                                ));
                                             }
                                         }
                                     } else {
-                                        self.add_progress("⚠ No new entries added (all already exist)".to_string());
+                                        self.add_progress(
+                                            "⚠ No new entries added (all already exist)"
+                                                .to_string(),
+                                        );
                                     }
                                 }
                                 Err(e) => {
@@ -1914,7 +2168,8 @@ impl NsTab {
 
             // Validate DuckDNS format
             if provider == "duckdns" && !domain.ends_with(".duckdns.org") {
-                self.error_message = "DuckDNS domains must be in the format: xxx.duckdns.org".to_string();
+                self.error_message =
+                    "DuckDNS domains must be in the format: xxx.duckdns.org".to_string();
                 self.show_error_dialog = true;
                 return;
             }
@@ -1931,14 +2186,17 @@ impl NsTab {
 
                             // Verify account still exists in config
                             if config.get_gcp_account(&email).is_none() {
-                                self.error_message = format!("Selected account {} not found in config", email);
+                                self.error_message =
+                                    format!("Selected account {} not found in config", email);
                                 self.show_error_dialog = true;
                                 return;
                             }
 
                             // Use full provider ID
                             format!("gcloud:{}", email)
-                        } else if let (Some(oauth), Some(email)) = (&self.add_gcp_oauth_result, &self.add_gcp_connected_email) {
+                        } else if let (Some(oauth), Some(email)) =
+                            (&self.add_gcp_oauth_result, &self.add_gcp_connected_email)
+                        {
                             // Adding new account via OAuth (from add provider flow)
                             // Clone values needed after borrow
                             let email = email.clone();
@@ -1946,7 +2204,8 @@ impl NsTab {
                             let project_id = self.add_gcp_project_id.clone();
 
                             if project_id.is_empty() {
-                                self.error_message = "Please select a GCP project first".to_string();
+                                self.error_message =
+                                    "Please select a GCP project first".to_string();
                                 self.show_error_dialog = true;
                                 return;
                             }
@@ -1964,7 +2223,8 @@ impl NsTab {
                                 };
 
                                 if let Err(e) = config.add_gcp_account(account) {
-                                    self.error_message = format!("Failed to add GCP account: {}", e);
+                                    self.error_message =
+                                        format!("Failed to add GCP account: {}", e);
                                     self.show_error_dialog = true;
                                     return;
                                 }
@@ -2014,10 +2274,16 @@ impl NsTab {
                             if config.get_domain(&provider, &gcp_placeholder).is_some() {
                                 match config.remove_domain(&provider, &gcp_placeholder) {
                                     Ok(_) => {
-                                        self.add_progress(format!("Removed placeholder: {}", gcp_placeholder));
+                                        self.add_progress(format!(
+                                            "Removed placeholder: {}",
+                                            gcp_placeholder
+                                        ));
                                     }
                                     Err(e) => {
-                                        self.add_progress(format!("Warning: Failed to remove placeholder: {}", e));
+                                        self.add_progress(format!(
+                                            "Warning: Failed to remove placeholder: {}",
+                                            e
+                                        ));
                                     }
                                 }
                             }
@@ -2028,10 +2294,16 @@ impl NsTab {
                         if config.get_domain(&provider, &placeholder).is_some() {
                             match config.remove_domain(&provider, &placeholder) {
                                 Ok(_) => {
-                                    self.add_progress(format!("Removed placeholder for {}", provider));
+                                    self.add_progress(format!(
+                                        "Removed placeholder for {}",
+                                        provider
+                                    ));
                                 }
                                 Err(e) => {
-                                    self.add_progress(format!("Warning: Failed to remove placeholder: {}", e));
+                                    self.add_progress(format!(
+                                        "Warning: Failed to remove placeholder: {}",
+                                        e
+                                    ));
                                 }
                             }
                         }
@@ -2042,44 +2314,75 @@ impl NsTab {
                         Ok(_) => {
                             // For DuckDNS, fetch DNS records using DoH
                             if provider == "duckdns" {
-                                self.add_progress(format!("Fetching DNS records for {} via DoH...", domain));
+                                self.add_progress(format!(
+                                    "Fetching DNS records for {} via DoH...",
+                                    domain
+                                ));
 
                                 let mut found_any_records = false;
 
                                 // Fetch A, AAAA, TXT records
-                                for record_type in [dns::RecordType::A, dns::RecordType::AAAA, dns::RecordType::TXT] {
+                                for record_type in [
+                                    dns::RecordType::A,
+                                    dns::RecordType::AAAA,
+                                    dns::RecordType::TXT,
+                                ] {
                                     match dns::resolve_dns(&domain, record_type) {
                                         Ok(records) => {
                                             if !records.is_empty() {
                                                 found_any_records = true;
-                                                self.add_progress(format!("  Found {} {} records", records.len(), record_type.as_str()));
+                                                self.add_progress(format!(
+                                                    "  Found {} {} records",
+                                                    records.len(),
+                                                    record_type.as_str()
+                                                ));
 
                                                 // Add records to config
-                                                if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
+                                                if let Some(domain_entry) =
+                                                    config.get_domain_mut(&provider, &domain)
+                                                {
                                                     for dns_record in records {
                                                         // Convert dns::RecordType to calc::ns::RecordType
-                                                        if let Some(ns_record_type) = RecordType::from_str(&dns_record.record_type.as_str().to_lowercase()) {
-                                                            domain_entry.records.push(crate::calc::ns::DnsRecord {
-                                                                record_type: ns_record_type,
-                                                                name: dns_record.domain.clone(),
-                                                                value: dns_record.value.clone(),
-                                                                ttl: Some(dns_record.ttl),
-                                                            });
+                                                        if let Some(ns_record_type) =
+                                                            RecordType::from_str(
+                                                                &dns_record
+                                                                    .record_type
+                                                                    .as_str()
+                                                                    .to_lowercase(),
+                                                            )
+                                                        {
+                                                            domain_entry.records.push(
+                                                                crate::calc::ns::DnsRecord {
+                                                                    record_type: ns_record_type,
+                                                                    name: dns_record.domain.clone(),
+                                                                    value: dns_record.value.clone(),
+                                                                    ttl: Some(dns_record.ttl),
+                                                                },
+                                                            );
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            self.add_progress(format!("  ⚠ Failed to fetch {} records: {}", record_type.as_str(), e));
+                                            self.add_progress(format!(
+                                                "  ⚠ Failed to fetch {} records: {}",
+                                                record_type.as_str(),
+                                                e
+                                            ));
                                         }
                                     }
                                 }
 
                                 // If no records found, add empty placeholders
                                 if !found_any_records {
-                                    self.add_progress("  No DNS records found, adding empty placeholders".to_string());
-                                    if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
+                                    self.add_progress(
+                                        "  No DNS records found, adding empty placeholders"
+                                            .to_string(),
+                                    );
+                                    if let Some(domain_entry) =
+                                        config.get_domain_mut(&provider, &domain)
+                                    {
                                         // Add empty A record
                                         domain_entry.records.push(crate::calc::ns::DnsRecord {
                                             record_type: RecordType::A,
@@ -2095,22 +2398,32 @@ impl NsTab {
                             if provider == "cloudflare" {
                                 use crate::api::ns_cloudflare::CloudflareClient;
 
-                                self.add_progress(format!("Creating Cloudflare zone for {}...", domain));
+                                self.add_progress(format!(
+                                    "Creating Cloudflare zone for {}...",
+                                    domain
+                                ));
                                 let client = CloudflareClient::new(token.clone());
 
                                 match client.create_zone(&domain) {
                                     Ok(zone) => {
                                         self.add_progress(format!("✓ Zone created: {}", zone.name));
                                         if !zone.name_servers.is_empty() {
-                                            self.add_progress(format!("  Nameservers: {}", zone.name_servers.join(", ")));
+                                            self.add_progress(format!(
+                                                "  Nameservers: {}",
+                                                zone.name_servers.join(", ")
+                                            ));
                                         }
                                     }
                                     Err(e) => {
                                         let error_str = e.to_string();
                                         // If zone already exists, that's okay
-                                        if error_str.contains("already exists") || error_str.contains("1061") {
+                                        if error_str.contains("already exists")
+                                            || error_str.contains("1061")
+                                        {
                                             self.add_progress("  Zone already exists".to_string());
-                                        } else if error_str.contains("403") || error_str.contains("zone.create") {
+                                        } else if error_str.contains("403")
+                                            || error_str.contains("zone.create")
+                                        {
                                             self.error_message = format!(
                                                 "Cloudflare API token doesn't have zone creation permission.\n\n\
                                                 Please create a new API token at:\n\
@@ -2118,12 +2431,16 @@ impl NsTab {
                                                 Required permissions:\n\
                                                 • Zone - Zone - Edit\n\
                                                 • Zone - DNS - Edit\n\n\
-                                                Error: {}", e
+                                                Error: {}",
+                                                e
                                             );
                                             self.show_error_dialog = true;
                                             return;
                                         } else {
-                                            self.error_message = format!("Failed to create Cloudflare zone:\n\n{}", e);
+                                            self.error_message = format!(
+                                                "Failed to create Cloudflare zone:\n\n{}",
+                                                e
+                                            );
                                             self.show_error_dialog = true;
                                             return;
                                         }
@@ -2141,23 +2458,39 @@ impl NsTab {
                                     let access_token = parts[0].to_string();
                                     let project_id = parts[1].to_string();
 
-                                    self.add_progress(format!("Creating GCP managed zone for {}...", domain));
+                                    self.add_progress(format!(
+                                        "Creating GCP managed zone for {}...",
+                                        domain
+                                    ));
                                     let client = GcpDnsClient::new(access_token);
 
                                     match client.create_managed_zone(&project_id, &domain) {
                                         Ok(zone) => {
                                             let zone_name = domain.replace('.', "-");
-                                            self.add_progress(format!("✓ Zone created: {} (DNSSEC enabled)", zone_name));
+                                            self.add_progress(format!(
+                                                "✓ Zone created: {} (DNSSEC enabled)",
+                                                zone_name
+                                            ));
                                             if !zone.name_servers.is_empty() {
-                                                self.add_progress(format!("  Nameservers: {}", zone.name_servers.join(", ")));
+                                                self.add_progress(format!(
+                                                    "  Nameservers: {}",
+                                                    zone.name_servers.join(", ")
+                                                ));
                                             }
                                         }
                                         Err(e) => {
                                             // If zone already exists, that's okay
-                                            if e.to_string().contains("already exists") || e.to_string().contains("409") {
-                                                self.add_progress("  Zone already exists".to_string());
+                                            if e.to_string().contains("already exists")
+                                                || e.to_string().contains("409")
+                                            {
+                                                self.add_progress(
+                                                    "  Zone already exists".to_string(),
+                                                );
                                             } else {
-                                                self.error_message = format!("Failed to create GCP managed zone:\n\n{}", e);
+                                                self.error_message = format!(
+                                                    "Failed to create GCP managed zone:\n\n{}",
+                                                    e
+                                                );
                                                 self.show_error_dialog = true;
                                                 return;
                                             }
@@ -2175,7 +2508,8 @@ impl NsTab {
                                     // Record audit event
                                     let _ = audit::push_gui("system", "desktop", "ns add", &domain);
 
-                                    let record_count = config.get_domain(&provider, &domain)
+                                    let record_count = config
+                                        .get_domain(&provider, &domain)
                                         .map(|d| d.records.len())
                                         .unwrap_or(0);
 
@@ -2245,10 +2579,16 @@ impl NsTab {
                                                         domain_entry.records.clear();
 
                                                         for record in records {
-                                                            let rt = record.record_type.to_uppercase();
-                                                            if rt == "A" || rt == "AAAA" || rt == "TXT" {
+                                                            let rt =
+                                                                record.record_type.to_uppercase();
+                                                            if rt == "A"
+                                                                || rt == "AAAA"
+                                                                || rt == "TXT"
+                                                            {
                                                                 if let Some(rec_type) =
-                                                                    RecordType::from_str(&rt.to_lowercase())
+                                                                    RecordType::from_str(
+                                                                        &rt.to_lowercase(),
+                                                                    )
                                                                 {
                                                                     // For Cloudflare, keep full FQDN as returned by API
                                                                     domain_entry.records.push(
@@ -2298,27 +2638,47 @@ impl NsTab {
                                         continue;
                                     }
 
-                                    self.add_progress(format!("  Fetching records for {} via DoH...", domain));
+                                    self.add_progress(format!(
+                                        "  Fetching records for {} via DoH...",
+                                        domain
+                                    ));
 
-                                    if let Some(domain_entry) = config.get_domain_mut("duckdns", &domain) {
+                                    if let Some(domain_entry) =
+                                        config.get_domain_mut("duckdns", &domain)
+                                    {
                                         // Clear existing records
                                         domain_entry.records.clear();
 
                                         let mut found_any_records = false;
 
                                         // Fetch A, AAAA, TXT records
-                                        for record_type in [dns::RecordType::A, dns::RecordType::AAAA, dns::RecordType::TXT] {
+                                        for record_type in [
+                                            dns::RecordType::A,
+                                            dns::RecordType::AAAA,
+                                            dns::RecordType::TXT,
+                                        ] {
                                             match dns::resolve_dns(&domain, record_type) {
                                                 Ok(records) => {
                                                     if !records.is_empty() {
                                                         found_any_records = true;
                                                         for dns_record in records {
-                                                            if let Some(ns_record_type) = RecordType::from_str(&dns_record.record_type.as_str().to_lowercase()) {
+                                                            if let Some(ns_record_type) =
+                                                                RecordType::from_str(
+                                                                    &dns_record
+                                                                        .record_type
+                                                                        .as_str()
+                                                                        .to_lowercase(),
+                                                                )
+                                                            {
                                                                 domain_entry.records.push(
                                                                     crate::calc::ns::DnsRecord {
                                                                         record_type: ns_record_type,
-                                                                        name: dns_record.domain.clone(),
-                                                                        value: dns_record.value.clone(),
+                                                                        name: dns_record
+                                                                            .domain
+                                                                            .clone(),
+                                                                        value: dns_record
+                                                                            .value
+                                                                            .clone(),
                                                                         ttl: Some(dns_record.ttl),
                                                                     },
                                                                 );
@@ -2329,7 +2689,8 @@ impl NsTab {
                                                 Err(e) => {
                                                     self.add_progress(format!(
                                                         "    ⚠ Failed to fetch {} records: {}",
-                                                        record_type.as_str(), e
+                                                        record_type.as_str(),
+                                                        e
                                                     ));
                                                 }
                                             }
@@ -2337,15 +2698,15 @@ impl NsTab {
 
                                         // If no records found, add empty placeholder
                                         if !found_any_records {
-                                            self.add_progress(format!("    No records found, adding empty placeholder"));
-                                            domain_entry.records.push(
-                                                crate::calc::ns::DnsRecord {
-                                                    record_type: RecordType::A,
-                                                    name: String::new(),
-                                                    value: String::new(),
-                                                    ttl: None,
-                                                },
-                                            );
+                                            self.add_progress(format!(
+                                                "    No records found, adding empty placeholder"
+                                            ));
+                                            domain_entry.records.push(crate::calc::ns::DnsRecord {
+                                                record_type: RecordType::A,
+                                                name: String::new(),
+                                                value: String::new(),
+                                                ttl: None,
+                                            });
                                         }
 
                                         updated_count += 1;
@@ -2359,10 +2720,13 @@ impl NsTab {
                             }
                             "porkbun" => {
                                 // Parse Porkbun credentials
-                                let (api_key, secret_key) = match parse_porkbun_credentials(&token) {
+                                let (api_key, secret_key) = match parse_porkbun_credentials(&token)
+                                {
                                     Some((k, s)) => (k, s),
                                     None => {
-                                        self.add_progress(format!("  ⚠ Invalid Porkbun credentials format"));
+                                        self.add_progress(format!(
+                                            "  ⚠ Invalid Porkbun credentials format"
+                                        ));
                                         continue;
                                     }
                                 };
@@ -2378,9 +2742,14 @@ impl NsTab {
                                         continue;
                                     }
 
-                                    self.add_progress(format!("  Fetching records for {}...", domain));
+                                    self.add_progress(format!(
+                                        "  Fetching records for {}...",
+                                        domain
+                                    ));
 
-                                    if let Some(domain_entry) = config.get_domain_mut("porkbun", &domain) {
+                                    if let Some(domain_entry) =
+                                        config.get_domain_mut("porkbun", &domain)
+                                    {
                                         // Fetch DNS records
                                         match client.get_records(&domain) {
                                             Ok(records) => {
@@ -2450,21 +2819,32 @@ impl NsTab {
                                     // Find the managed zone for this domain
                                     match client.find_zone_by_domain(&project_id, &domain) {
                                         Ok(Some(zone)) => {
-                                            self.add_progress(format!("    Found zone: {}", zone.name));
+                                            self.add_progress(format!(
+                                                "    Found zone: {}",
+                                                zone.name
+                                            ));
 
                                             // Fetch resource record sets
                                             match client.list_rrsets(&project_id, &zone.name) {
                                                 Ok(rrsets) => {
-                                                    if let Some(domain_entry) = config.get_domain_mut("gcloud", &domain) {
+                                                    if let Some(domain_entry) =
+                                                        config.get_domain_mut("gcloud", &domain)
+                                                    {
                                                         // Clear existing records
                                                         domain_entry.records.clear();
 
                                                         // Add fresh records
                                                         for rrset in rrsets {
-                                                            let rt = rrset.record_type.to_uppercase();
-                                                            if rt == "A" || rt == "AAAA" || rt == "TXT" {
+                                                            let rt =
+                                                                rrset.record_type.to_uppercase();
+                                                            if rt == "A"
+                                                                || rt == "AAAA"
+                                                                || rt == "TXT"
+                                                            {
                                                                 if let Some(rec_type) =
-                                                                    RecordType::from_str(&rt.to_lowercase())
+                                                                    RecordType::from_str(
+                                                                        &rt.to_lowercase(),
+                                                                    )
                                                                 {
                                                                     // GCP returns multiple values in rrdatas array
                                                                     for value in &rrset.rrdatas {
@@ -2525,10 +2905,7 @@ impl NsTab {
                         // Save updated config
                         match save_ns_config(&config) {
                             Ok(_) => {
-                                self.add_progress(format!(
-                                    "✓ Refreshed {} domains",
-                                    updated_count
-                                ));
+                                self.add_progress(format!("✓ Refreshed {} domains", updated_count));
                                 self.load_data();
                                 // Also reload records if a domain is selected
                                 if self.selected_domain.is_some() {
@@ -2572,10 +2949,17 @@ impl NsTab {
                                 let email = &provider[7..];
                                 if let Some(account) = config.get_gcp_account(email) {
                                     if account.domains.is_empty() {
-                                        let stub_domain = format!("gcloud ({})", account.project_id);
+                                        let stub_domain =
+                                            format!("gcloud ({})", account.project_id);
                                         let token = account.access_token.clone();
-                                        let _ = config.add_domain(provider.clone(), stub_domain.clone(), token);
-                                        self.add_progress(format!("Added placeholder for GCP account"));
+                                        let _ = config.add_domain(
+                                            provider.clone(),
+                                            stub_domain.clone(),
+                                            token,
+                                        );
+                                        self.add_progress(format!(
+                                            "Added placeholder for GCP account"
+                                        ));
                                     }
                                 }
                             }
@@ -2660,7 +3044,8 @@ impl NsTab {
                                 }
                                 Err(e) => {
                                     // API call failed - show error dialog and don't save
-                                    self.error_message = format!("Failed to apply DNS record to provider:\n\n{}", e);
+                                    self.error_message =
+                                        format!("Failed to apply DNS record to provider:\n\n{}", e);
                                     self.show_error_dialog = true;
                                     return;
                                 }
@@ -2668,7 +3053,13 @@ impl NsTab {
                         }
 
                         // API succeeded (or not applying), now save to config
-                        match config.add_record(&provider, &domain, record_type.clone(), normalized_name.clone(), value.clone()) {
+                        match config.add_record(
+                            &provider,
+                            &domain,
+                            record_type.clone(),
+                            normalized_name.clone(),
+                            value.clone(),
+                        ) {
                             Ok(_) => {
                                 match save_ns_config(&config) {
                                     Ok(_) => {
@@ -2696,7 +3087,8 @@ impl NsTab {
                                         self.load_data(); // Refresh record count
                                     }
                                     Err(e) => {
-                                        self.error_message = format!("Failed to save config:\n\n{}", e);
+                                        self.error_message =
+                                            format!("Failed to save config:\n\n{}", e);
                                         self.show_error_dialog = true;
                                     }
                                 }
@@ -2737,15 +3129,18 @@ impl NsTab {
                         let rec_type_unwrapped = rec_type.unwrap();
 
                         // Verify record exists
-                        let record_exists = if let Some(domain_entry) = config.get_domain(&provider, &domain) {
-                            domain_entry.records.iter().any(|r| {
-                                r.name == name && r.record_type == rec_type_unwrapped && r.value == value
-                            })
-                        } else {
-                            self.error_message = "Domain not found".to_string();
-                            self.show_error_dialog = true;
-                            return;
-                        };
+                        let record_exists =
+                            if let Some(domain_entry) = config.get_domain(&provider, &domain) {
+                                domain_entry.records.iter().any(|r| {
+                                    r.name == name
+                                        && r.record_type == rec_type_unwrapped
+                                        && r.value == value
+                                })
+                            } else {
+                                self.error_message = "Domain not found".to_string();
+                                self.show_error_dialog = true;
+                                return;
+                            };
 
                         if !record_exists {
                             self.error_message = "Record not found".to_string();
@@ -2786,7 +3181,8 @@ impl NsTab {
                             }
                             Err(e) => {
                                 // API call failed - show error dialog and don't delete from config
-                                self.error_message = format!("Failed to delete DNS record from provider:\n\n{}", e);
+                                self.error_message =
+                                    format!("Failed to delete DNS record from provider:\n\n{}", e);
                                 self.show_error_dialog = true;
                                 return;
                             }
@@ -2795,7 +3191,9 @@ impl NsTab {
                         // API succeeded, now delete from config
                         if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
                             let index = domain_entry.records.iter().position(|r| {
-                                r.name == name && r.record_type == rec_type_unwrapped && r.value == value
+                                r.name == name
+                                    && r.record_type == rec_type_unwrapped
+                                    && r.value == value
                             });
 
                             if let Some(idx) = index {
@@ -2809,12 +3207,8 @@ impl NsTab {
                                 // Record audit event
                                 let record_desc =
                                     format!("{} {} {} {}", domain, name, record_type, value);
-                                let _ = audit::push_gui(
-                                    "system",
-                                    "desktop",
-                                    "ns remove",
-                                    &record_desc,
-                                );
+                                let _ =
+                                    audit::push_gui("system", "desktop", "ns remove", &record_desc);
 
                                 self.add_progress(format!(
                                     "✓ Deleted record: {} {} {} {}",
@@ -2855,10 +3249,7 @@ impl NsTab {
             // Resolve actual DNS NS records
             match dns::resolve_dns(domain, dns::RecordType::NS) {
                 Ok(records) => {
-                    self.ns_dialog_actual_ns = records
-                        .iter()
-                        .map(|r| r.value.clone())
-                        .collect();
+                    self.ns_dialog_actual_ns = records.iter().map(|r| r.value.clone()).collect();
                 }
                 Err(e) => {
                     self.add_progress(format!("⚠ Failed to resolve NS records: {}", e));
@@ -2895,7 +3286,10 @@ impl NsTab {
                                     }
                                 }
                                 Err(e) => {
-                                    self.add_progress(format!("⚠ Failed to fetch Cloudflare zones: {}", e));
+                                    self.add_progress(format!(
+                                        "⚠ Failed to fetch Cloudflare zones: {}",
+                                        e
+                                    ));
                                 }
                             }
                         }
@@ -2916,12 +3310,17 @@ impl NsTab {
                                             format!("{}.", domain)
                                         };
 
-                                        if let Some(zone) = zones.iter().find(|z| z.dns_name == dns_name) {
+                                        if let Some(zone) =
+                                            zones.iter().find(|z| z.dns_name == dns_name)
+                                        {
                                             self.ns_dialog_provider_ns = zone.name_servers.clone();
                                         }
                                     }
                                     Err(e) => {
-                                        self.add_progress(format!("⚠ Failed to fetch GCP zones: {}", e));
+                                        self.add_progress(format!(
+                                            "⚠ Failed to fetch GCP zones: {}",
+                                            e
+                                        ));
                                     }
                                 }
                             }
@@ -2931,7 +3330,8 @@ impl NsTab {
 
                             let parts: Vec<&str> = token.split("::").collect();
                             if parts.len() == 2 {
-                                let client = PorkbunClient::new(parts[0].to_string(), parts[1].to_string());
+                                let client =
+                                    PorkbunClient::new(parts[0].to_string(), parts[1].to_string());
 
                                 match client.get_records(domain) {
                                     Ok(records) => {
@@ -2942,16 +3342,17 @@ impl NsTab {
                                             .collect();
                                     }
                                     Err(e) => {
-                                        self.add_progress(format!("⚠ Failed to fetch Porkbun records: {}", e));
+                                        self.add_progress(format!(
+                                            "⚠ Failed to fetch Porkbun records: {}",
+                                            e
+                                        ));
                                     }
                                 }
                             }
                         }
                         "duckdns" => {
-                            self.ns_dialog_provider_ns = vec![
-                                "ns1.duckdns.org".to_string(),
-                                "ns2.duckdns.org".to_string(),
-                            ];
+                            self.ns_dialog_provider_ns =
+                                vec!["ns1.duckdns.org".to_string(), "ns2.duckdns.org".to_string()];
                         }
                         _ => {}
                     }
@@ -3014,9 +3415,9 @@ impl NsTab {
                             for ns in &self.ns_dialog_actual_ns {
                                 let matches = self.ns_dialog_provider_ns.contains(ns);
                                 let color = if matches {
-                                    egui::Color32::from_rgb(76, 175, 80)  // Green if matches
+                                    egui::Color32::from_rgb(76, 175, 80) // Green if matches
                                 } else {
-                                    egui::Color32::from_rgb(255, 152, 0)  // Orange if different
+                                    egui::Color32::from_rgb(255, 152, 0) // Orange if different
                                 };
                                 ui.colored_label(color, format!("• {}", ns));
                             }
@@ -3028,19 +3429,20 @@ impl NsTab {
 
                 // Status summary
                 if !self.ns_dialog_provider_ns.is_empty() && !self.ns_dialog_actual_ns.is_empty() {
-                    let all_match = self.ns_dialog_actual_ns
+                    let all_match = self
+                        .ns_dialog_actual_ns
                         .iter()
                         .all(|ns| self.ns_dialog_provider_ns.contains(ns));
 
                     if all_match {
                         ui.colored_label(
                             egui::Color32::from_rgb(76, 175, 80),
-                            "✓ DNS is correctly configured"
+                            "✓ DNS is correctly configured",
                         );
                     } else {
                         ui.colored_label(
                             egui::Color32::from_rgb(255, 152, 0),
-                            "⚠ DNS nameservers don't match - DNS may not be propagated yet"
+                            "⚠ DNS nameservers don't match - DNS may not be propagated yet",
                         );
                     }
                 }
@@ -3079,7 +3481,6 @@ impl NsTab {
             handler.run_oauth_flow().map_err(|e| e.to_string())
         }));
     }
-
 
     /// Fetch connected email from OAuth result
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -3130,7 +3531,8 @@ impl NsTab {
                     self.add_gcp_projects_loaded = true;
                     self.add_gcp_projects_error = None;
 
-                    let active_count = self.add_gcp_projects
+                    let active_count = self
+                        .add_gcp_projects
                         .iter()
                         .filter(|p| p.is_active())
                         .count();

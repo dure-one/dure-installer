@@ -133,13 +133,24 @@ impl PorkbunClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        eprintln!("DEBUG: Porkbun DNS records response: {}",
-            if body.len() > 500 { &body[..500] } else { &body });
+        eprintln!(
+            "DEBUG: Porkbun DNS records response: {}",
+            if body.len() > 500 {
+                &body[..500]
+            } else {
+                &body
+            }
+        );
 
         // Try to parse the JSON
-        let result: DnsRecordsResponse = serde_json::from_str(&body)
-            .context(format!("Failed to parse DNS records response. Body: {}",
-                if body.len() > 200 { &body[..200] } else { &body }))?;
+        let result: DnsRecordsResponse = serde_json::from_str(&body).context(format!(
+            "Failed to parse DNS records response. Body: {}",
+            if body.len() > 200 {
+                &body[..200]
+            } else {
+                &body
+            }
+        ))?;
 
         if result.status != "SUCCESS" {
             anyhow::bail!("Porkbun API error: {}", result.status);
@@ -177,7 +188,10 @@ impl PorkbunClient {
             prio: None,
         };
 
-        eprintln!("  Request JSON: {}", serde_json::to_string(&request).unwrap_or_default());
+        eprintln!(
+            "  Request JSON: {}",
+            serde_json::to_string(&request).unwrap_or_default()
+        );
 
         let response = match ureq::post(&url)
             .set("Content-Type", "application/json")
@@ -185,10 +199,16 @@ impl PorkbunClient {
         {
             Ok(resp) => resp,
             Err(ureq::Error::Status(code, resp)) => {
-                let error_body = resp.into_string().unwrap_or_else(|_| "Could not read error body".to_string());
+                let error_body = resp
+                    .into_string()
+                    .unwrap_or_else(|_| "Could not read error body".to_string());
                 eprintln!("  ❌ HTTP {} error", code);
                 eprintln!("  Error response: {}", error_body);
-                return Err(anyhow::anyhow!("Failed to create DNS record: HTTP {} - {}", code, error_body));
+                return Err(anyhow::anyhow!(
+                    "Failed to create DNS record: HTTP {} - {}",
+                    code,
+                    error_body
+                ));
             }
             Err(e) => {
                 eprintln!("  ❌ HTTP request failed: {:?}", e);
@@ -196,13 +216,14 @@ impl PorkbunClient {
             }
         };
 
-        let body = response.into_string()
+        let body = response
+            .into_string()
             .context("Failed to read response body")?;
 
         eprintln!("  Response: {}", body);
 
-        let result: ApiResponse = serde_json::from_str(&body)
-            .context("Failed to parse create response")?;
+        let result: ApiResponse =
+            serde_json::from_str(&body).context("Failed to parse create response")?;
 
         if result.status != "SUCCESS" {
             let msg = result.message.unwrap_or_else(|| result.status.clone());
@@ -225,7 +246,10 @@ impl PorkbunClient {
     ) -> Result<()> {
         let url = format!(
             "{}/dns/editByNameType/{}/{}/{}",
-            API_BASE, domain, record_type.to_uppercase(), subdomain
+            API_BASE,
+            domain,
+            record_type.to_uppercase(),
+            subdomain
         );
 
         eprintln!("DEBUG Porkbun update_record:");
@@ -246,20 +270,24 @@ impl PorkbunClient {
             prio: None,
         };
 
-        eprintln!("  Request JSON: {}", serde_json::to_string(&request).unwrap_or_default());
+        eprintln!(
+            "  Request JSON: {}",
+            serde_json::to_string(&request).unwrap_or_default()
+        );
 
         let response = ureq::post(&url)
             .set("Content-Type", "application/json")
             .send_json(&request)
             .context("Failed to update DNS record")?;
 
-        let body = response.into_string()
+        let body = response
+            .into_string()
             .context("Failed to read response body")?;
 
         eprintln!("  Response: {}", body);
 
-        let result: ApiResponse = serde_json::from_str(&body)
-            .context("Failed to parse update response")?;
+        let result: ApiResponse =
+            serde_json::from_str(&body).context("Failed to parse update response")?;
 
         if result.status != "SUCCESS" {
             let msg = result.message.unwrap_or_else(|| result.status.clone());
@@ -272,15 +300,13 @@ impl PorkbunClient {
     }
 
     /// Delete DNS record by name and type
-    pub fn delete_record(
-        &self,
-        domain: &str,
-        subdomain: &str,
-        record_type: &str,
-    ) -> Result<()> {
+    pub fn delete_record(&self, domain: &str, subdomain: &str, record_type: &str) -> Result<()> {
         let url = format!(
             "{}/dns/deleteByNameType/{}/{}/{}",
-            API_BASE, domain, record_type.to_uppercase(), subdomain
+            API_BASE,
+            domain,
+            record_type.to_uppercase(),
+            subdomain
         );
 
         let creds = ApiCredentials {

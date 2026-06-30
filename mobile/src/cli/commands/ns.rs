@@ -268,7 +268,13 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
     let provider = &providers[0];
 
     // Add record to config (using "@" for root domain)
-    config.add_record(provider, domain, rec_type.clone(), "@".to_string(), value.to_string())?;
+    config.add_record(
+        provider,
+        domain,
+        rec_type.clone(),
+        "@".to_string(),
+        value.to_string(),
+    )?;
     save_ns_config(&config)?;
 
     // Record audit event

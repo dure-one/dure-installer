@@ -160,13 +160,7 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
     let kpkey_path = get_default_kpkey_path()?;
 
     // Add the key
-    add_key(
-        &kdbx_path,
-        Some(&kpkey_path),
-        &domain,
-        &username,
-        &password,
-    )?;
+    add_key(&kdbx_path, Some(&kpkey_path), &domain, &username, &password)?;
 
     eprintln!();
     eprintln!("✓ Key added successfully");

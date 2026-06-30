@@ -327,26 +327,49 @@ impl GoWebAuthnClient {
 
     /// Find the go-webauthn-cli executable
     fn find_cli_executable() -> Result<String> {
-        // Try common locations
+        use std::path::Path;
+
+        // Try common locations (relative to different possible working directories)
         let candidates = [
+            // Relative to workspace root (when running from dure/)
+            "./crates/go-webauthn/bin/go-webauthn-cli",
+            "crates/go-webauthn/bin/go-webauthn-cli",
+            // Relative to mobile directory (when running from dure/mobile/)
+            "../crates/go-webauthn/bin/go-webauthn-cli",
             // Relative to current directory
             "./bin/go-webauthn-cli",
             "./go-webauthn-cli",
-            // Relative to crate directory
-            "../crates/go-webauthn/bin/go-webauthn-cli",
+            // One more level up (when running from nested directories)
             "../../crates/go-webauthn/bin/go-webauthn-cli",
-            // In PATH
-            "go-webauthn-cli",
         ];
 
+        // First try relative paths by checking file existence
         for candidate in &candidates {
-            if let Ok(path) = which::which(candidate) {
-                return Ok(path.to_string_lossy().to_string());
+            let path = Path::new(candidate);
+            if path.exists() {
+                // Convert to absolute path for reliability
+                if let Ok(abs_path) = path.canonicalize() {
+                    return Ok(abs_path.to_string_lossy().to_string());
+                }
             }
         }
 
+        // Then try PATH
+        if let Ok(path) = which::which("go-webauthn-cli") {
+            return Ok(path.to_string_lossy().to_string());
+        }
+
         anyhow::bail!(
-            "go-webauthn-cli executable not found. Please build it first or specify the path."
+            "go-webauthn-cli executable not found. Please build it first or specify the path.\n\
+             Searched locations:\n\
+             - ./crates/go-webauthn/bin/go-webauthn-cli\n\
+             - crates/go-webauthn/bin/go-webauthn-cli\n\
+             - ../crates/go-webauthn/bin/go-webauthn-cli\n\
+             - ./bin/go-webauthn-cli\n\
+             - ./go-webauthn-cli\n\
+             - ../../crates/go-webauthn/bin/go-webauthn-cli\n\
+             - go-webauthn-cli (in PATH)\n\n\
+             To build: cd crates/go-webauthn && ./build-cli.sh"
         )
     }
 

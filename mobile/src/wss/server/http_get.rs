@@ -14,8 +14,8 @@
 //! The server automatically selects the best available compression based on client support.
 
 use async_fs as fs;
-use futures::io::AsyncWriteExt;
 use futures::StreamExt;
+use futures::io::AsyncWriteExt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;

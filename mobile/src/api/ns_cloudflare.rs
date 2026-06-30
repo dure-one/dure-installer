@@ -132,9 +132,14 @@ impl CloudflareClient {
             .context("Failed to read response body")?;
 
         // Try to parse the JSON
-        let result: ZoneListResponse = serde_json::from_str(&body)
-            .context(format!("Failed to parse zones response. Body: {}",
-                if body.len() > 500 { &body[..500] } else { &body }))?;
+        let result: ZoneListResponse = serde_json::from_str(&body).context(format!(
+            "Failed to parse zones response. Body: {}",
+            if body.len() > 500 {
+                &body[..500]
+            } else {
+                &body
+            }
+        ))?;
 
         if !result.success {
             let errors: Vec<String> = result.errors.iter().map(|e| e.message.clone()).collect();
@@ -182,9 +187,14 @@ impl CloudflareClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        let result: CreateZoneResponse = serde_json::from_str(&body)
-            .context(format!("Failed to parse zone creation response. Body: {}",
-                if body.len() > 500 { &body[..500] } else { &body }))?;
+        let result: CreateZoneResponse = serde_json::from_str(&body).context(format!(
+            "Failed to parse zone creation response. Body: {}",
+            if body.len() > 500 {
+                &body[..500]
+            } else {
+                &body
+            }
+        ))?;
 
         if !result.success {
             let errors: Vec<String> = result.errors.iter().map(|e| e.message.clone()).collect();
@@ -327,9 +337,9 @@ impl CloudflareClient {
         record_type: &str,
     ) -> Result<Option<DnsRecord>> {
         let records = self.get_records(zone_id)?;
-        Ok(records.into_iter().find(|r| {
-            r.name == name && r.record_type.to_uppercase() == record_type.to_uppercase()
-        }))
+        Ok(records
+            .into_iter()
+            .find(|r| r.name == name && r.record_type.to_uppercase() == record_type.to_uppercase()))
     }
 }
 

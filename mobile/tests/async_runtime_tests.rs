@@ -17,9 +17,7 @@ mod tests {
 
     /// Test helper to set up logging for tests
     fn setup_logging() {
-        let _ = env_logger::builder()
-            .is_test(true)
-            .try_init();
+        let _ = env_logger::builder().is_test(true).try_init();
     }
 
     // WebSocket tests will be added here

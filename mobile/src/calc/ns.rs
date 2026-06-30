@@ -13,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-use crate::calc::acme::{DnsProvider, DnsProviderType, set_a_record, set_aaaa_record, set_txt_record};
+use crate::calc::acme::{
+    DnsProvider, DnsProviderType, set_a_record, set_aaaa_record, set_txt_record,
+};
 
 /// DNS record type
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,14 +108,14 @@ impl serde::Serialize for NsConfig {
 
         // Add regular providers
         for (name, config) in &self.providers {
-            let config_value = serde_yaml::to_value(config)
-                .map_err(serde::ser::Error::custom)?;
+            let config_value = serde_yaml::to_value(config).map_err(serde::ser::Error::custom)?;
             providers_map.insert(name.clone(), config_value);
         }
 
         // Add GCP accounts as array
         if !self.gcp_accounts.is_empty() {
-            let gcp_array: Vec<serde_yaml::Value> = self.gcp_accounts
+            let gcp_array: Vec<serde_yaml::Value> = self
+                .gcp_accounts
                 .iter()
                 .map(|account| serde_yaml::to_value(account).unwrap_or(serde_yaml::Value::Null))
                 .collect();
@@ -168,8 +170,8 @@ impl<'de> serde::Deserialize<'de> for NsConfig {
 impl NsConfig {
     /// Load from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        let value: serde_yaml::Value = serde_yaml::from_str(yaml)
-            .context("Failed to parse NS config YAML")?;
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(yaml).context("Failed to parse NS config YAML")?;
 
         let mut providers = HashMap::new();
         let mut gcp_accounts = Vec::new();
@@ -184,14 +186,18 @@ impl NsConfig {
                             // Handle gcloud as array of accounts
                             if let serde_yaml::Value::Sequence(accounts) = val {
                                 for account_val in accounts {
-                                    if let Ok(account) = serde_yaml::from_value::<GcpAccount>(account_val.clone()) {
+                                    if let Ok(account) =
+                                        serde_yaml::from_value::<GcpAccount>(account_val.clone())
+                                    {
                                         gcp_accounts.push(account);
                                     }
                                 }
                             }
                         } else {
                             // Handle other providers normally
-                            if let Ok(config) = serde_yaml::from_value::<ProviderConfig>(val.clone()) {
+                            if let Ok(config) =
+                                serde_yaml::from_value::<ProviderConfig>(val.clone())
+                            {
                                 providers.insert(provider_name.clone(), config);
                             }
                         }
@@ -212,30 +218,28 @@ impl NsConfig {
 
         // Add regular providers
         for (name, config) in &self.providers {
-            let config_value = serde_yaml::to_value(config)
-                .context("Failed to serialize provider config")?;
-            providers_map.insert(
-                serde_yaml::Value::String(name.clone()),
-                config_value
-            );
+            let config_value =
+                serde_yaml::to_value(config).context("Failed to serialize provider config")?;
+            providers_map.insert(serde_yaml::Value::String(name.clone()), config_value);
         }
 
         // Add GCP accounts as array
         if !self.gcp_accounts.is_empty() {
-            let gcp_array: Vec<serde_yaml::Value> = self.gcp_accounts
+            let gcp_array: Vec<serde_yaml::Value> = self
+                .gcp_accounts
                 .iter()
                 .map(|account| serde_yaml::to_value(account).unwrap_or(serde_yaml::Value::Null))
                 .collect();
             providers_map.insert(
                 serde_yaml::Value::String("gcloud".to_string()),
-                serde_yaml::Value::Sequence(gcp_array)
+                serde_yaml::Value::Sequence(gcp_array),
             );
         }
 
         let mut root = serde_yaml::Mapping::new();
         root.insert(
             serde_yaml::Value::String("providers".to_string()),
-            serde_yaml::Value::Mapping(providers_map)
+            serde_yaml::Value::Mapping(providers_map),
         );
 
         serde_yaml::to_string(&serde_yaml::Value::Mapping(root))
@@ -255,7 +259,8 @@ impl NsConfig {
     pub fn get_domain(&self, provider: &str, domain: &str) -> Option<&DomainEntry> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(provider) {
-            return self.gcp_accounts
+            return self
+                .gcp_accounts
                 .iter()
                 .find(|acc| acc.connected_email == email)?
                 .domains
@@ -275,7 +280,8 @@ impl NsConfig {
     pub fn get_domain_mut(&mut self, provider: &str, domain: &str) -> Option<&mut DomainEntry> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(provider) {
-            return self.gcp_accounts
+            return self
+                .gcp_accounts
                 .iter_mut()
                 .find(|acc| acc.connected_email == email)?
                 .domains
@@ -300,7 +306,8 @@ impl NsConfig {
     ) -> Result<()> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(&provider) {
-            let account = self.gcp_accounts
+            let account = self
+                .gcp_accounts
                 .iter_mut()
                 .find(|acc| acc.connected_email == email)
                 .ok_or_else(|| anyhow::anyhow!("GCP account {} not found", email))?;
@@ -319,12 +326,13 @@ impl NsConfig {
         }
 
         // Regular provider
-        let provider_config = self.providers.entry(provider.clone()).or_insert_with(|| {
-            ProviderConfig {
-                api_token: api_token.clone(),
-                domains: Vec::new(),
-            }
-        });
+        let provider_config =
+            self.providers
+                .entry(provider.clone())
+                .or_insert_with(|| ProviderConfig {
+                    api_token: api_token.clone(),
+                    domains: Vec::new(),
+                });
 
         // Update api_token if provided
         if !api_token.is_empty() {
@@ -348,7 +356,8 @@ impl NsConfig {
     pub fn remove_domain(&mut self, provider: &str, domain: &str) -> Result<()> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(provider) {
-            let account = self.gcp_accounts
+            let account = self
+                .gcp_accounts
                 .iter_mut()
                 .find(|acc| acc.connected_email == email)
                 .ok_or_else(|| anyhow::anyhow!("GCP account {} not found", email))?;
@@ -357,7 +366,9 @@ impl NsConfig {
                 .domains
                 .iter()
                 .position(|d| d.domain == domain)
-                .ok_or_else(|| anyhow::anyhow!("Domain {} not found in GCP account {}", domain, email))?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Domain {} not found in GCP account {}", domain, email)
+                })?;
 
             account.domains.remove(index);
             return Ok(());
@@ -373,7 +384,9 @@ impl NsConfig {
             .domains
             .iter()
             .position(|d| d.domain == domain)
-            .ok_or_else(|| anyhow::anyhow!("Domain {} not found in provider {}", domain, provider))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("Domain {} not found in provider {}", domain, provider)
+            })?;
 
         provider_config.domains.remove(index);
 
@@ -394,9 +407,9 @@ impl NsConfig {
         name: String,
         value: String,
     ) -> Result<()> {
-        let domain_entry = self
-            .get_domain_mut(provider, domain)
-            .ok_or_else(|| anyhow::anyhow!("Domain {} not found in provider {}", domain, provider))?;
+        let domain_entry = self.get_domain_mut(provider, domain).ok_or_else(|| {
+            anyhow::anyhow!("Domain {} not found in provider {}", domain, provider)
+        })?;
 
         // Check if record already exists
         if domain_entry
@@ -431,9 +444,9 @@ impl NsConfig {
         record_type: RecordType,
         value: &str,
     ) -> Result<()> {
-        let domain_entry = self
-            .get_domain_mut(provider, domain)
-            .ok_or_else(|| anyhow::anyhow!("Domain {} not found in provider {}", domain, provider))?;
+        let domain_entry = self.get_domain_mut(provider, domain).ok_or_else(|| {
+            anyhow::anyhow!("Domain {} not found in provider {}", domain, provider)
+        })?;
 
         let index = domain_entry
             .records
@@ -524,7 +537,8 @@ impl NsConfig {
     pub fn get_api_token(&self, provider: &str) -> Option<String> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(provider) {
-            let account = self.gcp_accounts
+            let account = self
+                .gcp_accounts
                 .iter()
                 .find(|acc| acc.connected_email == email)?;
             return Some(format!("{}::{}", account.access_token, account.project_id));
@@ -538,7 +552,8 @@ impl NsConfig {
     pub fn get_api_token_refreshed(&mut self, provider: &str) -> Option<String> {
         // Check if it's a GCP provider
         if let Some(email) = Self::parse_gcp_identifier(provider) {
-            let account = self.gcp_accounts
+            let account = self
+                .gcp_accounts
                 .iter_mut()
                 .find(|acc| acc.connected_email == email)?;
 
@@ -599,7 +614,8 @@ impl NsConfig {
     pub fn get_domain_any_provider(&self, domain: &str) -> Option<(String, &DomainEntry)> {
         // Check regular providers
         for (provider_name, provider_config) in &self.providers {
-            if let Some(domain_entry) = provider_config.domains.iter().find(|d| d.domain == domain) {
+            if let Some(domain_entry) = provider_config.domains.iter().find(|d| d.domain == domain)
+            {
                 return Some((provider_name.clone(), domain_entry));
             }
         }
@@ -617,7 +633,11 @@ impl NsConfig {
     /// Add a new GCP account
     pub fn add_gcp_account(&mut self, account: GcpAccount) -> Result<()> {
         // Check for duplicate email
-        if self.gcp_accounts.iter().any(|acc| acc.connected_email == account.connected_email) {
+        if self
+            .gcp_accounts
+            .iter()
+            .any(|acc| acc.connected_email == account.connected_email)
+        {
             anyhow::bail!("GCP account {} already exists", account.connected_email);
         }
 
@@ -627,12 +647,16 @@ impl NsConfig {
 
     /// Get GCP account by email
     pub fn get_gcp_account(&self, email: &str) -> Option<&GcpAccount> {
-        self.gcp_accounts.iter().find(|acc| acc.connected_email == email)
+        self.gcp_accounts
+            .iter()
+            .find(|acc| acc.connected_email == email)
     }
 
     /// Get mutable GCP account by email
     pub fn get_gcp_account_mut(&mut self, email: &str) -> Option<&mut GcpAccount> {
-        self.gcp_accounts.iter_mut().find(|acc| acc.connected_email == email)
+        self.gcp_accounts
+            .iter_mut()
+            .find(|acc| acc.connected_email == email)
     }
 }
 
@@ -666,7 +690,9 @@ pub fn apply_record(
         RecordType::A => set_a_record(&provider, domain, &record.name, &record.value)?,
         RecordType::TXT => set_txt_record(&provider, domain, &record.name, &record.value)?,
         RecordType::AAAA => set_aaaa_record(&provider, domain, &record.name, &record.value)?,
-        RecordType::NS => anyhow::bail!("NS record type not yet supported for DNS provider operations"),
+        RecordType::NS => {
+            anyhow::bail!("NS record type not yet supported for DNS provider operations")
+        }
     }
 
     Ok(())
@@ -714,7 +740,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(config.providers.get("cloudflare").unwrap().domains.len(), 1);
-        assert_eq!(config.providers.get("cloudflare").unwrap().domains[0].domain, "example.com");
+        assert_eq!(
+            config.providers.get("cloudflare").unwrap().domains[0].domain,
+            "example.com"
+        );
     }
 
     #[test]
@@ -728,7 +757,13 @@ mod tests {
             )
             .unwrap();
         config
-            .add_record("cloudflare", "example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
+            .add_record(
+                "cloudflare",
+                "example.com",
+                RecordType::A,
+                "@".to_string(),
+                "1.2.3.4".to_string(),
+            )
             .unwrap();
 
         let domain = config.get_domain("cloudflare", "example.com").unwrap();
@@ -749,7 +784,13 @@ mod tests {
             )
             .unwrap();
         config
-            .add_record("cloudflare", "example.com", RecordType::A, "@".to_string(), "1.2.3.4".to_string())
+            .add_record(
+                "cloudflare",
+                "example.com",
+                RecordType::A,
+                "@".to_string(),
+                "1.2.3.4".to_string(),
+            )
             .unwrap();
 
         let yaml = config.to_yaml().unwrap();
@@ -758,6 +799,9 @@ mod tests {
 
         let loaded = NsConfig::from_yaml(&yaml).unwrap();
         assert_eq!(loaded.providers.get("cloudflare").unwrap().domains.len(), 1);
-        assert_eq!(loaded.providers.get("cloudflare").unwrap().domains[0].domain, "example.com");
+        assert_eq!(
+            loaded.providers.get("cloudflare").unwrap().domains[0].domain,
+            "example.com"
+        );
     }
 }

@@ -302,6 +302,9 @@ mod tests {
         assert!(yaml.contains("gcp_selected_project_id: project-123"));
 
         let deserialized: CloudPlatformConfig = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(deserialized.gcp_selected_project_id, Some("project-123".to_string()));
+        assert_eq!(
+            deserialized.gcp_selected_project_id,
+            Some("project-123".to_string())
+        );
     }
 }

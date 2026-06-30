@@ -1,8 +1,8 @@
 //! Client tab - Audit | DNS Client | Crypt Codec | Key Mgmt Ops
 
 use eframe::egui;
-use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
-use egui_material3::{tabs_secondary, MaterialButton};
+use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
+use egui_material3::{MaterialButton, tabs_secondary};
 
 // Sub-tab indices
 const TAB_AUDIT: usize = 0;
@@ -391,7 +391,7 @@ impl DnsClientSubTab {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::db;
-            use crate::calc::dns::{resolve_dns, RecordType};
+            use crate::calc::dns::{RecordType, resolve_dns};
             use crate::storage::models::dns::{
                 cache_dns_records, get_cached_dns_records, init_dns_table,
             };
@@ -1223,10 +1223,12 @@ impl KeyMgmtSubTab {
 
                     for key in &keys {
                         let created = format_key_timestamp(key.created_at);
-                        let last_mod = key.last_modification
+                        let last_mod = key
+                            .last_modification
                             .map(|ts| format_key_timestamp(ts as u64))
                             .unwrap_or_else(|| "-".to_string());
-                        let last_access = key.last_access
+                        let last_access = key
+                            .last_access
                             .map(|ts| format_key_timestamp(ts as u64))
                             .unwrap_or_else(|| "-".to_string());
                         let notes = key.notes.as_deref().unwrap_or("-");
@@ -1357,9 +1359,7 @@ impl KeyMgmtSubTab {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use crate::calc::keyring::{
-                delete_key, get_default_kdbx_path, get_default_kpkey_path,
-            };
+            use crate::calc::keyring::{delete_key, get_default_kdbx_path, get_default_kpkey_path};
 
             let kdbx_path = match get_default_kdbx_path() {
                 Ok(path) => path,

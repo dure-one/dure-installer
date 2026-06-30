@@ -1,8 +1,8 @@
 //! Site tab - Site-to-site communication management
 
 use eframe::egui;
-use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
 use egui_material3::MaterialButton;
+use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::calc::audit;
