@@ -19,8 +19,8 @@ use egui_i18n::tr;
 use egui_material3::*;
 use log::info;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Static variables for menu and search toggles
 pub static MENU_TOGGLE: AtomicBool = AtomicBool::new(false);
@@ -280,7 +280,7 @@ impl eframe::App for DureApp {
         // Handle save and theme changes from settings dialog
         if self.dlg_settings.save_clicked {
             self.dlg_settings.save_clicked = false; // Reset flag after processing
-                                                    // TODO: save settings to file
+            // TODO: save settings to file
             log::info!("Settings saved");
         }
         if let Some(theme_name) = self.dlg_settings.theme_to_apply.take() {

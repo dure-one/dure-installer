@@ -400,23 +400,11 @@ async fn handle_connection(
                 let session_id =
                     perform_websocket_handshake(&mut tls_stream, &request, &settings.server_id)
                         .await?;
-                let ws_stream = WebSocketStream::from_raw_socket(
-                    tls_stream,
-                    Role::Server,
-                    None,
-                )
-                .await;
-                handle_websocket(
-                    ws_stream,
-                    peer_addr,
-                    session_id,
-                    settings,
-                    stats.clone(),
-                )
-                .await
+                let ws_stream =
+                    WebSocketStream::from_raw_socket(tls_stream, Role::Server, None).await;
+                handle_websocket(ws_stream, peer_addr, session_id, settings, stats.clone()).await
             } else {
-                handle_https_request( tls_stream, request, settings, stats.clone(), peer_addr)
-                    .await
+                handle_https_request(tls_stream, request, settings, stats.clone(), peer_addr).await
             }
         } else {
             // Plain mode: HTTP and WS (no TLS)
@@ -430,29 +418,12 @@ async fn handle_connection(
                 let session_id =
                     perform_websocket_handshake(&mut plain_stream, &request, &settings.server_id)
                         .await?;
-                let ws_stream = WebSocketStream::from_raw_socket(
-                    plain_stream,
-                    Role::Server,
-                    None,
-                )
-                .await;
-                handle_websocket(
-                    ws_stream,
-                    peer_addr,
-                    session_id,
-                    settings,
-                    stats.clone(),
-                )
-                .await
+                let ws_stream =
+                    WebSocketStream::from_raw_socket(plain_stream, Role::Server, None).await;
+                handle_websocket(ws_stream, peer_addr, session_id, settings, stats.clone()).await
             } else {
-                handle_https_request(
-                    plain_stream,
-                    request,
-                    settings,
-                    stats.clone(),
-                    peer_addr,
-                )
-                .await
+                handle_https_request(plain_stream, request, settings, stats.clone(), peer_addr)
+                    .await
             }
         }
     }
@@ -511,7 +482,6 @@ async fn run_server_async(
     stats_interval: u64,
     download_static: bool,
 ) -> io::Result<()> {
-
     let db = db::open_db(&db_path)?;
     eprintln!("✓ Database opened: {}", db_path);
 

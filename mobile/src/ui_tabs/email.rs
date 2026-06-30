@@ -2,8 +2,8 @@
 
 use eframe::egui::{self, Id, Rect};
 use egui_material3::{
-    data_table, noto_emoji, show_tooltip_on_hover, MaterialButton, MaterialIconButton,
-    TooltipPosition,
+    MaterialButton, MaterialIconButton, TooltipPosition, data_table, noto_emoji,
+    show_tooltip_on_hover,
 };
 
 /// Email tab state

@@ -19,10 +19,10 @@
 //! ```
 
 use async_net::TcpStream;
-use futures_rustls::TlsConnector;
 use async_tungstenite::{client_async, tungstenite::Message};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{FutureExt, SinkExt, StreamExt};
+use futures_rustls::TlsConnector;
 use rustls::pki_types::ServerName;
 use std::io;
 use std::sync::Arc;
@@ -159,7 +159,8 @@ fn create_tls_connector() -> io::Result<TlsConnector> {
     let mut root_store = rustls::RootCertStore::empty();
     let cert_result = rustls_native_certs::load_native_certs();
     for cert in cert_result.certs {
-        root_store.add(cert)
+        root_store
+            .add(cert)
             .map_err(|e| io::Error::other(format!("Add cert: {}", e)))?;
     }
 
@@ -190,11 +191,13 @@ async fn https_get_request(
     } else {
         create_tls_connector()?
     };
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
-    let mut tls_stream = connector
-        .connect(server_name, tcp_stream)
-        .await?;
+    let server_name = ServerName::try_from(host.to_string()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid server name: {:?}", e),
+        )
+    })?;
+    let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
     eprintln!("TLS handshake completed");
 
     let request = format!(
@@ -240,11 +243,13 @@ async fn https_post_request(
     } else {
         create_tls_connector()?
     };
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
-    let mut tls_stream = connector
-        .connect(server_name, tcp_stream)
-        .await?;
+    let server_name = ServerName::try_from(host.to_string()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid server name: {:?}", e),
+        )
+    })?;
+    let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
     eprintln!("TLS handshake completed");
 
     let request = format!(
@@ -285,11 +290,13 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
     } else {
         create_tls_connector()?
     };
-    let server_name = ServerName::try_from(host.to_string())
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid server name: {:?}", e)))?;
-    let tls_stream = connector
-        .connect(server_name, tcp_stream)
-        .await?;
+    let server_name = ServerName::try_from(host.to_string()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid server name: {:?}", e),
+        )
+    })?;
+    let tls_stream = connector.connect(server_name, tcp_stream).await?;
     eprintln!("TLS handshake completed");
 
     let request = async_tungstenite::tungstenite::http::Request::builder()
@@ -487,8 +494,7 @@ async fn run_client() -> io::Result<()> {
                 Ok(ws_stream) => {
                     stats.total_connections.fetch_add(1, Ordering::Relaxed);
                     if let Err(e) =
-                        handle_websocket_connection(ws_stream, stats.clone(), should_exit)
-                            .await
+                        handle_websocket_connection(ws_stream, stats.clone(), should_exit).await
                     {
                         eprintln!("WebSocket error: {}", e);
                     }
@@ -547,8 +553,7 @@ pub fn run_with_args(
                 match connect_websocket(&url, insecure).await {
                     Ok(ws_stream) => {
                         stats.total_connections.fetch_add(1, Ordering::Relaxed);
-                        handle_websocket_connection(ws_stream, stats.clone(), should_exit)
-                            .await
+                        handle_websocket_connection(ws_stream, stats.clone(), should_exit).await
                     }
                     Err(e) => Err(e),
                 }

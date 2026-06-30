@@ -186,8 +186,8 @@ pub fn cleanup_old_devices(conn: &mut SqliteConnection, max_age_secs: u64) -> Re
 mod tests {
     use super::*;
     use crate::calc::db;
-    use std::time::{SystemTime, UNIX_EPOCH};
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 

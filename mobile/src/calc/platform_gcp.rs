@@ -3,8 +3,8 @@
 //! Handles platform-level GCP operations including status computation,
 //! project selection, and OAuth management.
 
-use anyhow::Result;
 use crate::config::CloudPlatformConfig;
+use anyhow::Result;
 
 /// Compute platform-level status string
 pub fn compute_platform_status(platform: &CloudPlatformConfig, total_projects: usize) -> String {

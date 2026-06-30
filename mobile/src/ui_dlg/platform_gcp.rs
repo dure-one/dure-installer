@@ -370,23 +370,47 @@ impl GcpWizard {
         // Next button
         ui.horizontal(|ui| {
             if ui.add(MaterialButton::filled("Next →")).clicked() {
-                // Load OAuth from selected platform
-                if let Some(platform) = self.available_platforms.iter().find(|p| {
-                    p.gcp_connected_email.as_ref() == Some(&self.selected_platform_email)
-                }) {
+                // Load OAuth from selected platform and refresh if expired
+                if let Some(platform) = self
+                    .available_platforms
+                    .iter()
+                    .find(|p| p.gcp_connected_email.as_ref() == Some(&self.selected_platform_email))
+                {
                     if let (Some(access_token), Some(refresh_token)) = (
                         &platform.gcp_oauth_access_token,
                         &platform.gcp_oauth_refresh_token,
                     ) {
-                        self.oauth_result = Some(OAuthResult {
-                            access_token: access_token.clone(),
-                            refresh_token: refresh_token.clone(),
-                            expires_at: platform
-                                .gcp_oauth_token_expiry
-                                .map(|exp| exp as u64)
-                                .unwrap_or(chrono::Utc::now().timestamp() as u64 + 3600),
-                        });
-                        self.state = WizardState::SelectProject;
+                        let expires_at = platform
+                            .gcp_oauth_token_expiry
+                            .map(|exp| exp as u64)
+                            .unwrap_or(chrono::Utc::now().timestamp() as u64 + 3600);
+
+                        // Check if token is expired (with 60 second buffer)
+                        let now = chrono::Utc::now().timestamp() as u64;
+                        let is_expired = now >= expires_at.saturating_sub(60);
+
+                        if is_expired {
+                            // Refresh token
+                            log::info!("OAuth token expired, refreshing...");
+                            match self.refresh_token_sync(refresh_token) {
+                                Ok(new_oauth) => {
+                                    self.oauth_result = Some(new_oauth);
+                                    self.state = WizardState::SelectProject;
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to refresh token: {}", e);
+                                    // Show error but allow retry
+                                }
+                            }
+                        } else {
+                            // Token still valid
+                            self.oauth_result = Some(OAuthResult {
+                                access_token: access_token.clone(),
+                                refresh_token: refresh_token.clone(),
+                                expires_at,
+                            });
+                            self.state = WizardState::SelectProject;
+                        }
                     }
                 }
             }
@@ -956,7 +980,8 @@ impl GcpWizard {
                         }
 
                         // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
-                        let region = self.selected_zone
+                        let region = self
+                            .selected_zone
                             .rsplitn(2, '-')
                             .nth(1)
                             .unwrap_or(&self.selected_zone)
@@ -971,32 +996,33 @@ impl GcpWizard {
                                 Ok(list) => {
                                     if let Some(ba) = list.billing_accounts.first() {
                                         // Extract billing account ID from name (e.g., "billingAccounts/012345-ABCDEF-678901" -> "012345-ABCDEF-678901")
-                                        let account_id = ba.name
+                                        let account_id = ba
+                                            .name
                                             .strip_prefix("billingAccounts/")
                                             .unwrap_or(&ba.name)
                                             .to_string();
 
                                         self.progress_log.push(format!(
                                             "✓ Found billing account: {} ({})",
-                                            ba.display_name,
-                                            account_id
+                                            ba.display_name, account_id
                                         ));
                                         Some(account_id)
                                     } else {
-                                        self.progress_log.push("⚠ No billing accounts found".to_string());
+                                        self.progress_log
+                                            .push("⚠ No billing accounts found".to_string());
                                         None
                                     }
                                 }
                                 Err(e) => {
-                                    self.progress_log.push(format!(
-                                        "⚠ Failed to fetch billing account: {}",
-                                        e
-                                    ));
+                                    self.progress_log
+                                        .push(format!("⚠ Failed to fetch billing account: {}", e));
                                     None
                                 }
                             }
                         } else {
-                            self.progress_log.push("⚠ No OAuth token available for billing account fetch".to_string());
+                            self.progress_log.push(
+                                "⚠ No OAuth token available for billing account fetch".to_string(),
+                            );
                             None
                         };
 
@@ -1048,8 +1074,7 @@ impl GcpWizard {
                             self.progress_log
                                 .push(format!("⚠ Failed to save VM to config: {}", e));
                         } else {
-                            self.progress_log
-                                .push("✓ VM saved to config".to_string());
+                            self.progress_log.push("✓ VM saved to config".to_string());
                         }
                     }
                 }
@@ -1168,7 +1193,6 @@ impl GcpWizard {
         }));
     }
 
-
     /// Get config file path
     #[cfg(not(target_arch = "wasm32"))]
     fn get_config_path(&self) -> Result<std::path::PathBuf, String> {
@@ -1193,8 +1217,8 @@ impl GcpWizard {
                 .into_iter()
                 .filter(|p| {
                     p.platform_type == "gcp"
-                    && p.gcp_connected_email.is_some()
-                    && p.gcp_oauth_access_token.is_some()
+                        && p.gcp_connected_email.is_some()
+                        && p.gcp_oauth_access_token.is_some()
                 })
                 .collect();
 
@@ -1205,6 +1229,40 @@ impl GcpWizard {
                 }
             }
         }
+    }
+
+    fn refresh_token_sync(&self, refresh_token: &str) -> Result<OAuthResult, String> {
+        use crate::api::gcp_oauth::{self, OAuthHandler};
+
+        // Use embedded OAuth credentials
+        let handler = OAuthHandler::default();
+        let oauth_result = gcp_oauth::refresh_access_token(
+            handler.client_id(),
+            handler.client_secret(),
+            refresh_token,
+        )
+        .map_err(|e| format!("Failed to refresh token: {}", e))?;
+
+        // Update config with new token
+        if let Ok((mut app_config, config_path)) = self.load_config_file() {
+            if let Some(platform) = app_config
+                .platforms
+                .iter_mut()
+                .find(|p| p.gcp_connected_email.as_ref() == Some(&self.selected_platform_email))
+            {
+                platform.gcp_oauth_access_token = Some(oauth_result.access_token.clone());
+                platform.gcp_oauth_token_expiry = Some(oauth_result.expires_at as i64);
+
+                // Save config
+                app_config
+                    .save(&config_path)
+                    .map_err(|e| format!("Failed to save refreshed token: {}", e))?;
+
+                log::info!("✓ OAuth token refreshed and saved");
+            }
+        }
+
+        Ok(oauth_result)
     }
 
     fn store_oauth_token(&self, oauth_result: &OAuthResult) -> Result<(), String> {
@@ -1408,15 +1466,17 @@ impl GcpWizard {
                 .map_err(|e| format!("Failed to ensure firewall: {}", e))?;
 
             // Generate SSH key pair for this instance
-            let (ssh_private_key, ssh_public_key, _raw_private, _raw_public) = Self::generate_ssh_key_pair()
-                .map_err(|e| format!("Failed to generate SSH key: {}", e))?;
+            let (ssh_private_key, ssh_public_key, _raw_private, _raw_public) =
+                Self::generate_ssh_key_pair()
+                    .map_err(|e| format!("Failed to generate SSH key: {}", e))?;
 
             // Store private key in keyring
             Self::store_ssh_key_in_keyring(&instance_name, &platform_name, &ssh_private_key)
                 .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 
             // Create instance request with startup script
-            let mut instance_req = InstanceRequest::debian_micro(instance_name.clone(), zone.clone());
+            let mut instance_req =
+                InstanceRequest::debian_micro(instance_name.clone(), zone.clone());
 
             // Customize machine type if not default
             if machine_type != "e2-micro" {
@@ -1488,7 +1548,7 @@ impl GcpWizard {
         }
 
         // Create firewall rule
-        use crate::calc::gcp_rest::{FirewallRequest, FirewallAllowed};
+        use crate::calc::gcp_rest::{FirewallAllowed, FirewallRequest};
 
         let firewall_req = FirewallRequest {
             name: FIREWALL_NAME.to_string(),
@@ -1496,16 +1556,15 @@ impl GcpWizard {
             direction: "INGRESS".to_string(),
             priority: 1000,
             target_tags: vec![FIREWALL_TAG.to_string()],
-            allowed: vec![
-                FirewallAllowed {
-                    ip_protocol: "all".to_string(),
-                    ports: None,
-                },
-            ],
+            allowed: vec![FirewallAllowed {
+                ip_protocol: "all".to_string(),
+                ports: None,
+            }],
             source_ranges: vec!["0.0.0.0/0".to_string()],
         };
 
-        client.create_firewall(project_id, &firewall_req)
+        client
+            .create_firewall(project_id, &firewall_req)
             .map_err(|e| format!("Failed to create firewall: {}", e))?;
 
         Ok(())
@@ -1526,10 +1585,16 @@ impl GcpWizard {
                 .map_err(|e| format!("Failed to generate key: {}", e))?;
 
             // Convert to SSH format
-            let private_key = Self::ed25519_to_openssh_private(&keypair.private_key, &keypair.public_key)?;
+            let private_key =
+                Self::ed25519_to_openssh_private(&keypair.private_key, &keypair.public_key)?;
             let public_key = Self::ed25519_to_openssh_public(&keypair.public_key)?;
 
-            Ok((private_key, public_key, keypair.private_key, keypair.public_key))
+            Ok((
+                private_key,
+                public_key,
+                keypair.private_key,
+                keypair.public_key,
+            ))
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -1550,11 +1615,17 @@ impl GcpWizard {
         } else if private_key.len() == 32 {
             private_key
         } else {
-            return Err(format!("Ed25519 private key must be 32 or 64 bytes, got {}", private_key.len()));
+            return Err(format!(
+                "Ed25519 private key must be 32 or 64 bytes, got {}",
+                private_key.len()
+            ));
         };
 
         if public_key.len() != 32 {
-            return Err(format!("Ed25519 public key must be 32 bytes, got {}", public_key.len()));
+            return Err(format!(
+                "Ed25519 public key must be 32 bytes, got {}",
+                public_key.len()
+            ));
         }
 
         let mut key_data = Vec::new();
@@ -1635,7 +1706,10 @@ impl GcpWizard {
     /// Convert Ed25519 public key to OpenSSH format
     fn ed25519_to_openssh_public(public_key: &[u8]) -> Result<String, String> {
         if public_key.len() != 32 {
-            return Err(format!("Ed25519 public key must be 32 bytes, got {}", public_key.len()));
+            return Err(format!(
+                "Ed25519 public key must be 32 bytes, got {}",
+                public_key.len()
+            ));
         }
 
         // OpenSSH public key format: ssh-ed25519 <base64-encoded-blob> comment
@@ -1665,8 +1739,9 @@ impl GcpWizard {
             let domain = format!("gcp.{}.{}", platform_name, instance_name);
             let username = "root";
 
-            let kdbx_path = keyring::get_default_kdbx_path()
-                .map_err(|e| format!("Failed to get kdbx path: {}", e))?;
+            // Ensure KeePass database exists (will create KPKey if needed)
+            let kdbx_path = keyring::ensure_kdbx_exists()
+                .map_err(|e| format!("Failed to initialize keyring: {}", e))?;
             let kpkey_path = keyring::get_default_kpkey_path()
                 .map_err(|e| format!("Failed to get KPKey path: {}", e))?;
 
@@ -1676,8 +1751,8 @@ impl GcpWizard {
                 Some(&kpkey_path),
                 &domain,
                 username,
-                "", // Empty password field
-                Some(private_key.as_bytes()), // SSH key as binary attachment
+                "",                             // Empty password field
+                Some(private_key.as_bytes()),   // SSH key as binary attachment
                 Some("GCP VM SSH private key"), // Notes
             )
             .map_err(|e| format!("Failed to store SSH key: {}", e))?;
@@ -1979,7 +2054,11 @@ mod tests {
         let result = GcpWizard::generate_ssh_key_pair();
 
         // Should succeed
-        assert!(result.is_ok(), "Failed to generate SSH key pair: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Failed to generate SSH key pair: {:?}",
+            result
+        );
 
         let (private_key, public_key, raw_private, raw_public) = result.unwrap();
 

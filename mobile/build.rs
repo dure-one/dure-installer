@@ -26,7 +26,10 @@ fn main() {
     }
 
     if let Ok(client_secret) = std::env::var("GOOGLE_OAUTH_CLIENT_SECRET") {
-        println!("cargo:rustc-env=GOOGLE_OAUTH_CLIENT_SECRET={}", client_secret);
+        println!(
+            "cargo:rustc-env=GOOGLE_OAUTH_CLIENT_SECRET={}",
+            client_secret
+        );
     } else {
         println!("cargo:warning=GOOGLE_OAUTH_CLIENT_SECRET not set - OAuth will not work");
     }

@@ -29,10 +29,10 @@ use anyhow::{Context, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 use keepass::{
-    db::{Entry, Group, Value},
     Database, DatabaseKey,
+    db::{Entry, Group, Value},
 };
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::{Cursor, Write as IoWrite};
 use std::path::{Path, PathBuf};
 
@@ -119,7 +119,8 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         .context("Failed to write private key")?;
 
     // Write public key to KPPubKey file
-    let mut kppubkey_file = File::create(&kppubkey_path).context("Failed to create KPPubKey file")?;
+    let mut kppubkey_file =
+        File::create(&kppubkey_path).context("Failed to create KPPubKey file")?;
     kppubkey_file
         .write_all(&gen_resp.public_key)
         .context("Failed to write public key")?;
@@ -131,20 +132,50 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
     Ok(kpkey_path)
 }
 
-/// OpenBSD stub - key generation requires go-webauthn which is unavailable
+/// OpenBSD - use ed25519-dalek directly for key generation
 #[cfg(target_os = "openbsd")]
 pub fn ensure_kpkey_exists() -> Result<PathBuf> {
+    use ed25519_dalek::SigningKey;
+    use rand::RngCore;
+
     let kpkey_path = get_default_kpkey_path()?;
+    let kppubkey_path = get_default_kppubkey_path()?;
 
     // If KPKey already exists, return it
     if kpkey_path.exists() {
         return Ok(kpkey_path);
     }
 
-    anyhow::bail!(
-        "KPKey generation not supported on OpenBSD (go-webauthn unavailable). \
-         Please import a KPKey from another platform or generate manually."
-    );
+    eprintln!("Generating Ed25519 keypair for KeePass...");
+
+    // Create config directory if it doesn't exist
+    let config_dir = get_config_dir()?;
+    create_dir_all(&config_dir)?;
+
+    // Generate random 32 bytes for the key
+    let mut rng = rand::thread_rng();
+    let mut secret_bytes = [0u8; 32];
+    rng.fill_bytes(&mut secret_bytes);
+
+    // Generate key pair
+    let signing_key = SigningKey::from_bytes(&secret_bytes);
+    let verifying_key = signing_key.verifying_key();
+
+    // Save private key
+    let mut priv_file = File::create(&kpkey_path).context("Failed to create KPKey file")?;
+    priv_file
+        .write_all(&secret_bytes)
+        .context("Failed to write KPKey")?;
+
+    // Save public key
+    let mut pub_file = File::create(&kppubkey_path).context("Failed to create KPPubKey file")?;
+    pub_file
+        .write_all(&verifying_key.to_bytes())
+        .context("Failed to write KPPubKey")?;
+
+    eprintln!("✓ Generated KPKey at: {}", kpkey_path.display());
+
+    Ok(kpkey_path)
 }
 
 /// WASM stub - key generation not supported
@@ -226,8 +257,7 @@ pub fn open_kdbx(
         key = key.with_keyfile(&mut kpkey_cursor)?;
     }
 
-    Database::open(&mut file, key)
-        .context("Failed to open KeePass database. Check password/KPKey.")
+    Database::open(&mut file, key).context("Failed to open KeePass database. Check password/KPKey.")
 }
 
 /// Save a KeePass database to file
@@ -318,7 +348,9 @@ fn parse_key_entry(entry: &Entry) -> Result<Option<KeyEntry>> {
     // Get created_at from custom field or times.creation
     let created_at = match entry.fields.get("created_at") {
         Some(value) => value.get().parse::<u64>().unwrap_or_else(|_| {
-            entry.times.creation
+            entry
+                .times
+                .creation
                 .map(|dt| dt.and_utc().timestamp() as u64)
                 .unwrap_or_else(|| {
                     std::time::SystemTime::now()
@@ -327,7 +359,9 @@ fn parse_key_entry(entry: &Entry) -> Result<Option<KeyEntry>> {
                         .as_secs()
                 })
         }),
-        None => entry.times.creation
+        None => entry
+            .times
+            .creation
             .map(|dt| dt.and_utc().timestamp() as u64)
             .unwrap_or_else(|| {
                 std::time::SystemTime::now()
@@ -338,20 +372,25 @@ fn parse_key_entry(entry: &Entry) -> Result<Option<KeyEntry>> {
     };
 
     // Get last modification time
-    let last_modification = entry.times.last_modification
+    let last_modification = entry
+        .times
+        .last_modification
         .map(|dt| dt.and_utc().timestamp());
 
     // Get last access time
-    let last_access = entry.times.last_access
-        .map(|dt| dt.and_utc().timestamp());
+    let last_access = entry.times.last_access.map(|dt| dt.and_utc().timestamp());
 
     // Get notes from Notes field
-    let notes = entry.fields.get("Notes")
+    let notes = entry
+        .fields
+        .get("Notes")
         .map(|value| value.get().to_string())
         .filter(|s| !s.is_empty());
 
     // Get SSH key from attachments (look for "ssh_key" or "private_key" attachment)
-    let ssh_key = entry.attachments.get("ssh_key")
+    let ssh_key = entry
+        .attachments
+        .get("ssh_key")
         .or_else(|| entry.attachments.get("private_key"))
         .or_else(|| entry.attachments.get("id_rsa"))
         .or_else(|| entry.attachments.get("id_ed25519"))
@@ -377,7 +416,9 @@ pub fn add_key(
     username: &str,
     password: &str,
 ) -> Result<()> {
-    add_key_with_ssh(kdbx_path, kpkey_path, domain, username, password, None, None)
+    add_key_with_ssh(
+        kdbx_path, kpkey_path, domain, username, password, None, None,
+    )
 }
 
 /// Add a new key with optional SSH key and notes to the KeePass database
@@ -494,7 +535,9 @@ pub fn update_key(
     username: &str,
     password: &str,
 ) -> Result<()> {
-    update_key_with_ssh(kdbx_path, kpkey_path, domain, username, password, None, None)
+    update_key_with_ssh(
+        kdbx_path, kpkey_path, domain, username, password, None, None,
+    )
 }
 
 /// Update or add a key with SSH key and notes to the KeePass database

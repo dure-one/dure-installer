@@ -142,7 +142,10 @@ fn main() -> Result<()> {
     }
 
     // Initialize global tray event handlers (one-time setup)
-    #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+    #[cfg(all(
+        not(any(target_os = "android", target_arch = "wasm32")),
+        not(target_os = "openbsd")
+    ))]
     dure::tray::init_tray_event_handlers();
 
     let force_gui = args.iter().any(|arg| arg == "--gui");
@@ -183,7 +186,10 @@ fn main() -> Result<()> {
 
         run_gui_mode()?;
     } else if force_tray {
-        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+        #[cfg(all(
+            not(any(target_os = "android", target_arch = "wasm32")),
+            not(target_os = "openbsd")
+        ))]
         {
             // Tray mode (explicitly requested via --tray flag)
             log::info!("Running in tray mode (--tray flag)");
@@ -233,7 +239,10 @@ fn main() -> Result<()> {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         dure::cli::run_cli_mode()?;
     } else {
-        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
+        #[cfg(all(
+            not(any(target_os = "android", target_arch = "wasm32")),
+            not(target_os = "openbsd")
+        ))]
         {
             // Tray mode (default for double-click on Windows - no terminal, no flags)
             log::info!("Running in tray mode (default - no terminal detected)");

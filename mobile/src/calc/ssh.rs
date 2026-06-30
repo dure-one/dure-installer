@@ -25,7 +25,8 @@ pub fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectionResul
 
     // Connect to TCP stream with 15 second timeout
     let timeout = Duration::from_secs(15);
-    let socket_addr = addr.to_socket_addrs()
+    let socket_addr = addr
+        .to_socket_addrs()
         .context(format!("Failed to resolve address: {}", addr))?
         .next()
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
@@ -54,7 +55,8 @@ pub fn execute_command(host_config: &SshHostConfig, command: &str) -> Result<Str
 
     // Connect to TCP stream with 15 second timeout
     let timeout = Duration::from_secs(15);
-    let socket_addr = addr.to_socket_addrs()
+    let socket_addr = addr
+        .to_socket_addrs()
         .context(format!("Failed to resolve address: {}", addr))?
         .next()
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
@@ -268,7 +270,10 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
                 }
             }
         } else {
-            errors.push(format!("Private key: file not found at '{}'", key_path.display()));
+            errors.push(format!(
+                "Private key: file not found at '{}'",
+                key_path.display()
+            ));
         }
     }
 
@@ -298,7 +303,10 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
     let mut error_msg = format!("Authentication failed for {}@host", username);
 
     if !attempted_methods.is_empty() {
-        error_msg.push_str(&format!("\nAttempted methods: {}", attempted_methods.join(", ")));
+        error_msg.push_str(&format!(
+            "\nAttempted methods: {}",
+            attempted_methods.join(", ")
+        ));
     }
 
     if !errors.is_empty() {
@@ -316,24 +324,29 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
 fn load_private_key_from_keyring(domain: &str, username: &str) -> Result<String> {
     use crate::calc::keyring;
 
-    let kdbx_path = keyring::get_default_kdbx_path()
-        .context("Failed to get kdbx path")?;
-    let kpkey_path = keyring::get_default_kpkey_path()
-        .context("Failed to get KPKey path")?;
+    let kdbx_path = keyring::get_default_kdbx_path().context("Failed to get kdbx path")?;
+    let kpkey_path = keyring::get_default_kpkey_path().context("Failed to get KPKey path")?;
 
     let keys = keyring::list_keys(&kdbx_path, Some(&kpkey_path))
         .context("Failed to list keys from keyring")?;
 
     // Find the key with matching domain and username
-    let key_entry = keys.iter()
+    let key_entry = keys
+        .iter()
         .find(|k| k.domain == domain && k.username == username)
-        .ok_or_else(|| anyhow::anyhow!("Key not found in keyring for domain '{}' and username '{}'", domain, username))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Key not found in keyring for domain '{}' and username '{}'",
+                domain,
+                username
+            )
+        })?;
 
     // Try to get SSH key from binary attachment first
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
         // Convert bytes to string (SSH private keys are text)
-        let private_key_str = String::from_utf8(ssh_key_bytes.clone())
-            .context("SSH key is not valid UTF-8")?;
+        let private_key_str =
+            String::from_utf8(ssh_key_bytes.clone()).context("SSH key is not valid UTF-8")?;
 
         Ok(private_key_str)
     } else {
@@ -341,7 +354,9 @@ fn load_private_key_from_keyring(domain: &str, username: &str) -> Result<String>
         if !key_entry.password.is_empty() {
             Ok(key_entry.password.clone())
         } else {
-            anyhow::bail!("No SSH key found in keyring entry. Please store the SSH private key as a binary attachment named 'ssh_key'.")
+            anyhow::bail!(
+                "No SSH key found in keyring entry. Please store the SSH private key as a binary attachment named 'ssh_key'."
+            )
         }
     }
 }
