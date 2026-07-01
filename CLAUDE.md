@@ -127,6 +127,31 @@ dure/
 
 ## Building
 
+### Prerequisites
+
+#### OpenBSD
+OpenBSD requires OpenSSL 3.5+ (uses eopenssl35 instead of LibreSSL):
+
+**Option 1: Using direnv (recommended)**
+```bash
+# Install direnv
+pkg_add direnv
+
+# Add to ~/.bashrc
+eval "$(direnv hook bash)"
+
+# Allow direnv in this project
+cd /path/to/dure
+direnv allow
+```
+
+**Option 2: Manual environment variables**
+```bash
+# Add to ~/.bashrc or ~/.profile
+export OPENSSL_LIB_DIR="/usr/local/lib/eopenssl35"
+export OPENSSL_INCLUDE_DIR="/usr/local/include/eopenssl35"
+```
+
 ### Desktop
 ```bash
 # Debug build
