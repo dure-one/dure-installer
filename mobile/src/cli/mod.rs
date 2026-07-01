@@ -791,32 +791,42 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             }
         },
         Commands::Info => {
+            use clap::CommandFactory;
+
             println!("Dure CLI Info:");
             println!("  Version: {}", env!("CARGO_PKG_VERSION"));
             println!("  Mode: CLI");
             println!();
-            println!("Hosting Control Commands:");
-            println!("  ns       - DNS nameserver record management");
-            println!("  platform - Platform management (GCP, Firebase, Supabase)");
-            println!("  hosting  - Hosting management (domain, DNS, VM, service)");
-            println!();
-            println!("Server Control Commands:");
-            println!("  acme     - SSL certificate management");
-            println!("  nft      - NFTables firewall management (SSH whitelist)");
-            println!("  wss      - WebSocket Secure server management");
-            println!("  webhook  - Webhook management and monitoring");
-            println!();
-            println!("Client Commands:");
-            println!("  dns      - DNS lookup with caching (A, AAAA, TXT records)");
-            println!("  key      - Key management (password manager with KeePass)");
-            println!("  ssh      - SSH host management");
-            println!("  audit    - Audit trail management (show/clear)");
-            println!();
-            println!("Common/Utility Commands:");
-            println!("  crypt    - Cryptographic operations (encrypt/decrypt)");
-            println!("  site     - Site management for site-to-site communication");
-            println!("  info     - Show this information");
-            println!("  init     - Initialize workspace");
+
+            // Define command categories
+            let categories = vec![
+                ("Hosting Control Commands", vec!["ns", "platform", "hosting"]),
+                ("Server Control Commands", vec!["acme", "nft", "wss", "webhook"]),
+                ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
+                ("Common/Utility Commands", vec!["crypt", "site", "info", "init"]),
+            ];
+
+            let mut cmd = Cli::command();
+
+            for (category, command_names) in categories {
+                println!("{}:", category);
+                for name in command_names {
+                    if let Some(subcmd) = cmd.find_subcommand_mut(name) {
+                        let about = subcmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+                        println!("  {:<8} - {}", name, about);
+
+                        // Print subcommands if any
+                        for sub in subcmd.get_subcommands() {
+                            if sub.get_name() == "help" {
+                                continue;
+                            }
+                            let sub_about = sub.get_about().map(|s| s.to_string()).unwrap_or_default();
+                            println!("    {:<10} - {}", sub.get_name(), sub_about);
+                        }
+                    }
+                }
+                println!();
+            }
         }
         Commands::Init { prefix, force } => {
             println!("Initializing Dure workspace...");
