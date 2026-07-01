@@ -48,13 +48,14 @@ jobs:
       - name: Install OpenSSL
         run: |
           choco install openssl -y
-          refreshenv
 
       - name: Build release binary
         env:
           # OAuth credentials from GitHub Secrets
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # OpenSSL location for openssl-sys crate
+          OPENSSL_DIR: C:\Program Files\OpenSSL-Win64
         run: |
           cd mobile
           cargo build --release --bin dure-desktop
