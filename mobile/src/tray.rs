@@ -6,6 +6,9 @@
 //! When "Show App" is clicked, it sends TrayExitAction::OpenGui via channel.
 //!
 
+// Allow unsafe code for platform-specific FFI (macOS CFRunLoop)
+#![allow(unsafe_code)]
+
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
 use std::sync::{Arc, OnceLock};

@@ -45,6 +45,11 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install OpenSSL
+        run: |
+          choco install openssl -y
+          refreshenv
+
       - name: Build release binary
         env:
           # OAuth credentials from GitHub Secrets
