@@ -81,10 +81,108 @@ get_architecture() {
     esac
 }
 
+downloader() {
+    local _url="$1"
+    local _dest="$2"
+    local _status
+
+    say "Downloading: $_url"
+
+    if check_cmd curl; then
+        if [ -n "$GITHUB_TOKEN" ]; then
+            curl --proto '=https' --tlsv1.2 -fsSL \
+                 -H "Accept: application/vnd.github+json" \
+                 -H "Authorization: Bearer $GITHUB_TOKEN" \
+                 -H "X-GitHub-Api-Version: 2026-03-10" \
+                 -o "$_dest" "$_url"
+            _status=$?
+        else
+            curl --proto '=https' --tlsv1.2 -fsSL \
+                 -o "$_dest" "$_url"
+            _status=$?
+        fi
+    elif check_cmd wget; then
+        if [ -n "$GITHUB_TOKEN" ]; then
+            wget --https-only --quiet \
+                 --header="Accept: application/vnd.github+json" \
+                 --header="Authorization: Bearer $GITHUB_TOKEN" \
+                 --header="X-GitHub-Api-Version: 2026-03-10" \
+                 -O "$_dest" "$_url"
+            _status=$?
+        else
+            wget --https-only --quiet \
+                 -O "$_dest" "$_url"
+            _status=$?
+        fi
+    fi
+
+    if [ $_status -ne 0 ]; then
+        err "Download failed: $_url"
+        exit 1
+    fi
+
+    # Check file exists and is non-empty
+    if [ ! -f "$_dest" ] || [ ! -s "$_dest" ]; then
+        err "Downloaded file is empty or missing: $_dest"
+        exit 1
+    fi
+
+    say "Downloaded to: $_dest"
+}
+
+get_release_metadata() {
+    local _url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
+    local _temp_file
+    local _response
+
+    _temp_file=$(mktemp)
+
+    downloader "$_url" "$_temp_file"
+    _response=$(cat "$_temp_file")
+    rm "$_temp_file"
+
+    # Check if release exists
+    if echo "$_response" | grep -q '"message":"Not Found"'; then
+        err "No stable releases available yet"
+        err "Try: DURE_CHANNEL=dev $0"
+        exit 1
+    fi
+
+    echo "$_response"
+}
+
+get_artifact_metadata() {
+    local _url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/artifacts"
+    local _temp_file
+    local _response
+
+    _temp_file=$(mktemp)
+
+    downloader "$_url" "$_temp_file"
+    _response=$(cat "$_temp_file")
+    rm "$_temp_file"
+
+    echo "$_response"
+}
+
 main() {
     local _arch
 
     say "Dure installer"
+
+    # Check dependencies
+    need_cmd uname
+    need_cmd mktemp
+    need_cmd chmod
+    need_cmd mkdir
+    need_cmd rm
+    need_cmd sha256sum
+
+    # Check downloader
+    if ! check_cmd curl && ! check_cmd wget; then
+        err "Neither curl nor wget found. Please install one and try again."
+        exit 1
+    fi
 
     # Detect platform
     _arch=$(get_architecture)
