@@ -43,6 +43,7 @@ include:
   - index.md
   - fastlane
   - README.md
+  - install.sh
   # - google1fadff23415819bc.html
 
 # Theme settings

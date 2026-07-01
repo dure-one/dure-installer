@@ -43,9 +43,32 @@ Complete installation instructions for `dure`, a distributed e-commerce platform
 
 ---
 
-## Quick Install
+## Quick Install (Recommended)
 
-Dure is currently in planning/development phase. Installation methods will be available once the initial release is ready.
+Install dure with a single command:
+
+### Stable Release (Recommended)
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://dure.one/install.sh | sh
+```
+
+### Development Build (Latest)
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://dure.one/install.sh | DURE_CHANNEL=dev sh
+```
+
+### Options
+
+- **Quiet mode:** Add `DURE_QUIET=1` to suppress output
+- **Custom channel:** Set `DURE_CHANNEL=dev` for development builds
+
+The installer will:
+1. Detect your platform (Linux x86_64 only)
+2. Download and verify the binary with SHA256
+3. Install to `~/.local/bin/dure`
+4. Add to your PATH automatically
+
+**Note:** Currently only supports Linux x86_64. arm64/aarch64 support coming soon.
 
 ---
 
