@@ -26,7 +26,7 @@ pub enum WinHttpdError {
 /// Type alias for Results using WinHttpdError
 pub type Result<T> = std::result::Result<T, WinHttpdError>;
 
-// Modules will be added in later tasks
+mod ffi;
 
 #[cfg(test)]
 mod tests {
