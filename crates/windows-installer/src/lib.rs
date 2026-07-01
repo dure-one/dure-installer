@@ -1,9 +1,35 @@
 //! Windows installer utilities for Dure
 //!
-//! Provides Windows-specific installation operations that require COM APIs.
-//! This crate uses unsafe code for COM interop.
+//! Provides Windows-specific installation and GUI operations that require unsafe code.
+//! This crate isolates platform-specific unsafe operations.
 
 use std::path::PathBuf;
+
+/// Hide the console window on Windows
+///
+/// This is typically used when running GUI applications that are compiled
+/// with windows_subsystem = "windows" but still have a console attached.
+///
+/// # Platform
+/// This function is only available on Windows and will do nothing on other platforms.
+#[cfg(target_os = "windows")]
+pub fn hide_console() {
+    use windows_sys::Win32::System::Console::GetConsoleWindow;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{SW_HIDE, ShowWindow};
+
+    unsafe {
+        let console_window = GetConsoleWindow();
+        if !console_window.is_null() {
+            ShowWindow(console_window, SW_HIDE);
+        }
+    }
+}
+
+/// Stub for non-Windows platforms
+#[cfg(not(target_os = "windows"))]
+pub fn hide_console() {
+    // No-op on non-Windows platforms
+}
 
 /// Create a Windows shortcut (.lnk file)
 ///
