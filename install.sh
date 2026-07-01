@@ -254,6 +254,64 @@ install_binary() {
     say "Installed to $_dest"
 }
 
+setup_path() {
+    local _bin_dir="$HOME/.local/bin"
+    local _shell_config
+    local _shell_name
+
+    # Check if already in PATH
+    case ":$PATH:" in
+        *:"$_bin_dir":*)
+            say "$_bin_dir is already in PATH"
+            return 0
+            ;;
+    esac
+
+    # Detect shell config file
+    if [ -n "${BASH_VERSION:-}" ]; then
+        _shell_config="$HOME/.bashrc"
+        _shell_name="bash"
+    elif [ -n "${ZSH_VERSION:-}" ]; then
+        _shell_config="$HOME/.zshrc"
+        _shell_name="zsh"
+    else
+        # Default to .profile for POSIX shells
+        _shell_config="$HOME/.profile"
+        _shell_name="sh"
+    fi
+
+    say "Detected shell: $_shell_name"
+
+    # Check if config file exists, create if not
+    if [ ! -f "$_shell_config" ]; then
+        if ! touch "$_shell_config"; then
+            warn "Could not create $_shell_config"
+            warn "Manually add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
+            return 1
+        fi
+    fi
+
+    # Check if PATH export already exists
+    if grep -q "^export PATH=.*\.local/bin" "$_shell_config"; then
+        say "PATH already configured in $_shell_config"
+        return 0
+    fi
+
+    # Append PATH export
+    if ! {
+        echo ""
+        echo "# Added by dure installer"
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\""
+    } >> "$_shell_config"; then
+        warn "Could not modify $_shell_config"
+        warn "Manually add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
+        return 1
+    fi
+
+    say "Added to PATH in $_shell_config"
+    say "Run 'source $_shell_config' or restart your shell to use dure"
+}
+
 main() {
     local _arch
 
