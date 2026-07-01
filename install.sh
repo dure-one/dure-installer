@@ -205,6 +205,55 @@ verify_checksum() {
     fi
 }
 
+install_binary() {
+    local _src="$1"
+    local _dest_name="${2:-dure}"
+    local _dest="$HOME/.local/bin/$_dest_name"
+    local _response
+
+    # Check for existing installation
+    if [ -f "$_dest" ]; then
+        warn "$_dest_name is already installed at $_dest"
+
+        # Prompt for overwrite (skip if non-interactive)
+        if [ -t 0 ]; then
+            printf "Overwrite? (y/N) " >&2
+            read -r _response
+            case "$_response" in
+                [yY]|[yY][eE][sS])
+                    say "Overwriting existing installation..."
+                    ;;
+                *)
+                    say "Installation cancelled"
+                    exit 0
+                    ;;
+            esac
+        else
+            # Non-interactive: overwrite silently
+            say "Overwriting existing installation (non-interactive mode)..."
+        fi
+    fi
+
+    # Create directory if needed
+    if ! mkdir -p "$HOME/.local/bin"; then
+        err "Failed to create directory: $HOME/.local/bin"
+        exit 1
+    fi
+
+    # Copy and set permissions
+    if ! cp "$_src" "$_dest"; then
+        err "Failed to install binary to $_dest"
+        exit 1
+    fi
+
+    if ! chmod +x "$_dest"; then
+        err "Failed to set executable permissions on $_dest"
+        exit 1
+    fi
+
+    say "Installed to $_dest"
+}
+
 main() {
     local _arch
 
