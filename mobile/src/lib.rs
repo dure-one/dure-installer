@@ -55,6 +55,9 @@ pub mod tray;
 // WSS server/client (HTTPS + WebSocket Secure)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod wss;
+// HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod http_server;
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 // pub mod attestation;
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
