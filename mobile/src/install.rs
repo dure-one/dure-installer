@@ -838,6 +838,7 @@ fn install_windows(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String
 }
 
 #[cfg(target_os = "windows")]
+#[allow(unsafe_code)] // Required for Windows COM APIs
 fn create_windows_shortcut(target: &PathBuf, shortcut_path: &PathBuf) -> Result<(), String> {
     use windows::Win32::System::Com::{
         CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
