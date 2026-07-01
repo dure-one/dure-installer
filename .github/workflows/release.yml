@@ -45,17 +45,18 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install OpenSSL
+      - name: Install OpenSSL via vcpkg
         run: |
-          choco install openssl -y
+          vcpkg install openssl:x64-windows-static-md
+          vcpkg integrate install
 
       - name: Build release binary
         env:
           # OAuth credentials from GitHub Secrets
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-          # OpenSSL location for openssl-sys crate
-          OPENSSL_DIR: C:\Program Files\OpenSSL-Win64
+          # Use vcpkg for OpenSSL
+          VCPKG_ROOT: C:\vcpkg
         run: |
           cd mobile
           cargo build --release --bin dure-desktop
