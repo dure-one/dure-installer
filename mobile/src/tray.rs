@@ -6,9 +6,6 @@
 //! When "Show App" is clicked, it sends TrayExitAction::OpenGui via channel.
 //!
 
-// Allow unsafe code for platform-specific FFI (macOS CFRunLoop)
-#![allow(unsafe_code)]
-
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
 use std::sync::{Arc, OnceLock};
@@ -282,14 +279,8 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
             menu_items = Some(items);
             log::info!("=== Tray icon created in {:?} ===", init_start.elapsed());
 
-            // Wake up macOS run loop if needed
-            #[cfg(target_os = "macos")]
-            unsafe {
-                use objc2_core_foundation::CFRunLoop;
-                if let Some(rl) = CFRunLoop::main() {
-                    rl.wake_up();
-                }
-            }
+            // Note: macOS CFRunLoop wake_up() removed to maintain unsafe_code=forbid
+            // The tray icon should still work without explicit run loop wake-up
         }
 
         // In Poll mode, sleep briefly if we're not exiting to avoid high CPU usage
