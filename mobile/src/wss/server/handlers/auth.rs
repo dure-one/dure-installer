@@ -139,7 +139,7 @@ pub async fn handle_logout(
 // ============================================================================
 
 /// Handle WebAuthn signup begin request
-#[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "openbsd")))]
+#[cfg(any())] // Disabled: go-webauthn crate excluded from workspace
 pub async fn handle_webauthn_signup_begin(
     req: WebAuthnSignupBeginRequest,
 ) -> Result<WebAuthnSignupBeginResponse> {
@@ -185,7 +185,7 @@ pub async fn handle_webauthn_signup_begin(
 }
 
 /// Handle WebAuthn signup finish request
-#[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "openbsd")))]
+#[cfg(any())] // Disabled: go-webauthn crate excluded from workspace
 pub async fn handle_webauthn_signup_finish(
     req: WebAuthnSignupFinishRequest,
 ) -> Result<WebAuthnSignupFinishResponse> {
@@ -227,7 +227,7 @@ pub async fn handle_webauthn_signup_finish(
 }
 
 /// Handle WebAuthn signin begin request
-#[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "openbsd")))]
+#[cfg(any())] // Disabled: go-webauthn crate excluded from workspace
 pub async fn handle_webauthn_signin_begin(
     req: WebAuthnSigninBeginRequest,
 ) -> Result<WebAuthnSigninBeginResponse> {
@@ -274,7 +274,7 @@ pub async fn handle_webauthn_signin_begin(
 }
 
 /// Handle WebAuthn signin finish request
-#[cfg(not(any(target_arch = "wasm32", target_os = "android", target_os = "openbsd")))]
+#[cfg(any())] // Disabled: go-webauthn crate excluded from workspace
 pub async fn handle_webauthn_signin_finish(
     req: WebAuthnSigninFinishRequest,
 ) -> Result<WebAuthnSigninFinishResponse> {
