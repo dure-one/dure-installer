@@ -28,18 +28,6 @@ use dure::dure::DureApp;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
 
-#[cfg(target_os = "windows")]
-fn hide_console() {
-    use windows_sys::Win32::System::Console::GetConsoleWindow;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{SW_HIDE, ShowWindow};
-
-    unsafe {
-        let console_window = GetConsoleWindow();
-        if !console_window.is_null() {
-            ShowWindow(console_window, SW_HIDE);
-        }
-    }
-}
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
@@ -182,7 +170,7 @@ fn main() -> Result<()> {
 
         // Hide console window on Windows
         #[cfg(target_os = "windows")]
-        hide_console();
+        windows_installer::hide_console();
 
         run_gui_mode()?;
     } else if force_tray {
@@ -196,7 +184,7 @@ fn main() -> Result<()> {
 
             // Hide console window on Windows
             #[cfg(target_os = "windows")]
-            hide_console();
+            windows_installer::hide_console();
 
             // Start tray mode on separate thread
             log::info!("*** Starting tray mode on separate thread ***");
@@ -249,7 +237,7 @@ fn main() -> Result<()> {
 
             // Hide console window on Windows
             #[cfg(target_os = "windows")]
-            hide_console();
+            windows_installer::hide_console();
 
             // Start tray mode on separate thread
             log::info!("*** Starting tray mode on separate thread ***");

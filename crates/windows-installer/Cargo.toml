@@ -19,6 +19,10 @@ windows = { version = "0.58", features = [
     "Win32_System_Com",
     "Win32_Foundation",
 ] }
+windows-sys = { version = "0.59", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Console",
+] }
 
 [lib]
 name = "windows_installer"
