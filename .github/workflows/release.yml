@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dure-desktop-linux
-          path: mobile/target/release/dure-desktop
+          path: target/release/dure-desktop
 
   build-windows:
     runs-on: windows-latest
@@ -71,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dure-desktop-windows
-          path: mobile/target/release/dure-desktop.exe
+          path: target/release/dure-desktop.exe
 
   build-macos:
     runs-on: macos-latest
@@ -96,7 +96,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dure-desktop-macos
-          path: mobile/target/release/dure-desktop
+          path: target/release/dure-desktop
 
   create-release:
     needs: [build-linux, build-windows, build-macos]
