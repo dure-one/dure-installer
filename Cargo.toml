@@ -5,6 +5,7 @@ members = [
     "crates/darkhttpd-sys",
     "crates/winhttpd-sys",
     "crates/go-webauthn-client",
+    "crates/windows-installer",
 ]
 exclude = [
     "crates/asyncapi-gen",  # Standalone workspace for AsyncAPI generation
