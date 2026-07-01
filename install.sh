@@ -312,6 +312,145 @@ setup_path() {
     say "Run 'source $_shell_config' or restart your shell to use dure"
 }
 
+install_from_release() {
+    local _metadata
+    local _binary_url
+    local _checksum_url
+    local _temp_dir
+    local _binary_path
+    local _checksum_path
+
+    say "Running in stable mode"
+    say "Fetching latest release from GitHub..."
+
+    # Get release metadata
+    _metadata=$(get_release_metadata)
+
+    # Parse binary and checksum URLs from release assets
+    # Expected asset names: "dure-desktop-linux" and "dure-desktop-linux.sha256"
+    _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop-linux"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | head -1)
+    _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop-linux\.sha256"' | grep -o 'https://[^"]*' | head -1)
+
+    if [ -z "$_binary_url" ]; then
+        err "Could not find dure-desktop-linux in release assets"
+        err "This release may be incomplete."
+        exit 1
+    fi
+
+    if [ -z "$_checksum_url" ]; then
+        err "Could not find dure-desktop-linux.sha256 in release assets"
+        err "This release may be incomplete."
+        exit 1
+    fi
+
+    # Create temp directory
+    _temp_dir=$(mktemp -d -t dure-install.XXXXXXXXXX)
+
+    # Setup cleanup trap
+    trap "rm -rf '$_temp_dir'" EXIT
+
+    _binary_path="$_temp_dir/dure-desktop-linux"
+    _checksum_path="$_temp_dir/dure-desktop-linux.sha256"
+
+    # Download binary and checksum
+    downloader "$_binary_url" "$_binary_path"
+    downloader "$_checksum_url" "$_checksum_path"
+
+    # Verify checksum
+    verify_checksum "$_binary_path" "$_checksum_path"
+
+    # Install binary
+    install_binary "$_binary_path" "dure"
+
+    # Setup PATH
+    setup_path
+
+    say "Installation complete!"
+    say "Run 'dure --version' to verify installation"
+}
+
+install_from_artifacts() {
+    local _metadata
+    local _artifact_url
+    local _artifact_digest
+    local _checksum_url
+    local _temp_dir
+    local _binary_path
+    local _checksum_path
+    local _artifact_zip
+
+    say "Running in dev mode"
+    say "Fetching latest artifacts from GitHub..."
+
+    # Get artifact metadata
+    _metadata=$(get_artifact_metadata)
+
+    # Filter for dure-desktop-linux artifact (latest)
+    # Parse JSON manually (no jq dependency)
+    _artifact_url=$(echo "$_metadata" | grep -B5 '"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"' | grep '"archive_download_url"' | head -1 | grep -o 'https://[^"]*')
+    _artifact_digest=$(echo "$_metadata" | grep -B5 '"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"' | grep '"digest"' | head -1 | grep -o 'sha256:[a-f0-9]*' | cut -d: -f2)
+
+    if [ -z "$_artifact_url" ]; then
+        err "Could not find dure-desktop-linux artifact"
+        err "No development builds available."
+        exit 1
+    fi
+
+    if [ -z "$_artifact_digest" ]; then
+        warn "Could not find digest for artifact, will download checksum file"
+    fi
+
+    # Create temp directory
+    _temp_dir=$(mktemp -d -t dure-install.XXXXXXXXXX)
+
+    # Setup cleanup trap
+    trap "rm -rf '$_temp_dir'" EXIT
+
+    _artifact_zip="$_temp_dir/artifact.zip"
+    _binary_path="$_temp_dir/dure-desktop"
+    _checksum_path="$_temp_dir/dure-desktop-linux.sha256"
+
+    # Download artifact (it's a zip file)
+    need_cmd unzip
+    downloader "$_artifact_url" "$_artifact_zip"
+
+    # Extract artifact
+    say "Extracting artifact..."
+    if ! unzip -q "$_artifact_zip" -d "$_temp_dir"; then
+        err "Failed to extract artifact"
+        exit 1
+    fi
+
+    # The artifact should contain dure-desktop and dure-desktop-linux.sha256
+    if [ ! -f "$_binary_path" ]; then
+        err "Binary not found in artifact: dure-desktop"
+        exit 1
+    fi
+
+    if [ ! -f "$_checksum_path" ]; then
+        # If checksum file not in artifact, create one from digest
+        if [ -n "$_artifact_digest" ]; then
+            say "Using digest from API"
+            echo "$_artifact_digest  dure-desktop" > "$_checksum_path"
+        else
+            err "Checksum file not found and no digest available"
+            exit 1
+        fi
+    fi
+
+    # Verify checksum
+    verify_checksum "$_binary_path" "$_checksum_path"
+
+    # Install binary
+    install_binary "$_binary_path" "dure"
+
+    # Setup PATH
+    setup_path
+
+    say "Installation complete!"
+    say "Run 'dure --version' to verify installation"
+}
+
 main() {
     local _arch
 
@@ -336,6 +475,21 @@ main() {
     say "Detected platform: $_arch"
 
     say "Channel: $CHANNEL"
+
+    # Run installation based on channel
+    case "$CHANNEL" in
+        stable)
+            install_from_release
+            ;;
+        dev)
+            install_from_artifacts
+            ;;
+        *)
+            err "Invalid DURE_CHANNEL: $CHANNEL"
+            err "Valid options: stable, dev"
+            exit 1
+            ;;
+    esac
 }
 
 main "$@"
