@@ -1,7 +1,6 @@
 # Cargo configuration for Dure project
-
-# OpenSSL configuration for OpenBSD only
-# Points to OpenSSL 3.5.7 installation instead of LibreSSL
-[target.'cfg(target_os = "openbsd")'.env]
-OPENSSL_LIB_DIR = "/usr/local/lib/eopenssl35"
-OPENSSL_INCLUDE_DIR = "/usr/local/include/eopenssl35"
+#
+# Note: OpenSSL environment variables should be set in your shell profile
+# For OpenBSD with eopenssl35:
+#   export OPENSSL_LIB_DIR="/usr/local/lib/eopenssl35"
+#   export OPENSSL_INCLUDE_DIR="/usr/local/include/eopenssl35"

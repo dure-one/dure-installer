@@ -85,10 +85,13 @@ pub fn get_default_kppubkey_path() -> Result<PathBuf> {
 
 /// Generate Ed25519 key pair if it doesn't exist (using go-webauthn)
 ///
-/// Uses go-webauthn crypto bridge to generate keys.
+/// Uses ed25519-dalek directly for key generation.
 /// Available on desktop (except OpenBSD) and Android.
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "openbsd")))]
 pub fn ensure_kpkey_exists() -> Result<PathBuf> {
+    use ed25519_dalek::SigningKey;
+    use rand::RngCore;
+
     let kpkey_path = get_default_kpkey_path()?;
     let kppubkey_path = get_default_kppubkey_path()?;
 
@@ -97,32 +100,31 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         return Ok(kpkey_path);
     }
 
+    eprintln!("Generating Ed25519 keypair for KeePass...");
+
     // Create config directory if it doesn't exist
     let config_dir = get_config_dir()?;
     create_dir_all(&config_dir)?;
 
-    // Generate Ed25519 key pair using go-webauthn
-    use go_webauthn::*;
-    use pollster::block_on;
+    // Generate random 32 bytes for the key
+    let mut rng = rand::thread_rng();
+    let mut secret_bytes = [0u8; 32];
+    rng.fill_bytes(&mut secret_bytes);
 
-    let gen_req = Ed25519GenerateKeyRequest {};
-    let gen_resp = block_on(crypto_ed25519_generate_key(&gen_req));
+    // Generate key pair
+    let signing_key = SigningKey::from_bytes(&secret_bytes);
+    let verifying_key = signing_key.verifying_key();
 
-    if !gen_resp.success {
-        anyhow::bail!("Failed to generate Ed25519 key: {}", gen_resp.error);
-    }
-
-    // Write private key to KPKey
-    let mut kpkey_file = File::create(&kpkey_path).context("Failed to create KPKey")?;
-    kpkey_file
-        .write_all(&gen_resp.private_key)
+    // Save private key
+    let mut priv_file = File::create(&kpkey_path).context("Failed to create KPKey file")?;
+    priv_file
+        .write_all(&secret_bytes)
         .context("Failed to write private key")?;
 
-    // Write public key to KPPubKey file
-    let mut kppubkey_file =
-        File::create(&kppubkey_path).context("Failed to create KPPubKey file")?;
-    kppubkey_file
-        .write_all(&gen_resp.public_key)
+    // Save public key
+    let mut pub_file = File::create(&kppubkey_path).context("Failed to create KPPubKey file")?;
+    pub_file
+        .write_all(verifying_key.as_bytes())
         .context("Failed to write public key")?;
 
     eprintln!("✓ Generated new Ed25519 key pair:");
