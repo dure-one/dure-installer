@@ -154,6 +154,7 @@ libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
 winhttpd-sys = { path = "../crates/winhttpd-sys" }
+windows-installer = { path = "../crates/windows-installer" }
 windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Console",

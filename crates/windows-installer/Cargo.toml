@@ -1,0 +1,25 @@
+[package]
+name = "windows-installer"
+version = "0.1.0"
+edition = "2021"
+authors = ["dure contributors"]
+description = "Windows installation utilities for Dure (COM-based shortcut creation)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/nikescar/dure"
+
+[lints.rust]
+unsafe_code = "allow" # Required for Windows COM APIs
+
+[dependencies]
+log = "0.4"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_UI_Shell",
+    "Win32_System_Com",
+    "Win32_Foundation",
+] }
+
+[lib]
+name = "windows_installer"
+path = "src/lib.rs"
