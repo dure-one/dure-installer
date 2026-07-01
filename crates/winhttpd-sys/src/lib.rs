@@ -1,7 +1,55 @@
 //! Rust FFI bindings for winhttpd - Windows HTTP server
 //!
-//! Provides safe Rust wrapper around winhttpd C library for serving
-//! static files on Windows. API matches darkhttpd-sys for cross-platform compatibility.
+//! This crate provides safe Rust bindings to [winhttpd](https://github.com/FmasterofU/winhttpd),
+//! a Windows port of the darkhttpd static file server. It enables serving static files
+//! on Windows with an API identical to `darkhttpd-sys`.
+//!
+//! # Platform Support
+//!
+//! This crate is **Windows-only** (MSVC compiler required). For Unix-like systems,
+//! use `darkhttpd-sys` which provides an identical API.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use winhttpd_sys::WinHttpd;
+//!
+//! let mut server = WinHttpd::new();
+//! server.serve("./www", 8080).expect("Failed to start server");
+//!
+//! // Server runs until stopped
+//! server.stop().expect("Failed to stop server");
+//! // Or server automatically stops when dropped
+//! ```
+//!
+//! # Cross-Platform Usage
+//!
+//! For cross-platform code, use type aliasing:
+//!
+//! ```ignore
+//! #[cfg(not(target_os = "windows"))]
+//! use darkhttpd_sys::DarkHttpd as HttpServer;
+//!
+//! #[cfg(target_os = "windows")]
+//! use winhttpd_sys::WinHttpd as HttpServer;
+//!
+//! fn start_server(port: u16) -> Result<(), Box<dyn std::error::Error>> {
+//!     let mut server = HttpServer::new();
+//!     server.serve("./www", port)?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Safety
+//!
+//! This crate uses FFI to call C functions. All unsafe code is encapsulated
+//! in the `ffi` module. The public API is safe to use.
+//!
+//! # Build Requirements
+//!
+//! - Windows with MSVC compiler
+//! - `cc` crate for building C source
+//! - Links against `ws2_32.lib` (Windows sockets)
 
 #![allow(unsafe_code)] // Required for FFI
 
