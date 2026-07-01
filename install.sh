@@ -165,6 +165,46 @@ get_artifact_metadata() {
     echo "$_response"
 }
 
+verify_checksum() {
+    local _binary="$1"
+    local _checksum_file="$2"
+    local _binary_dir
+    local _binary_name
+    local _expected
+    local _actual
+
+    need_cmd sha256sum
+
+    say "Verifying SHA256 checksum..."
+
+    # Verify checksum file format
+    if ! grep -qE '^[a-f0-9]{64} ' "$_checksum_file"; then
+        err "Invalid checksum file format"
+        exit 1
+    fi
+
+    # Change to binary directory for relative path matching
+    _binary_dir=$(dirname "$_binary")
+    _binary_name=$(basename "$_binary")
+
+    cd "$_binary_dir" || exit 1
+
+    # Verify checksum
+    if sha256sum -c "$_checksum_file" >/dev/null 2>&1; then
+        say "SHA256 verification passed"
+        cd - >/dev/null || exit 1
+    else
+        _expected=$(awk '{print $1}' "$_checksum_file")
+        _actual=$(sha256sum "$_binary_name" | awk '{print $1}')
+
+        err "SHA256 verification failed"
+        err "Expected: $_expected"
+        err "Got:      $_actual"
+        err "The download may be corrupted. Try again."
+        exit 1
+    fi
+}
+
 main() {
     local _arch
 
