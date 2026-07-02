@@ -142,20 +142,22 @@ get_release_metadata() {
     # Public releases don't need authentication, so try without token first
     say "Downloading: $_url"
     if check_cmd curl; then
-        curl --proto '=https' --tlsv1.2 -fsSL \
+        curl --proto '=https' --tlsv1.2 -sSL \
              -H "Accept: application/vnd.github+json" \
-             -o "$_temp_file" "$_url"
+             -o "$_temp_file" "$_url" 2>/dev/null
         _status=$?
     elif check_cmd wget; then
         wget --https-only --quiet \
              --header="Accept: application/vnd.github+json" \
-             -O "$_temp_file" "$_url"
+             -O "$_temp_file" "$_url" 2>/dev/null
         _status=$?
     fi
 
-    if [ $_status -ne 0 ]; then
-        err "Download failed: $_url"
+    # Check for HTTP errors (404, etc.)
+    if [ $_status -ne 0 ] || [ ! -s "$_temp_file" ]; then
         rm "$_temp_file"
+        err "No stable releases available yet"
+        err "Try: DURE_CHANNEL=dev $0"
         exit 1
     fi
 
@@ -169,7 +171,7 @@ get_release_metadata() {
         exit 1
     fi
 
-    say "Downloaded to: $_temp_file"
+    say "Release metadata retrieved"
     echo "$_response"
 }
 
@@ -433,6 +435,7 @@ install_from_artifacts() {
     local _binary_path
     local _checksum_path
     local _artifact_zip
+    local _artifact_block
 
     say "Running in dev mode"
     say "Fetching latest artifacts from GitHub..."
@@ -442,11 +445,20 @@ install_from_artifacts() {
 
     # Filter for dure-desktop-linux artifact (latest)
     # Parse JSON manually (no jq dependency)
-    _artifact_url=$(echo "$_metadata" | grep -B5 '"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"' | grep '"archive_download_url"' | head -1 | grep -o 'https://[^"]*')
-    _artifact_digest=$(echo "$_metadata" | grep -B5 '"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"' | grep '"digest"' | head -1 | grep -o 'sha256:[a-f0-9]*' | cut -d: -f2)
+    # Extract the artifact block containing dure-desktop-linux
+    _artifact_block=$(echo "$_metadata" | sed -n '/"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"/,/}/p' | head -20)
+
+    if [ -z "$_artifact_block" ]; then
+        err "Could not find dure-desktop-linux artifact"
+        err "No development builds available."
+        exit 1
+    fi
+
+    _artifact_url=$(echo "$_artifact_block" | grep '"archive_download_url"' | head -1 | sed 's/.*"archive_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    _artifact_digest=$(echo "$_artifact_block" | grep '"digest"' | head -1 | sed 's/.*"digest"[[:space:]]*:[[:space:]]*"sha256:\([a-f0-9]*\)".*/\1/')
 
     if [ -z "$_artifact_url" ]; then
-        err "Could not find dure-desktop-linux artifact"
+        err "Could not find artifact download URL"
         err "No development builds available."
         exit 1
     fi
