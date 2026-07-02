@@ -42,7 +42,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CLOUDFLARE_PAGES_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-          
+
+      - name: Upload install.sh to Cloudflare R2
+        run: |
+          npx wrangler@latest r2 object put dure-one/install.sh \
+            --file=install.sh \
+            --content-type="text/x-shellscript" \
+            --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # bash ghworkflow.sh --no-deploy --src-path ../
       # - name: Setup Pages
       #   uses: actions/configure-pages@v5
