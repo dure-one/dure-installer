@@ -44,9 +44,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
 
-      - name: Upload install.sh to Cloudflare R2
+      - name: Upload install.sh to Cloudflare R2 as index.html
         run: |
-          npx wrangler@latest r2 object put dure-one/install.sh \
+          npx wrangler@latest r2 object put dure-one/index.html \
             --file=install.sh \
             --content-type="text/x-shellscript" \
             --remote
