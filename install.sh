@@ -93,7 +93,7 @@ downloader() {
             curl --proto '=https' --tlsv1.2 -fsSL \
                  -H "Accept: application/vnd.github+json" \
                  -H "Authorization: Bearer $GITHUB_TOKEN" \
-                 -H "X-GitHub-Api-Version: 2026-03-10" \
+                 -H "X-GitHub-Api-Version: 2022-11-28" \
                  -o "$_dest" "$_url"
             _status=$?
         else
@@ -106,7 +106,7 @@ downloader() {
             wget --https-only --quiet \
                  --header="Accept: application/vnd.github+json" \
                  --header="Authorization: Bearer $GITHUB_TOKEN" \
-                 --header="X-GitHub-Api-Version: 2026-03-10" \
+                 --header="X-GitHub-Api-Version: 2022-11-28" \
                  -O "$_dest" "$_url"
             _status=$?
         else
