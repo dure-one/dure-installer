@@ -1,6 +1,0 @@
-# Cargo configuration for Dure project
-#
-# Note: OpenSSL environment variables should be set in your shell profile
-# For OpenBSD with eopenssl35:
-#   export OPENSSL_LIB_DIR="/usr/local/lib/eopenssl35"
-#   export OPENSSL_INCLUDE_DIR="/usr/local/include/eopenssl35"
