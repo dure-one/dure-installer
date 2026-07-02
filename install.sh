@@ -5,7 +5,8 @@
 set -u
 
 # Configuration
-GITHUB_TOKEN="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"
+# Allow users to override with their own token via environment variable
+GITHUB_TOKEN="${GITHUB_TOKEN:-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}"
 REPO_OWNER="nikescar"
 REPO_NAME="dure"
 CHANNEL="${DURE_CHANNEL:-stable}"
@@ -134,10 +135,30 @@ get_release_metadata() {
     local _url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest"
     local _temp_file
     local _response
+    local _status
 
     _temp_file=$(mktemp)
 
-    downloader "$_url" "$_temp_file"
+    # Public releases don't need authentication, so try without token first
+    say "Downloading: $_url"
+    if check_cmd curl; then
+        curl --proto '=https' --tlsv1.2 -fsSL \
+             -H "Accept: application/vnd.github+json" \
+             -o "$_temp_file" "$_url"
+        _status=$?
+    elif check_cmd wget; then
+        wget --https-only --quiet \
+             --header="Accept: application/vnd.github+json" \
+             -O "$_temp_file" "$_url"
+        _status=$?
+    fi
+
+    if [ $_status -ne 0 ]; then
+        err "Download failed: $_url"
+        rm "$_temp_file"
+        exit 1
+    fi
+
     _response=$(cat "$_temp_file")
     rm "$_temp_file"
 
@@ -148,6 +169,7 @@ get_release_metadata() {
         exit 1
     fi
 
+    say "Downloaded to: $_temp_file"
     echo "$_response"
 }
 
@@ -155,13 +177,46 @@ get_artifact_metadata() {
     local _url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/artifacts"
     local _temp_file
     local _response
+    local _status
+
+    if [ -z "$GITHUB_TOKEN" ]; then
+        err "GitHub token required for dev mode"
+        err "Set GITHUB_TOKEN environment variable with a valid token"
+        exit 1
+    fi
 
     _temp_file=$(mktemp)
 
-    downloader "$_url" "$_temp_file"
+    # Artifacts endpoint requires authentication
+    say "Downloading: $_url"
+    if check_cmd curl; then
+        curl --proto '=https' --tlsv1.2 -fsSL \
+             -H "Accept: application/vnd.github+json" \
+             -H "Authorization: Bearer $GITHUB_TOKEN" \
+             -H "X-GitHub-Api-Version: 2022-11-28" \
+             -o "$_temp_file" "$_url"
+        _status=$?
+    elif check_cmd wget; then
+        wget --https-only --quiet \
+             --header="Accept: application/vnd.github+json" \
+             --header="Authorization: Bearer $GITHUB_TOKEN" \
+             --header="X-GitHub-Api-Version: 2022-11-28" \
+             -O "$_temp_file" "$_url"
+        _status=$?
+    fi
+
+    if [ $_status -ne 0 ]; then
+        err "Download failed: $_url"
+        err "This may indicate an invalid or expired GitHub token"
+        err "Try setting GITHUB_TOKEN environment variable with a valid token"
+        rm "$_temp_file"
+        exit 1
+    fi
+
     _response=$(cat "$_temp_file")
     rm "$_temp_file"
 
+    say "Downloaded to: $_temp_file"
     echo "$_response"
 }
 
