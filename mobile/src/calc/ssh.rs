@@ -1,12 +1,14 @@
 //! SSH management functionality
 //!
 //! Provides SSH connection and server initialization capabilities
+//! Uses russh (pure Rust SSH, no OpenSSL dependency)
 
 use anyhow::{Context, Result};
-use ssh2::Session;
-use std::io::Read;
-use std::net::{TcpStream, ToSocketAddrs};
+use russh::client::{self, Handle};
+use russh_keys::key::PublicKey;
+use std::net::ToSocketAddrs;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::config::SshHostConfig;
@@ -18,29 +20,52 @@ pub struct SshConnectionResult {
     pub message: String,
 }
 
+/// SSH client handler
+struct Client;
+
+#[async_trait::async_trait]
+impl client::Handler for Client {
+    type Error = anyhow::Error;
+
+    async fn check_server_key(
+        &mut self,
+        _server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
+        // Accept all server keys for now
+        // TODO: Implement proper host key verification
+        Ok(true)
+    }
+}
+
 /// Connect to SSH host and verify connection
-pub fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectionResult> {
+pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectionResult> {
     let (username, hostname) = parse_ssh_host(&host_config.host)?;
     let addr = format!("{}:{}", hostname, host_config.port);
 
-    // Connect to TCP stream with 15 second timeout
-    let timeout = Duration::from_secs(15);
+    // Resolve address
     let socket_addr = addr
         .to_socket_addrs()
         .context(format!("Failed to resolve address: {}", addr))?
         .next()
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
 
-    let tcp = TcpStream::connect_timeout(&socket_addr, timeout)
-        .context(format!("Failed to connect to {} (timeout: 15s)", addr))?;
+    // Connect with timeout
+    let config = client::Config {
+        connection_timeout: Some(Duration::from_secs(15)),
+        ..<br/>Default::default()
+    };
 
-    // Create SSH session
-    let mut sess = Session::new()?;
-    sess.set_tcp_stream(tcp);
-    sess.handshake()?;
+    let config = Arc::new(config);
+    let sh = Client;
+
+    let mut session = client::connect(config, socket_addr, sh)
+        .await
+        .context("Failed to connect")?;
 
     // Authenticate
-    authenticate(&mut sess, &username, host_config)?;
+    authenticate(&mut session, &username, host_config).await?;
+
+    session.disconnect(russh::Disconnect::ByApplication, "", "").await?;
 
     Ok(SshConnectionResult {
         success: true,
@@ -49,60 +74,82 @@ pub fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectionResul
 }
 
 /// Execute SSH command on remote host
-pub fn execute_command(host_config: &SshHostConfig, command: &str) -> Result<String> {
+pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Result<String> {
     let (username, hostname) = parse_ssh_host(&host_config.host)?;
     let addr = format!("{}:{}", hostname, host_config.port);
 
-    // Connect to TCP stream with 15 second timeout
-    let timeout = Duration::from_secs(15);
+    // Resolve address
     let socket_addr = addr
         .to_socket_addrs()
         .context(format!("Failed to resolve address: {}", addr))?
         .next()
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
 
-    let tcp = TcpStream::connect_timeout(&socket_addr, timeout)
-        .context(format!("Failed to connect to {} (timeout: 15s)", addr))?;
+    // Connect
+    let config = client::Config {
+        connection_timeout: Some(Duration::from_secs(15)),
+        ..Default::default()
+    };
 
-    // Create SSH session
-    let mut sess = Session::new()?;
-    sess.set_tcp_stream(tcp);
-    sess.handshake()?;
+    let config = Arc::new(config);
+    let sh = Client;
+
+    let mut session = client::connect(config, socket_addr, sh)
+        .await
+        .context("Failed to connect")?;
 
     // Authenticate
-    authenticate(&mut sess, &username, host_config)?;
+    authenticate(&mut session, &username, host_config).await?;
 
     // Execute command
-    let mut channel = sess.channel_session()?;
-    channel.exec(command)?;
+    let mut channel = session.channel_open_session().await?;
+    channel.exec(true, command).await?;
 
     let mut output = String::new();
-    channel.read_to_string(&mut output)?;
+    let mut code = None;
 
-    channel.wait_close()?;
-    let exit_status = channel.exit_status()?;
+    loop {
+        let Some(msg) = channel.wait().await else {
+            break;
+        };
 
-    if exit_status != 0 {
-        anyhow::bail!("Command failed with exit code {}: {}", exit_status, output);
+        use russh::ChannelMsg::*;
+        match msg {
+            Data { ref data } => {
+                output.push_str(&String::from_utf8_lossy(data));
+            }
+            ExitStatus { exit_status } => {
+                code = Some(exit_status);
+            }
+            _ => {}
+        }
+    }
+
+    session.disconnect(russh::Disconnect::ByApplication, "", "").await?;
+
+    if let Some(exit_code) = code {
+        if exit_code != 0 {
+            anyhow::bail!("Command failed with exit code {}: {}", exit_code, output);
+        }
     }
 
     Ok(output)
 }
 
 /// Initialize SSH host with required software
-pub fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>> {
+pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>> {
     let mut progress_log = Vec::new();
 
     progress_log.push("Starting SSH host initialization...".to_string());
 
     // Step 1: Test connection
     progress_log.push("Testing SSH connection...".to_string());
-    test_connection(host_config)?;
+    test_connection(host_config).await?;
     progress_log.push("✓ SSH connection successful".to_string());
 
     // Step 2: Check and install swap if needed
     progress_log.push("Checking swap memory...".to_string());
-    let swap_output = execute_command(host_config, "free -m | grep Swap | awk '{print $2}'")?;
+    let swap_output = execute_command(host_config, "free -m | grep Swap | awk '{print $2}'").await?;
     let swap_mb: u32 = swap_output.trim().parse().unwrap_or(0);
 
     if swap_mb < 8000 {
@@ -120,7 +167,7 @@ pub fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>> {
         ];
 
         for cmd in swap_commands {
-            execute_command(host_config, cmd).context(format!("Failed to execute: {}", cmd))?;
+            execute_command(host_config, cmd).await.context(format!("Failed to execute: {}", cmd))?;
         }
 
         progress_log.push("✓ 8GB swap installed and enabled".to_string());
@@ -138,7 +185,7 @@ pub fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>> {
     ];
 
     for cmd in nft_commands {
-        execute_command(host_config, cmd).context(format!("Failed to execute: {}", cmd))?;
+        execute_command(host_config, cmd).await.context(format!("Failed to execute: {}", cmd))?;
     }
 
     progress_log.push("✓ nftables installed".to_string());
@@ -182,8 +229,8 @@ table inet filter {
 "#;
 
     let write_nft_config = format!("echo '{}' | sudo tee /etc/nftables.conf", nft_rules);
-    execute_command(host_config, &write_nft_config)?;
-    execute_command(host_config, "sudo nft -f /etc/nftables.conf")?;
+    execute_command(host_config, &write_nft_config).await?;
+    execute_command(host_config, "sudo nft -f /etc/nftables.conf").await?;
 
     progress_log.push("✓ nftables configured".to_string());
 
@@ -219,7 +266,11 @@ fn parse_ssh_host(host: &str) -> Result<(String, String)> {
 }
 
 /// Authenticate SSH session
-fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig) -> Result<()> {
+async fn authenticate(
+    session: &mut Handle<Client>,
+    username: &str,
+    host_config: &SshHostConfig,
+) -> Result<()> {
     let mut attempted_methods = Vec::new();
     let mut errors = Vec::new();
 
@@ -229,25 +280,21 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
         attempted_methods.push("keyring".to_string());
 
         match load_private_key_from_keyring(keyring_domain, username) {
-            Ok(private_key) => {
-                // Write key to temp file (ssh2 requires file path)
-                use std::io::Write;
-                let temp_dir = std::env::temp_dir();
-                let key_file = temp_dir.join(format!("dure_ssh_{}", uuid::Uuid::new_v4()));
+            Ok(private_key_pem) => {
+                match russh_keys::decode_secret_key(&private_key_pem, None) {
+                    Ok(key_pair) => {
+                        let auth_res = session
+                            .authenticate_publickey(username, Arc::new(key_pair))
+                            .await;
 
-                if let Ok(mut file) = std::fs::File::create(&key_file) {
-                    if file.write_all(private_key.as_bytes()).is_ok() {
-                        // Try to authenticate with the key
-                        let result = sess.userauth_pubkey_file(username, None, &key_file, None);
-
-                        // Clean up temp file
-                        let _ = std::fs::remove_file(&key_file);
-
-                        if result.is_ok() {
+                        if auth_res.is_ok() {
                             return Ok(());
-                        } else if let Err(e) = result {
+                        } else if let Err(e) = auth_res {
                             errors.push(format!("Keyring: {}", e));
                         }
+                    }
+                    Err(e) => {
+                        errors.push(format!("Keyring key decode: {}", e));
                     }
                 }
             }
@@ -263,10 +310,27 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
 
         let key_path = Path::new(key_path);
         if key_path.exists() {
-            match sess.userauth_pubkey_file(username, None, key_path, None) {
-                Ok(_) => return Ok(()),
+            match std::fs::read_to_string(key_path) {
+                Ok(key_content) => {
+                    match russh_keys::decode_secret_key(&key_content, None) {
+                        Ok(key_pair) => {
+                            let auth_res = session
+                                .authenticate_publickey(username, Arc::new(key_pair))
+                                .await;
+
+                            if auth_res.is_ok() {
+                                return Ok(());
+                            } else if let Err(e) = auth_res {
+                                errors.push(format!("Private key: {}", e));
+                            }
+                        }
+                        Err(e) => {
+                            errors.push(format!("Private key decode: {}", e));
+                        }
+                    }
+                }
                 Err(e) => {
-                    errors.push(format!("Private key: {}", e));
+                    errors.push(format!("Private key read: {}", e));
                 }
             }
         } else {
@@ -281,21 +345,11 @@ fn authenticate(sess: &mut Session, username: &str, host_config: &SshHostConfig)
     if let Some(ref password) = host_config.password {
         attempted_methods.push("password".to_string());
 
-        match sess.userauth_password(username, password) {
+        match session.authenticate_password(username, password).await {
             Ok(_) => return Ok(()),
             Err(e) => {
                 errors.push(format!("Password: {}", e));
             }
-        }
-    }
-
-    // Try agent authentication as fallback
-    attempted_methods.push("SSH agent".to_string());
-
-    match sess.userauth_agent(username) {
-        Ok(_) => return Ok(()),
-        Err(e) => {
-            errors.push(format!("SSH agent: {}", e));
         }
     }
 

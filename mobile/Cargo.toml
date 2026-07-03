@@ -80,8 +80,6 @@ sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
 keepass = { version = "0.10", features = ["save_kdbx4"] }
-# Static OpenSSL linking (for headless server deployments without libssl.so.3)
-openssl-sys = { version = "0.9", features = ["vendored"] }
 
 # AsyncAPI documentation
 asyncapi-rust = "0.2"
@@ -133,11 +131,13 @@ rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 rustls-native-certs = "0.8"
 url = "2.5"
-# SSH support for remote server management
-ssh2 = "0.9"
+# SSH support for remote server management (pure Rust, no OpenSSL)
+russh = "0.45"
+russh-keys = "0.45"
+async-trait = "0.1"  # Required for russh Handler trait
 shellexpand = "3.1"
-# WebAuthn server-side support
-webauthn-rs = { version = "0.5.0", features = ["danger-allow-state-serialisation"] }
+# WebAuthn server-side support (pure Rust + Go, no OpenSSL)
+go-webauthn = { path = "../crates/go-webauthn" }
 uuid = { version = "1.11", features = ["v4", "serde"] }
 urlencoding = "2.1"
 
