@@ -46,16 +46,15 @@ jobs:
 
       - name: Upload install.sh to Cloudflare R2 as index.html
         run: |
-          npx --yes wrangler@latest r2 object put dure-one/index.html \
-            --file install.sh \
+          aws s3 cp install.sh s3://dure-one/index.html \
+            --endpoint-url https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com \
             --content-type text/x-shellscript \
-            --cache-control "public, max-age=31536000, immutable" \
-            --remote
+            --cache-control "public, max-age=31536000, immutable"
         env:
-          # CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_R2_BUCKET: dure-one
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}
 
       # bash ghworkflow.sh --no-deploy --src-path ../
       # - name: Setup Pages
