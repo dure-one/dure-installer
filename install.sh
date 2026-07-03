@@ -177,6 +177,7 @@ get_release_metadata() {
 }
 
 get_artifact_metadata() {
+    local _artifact_name="$1"
     local _url="https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/artifacts"
     local _temp_file
     local _response
@@ -186,6 +187,11 @@ get_artifact_metadata() {
         err "GitHub token required for dev mode"
         err "Set GITHUB_TOKEN environment variable with a valid token"
         exit 1
+    fi
+
+    # Filter by artifact name and get only the latest (per_page=1)
+    if [ -n "$_artifact_name" ]; then
+        _url="${_url}?name=${_artifact_name}&per_page=1"
     fi
 
     _temp_file=$(mktemp)
@@ -450,22 +456,18 @@ install_from_artifacts() {
     local _metadata
     local _artifact_url
     local _artifact_digest
+    local _artifact_id
     local _checksum_url
     local _temp_dir
     local _binary_path
     local _checksum_path
     local _artifact_zip
-    local _artifact_block
     local _artifact_name
     local _binary_filename
     local _checksum_filename
 
     say "Running in dev mode"
     say "Variant: $VARIANT"
-    say "Fetching latest artifacts from GitHub..."
-
-    # Get artifact metadata
-    _metadata=$(get_artifact_metadata)
 
     # Linux uses musl for both headless and GUI
     if [ "$VARIANT" = "headless" ]; then
@@ -476,12 +478,13 @@ install_from_artifacts() {
     _binary_filename="dure-desktop"
     _checksum_filename="dure-desktop.sha256"
 
-    # Filter for artifact (latest)
-    # Parse JSON manually (no jq dependency)
-    # Extract the artifact block
-    _artifact_block=$(echo "$_metadata" | sed -n '/"name"[[:space:]]*:[[:space:]]*"'"$_artifact_name"'"/,/}/p' | head -20)
+    say "Fetching latest $_artifact_name artifact from GitHub..."
 
-    if [ -z "$_artifact_block" ]; then
+    # Get artifact metadata (filtered by name, returns only latest)
+    _metadata=$(get_artifact_metadata "$_artifact_name")
+
+    # Check if we got any artifacts
+    if ! echo "$_metadata" | grep -q '"total_count"[[:space:]]*:[[:space:]]*[1-9]'; then
         err "Could not find $_artifact_name artifact"
         if [ "$VARIANT" = "gui" ]; then
             err "Try headless variant: DURE_VARIANT=headless DURE_CHANNEL=dev $0"
@@ -489,13 +492,20 @@ install_from_artifacts() {
         exit 1
     fi
 
-    _artifact_url=$(echo "$_artifact_block" | grep '"archive_download_url"' | head -1 | sed 's/.*"archive_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-    _artifact_digest=$(echo "$_artifact_block" | grep '"digest"' | head -1 | sed 's/.*"digest"[[:space:]]*:[[:space:]]*"sha256:\([a-f0-9]*\)".*/\1/')
+    # Parse the first (and only) artifact from the filtered results
+    _artifact_url=$(echo "$_metadata" | grep '"archive_download_url"' | head -1 | sed 's/.*"archive_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    _artifact_digest=$(echo "$_metadata" | grep '"digest"' | head -1 | sed 's/.*"digest"[[:space:]]*:[[:space:]]*"sha256:\([a-f0-9]*\)".*/\1/')
+    _artifact_id=$(echo "$_metadata" | grep '"id"' | head -1 | sed 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/')
 
     if [ -z "$_artifact_url" ]; then
         err "Could not find artifact download URL"
         err "No development builds available."
         exit 1
+    fi
+
+    # Show which artifact was selected
+    if [ -n "$_artifact_id" ]; then
+        say "Selected artifact ID: $_artifact_id"
     fi
 
     if [ -z "$_artifact_digest" ]; then
