@@ -1,223 +1,225 @@
 //! WebAuthn authentication support for WebSocket connections
 //!
-//! Provides passkey-based authentication using WebAuthn protocol via go-webauthn bridge.
-//! This implementation uses pure Rust + Go (no OpenSSL dependencies).
+//! Provides passkey-based authentication using WebAuthn protocol via go-webauthn-client.
+//! Uses CLI-based JSON-RPC communication (works on all platforms including OpenBSD).
 
-use go_webauthn::*;
+use anyhow::Result;
+use go_webauthn_client::*;
+use std::sync::Mutex;
 
 /// Custom errors for WebAuthn operations
 #[derive(Debug)]
 pub enum AuthError {
     WebAuthnFailed(String),
-    InvalidJson(String),
+    ClientError(String),
 }
 
 impl std::fmt::Display for AuthError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AuthError::WebAuthnFailed(msg) => write!(f, "WebAuthn error: {}", msg),
-            AuthError::InvalidJson(msg) => write!(f, "JSON parsing error: {}", msg),
+            AuthError::ClientError(msg) => write!(f, "Client error: {}", msg),
         }
     }
 }
 
 impl std::error::Error for AuthError {}
 
-/// WebAuthn application state (simplified wrapper for go-webauthn)
+impl From<anyhow::Error> for AuthError {
+    fn from(err: anyhow::Error) -> Self {
+        AuthError::ClientError(err.to_string())
+    }
+}
+
+/// WebAuthn application state using go-webauthn-client
 ///
-/// Note: Session management is handled by the Go side, so this struct
-/// only needs to store configuration. All state is managed internally
-/// by the go-webauthn implementation.
-#[derive(Clone)]
+/// Uses CLI-based JSON-RPC communication with go-webauthn process.
+/// Session management is handled by the CLI process.
 pub struct WebAuthnState {
+    /// Relying party ID (domain name)
+    pub rp_id: String,
+    /// Relying party origins (comma-separated)
+    pub rp_origins: String,
+    /// Relying party display name
+    pub rp_name: String,
     /// Default scenario for operations ("passwordless", "mfa", or "usernameless")
     pub scenario: String,
+    /// Go WebAuthn CLI client (wrapped in Mutex for interior mutability)
+    client: Mutex<GoWebAuthnClient>,
 }
 
 impl WebAuthnState {
     /// Create a new WebAuthn state
     ///
     /// # Arguments
-    /// * `_rp_id` - Relying party ID (currently unused, go-webauthn configures this internally)
-    /// * `_rp_origin` - Relying party origin URL (currently unused, go-webauthn configures this internally)
-    /// * `_rp_name` - Optional relying party display name (currently unused)
-    ///
-    /// Note: The go-webauthn bridge is configured at initialization time with RP details.
-    /// This constructor exists for API compatibility but doesn't need the parameters.
-    pub fn new(_rp_id: &str, _rp_origin: &str, _rp_name: Option<&str>) -> Result<Self, AuthError> {
+    /// * `rp_id` - Relying party ID (effective domain name, e.g., "localhost" or "example.com")
+    /// * `rp_origin` - Relying party origin URL (e.g., "https://example.com:8443")
+    /// * `rp_name` - Optional relying party display name
+    pub fn new(rp_id: &str, rp_origin: &str, rp_name: Option<&str>) -> Result<Self, AuthError> {
+        let client = GoWebAuthnClient::new(None)?;
+
         Ok(WebAuthnState {
+            rp_id: rp_id.to_string(),
+            rp_origins: rp_origin.to_string(),
+            rp_name: rp_name.unwrap_or("Dure").to_string(),
             scenario: "passwordless".to_string(),
+            client: Mutex::new(client),
         })
     }
 
     /// Start passkey registration for a user
     ///
-    /// Returns JSON-serialized creation challenge to send to the client
+    /// Returns (session_id, challenge_json) to send to the client
     pub async fn start_registration(
         &self,
         username: String,
     ) -> Result<(String, String), AuthError> {
-        let req = SignupBeginRequest {
+        let params = WebAuthnSignupBeginParams {
+            rp_display_name: self.rp_name.clone(),
+            rp_id: self.rp_id.clone(),
+            rp_origins: self.rp_origins.clone(),
             username: username.clone(),
             display_name: username,
             scenario: self.scenario.clone(),
         };
 
-        let resp = webauthn_signup_begin(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_signup_begin(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok((resp.session_id, resp.challenge_json))
+        Ok((result.session_id, result.challenge_json))
     }
 
     /// Finish passkey registration
     ///
     /// Verifies the registration credential JSON from client
+    /// Returns user_id
     pub async fn finish_registration(
         &self,
         session_id: String,
         credential_json: String,
     ) -> Result<String, AuthError> {
-        let req = SignupFinishRequest {
+        let params = WebAuthnSignupFinishParams {
             session_id,
             credential_json,
         };
 
-        let resp = webauthn_signup_finish(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_signup_finish(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok(resp.user_id)
+        Ok(result.user_id)
     }
 
     /// Start passkey authentication for a user
     ///
-    /// Returns JSON-serialized request challenge to send to the client
+    /// Returns (session_id, challenge_json) to send to the client
     pub async fn start_authentication(
         &self,
         username: String,
     ) -> Result<(String, String), AuthError> {
-        let req = SigninBeginRequest {
+        let params = WebAuthnSigninBeginParams {
             username,
             scenario: self.scenario.clone(),
         };
 
-        let resp = webauthn_signin_begin(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_signin_begin(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok((resp.session_id, resp.challenge_json))
+        Ok((result.session_id, result.challenge_json))
     }
 
     /// Finish passkey authentication
     ///
     /// Verifies the authentication credential JSON from client
+    /// Returns user_id
     pub async fn finish_authentication(
         &self,
         session_id: String,
         credential_json: String,
     ) -> Result<String, AuthError> {
-        let req = SigninFinishRequest {
+        let params = WebAuthnSigninFinishParams {
             session_id,
             credential_json,
         };
 
-        let resp = webauthn_signin_finish(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_signin_finish(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok(resp.user_id)
+        Ok(result.user_id)
     }
 
-    /// Start passkey login (discoverable credentials)
+    /// Start passkey login (discoverable credentials, usernameless)
     ///
-    /// Returns JSON-serialized challenge for usernameless authentication
-    pub async fn start_passkey_login(
-        &self,
-        mediation: String,
-    ) -> Result<(String, String), AuthError> {
-        let req = PasskeyLoginBeginRequest { mediation };
+    /// Returns (session_id, challenge_json) to send to the client
+    pub async fn start_passkey_login(&self) -> Result<(String, String), AuthError> {
+        let params = WebAuthnPasskeyLoginBeginParams {
+            rp_display_name: self.rp_name.clone(),
+            rp_id: self.rp_id.clone(),
+            rp_origins: self.rp_origins.clone(),
+        };
 
-        let resp = webauthn_passkey_login_begin(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_passkey_login_begin(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok((resp.session_id, resp.challenge_json))
+        Ok((result.session_id, result.challenge_json))
     }
 
     /// Finish passkey login
     ///
     /// Verifies the passkey login credential JSON from client
+    /// Returns (user_id, username)
     pub async fn finish_passkey_login(
         &self,
         session_id: String,
         credential_json: String,
     ) -> Result<(String, String), AuthError> {
-        let req = PasskeyLoginFinishRequest {
+        let params = WebAuthnPasskeyLoginFinishParams {
             session_id,
             credential_json,
         };
 
-        let resp = webauthn_passkey_login_finish(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_passkey_login_finish(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok((resp.user_id, resp.username))
+        Ok((result.user_id, result.username))
     }
 
     /// Start multi-factor authentication
     ///
-    /// Returns JSON-serialized challenge for MFA
+    /// Returns (session_id, challenge_json) to send to the client
     pub async fn start_mfa_login(
         &self,
         username: String,
-        mediation: String,
     ) -> Result<(String, String), AuthError> {
-        let req = MfaLoginBeginRequest {
+        let params = WebAuthnMfaLoginBeginParams {
+            rp_display_name: self.rp_name.clone(),
+            rp_id: self.rp_id.clone(),
+            rp_origins: self.rp_origins.clone(),
             username,
-            mediation,
         };
 
-        let resp = webauthn_mfa_login_begin(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_mfa_login_begin(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok((resp.session_id, resp.challenge_json))
+        Ok((result.session_id, result.challenge_json))
     }
 
     /// Finish multi-factor authentication
     ///
     /// Verifies the MFA credential JSON from client
+    /// Returns user_id
     pub async fn finish_mfa_login(
         &self,
         session_id: String,
         credential_json: String,
     ) -> Result<String, AuthError> {
-        let req = MfaLoginFinishRequest {
+        let params = WebAuthnMfaLoginFinishParams {
             session_id,
             credential_json,
         };
 
-        let resp = webauthn_mfa_login_finish(&req).await;
+        let mut client = self.client.lock().unwrap();
+        let result = client.webauthn_mfa_login_finish(params)?;
 
-        if !resp.success {
-            return Err(AuthError::WebAuthnFailed(resp.error));
-        }
-
-        Ok(resp.user_id)
+        Ok(result.user_id)
     }
 }
