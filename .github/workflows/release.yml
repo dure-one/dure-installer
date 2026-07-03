@@ -38,7 +38,7 @@ jobs:
       - name: Prepare artifact files
         run: |
           mkdir -p artifact-staging
-          cp mobile/target/release/dure-desktop artifact-staging/dure-desktop
+          cp target/release/dure-desktop artifact-staging/dure-desktop
           cd artifact-staging
           sha256sum dure-desktop > dure-desktop-linux.sha256
 
