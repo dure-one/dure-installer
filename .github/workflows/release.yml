@@ -29,9 +29,8 @@ jobs:
             target: x86_64-unknown-linux-musl
             build-args: "--release --bin dure-desktop"
 
-          - name: Linux aarch64 Headless
-            target: aarch64-unknown-linux-musl
-            build-args: "--release --bin dure-desktop --no-default-features"
+          # Note: aarch64 build disabled - requires cross-compiler (aarch64-linux-musl-gcc)
+          # TODO: Re-enable when cross-compilation toolchain is configured
 
           # macOS
           - name: macOS x86_64
