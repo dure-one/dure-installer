@@ -1,21 +1,19 @@
 # Build Architecture
 
-## Strategy: musl-only for Linux (all variants)
+## Strategy: musl for servers, gnu for GUI
 
-### Linux - musl for everything
-**Both headless and GUI use musl**
+### Linux builds
 
 ```
-x86_64-unknown-linux-musl   → Headless (static libc, no dependencies)
-x86_64-unknown-linux-musl   → GUI (static libc, links GTK/X11 dynamically)
-aarch64-unknown-linux-musl  → Headless (ARM64 servers)
+x86_64-unknown-linux-musl → Headless (fully static, zero dependencies)
+x86_64-unknown-linux-gnu  → GUI (needs GTK, standard desktop binary)
 ```
 
-**Why musl for GUI too?**
-- ✅ musl = static libc (no GLIBC version issues)
-- ✅ GTK/X11/Wayland link dynamically (like normal GUI apps)
-- ✅ Works on any Linux distro
-- ✅ Simpler: no need for separate gnu builds
+**Why different targets?**
+- ✅ **Headless/musl**: Fully static, works on any distro (servers)
+- ✅ **GUI/gnu**: Standard desktop build (needs GTK anyway)
+- ✅ Building musl GUI in CI requires complex cross-compilation setup
+- ✅ Local builds can use either (OpenBSD musl GUI works fine)
 
 ### Desktop OSes (User Machines)
 **Native targets with full GUI**
