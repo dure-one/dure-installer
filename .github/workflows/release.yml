@@ -38,21 +38,24 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
-      - name: Install musl tools
+      - name: Install musl tools (Headless)
+        if: contains(matrix.platform.target, 'musl')
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Install GUI dependencies
+      - name: Install build dependencies (GUI)
         if: contains(matrix.platform.name, 'GUI')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev libcairo2-dev libpango1.0-dev golang-go
+          sudo apt-get install -y pkg-config libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev golang-go
 
       - name: Build binary for ${{ matrix.platform.name }}
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # Allow pkg-config to find system libraries when building for musl
+          PKG_CONFIG_ALLOW_CROSS: 1
         working-directory: mobile
         run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
 
