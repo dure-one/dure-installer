@@ -57,6 +57,8 @@ jobs:
           # Allow pkg-config to find system libraries when building for musl
           PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
+          # Force dynamic linking for system libraries (GTK) even with musl
+          RUSTFLAGS: -C target-feature=-crt-static
         working-directory: mobile
         run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
 
