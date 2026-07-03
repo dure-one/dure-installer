@@ -6,7 +6,9 @@
 use anyhow::Result;
 
 /// Embedded fluent translation files
+#[cfg(feature = "gui")]
 const EN_US_FTL: &str = include_str!("../assets/languages/fluent/en-US.ftl");
+#[cfg(feature = "gui")]
 const KO_KR_FTL: &str = include_str!("../assets/languages/fluent/ko-KR.ftl");
 
 /// Initialize the i18n system
@@ -16,6 +18,7 @@ const KO_KR_FTL: &str = include_str!("../assets/languages/fluent/ko-KR.ftl");
 ///
 /// # Arguments
 /// * `language` - Language code ("en-US", "ko-KR", or "Auto")
+#[cfg(feature = "gui")]
 pub fn init_i18n(language: &str) -> Result<()> {
     log::info!("Initializing i18n system with language: {}", language);
 
@@ -53,10 +56,18 @@ pub fn init_i18n(language: &str) -> Result<()> {
     Ok(())
 }
 
+/// Initialize the i18n system (no-op for headless builds)
+#[cfg(not(feature = "gui"))]
+pub fn init_i18n(_language: &str) -> Result<()> {
+    log::debug!("i18n disabled (headless build)");
+    Ok(())
+}
+
 /// Set the current language
 ///
 /// # Arguments
 /// * `language` - Language code ("en-US", "ko-KR", or "Auto")
+#[cfg(feature = "gui")]
 pub fn set_language(language: &str) -> Result<()> {
     let lang_code = if language == "Auto" {
         detect_system_language()
@@ -67,6 +78,12 @@ pub fn set_language(language: &str) -> Result<()> {
     log::info!("Setting language to: {}", lang_code);
     egui_i18n::set_language(&lang_code);
 
+    Ok(())
+}
+
+/// Set the current language (no-op for headless builds)
+#[cfg(not(feature = "gui"))]
+pub fn set_language(_language: &str) -> Result<()> {
     Ok(())
 }
 

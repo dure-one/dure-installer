@@ -23,7 +23,7 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 use anyhow::Result;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 use dure::dure::DureApp;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
@@ -131,6 +131,7 @@ fn main() -> Result<()> {
 
     // Initialize global tray event handlers (one-time setup)
     #[cfg(all(
+        feature = "gui",
         not(any(target_os = "android", target_arch = "wasm32")),
         not(target_os = "openbsd")
     ))]
@@ -165,16 +166,26 @@ fn main() -> Result<()> {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         dure::cli::run_cli_mode()?;
     } else if force_gui {
-        // GUI mode (explicitly requested via --gui flag)
-        log::info!("Running in GUI mode (--gui flag)");
+        #[cfg(feature = "gui")]
+        {
+            // GUI mode (explicitly requested via --gui flag)
+            log::info!("Running in GUI mode (--gui flag)");
 
-        // Hide console window on Windows
-        #[cfg(target_os = "windows")]
-        windows_installer::hide_console();
+            // Hide console window on Windows
+            #[cfg(target_os = "windows")]
+            windows_installer::hide_console();
 
-        run_gui_mode()?;
+            run_gui_mode()?;
+        }
+        #[cfg(not(feature = "gui"))]
+        {
+            eprintln!("Error: GUI support not compiled in this build.");
+            eprintln!("Rebuild with: cargo build --features gui");
+            std::process::exit(1);
+        }
     } else if force_tray {
         #[cfg(all(
+            feature = "gui",
             not(any(target_os = "android", target_arch = "wasm32")),
             not(target_os = "openbsd")
         ))]
@@ -214,11 +225,17 @@ fn main() -> Result<()> {
             log::info!("*** Joining tray thread ***");
             tray_handle.join()?;
         }
-        #[cfg(target_os = "openbsd")]
+        #[cfg(all(feature = "gui", target_os = "openbsd"))]
         {
             // Tray mode not available on OpenBSD - run GUI mode instead
             log::info!("Tray mode not available on OpenBSD (--tray flag), running GUI mode");
             run_gui_mode()?;
+        }
+        #[cfg(not(feature = "gui"))]
+        {
+            eprintln!("Error: GUI/Tray support not compiled in this build.");
+            eprintln!("Rebuild with: cargo build --features gui");
+            std::process::exit(1);
         }
     } else if std::io::stdout().is_terminal() {
         // Terminal mode - run CLI interface
@@ -228,6 +245,7 @@ fn main() -> Result<()> {
         dure::cli::run_cli_mode()?;
     } else {
         #[cfg(all(
+            feature = "gui",
             not(any(target_os = "android", target_arch = "wasm32")),
             not(target_os = "openbsd")
         ))]
@@ -267,18 +285,27 @@ fn main() -> Result<()> {
             log::info!("*** Joining tray thread ***");
             tray_handle.join()?;
         }
-        #[cfg(target_os = "openbsd")]
+        #[cfg(all(feature = "gui", target_os = "openbsd"))]
         {
             // Tray mode not available on OpenBSD - run GUI mode instead
             log::info!("Tray mode not available on OpenBSD, running GUI mode");
             run_gui_mode()?;
+        }
+        #[cfg(not(feature = "gui"))]
+        {
+            // No terminal, no GUI - fall back to CLI mode
+            log::warn!("No terminal detected and GUI not compiled in - falling back to CLI mode");
+            eprintln!("Warning: Running in CLI mode (GUI not available)");
+            eprintln!("For GUI support, rebuild with: cargo build --features gui");
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            dure::cli::run_cli_mode()?;
         }
     }
 
     Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 fn run_gui_mode() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
