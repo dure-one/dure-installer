@@ -2138,7 +2138,12 @@ impl PlatformTab {
         let platform_name_clone = platform_name.clone();
         let promise = poll_promise::Promise::spawn_thread("ssh_test_platform", move || {
             use crate::calc::ssh;
-            ssh::test_connection(&host_config).map_err(|e| format!("{}", e))
+            // russh uses tokio internally, wrap with async-compat for smol
+            smol::block_on(async {
+                async_compat::Compat::new(ssh::test_connection(&host_config))
+                    .await
+                    .map_err(|e| format!("{}", e))
+            })
         });
 
         self.ssh_test_promises.insert(platform_name, promise);
