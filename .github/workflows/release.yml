@@ -35,24 +35,19 @@ jobs:
           cd mobile
           cargo build --release --bin dure-desktop
 
-      - name: Generate checksum
+      - name: Prepare artifact files
         run: |
-          cd mobile
-          sha256sum target/release/dure-desktop > dure-desktop-linux.sha256
-
-      - name: Upload checksum artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dure-desktop-linux-checksum
-          path: mobile/dure-desktop-linux.sha256
+          mkdir -p artifact-staging
+          cp mobile/target/release/dure-desktop artifact-staging/dure-desktop
+          cd artifact-staging
+          sha256sum dure-desktop > dure-desktop-linux.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: dure-desktop-linux
-          path: |
-            mobile/target/release/dure-desktop
-            mobile/dure-desktop-linux.sha256
+          path: artifact-staging/*
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
@@ -124,7 +119,7 @@ jobs:
         with:
           files: |
             dure-desktop-linux/dure-desktop
-            dure-desktop-linux-checksum/dure-desktop-linux.sha256
+            dure-desktop-linux/dure-desktop-linux.sha256
             dure-desktop-windows/dure-desktop.exe
             dure-desktop-macos/dure-desktop
           generate_release_notes: true
