@@ -49,11 +49,8 @@ pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectio
         .next()
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
 
-    // Connect with timeout
-    let config = client::Config {
-        connection_timeout: Some(Duration::from_secs(15)),
-        ..<br/>Default::default()
-    };
+    // Connect
+    let config = client::Config::default();
 
     let config = Arc::new(config);
     let sh = Client;
@@ -86,10 +83,7 @@ pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Resu
         .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
 
     // Connect
-    let config = client::Config {
-        connection_timeout: Some(Duration::from_secs(15)),
-        ..Default::default()
-    };
+    let config = client::Config::default();
 
     let config = Arc::new(config);
     let sh = Client;

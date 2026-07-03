@@ -549,7 +549,12 @@ impl SshTab {
 
             // Spawn initialization in background thread
             let promise = poll_promise::Promise::spawn_thread("ssh_init", move || {
-                ssh::initialize_host(&host_config).map_err(|e| format!("{}", e))
+                // russh uses tokio internally, wrap with async-compat for smol
+                smol::block_on(async {
+                    async_compat::Compat::new(ssh::initialize_host(&host_config))
+                        .await
+                        .map_err(|e| format!("{}", e))
+                })
             });
 
             self.init_promise = Some(promise);
@@ -584,7 +589,12 @@ impl SshTab {
 
             // Spawn connection test in background thread
             let promise = poll_promise::Promise::spawn_thread("ssh_test", move || {
-                ssh::test_connection(&host_config).map_err(|e| format!("{}", e))
+                // russh uses tokio internally, wrap with async-compat for smol
+                smol::block_on(async {
+                    async_compat::Compat::new(ssh::test_connection(&host_config))
+                        .await
+                        .map_err(|e| format!("{}", e))
+                })
             });
 
             self.test_promise = Some(promise);

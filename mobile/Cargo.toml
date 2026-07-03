@@ -119,6 +119,7 @@ async-net = "2.0"
 async-fs = "2.1"  # Async filesystem operations
 futures-rustls = "0.26"  # rustls-based TLS for futures-based runtimes
 async-lock = "3.4"  # Async synchronization primitives for smol
+async-compat = "0.2"  # Compatibility layer for tokio futures in smol runtime
 # OpenAPI / Swagger UI
 utoipa = { version="5.4.0", features = ["macros"] }
 utoipa-swagger-ui = { version="9.0.2", features = ["vendored"] }

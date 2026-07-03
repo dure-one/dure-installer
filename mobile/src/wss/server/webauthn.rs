@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use go_webauthn_client::*;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Custom errors for WebAuthn operations
 #[derive(Debug)]
@@ -35,6 +35,7 @@ impl From<anyhow::Error> for AuthError {
 ///
 /// Uses CLI-based JSON-RPC communication with go-webauthn process.
 /// Session management is handled by the CLI process.
+#[derive(Clone)]
 pub struct WebAuthnState {
     /// Relying party ID (domain name)
     pub rp_id: String,
@@ -44,8 +45,8 @@ pub struct WebAuthnState {
     pub rp_name: String,
     /// Default scenario for operations ("passwordless", "mfa", or "usernameless")
     pub scenario: String,
-    /// Go WebAuthn CLI client (wrapped in Mutex for interior mutability)
-    client: Mutex<GoWebAuthnClient>,
+    /// Go WebAuthn CLI client (wrapped in Arc<Mutex> for shared access)
+    client: Arc<Mutex<GoWebAuthnClient>>,
 }
 
 impl WebAuthnState {
@@ -63,7 +64,7 @@ impl WebAuthnState {
             rp_origins: rp_origin.to_string(),
             rp_name: rp_name.unwrap_or("Dure").to_string(),
             scenario: "passwordless".to_string(),
-            client: Mutex::new(client),
+            client: Arc::new(Mutex::new(client)),
         })
     }
 
