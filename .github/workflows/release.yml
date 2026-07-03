@@ -1,4 +1,4 @@
-name: Build Release
+name: Build and Release
 
 on:
   push:
@@ -10,156 +10,151 @@ on:
       - 'windows'
   workflow_dispatch:
 
+env:
+  RUST_VERSION: nightly
+
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/linux' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+  build:
+    name: Build - ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os || 'ubuntu-22.04' }}
     strategy:
       matrix:
-        variant: [gui, headless]
+        platform:
+          # Linux - musl only (static libc, works everywhere)
+          - name: Linux x86_64 Headless
+            target: x86_64-unknown-linux-musl
+            build-args: "--release --bin dure-desktop --no-default-features"
+
+          - name: Linux x86_64 GUI
+            target: x86_64-unknown-linux-musl
+            build-args: "--release --bin dure-desktop"
+
+          - name: Linux aarch64 Headless
+            target: aarch64-unknown-linux-musl
+            build-args: "--release --bin dure-desktop --no-default-features"
+
+          # macOS
+          - name: macOS x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            build-args: "--release --bin dure-desktop"
+
+          - name: macOS aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            build-args: "--release --bin dure-desktop"
+
+          # Windows
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            build-args: "--release --bin dure-desktop"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.platform.target }}
 
-      - name: Install build dependencies
+      - name: Linux - Install musl tools
+        if: contains(matrix.platform.target, 'musl')
         run: |
           sudo apt-get update
-          # For vendored OpenSSL build (statically linked, no runtime deps)
-          sudo apt-get install -y pkg-config libssl-dev perl make
+          sudo apt-get install -y musl-tools
 
-      - name: Install GUI dependencies
-        if: matrix.variant == 'gui'
+      - name: Linux GUI - Install dependencies
+        if: contains(matrix.platform.name, 'GUI') && contains(matrix.platform.target, 'musl')
         run: |
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev golang-go
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev libcairo2-dev libpango1.0-dev golang-go
 
-      - name: Build GUI release binary
-        if: matrix.variant == 'gui'
-        env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-        run: |
-          cd mobile
-          cargo build --release --bin dure-desktop
-
-      - name: Build headless release binary
-        if: matrix.variant == 'headless'
-        env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-        run: |
-          cd mobile
-          cargo build --release --bin dure-desktop --no-default-features
-
-      - name: Prepare GUI artifact
-        if: matrix.variant == 'gui'
-        run: |
-          mkdir -p artifact-staging
-          cp target/release/dure-desktop artifact-staging/dure-desktop
-          cd artifact-staging
-          sha256sum dure-desktop > dure-desktop-linux.sha256
-
-      - name: Prepare headless artifact
-        if: matrix.variant == 'headless'
-        run: |
-          mkdir -p artifact-staging
-          cp target/release/dure-desktop artifact-staging/dure-desktop-headless
-          cd artifact-staging
-          sha256sum dure-desktop-headless > dure-desktop-linux-headless.sha256
-
-      - name: Upload GUI artifact
-        if: matrix.variant == 'gui'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dure-desktop-linux
-          path: artifact-staging/*
-          if-no-files-found: error
-
-      - name: Upload headless artifact
-        if: matrix.variant == 'headless'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dure-desktop-linux-headless
-          path: artifact-staging/*
-          if-no-files-found: error
-
-  build-windows:
-    runs-on: windows-latest
-    if: github.ref == 'refs/heads/windows' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install OpenSSL via vcpkg
+      - name: Windows - Install OpenSSL
+        if: contains(matrix.platform.target, 'windows')
         run: |
           vcpkg install openssl:x64-windows-static-md
           vcpkg integrate install
 
-      - name: Build release binary
+      - name: Build binary for ${{ matrix.platform.name }}
         env:
-          # OAuth credentials from GitHub Secrets
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-          # Use vcpkg for OpenSSL
-          VCPKG_ROOT: C:\vcpkg
+          VCPKG_ROOT: ${{ contains(matrix.platform.target, 'windows') && 'C:\vcpkg' || '' }}
+        working-directory: mobile
+        run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
+
+      - name: Prepare artifact
+        shell: bash
         run: |
-          cd mobile
-          cargo build --release --bin dure-desktop
+          mkdir -p artifact-staging
+
+          # Determine binary name and path
+          if [[ "${{ matrix.platform.target }}" == *"windows"* ]]; then
+            BINARY_NAME="dure-desktop.exe"
+            BINARY_PATH="target/${{ matrix.platform.target }}/release/dure-desktop.exe"
+          else
+            BINARY_NAME="dure-desktop"
+            BINARY_PATH="target/${{ matrix.platform.target }}/release/dure-desktop"
+          fi
+
+          # Copy binary
+          cp "$BINARY_PATH" "artifact-staging/$BINARY_NAME"
+
+          # Generate checksum
+          cd artifact-staging
+          if [[ "${{ matrix.platform.target }}" == *"windows"* ]]; then
+            sha256sum "$BINARY_NAME" > "$BINARY_NAME.sha256"
+          else
+            sha256sum "$BINARY_NAME" > "$BINARY_NAME.sha256"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dure-desktop-windows
-          path: target/release/dure-desktop.exe
+          name: dure-desktop-${{ matrix.platform.target }}${{ contains(matrix.platform.name, 'Headless') && '-headless' || '' }}
+          path: artifact-staging/*
+          retention-days: 1
 
-  build-macos:
-    runs-on: macos-latest
-    if: github.ref == 'refs/heads/macos' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+  release:
+    name: Release
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build release binary
-        env:
-          # OAuth credentials from GitHub Secrets
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-        run: |
-          cd mobile
-          cargo build --release --bin dure-desktop
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
         with:
-          name: dure-desktop-macos
-          path: target/release/dure-desktop
+          fetch-depth: 0
 
-  create-release:
-    needs: [build-linux, build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dure-desktop-linux/dure-desktop
-            dure-desktop-linux/dure-desktop-linux.sha256
-            dure-desktop-linux-headless/dure-desktop-headless
-            dure-desktop-linux-headless/dure-desktop-linux-headless.sha256
-            dure-desktop-windows/dure-desktop.exe
-            dure-desktop-macos/dure-desktop
+          path: artifacts
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p distbin/
+
+          # Copy all artifacts to distbin
+          for dir in ./artifacts/dure-desktop-*/; do
+            if [ -d "$dir" ]; then
+              cp -v "$dir"/* distbin/ 2>/dev/null || true
+            fi
+          done
+
+          # List what we have
+          echo "=== Release artifacts ==="
+          ls -lh distbin/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          make_latest: true
+          files: distbin/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

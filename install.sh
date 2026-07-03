@@ -10,7 +10,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-github_pat_11AAA6L3Q0JyWfyQs2hoQe_1rkCeXGMxPYLPhDD
 REPO_OWNER="nikescar"
 REPO_NAME="dure"
 CHANNEL="${DURE_CHANNEL:-stable}"
-VARIANT="${DURE_VARIANT:-headless}"  # headless (no GUI) or gui (full desktop)
+VARIANT="${DURE_VARIANT:-headless}"  # headless or gui
 QUIET="${DURE_QUIET:-no}"
 
 # ANSI color detection
@@ -387,29 +387,29 @@ install_from_release() {
     # Get release metadata
     _metadata=$(get_release_metadata)
 
-    # Determine asset names based on variant
+    # Look for x86_64-unknown-linux-musl binary (both headless and GUI use musl)
+    _binary_filename="dure-desktop"
+
     if [ "$VARIANT" = "headless" ]; then
-        _asset_name="dure-desktop-linux-headless"
-        _binary_filename="dure-desktop-headless"
+        # Look for headless variant (has -headless in artifact name)
+        _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | grep 'x86_64-unknown-linux-musl-headless' | head -1)
+        _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop\.sha256"' | grep -o 'https://[^"]*' | grep 'x86_64-unknown-linux-musl-headless' | head -1)
     else
-        _asset_name="dure-desktop-linux"
-        _binary_filename="dure-desktop"
+        # Look for GUI variant (no -headless suffix)
+        _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | grep 'x86_64-unknown-linux-musl' | grep -v 'headless' | head -1)
+        _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop\.sha256"' | grep -o 'https://[^"]*' | grep 'x86_64-unknown-linux-musl' | grep -v 'headless' | head -1)
     fi
 
-    # Parse binary and checksum URLs from release assets
-    _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*'"$_asset_name"'"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | head -1)
-    _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*'"$_asset_name"'\.sha256"' | grep -o 'https://[^"]*' | head -1)
-
     if [ -z "$_binary_url" ]; then
-        err "Could not find $_asset_name in release assets"
-        if [ "$VARIANT" = "headless" ]; then
-            err "Try GUI variant: DURE_VARIANT=gui $0"
+        err "Could not find $VARIANT variant in release assets"
+        if [ "$VARIANT" = "gui" ]; then
+            err "Try headless variant: DURE_VARIANT=headless $0"
         fi
         exit 1
     fi
 
     if [ -z "$_checksum_url" ]; then
-        err "Could not find $_asset_name.sha256 in release assets"
+        err "Could not find checksum file in release assets"
         err "This release may be incomplete."
         exit 1
     fi
@@ -438,12 +438,12 @@ install_from_release() {
 
     say "Installation complete!"
     if [ "$VARIANT" = "headless" ]; then
-        say "Installed headless variant (no GUI dependencies)"
-        say "For GUI version: DURE_VARIANT=gui $0"
+        say "Installed musl headless binary (no GUI, no dependencies)"
     else
-        say "Installed GUI variant (full desktop application)"
+        say "Installed musl GUI binary (with GTK support)"
     fi
-    say "Run 'dure info' to verify installation"
+    say "Works on any Linux distribution (no GLIBC version issues)"
+    say "Run 'dure --version' to verify installation"
 }
 
 install_from_artifacts() {
@@ -467,16 +467,14 @@ install_from_artifacts() {
     # Get artifact metadata
     _metadata=$(get_artifact_metadata)
 
-    # Determine artifact name based on variant
+    # Linux uses musl for both headless and GUI
     if [ "$VARIANT" = "headless" ]; then
-        _artifact_name="dure-desktop-linux-headless"
-        _binary_filename="dure-desktop-headless"
-        _checksum_filename="dure-desktop-linux-headless.sha256"
+        _artifact_name="dure-desktop-x86_64-unknown-linux-musl-headless"
     else
-        _artifact_name="dure-desktop-linux"
-        _binary_filename="dure-desktop"
-        _checksum_filename="dure-desktop-linux.sha256"
+        _artifact_name="dure-desktop-x86_64-unknown-linux-musl"
     fi
+    _binary_filename="dure-desktop"
+    _checksum_filename="dure-desktop.sha256"
 
     # Filter for artifact (latest)
     # Parse JSON manually (no jq dependency)
@@ -485,8 +483,8 @@ install_from_artifacts() {
 
     if [ -z "$_artifact_block" ]; then
         err "Could not find $_artifact_name artifact"
-        if [ "$VARIANT" = "headless" ]; then
-            err "Try GUI variant: DURE_VARIANT=gui DURE_CHANNEL=dev $0"
+        if [ "$VARIANT" = "gui" ]; then
+            err "Try headless variant: DURE_VARIANT=headless DURE_CHANNEL=dev $0"
         fi
         exit 1
     fi
@@ -553,12 +551,12 @@ install_from_artifacts() {
 
     say "Installation complete!"
     if [ "$VARIANT" = "headless" ]; then
-        say "Installed headless variant (no GUI dependencies)"
-        say "For GUI version: DURE_VARIANT=gui DURE_CHANNEL=dev $0"
+        say "Installed musl headless binary (no GUI, no dependencies)"
     else
-        say "Installed GUI variant (full desktop application)"
+        say "Installed musl GUI binary (with GTK support)"
     fi
-    say "Run 'dure info' to verify installation"
+    say "Works on any Linux distribution (no GLIBC version issues)"
+    say "Run 'dure --version' to verify installation"
 }
 
 main() {
@@ -593,10 +591,12 @@ main() {
             ;;
         *)
             err "Invalid DURE_VARIANT: $VARIANT"
-            err "Valid options: headless (default, no GUI), gui (full desktop)"
+            err "Valid options: headless (default), gui"
             exit 1
             ;;
     esac
+
+    say "Target: x86_64-unknown-linux-musl (all variants use musl)"
 
     # Run installation based on channel
     case "$CHANNEL" in
