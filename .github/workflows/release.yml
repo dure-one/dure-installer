@@ -24,10 +24,20 @@ jobs:
           - name: Linux x86_64 Headless
             target: x86_64-unknown-linux-musl
             build-args: "--release --bin dure-desktop --no-default-features"
+            rustflags: "-C link-arg=-lm"
 
           - name: Linux x86_64 GUI
             target: x86_64-unknown-linux-musl
             build-args: "--release --bin dure-desktop"
+            rustflags: "-C target-feature=-crt-static -C link-arg=-lm"
+
+          - name: Linux aarch64 Headless
+            target: aarch64-unknown-linux-musl
+            build-args: "--release --bin dure-desktop --no-default-features"
+            # Repeat libc/libm/libpthread/libdl at tail to fix link ordering:
+            # Rust places libc.a before C build-script archives (sqlite3mc), so
+            # SQLite's refs to strcat/pthread/log/dlerror go unresolved without these.
+            rustflags: "-C link-arg=-lm -C link-arg=-lpthread -C link-arg=-ldl -C link-arg=-lc"
 
     steps:
       - name: Checkout code
@@ -38,11 +48,19 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
-      - name: Install musl tools
-        if: contains(matrix.platform.target, 'musl')
+      - name: Install musl tools (x86_64)
+        if: matrix.platform.target == 'x86_64-unknown-linux-musl'
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev
+
+      - name: Download aarch64-linux-musl toolchain
+        if: matrix.platform.target == 'aarch64-unknown-linux-musl'
+        run: |
+          wget -q https://musl.cc/aarch64-linux-musl-cross.tgz
+          tar -xzf aarch64-linux-musl-cross.tgz -C "$HOME"
+          echo "$HOME/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=$HOME/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
 
       - name: Install GUI dependencies
         if: contains(matrix.platform.name, 'GUI')
@@ -54,12 +72,10 @@ jobs:
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-          # Allow pkg-config to find system libraries when building for musl
           PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
-          # GUI: disable static CRT to allow dynamic GTK linking
-          # Headless: keep static (no RUSTFLAGS set)
-          RUSTFLAGS: ${{ contains(matrix.platform.name, 'GUI') && '-C target-feature=-crt-static' || '' }}
+          RUSTFLAGS: ${{ matrix.platform.rustflags }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ env.CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER }}
         working-directory: mobile
         run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
 
