@@ -7,10 +7,21 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["serde", "spreadsheet"]
-serde = ["dep:serde", "dep:serde_json"]
-# UI features
-spreadsheet = ["egui-material3/spreadsheet"]
+default = ["gui", "spreadsheet"]
+# GUI support (egui/eframe) - disable for headless server builds
+gui = [
+    "dep:egui",
+    "dep:eframe",
+    "dep:egui_extras",
+    "dep:egui-material3",
+    "dep:egui-i18n",
+    "dep:image",
+    "dep:tao",
+    "dep:tray-icon",
+    "dep:gtk",
+]
+# UI features (requires gui feature)
+spreadsheet = ["gui", "egui-material3?/spreadsheet"]
 # GCP integration (disabled by default until dependencies are available)
 gcp = []
 # Database backend features
@@ -28,24 +39,24 @@ path = "src/main.rs"
 # Core dependencies
 log = { version = "0.4", default-features = false }
 anyhow = "1.0"
-serde = { version = "1.0", default-features = false, features = ["derive"], optional = true }
-serde_json = { version = "1.0", features = ["std"], optional = true }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0", features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
 
-# UI framework
-egui = { version = "0.33", default-features = false, features = ["default_fonts"] }
+# UI framework (optional - disable with --no-default-features for headless builds)
+egui = { version = "0.33", default-features = false, features = ["default_fonts"], optional = true }
 eframe = { version = "0.33", default-features = false, features = [
     "default_fonts",
     "glow",
     "persistence",
     "android-native-activity",
-] }
-egui_extras = { version = "0.33", default-features = false, features = ["image", "svg", "default", "all_loaders"] }
-egui-material3 = { git = "https://github.com/nikescar/egui-material3/", default-features = false, features = ["spreadsheet"] }
-# egui-material3 = { path = "../reference/egui-material3", default-features = false, features = ["spreadsheet"] }
+], optional = true }
+egui_extras = { version = "0.33", default-features = false, features = ["image", "svg", "default", "all_loaders"], optional = true }
+egui-material3 = { git = "https://github.com/nikescar/egui-material3/", default-features = false, features = ["spreadsheet"], optional = true }
+# egui-material3 = { path = "../reference/egui-material3", default-features = false, features = ["spreadsheet"], optional = true }
 
 # i18n
-egui-i18n = { version = "0.2", features = ["fluent"], default-features = false }
+egui-i18n = { version = "0.2", features = ["fluent"], default-features = false, optional = true }
 sys-locale = "0.3"
 
 # HTTP for cross-platform image downloads
@@ -53,7 +64,7 @@ ehttp = "0.5.0"
 webbrowser = { version = "1.2", default-features = false }
 
 # Utilities
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }
 crossbeam-queue = "0.3"
 rand = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
 poll-promise = "0.3.0"
@@ -79,7 +90,7 @@ serde_yaml = "0.9"
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
 # go-webauthn client (CLI-based, works on OpenBSD)
 go-webauthn-client = { path = "../crates/go-webauthn-client" }
-tao = "0.33"
+tao = { version = "0.33", optional = true }
 trash = "5.2"
 num_cpus = "1.17"
 dashmap = "6.1"
@@ -134,7 +145,7 @@ darkhttpd-sys = { path = "../crates/darkhttpd-sys" }
 
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
-tray-icon = { version = "0.18", default-features = false }
+tray-icon = { version = "0.18", default-features = false, optional = true }
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]
@@ -173,8 +184,8 @@ eframe = { version = "0.33", default-features = false, features = ["default_font
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18"
-eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow","x11", "wayland"] }
+gtk = { version = "0.18", optional = true }
+eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow","x11", "wayland"], optional = true }
 
 # WASM-specific dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]

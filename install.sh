@@ -10,6 +10,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-github_pat_11AAA6L3Q0JyWfyQs2hoQe_1rkCeXGMxPYLPhDD
 REPO_OWNER="nikescar"
 REPO_NAME="dure"
 CHANNEL="${DURE_CHANNEL:-stable}"
+VARIANT="${DURE_VARIANT:-headless}"  # headless (no GUI) or gui (full desktop)
 QUIET="${DURE_QUIET:-no}"
 
 # ANSI color detection
@@ -376,26 +377,39 @@ install_from_release() {
     local _temp_dir
     local _binary_path
     local _checksum_path
+    local _asset_name
+    local _binary_filename
 
     say "Running in stable mode"
+    say "Variant: $VARIANT"
     say "Fetching latest release from GitHub..."
 
     # Get release metadata
     _metadata=$(get_release_metadata)
 
+    # Determine asset names based on variant
+    if [ "$VARIANT" = "headless" ]; then
+        _asset_name="dure-desktop-linux-headless"
+        _binary_filename="dure-desktop-headless"
+    else
+        _asset_name="dure-desktop-linux"
+        _binary_filename="dure-desktop"
+    fi
+
     # Parse binary and checksum URLs from release assets
-    # Expected asset names: "dure-desktop-linux" and "dure-desktop-linux.sha256"
-    _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop-linux"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | head -1)
-    _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*dure-desktop-linux\.sha256"' | grep -o 'https://[^"]*' | head -1)
+    _binary_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*'"$_asset_name"'"' | grep -o 'https://[^"]*' | grep -v '\.sha256$' | head -1)
+    _checksum_url=$(echo "$_metadata" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*'"$_asset_name"'\.sha256"' | grep -o 'https://[^"]*' | head -1)
 
     if [ -z "$_binary_url" ]; then
-        err "Could not find dure-desktop-linux in release assets"
-        err "This release may be incomplete."
+        err "Could not find $_asset_name in release assets"
+        if [ "$VARIANT" = "headless" ]; then
+            err "Try GUI variant: DURE_VARIANT=gui $0"
+        fi
         exit 1
     fi
 
     if [ -z "$_checksum_url" ]; then
-        err "Could not find dure-desktop-linux.sha256 in release assets"
+        err "Could not find $_asset_name.sha256 in release assets"
         err "This release may be incomplete."
         exit 1
     fi
@@ -406,8 +420,8 @@ install_from_release() {
     # Setup cleanup trap
     trap "rm -rf '$_temp_dir'" EXIT
 
-    _binary_path="$_temp_dir/dure-desktop-linux"
-    _checksum_path="$_temp_dir/dure-desktop-linux.sha256"
+    _binary_path="$_temp_dir/$_binary_filename"
+    _checksum_path="$_temp_dir/$_asset_name.sha256"
 
     # Download binary and checksum
     downloader "$_binary_url" "$_binary_path"
@@ -423,7 +437,13 @@ install_from_release() {
     setup_path
 
     say "Installation complete!"
-    say "Run 'dure --version' to verify installation"
+    if [ "$VARIANT" = "headless" ]; then
+        say "Installed headless variant (no GUI dependencies)"
+        say "For GUI version: DURE_VARIANT=gui $0"
+    else
+        say "Installed GUI variant (full desktop application)"
+    fi
+    say "Run 'dure info' to verify installation"
 }
 
 install_from_artifacts() {
@@ -436,21 +456,38 @@ install_from_artifacts() {
     local _checksum_path
     local _artifact_zip
     local _artifact_block
+    local _artifact_name
+    local _binary_filename
+    local _checksum_filename
 
     say "Running in dev mode"
+    say "Variant: $VARIANT"
     say "Fetching latest artifacts from GitHub..."
 
     # Get artifact metadata
     _metadata=$(get_artifact_metadata)
 
-    # Filter for dure-desktop-linux artifact (latest)
+    # Determine artifact name based on variant
+    if [ "$VARIANT" = "headless" ]; then
+        _artifact_name="dure-desktop-linux-headless"
+        _binary_filename="dure-desktop-headless"
+        _checksum_filename="dure-desktop-linux-headless.sha256"
+    else
+        _artifact_name="dure-desktop-linux"
+        _binary_filename="dure-desktop"
+        _checksum_filename="dure-desktop-linux.sha256"
+    fi
+
+    # Filter for artifact (latest)
     # Parse JSON manually (no jq dependency)
-    # Extract the artifact block containing dure-desktop-linux
-    _artifact_block=$(echo "$_metadata" | sed -n '/"name"[[:space:]]*:[[:space:]]*"dure-desktop-linux"/,/}/p' | head -20)
+    # Extract the artifact block
+    _artifact_block=$(echo "$_metadata" | sed -n '/"name"[[:space:]]*:[[:space:]]*"'"$_artifact_name"'"/,/}/p' | head -20)
 
     if [ -z "$_artifact_block" ]; then
-        err "Could not find dure-desktop-linux artifact"
-        err "No development builds available."
+        err "Could not find $_artifact_name artifact"
+        if [ "$VARIANT" = "headless" ]; then
+            err "Try GUI variant: DURE_VARIANT=gui DURE_CHANNEL=dev $0"
+        fi
         exit 1
     fi
 
@@ -474,8 +511,8 @@ install_from_artifacts() {
     trap "rm -rf '$_temp_dir'" EXIT
 
     _artifact_zip="$_temp_dir/artifact.zip"
-    _binary_path="$_temp_dir/dure-desktop"
-    _checksum_path="$_temp_dir/dure-desktop-linux.sha256"
+    _binary_path="$_temp_dir/$_binary_filename"
+    _checksum_path="$_temp_dir/$_checksum_filename"
 
     # Download artifact (it's a zip file)
     need_cmd unzip
@@ -488,9 +525,9 @@ install_from_artifacts() {
         exit 1
     fi
 
-    # The artifact should contain dure-desktop and dure-desktop-linux.sha256
+    # The artifact should contain binary and checksum
     if [ ! -f "$_binary_path" ]; then
-        err "Binary not found in artifact: dure-desktop"
+        err "Binary not found in artifact: $_binary_filename"
         exit 1
     fi
 
@@ -498,7 +535,7 @@ install_from_artifacts() {
         # If checksum file not in artifact, create one from digest
         if [ -n "$_artifact_digest" ]; then
             say "Using digest from API"
-            echo "$_artifact_digest  dure-desktop" > "$_checksum_path"
+            echo "$_artifact_digest  $_binary_filename" > "$_checksum_path"
         else
             err "Checksum file not found and no digest available"
             exit 1
@@ -515,7 +552,13 @@ install_from_artifacts() {
     setup_path
 
     say "Installation complete!"
-    say "Run 'dure --version' to verify installation"
+    if [ "$VARIANT" = "headless" ]; then
+        say "Installed headless variant (no GUI dependencies)"
+        say "For GUI version: DURE_VARIANT=gui DURE_CHANNEL=dev $0"
+    else
+        say "Installed GUI variant (full desktop application)"
+    fi
+    say "Run 'dure info' to verify installation"
 }
 
 main() {
@@ -542,6 +585,18 @@ main() {
     say "Detected platform: $_arch"
 
     say "Channel: $CHANNEL"
+
+    # Validate variant
+    case "$VARIANT" in
+        headless|gui)
+            say "Variant: $VARIANT"
+            ;;
+        *)
+            err "Invalid DURE_VARIANT: $VARIANT"
+            err "Valid options: headless (default, no GUI), gui (full desktop)"
+            exit 1
+            ;;
+    esac
 
     # Run installation based on channel
     case "$CHANNEL" in

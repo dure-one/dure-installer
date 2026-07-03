@@ -14,6 +14,9 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/linux' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        variant: [gui, headless]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,31 +24,59 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
+      - name: Install GUI dependencies
+        if: matrix.variant == 'gui'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev golang-go
 
-      - name: Build release binary
+      - name: Build GUI release binary
+        if: matrix.variant == 'gui'
         env:
-          # OAuth credentials from GitHub Secrets
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           cd mobile
           cargo build --release --bin dure-desktop
 
-      - name: Prepare artifact files
+      - name: Build headless release binary
+        if: matrix.variant == 'headless'
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          cd mobile
+          cargo build --release --bin dure-desktop --no-default-features
+
+      - name: Prepare GUI artifact
+        if: matrix.variant == 'gui'
         run: |
           mkdir -p artifact-staging
           cp target/release/dure-desktop artifact-staging/dure-desktop
           cd artifact-staging
           sha256sum dure-desktop > dure-desktop-linux.sha256
 
-      - name: Upload artifact
+      - name: Prepare headless artifact
+        if: matrix.variant == 'headless'
+        run: |
+          mkdir -p artifact-staging
+          cp target/release/dure-desktop artifact-staging/dure-desktop-headless
+          cd artifact-staging
+          sha256sum dure-desktop-headless > dure-desktop-linux-headless.sha256
+
+      - name: Upload GUI artifact
+        if: matrix.variant == 'gui'
         uses: actions/upload-artifact@v4
         with:
           name: dure-desktop-linux
+          path: artifact-staging/*
+          if-no-files-found: error
+
+      - name: Upload headless artifact
+        if: matrix.variant == 'headless'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dure-desktop-linux-headless
           path: artifact-staging/*
           if-no-files-found: error
 
@@ -120,6 +151,8 @@ jobs:
           files: |
             dure-desktop-linux/dure-desktop
             dure-desktop-linux/dure-desktop-linux.sha256
+            dure-desktop-linux-headless/dure-desktop-headless
+            dure-desktop-linux-headless/dure-desktop-linux-headless.sha256
             dure-desktop-windows/dure-desktop.exe
             dure-desktop-macos/dure-desktop
           generate_release_notes: true

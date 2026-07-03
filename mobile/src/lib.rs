@@ -18,6 +18,7 @@ pub mod calc;
 pub mod i18n;
 pub mod site;
 pub mod storage;
+#[cfg(feature = "gui")]
 pub mod ui_dlg;
 
 // Desktop-only modules (minimal implementations for CLI)
@@ -34,10 +35,14 @@ macro_rules! egui_github_link_file {
     };
 }
 
-// Export modules for external use
+// Export modules for external use (GUI-only)
+#[cfg(feature = "gui")]
 pub use dure::DureApp as GuiApp;
+#[cfg(feature = "gui")]
 pub mod dure;
+#[cfg(feature = "gui")]
 pub mod dure_stt;
+#[cfg(feature = "gui")]
 pub mod ui_tabs;
 
 // Desktop-only modules
@@ -48,6 +53,7 @@ pub mod install;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod install_stt;
 #[cfg(all(
+    feature = "gui",
     not(any(target_os = "android", target_arch = "wasm32")),
     not(target_os = "openbsd")
 ))]
