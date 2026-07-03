@@ -5,11 +5,11 @@ members = [
     "crates/darkhttpd-sys",
     "crates/winhttpd-sys",
     "crates/go-webauthn-client",
-    "crates/go-webauthn",
     "crates/windows-installer",
 ]
 exclude = [
     "crates/asyncapi-gen",  # Standalone workspace for AsyncAPI generation
+    "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
 ]
 
 [workspace.package]
