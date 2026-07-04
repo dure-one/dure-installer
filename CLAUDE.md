@@ -50,13 +50,14 @@ All function exists for both EGUI and CLI.
 - Port Management (Port open/close management with nft)
 - Ansible Management (Add/Del ansible roles from ansiblegalaxy)
 - System Hardener (using Jangbi project)
+- Dure WSS Service Management (Add/Del dure install)
 
 ### 5. Hosting Management
 - DNS management (octodns)
 - ACME License Management (lego)
 - Dure Chat Server Hosting (dure)
 
-### 6. Store Management (EGUI/CLI)
+### 6. Store Management (EGUI/CLI, WSS Client)
 - Promotions
 - Products
 - Orders
@@ -64,7 +65,7 @@ All function exists for both EGUI and CLI.
 - Accounts
 - Dure (shared listings/shipments with other stores)
 
-### 7. Guest Front (WASM)
+### 7. Guest Front (WASM, WSS Client)
 - Minimum guest identity for customers
 - Product browsing and cart functionality
 - Product listings
