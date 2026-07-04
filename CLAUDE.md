@@ -29,6 +29,102 @@ dure/
 └── Cargo.toml          # Workspace manifest
 ```
 
+### Application Architecture
+
+The project follows a layered architecture with platform-specific entry points and shared business logic:
+
+#### Entry Points (`mobile/src/`)
+- **`main.rs`** - Desktop launcher (detects CLI/GUI/Tray mode automatically)
+- **`main_android.rs`** - Android native-activity entry point
+- **`main_wasm.rs`** - WebAssembly entry point for browser deployment
+- **`lib.rs`** - Library root with conditional compilation for all platforms
+
+#### Core Business Logic (`mobile/src/calc/`)
+Business logic controller layer (API → calc → DB → UI):
+- **`db.rs`** - Database operations and query interface
+- **`crypt.rs`** - Cryptographic operations (encryption, signing, key management)
+- **`dns.rs`** - DNS record management logic
+- **`gcp.rs`** / **`gcp_rest.rs`** - Google Cloud Platform integrations
+- **`platform.rs`** / **`platform_gcp.rs`** - Cloud platform management
+- **`hosting.rs`** / **`hosting_gcp.rs`** - Web hosting deployment logic
+- **`lego.rs`** - ACME/Let's Encrypt certificate management
+- **`nft.rs`** - nftables firewall rule management
+- **`ns.rs`** - Nameserver configuration
+- **`site.rs`** - Static site generation
+- **`keyring.rs`** - Secure key storage
+- **`session.rs`** - User session management
+- **`audit.rs`** - Security audit and logging
+
+#### Data Layer (`mobile/src/storage/`)
+- **`diesel_schema.rs`** - Database schema definitions (Diesel ORM)
+- **`models.rs`** - Data models and structs
+
+#### External Integrations (`mobile/src/api/`)
+- **`desktop.rs`** - Desktop-specific API utilities
+- **`ehttp_cache.rs`** - HTTP caching layer
+- **`gcp_oauth.rs`** - Google OAuth2 authentication
+- **`ns_cloudflare.rs`** - Cloudflare DNS API
+- Additional providers: DuckDNS, Porkbun, GCP Cloud DNS
+
+#### Real-Time Communication (`mobile/src/wss/`)
+- **`server/`** - WebSocket Secure server (HTTPS + WSS)
+  - `mod.rs` - Server initialization and connection handling
+  - `tls.rs` - TLS certificate management
+  - `ws.rs` - WebSocket protocol handler
+  - `https.rs` - HTTPS request handler
+  - `http_get.rs` / `http_post.rs` - HTTP endpoint handlers
+  - `webauthn.rs` - WebAuthn authentication
+- **`client.rs`** - WebSocket client for store/guest frontends
+
+#### User Interface (`mobile/src/` - feature-gated with `gui`)
+- **`dure.rs`** - Main eframe application (cross-platform GUI)
+- **`dure_stt.rs`** - Application state management
+- **`ui_tabs/`** - Tab-based navigation components:
+  - `platform.rs` - Cloud platform management UI
+  - `ssh.rs` - SSH host management UI
+  - `ns.rs` - DNS nameserver UI
+  - `site.rs` - Website hosting UI
+  - `products.rs` / `orders.rs` - E-commerce management UI
+  - `channel.rs` / `dm.rs` / `members.rs` - Messaging UI
+  - `client.rs` - Store client UI
+  - `email.rs` - Email integration UI
+  - `roles.rs` - User role management UI
+- **`ui_dlg/`** - Dialog and popup components:
+  - `settings.rs` - Settings dialog
+  - `about.rs` - About dialog
+  - `clipboard_popup.rs` - Clipboard utilities
+  - `platform_gcp.rs` - GCP-specific dialogs
+- **`tray.rs`** - System tray integration (Windows/Linux/macOS, not OpenBSD)
+
+#### Command-Line Interface (`mobile/src/cli/`)
+- **`mod.rs`** - CLI argument parser (clap-based)
+- **`commands/`** - Command implementations for headless operation
+
+#### Platform-Specific Modules
+- **`android/`** - Android utilities:
+  - `activity.rs` - Activity lifecycle management
+  - `clipboard.rs` - Android clipboard integration
+  - `log.rs` - Android logging (logcat)
+  - `inputmethod.rs` - Soft keyboard handling
+- **`install.rs`** / **`install_stt.rs`** - Desktop installation/deployment
+- **`http_server.rs`** - OAuth callback server (darkhttpd on Unix, winhttpd on Windows)
+
+#### Supporting Modules
+- **`config.rs`** - YAML-based configuration management
+- **`i18n.rs`** - Fluent-based internationalization (system locale detection)
+- **`attestation/`** - Binary verification with GitHub Sigstore
+- **`site/`** - Static site generation and asset management
+- **`log_capture.rs`** - In-memory log buffer for GUI display
+- **`asyncapi_spec.rs`** - API documentation generation
+
+#### Design Principles
+1. **Platform Abstraction** - Conditional compilation (`#[cfg(...)]`) isolates platform-specific code
+2. **Feature Flags** - GUI optional (`--no-default-features` for headless builds)
+3. **Layered Architecture** - Clear separation: UI → calc → storage/api
+4. **Async Runtime** - smol for async operations (network, I/O)
+5. **Security First** - Attestation, encryption, secure key storage
+6. **Dual Interface** - All features accessible via CLI and GUI
+
 ## Core Features
 
 All function exists for both EGUI and CLI. 
