@@ -44,6 +44,8 @@ pub mod dure;
 pub mod dure_stt;
 #[cfg(feature = "gui")]
 pub mod ui_tabs;
+#[cfg(feature = "gui")]
+pub mod viewmodel;
 
 // Desktop-only modules
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
