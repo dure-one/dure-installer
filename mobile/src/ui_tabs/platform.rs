@@ -798,7 +798,7 @@ impl PlatformTab {
                                 .id_salt(format!("operations_scroll_{}", idx))
                                 .auto_shrink([false, true])
                                 .show(ui, |ui| {
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.spacing_mut().item_spacing.x = 2.0;
                                         ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
@@ -850,13 +850,13 @@ impl PlatformTab {
                                         }
 
                                         // 5. Regen
-                                        if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_regen_vm"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
-                                        }
+                                        // if ui.add_enabled(row_for_actions.has_vm,
+                                        //     MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
+                                        //     ui.data_mut(|d| d.insert_temp(
+                                        //         egui::Id::new("platform_action_regen_vm"),
+                                        //         row_for_actions.platform_name.clone()
+                                        //     ));
+                                        // }
 
                                         // 6. Billing
                                         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -883,8 +883,10 @@ impl PlatformTab {
                         })
                 });
             }
-
-            table.show(ui);
+            
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                table.show(ui);
+            });
 
             // Process pending actions from button clicks
             // Refresh action (available on all platforms)
