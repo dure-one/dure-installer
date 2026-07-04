@@ -6,7 +6,7 @@
 
 ### Key Characteristics
 
-- **Language**: Rust (2021 edition, min version 1.81)
+- **Language**: Rust (nightly toolchain required)
 - **UI Framework**: egui + eframe (Material3 design)
 - **Architecture**: Multi-platform (Desktop, Mobile, WASM)
 - **Purpose**: Distributed e-commerce for small shop owners
@@ -31,26 +31,32 @@ dure/
 
 ## Core Features
 
+All function exists for both EGUI and CLI. 
+
 ### 1. Identity Management
 - Private/Public key for personal identity
-- Firebase/Supabase identity integration
+- Platform(GCP), SSH Host management
 - Attestation for WASM/EGUI apps with GitHub Sigstore
 
-### 2. Guest Front (WASM)
-- Minimum guest identity for customers
-- Product browsing and cart functionality
+### 2. Platform Management 
+- GCP management (Add/Del VM,View Billing)
 
-### 3. Store Front (WASM)
-- Product listings
-- Shopping cart
-- Payment integration (Portone, KakaoPay)
+### 3. DNS Management(Cloudflare, Google Cloud DNS, DuckDNS, Porkbun)
+- DNS management (Add/Del domain, Add/Del Txt Record)
 
-### 4. Hosting Management (EGUI)
+### 4. SSH Host Management
+- Automatically added host from Platform Management
+- Docker Management (Add/Del docker host from dockerhub)
+- Port Management (Port open/close management with nft)
+- Ansible Management (Add/Del ansible roles from ansiblegalaxy)
+- System Hardener (using Jangbi project)
+
+### 5. Hosting Management
 - DNS management (octodns)
-- Database setup (Firebase, Supabase)
-- Site deployment (Firebase/Supabase Cloud Functions)
+- ACME License Management (lego)
+- Dure Chat Server Hosting (dure)
 
-### 5. Store Management (EGUI)
+### 6. Store Management (EGUI/CLI)
 - Promotions
 - Products
 - Orders
@@ -58,24 +64,34 @@ dure/
 - Accounts
 - Dure (shared listings/shipments with other stores)
 
+### 7. Guest Front (WASM)
+- Minimum guest identity for customers
+- Product browsing and cart functionality
+- Product listings
+- Shopping cart
+- Payment integration (Portone, KakaoPay)
+
 ## Platform Support
 
-| Platform | Status | Features |
-|----------|--------|----------|
-| **Linux** | ✅ Supported | Full EGUI client (X11, Wayland) |
-| **Windows** | ✅ Supported | Full EGUI client |
-| **macOS** | ✅ Supported | Full EGUI client |
-| **Android** | ✅ Supported | EGUI client via native-activity |
-| **WASM** | ✅ Supported | Guest & Store Front only |
+| Platform | Status | Features | Distribution |
+|----------|--------|----------|--------------|
+| **Linux x86_64** | ✅ Supported | Full EGUI client / Headless CLI | GitHub Releases, Snap Store |
+| **Linux aarch64** | ✅ Supported | Headless CLI | GitHub Releases, Snap Store |
+| **macOS (Intel/Apple Silicon)** | ✅ Supported | Full EGUI client | GitHub Releases |
+| **Windows x86_64** | ✅ Supported | Full EGUI client | GitHub Releases |
+| **Android** | ✅ Supported | EGUI client via native-activity | Google Play Store |
+| **WASM** | ✅ Supported | Guest & Store Front only | Web deployment |
 
 ## Technology Stack
 
 ### Core Dependencies
 - **UI**: egui 0.33, eframe 0.33, egui-material3
 - **i18n**: egui-i18n with Fluent
-- **Database**: Diesel 2.2, diesel_migrations 2.2 (SQLite + optional PostgreSQL)
-- **Async**: tokio (multi-threaded runtime)
-- **HTTP**: ureq, ehttp
+- **Database**: Diesel 2.3, diesel_migrations 2.3 (SQLite with encryption via libsqlite3-hotbundle + optional PostgreSQL)
+- **Async**: smol 2.0 (multi-threaded runtime)
+- **HTTP**: ureq 2.12 (with rustls/ring TLS backend), ehttp
+- **TLS/Crypto**: rustls 0.23 (ring backend), futures-rustls 0.26 - **no OpenSSL dependency**
+- **SSH**: russh 0.45 (pure Rust, no OpenSSL)
 - **Serialization**: serde, serde_json, bincode
 
 ### Platform-Specific
@@ -129,39 +145,109 @@ dure/
 
 ### Prerequisites
 
-#### OpenBSD
-OpenBSD requires OpenSSL 3.5+ (uses eopenssl35 instead of LibreSSL):
-
-**Option 1: Using direnv (recommended)**
+**Rust Toolchain**: This project requires **Rust nightly**. Install with:
 ```bash
-# Install direnv
-pkg_add direnv
-
-# Add to ~/.bashrc
-eval "$(direnv hook bash)"
-
-# Allow direnv in this project
-cd /path/to/dure
-direnv allow
+rustup toolchain install nightly
+rustup default nightly
 ```
 
-**Option 2: Manual environment variables**
+#### Platform-Specific Requirements
+
+##### Linux (for musl builds)
 ```bash
-# Add to ~/.bashrc or ~/.profile
-export OPENSSL_LIB_DIR="/usr/local/lib/eopenssl35"
-export OPENSSL_INCLUDE_DIR="/usr/local/include/eopenssl35"
+# For x86_64 musl builds
+sudo apt-get update
+sudo apt-get install -y musl-tools musl-dev
+
+# For aarch64 musl cross-compilation
+# Download and install aarch64-linux-musl toolchain
+wget https://github.com/troglobit/misc/releases/download/11-20211120/aarch64-linux-musl-cross.tgz
+tar -xzf aarch64-linux-musl-cross.tgz -C "$HOME"
+export PATH="$HOME/aarch64-linux-musl-cross/bin:$PATH"
+export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER="$HOME/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc"
 ```
 
-### Desktop
+##### Linux GUI Dependencies
+For GUI builds on Linux, install GTK and related dependencies:
 ```bash
-# Debug build
+sudo apt-get install -y pkg-config libgtk-3-dev \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev \
+  libcairo2-dev libpango1.0-dev golang-go
+```
+
+##### Windows
+**Note**: The CI workflow installs OpenSSL via vcpkg, but this may not be necessary since the project uses rustls. If you encounter build issues:
+```bash
+vcpkg install openssl:x64-windows-static-md
+vcpkg integrate install
+```
+
+### Quick Build Commands
+
+#### Desktop - Local Development
+```bash
+# Debug build (default toolchain)
 cargo build
 
-# Release build
+# Release build (default toolchain)
 cargo build --release
 
 # Dev-release (faster iteration)
 cargo build --profile dev-release
+```
+
+#### Desktop - Production Builds (CI/CD Targets)
+
+**Linux x86_64 (musl) - Headless**
+```bash
+rustup target add x86_64-unknown-linux-musl
+cd mobile
+RUSTFLAGS="-C link-arg=-lm" \
+  cargo +nightly build --release --bin dure-desktop \
+  --no-default-features --target x86_64-unknown-linux-musl
+```
+
+**Linux x86_64 (musl) - GUI**
+```bash
+rustup target add x86_64-unknown-linux-musl
+cd mobile
+RUSTFLAGS="-C target-feature=-crt-static -C link-arg=-lm" \
+  cargo +nightly build --release --bin dure-desktop \
+  --target x86_64-unknown-linux-musl
+```
+
+**Linux aarch64 (musl) - Headless**
+```bash
+rustup target add aarch64-unknown-linux-musl
+cd mobile
+RUSTFLAGS="-C link-arg=-lm -C link-arg=-lpthread -C link-arg=-ldl -C link-arg=-lc" \
+  cargo +nightly build --release --bin dure-desktop \
+  --no-default-features --target aarch64-unknown-linux-musl
+```
+
+**macOS x86_64**
+```bash
+rustup target add x86_64-apple-darwin
+cd mobile
+cargo +nightly build --release --bin dure-desktop \
+  --target x86_64-apple-darwin
+```
+
+**macOS aarch64 (Apple Silicon)**
+```bash
+rustup target add aarch64-apple-darwin
+cd mobile
+cargo +nightly build --release --bin dure-desktop \
+  --target aarch64-apple-darwin
+```
+
+**Windows x86_64**
+```bash
+rustup target add x86_64-pc-windows-msvc
+cd mobile
+cargo +nightly build --release --bin dure-desktop \
+  --target x86_64-pc-windows-msvc
 ```
 
 ### Android
@@ -177,6 +263,25 @@ cd mobile
 # Target: wasm32-unknown-unknown
 ```
 
+### CI/CD Build Matrix
+
+The project uses GitHub Actions for automated builds. See `.github/workflows/release.yml` for the complete build matrix:
+
+| Platform | Target | Build Type | Notes |
+|----------|--------|------------|-------|
+| **Linux x86_64** | `x86_64-unknown-linux-musl` | Headless | Static musl, no GUI |
+| **Linux x86_64** | `x86_64-unknown-linux-musl` | GUI | Dynamic CRT for GTK |
+| **Linux aarch64** | `aarch64-unknown-linux-musl` | Headless | Cross-compiled with musl-cross |
+| **macOS x86_64** | `x86_64-apple-darwin` | GUI | Intel Macs |
+| **macOS aarch64** | `aarch64-apple-darwin` | GUI | Apple Silicon |
+| **Windows x86_64** | `x86_64-pc-windows-msvc` | GUI | MSVC toolchain |
+
+**Build Features:**
+- All builds use **Rust nightly** toolchain
+- Linux builds prefer **musl** for static linking and portability
+- GUI builds disable `crt-static` on musl to allow dynamic GTK linking
+- aarch64 builds include explicit libc/pthread/dl linking for SQLite compatibility
+
 ## Documentation
 
 See [`docs/`](./docs/) directory for detailed documentation:
@@ -188,6 +293,30 @@ See [`docs/`](./docs/) directory for detailed documentation:
 - **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[docs/GUIDELINES_RUST_CODING.md](./docs/GUIDELINES_RUST_CODING.md)** - Rust coding standards
 - **[docs/GUIDELINES_GIT_COMMITS.md](./docs/GUIDELINES_GIT_COMMITS.md)** - Git commit conventions
+
+## Distribution & Releases
+
+### GitHub Releases
+Tagged releases (`v*`) trigger automated builds for all platforms:
+- Linux x86_64 (musl): Headless and GUI binaries
+- Linux aarch64 (musl): Headless binary
+- macOS x86_64 and aarch64: GUI binaries
+- Windows x86_64: GUI binary
+
+All artifacts include SHA256 checksums for verification.
+
+### Snap Store
+Linux builds (x86_64, aarch64, armv7) are automatically published to the Snap Store:
+```bash
+sudo snap install dure
+```
+
+### Google Play Store
+Android builds are automatically published to Google Play Store after successful desktop builds.
+
+### Package Names
+- **Android**: `pe.nikescar.dure`
+- **Snap**: `dure`
 
 ## Configuration
 
@@ -210,10 +339,12 @@ cargo test --target x86_64-unknown-linux-gnu
 
 ## Known Limitations
 
-1. No iOS support yet (Android only for mobile)
-2. WASM deployment workflow not fully documented
-3. Some documentation needs updating to match Dure (not beads)
-4. Payment gateway integration in progress
+1. **No iOS support yet** - Android only for mobile platforms
+2. **WASM deployment** - Build process not fully automated in CI/CD
+3. **Linux aarch64 GUI** - Only headless builds available (no GUI dependencies in CI)
+4. **Documentation** - Some docs still reference old project name (beads_rust)
+5. **Payment integration** - Portone and KakaoPay integration in progress
+6. **Requires nightly** - Project depends on nightly Rust features
 
 ## Comparison with Traditional E-commerce
 
@@ -235,6 +366,8 @@ When working with this codebase:
 4. **Use [docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Fast lookups for commands and patterns
 5. **Ignore docs marked with ⚠️** - These reference a different project (beads_rust)
 6. **Focus on `mobile/src/`** - This is where the actual application code lives (despite the directory name)
+7. **Check `.github/workflows/`** - For build configurations and CI/CD processes
+8. **Remember**: This project requires **Rust nightly** and prefers **musl** builds on Linux
 
 ## Contributing
 
