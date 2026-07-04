@@ -582,12 +582,12 @@ rustc --version
 **Linux:**
 ```bash
 # Ubuntu/Debian
-sudo apt install build-essential pkg-config libssl-dev \
+sudo apt install build-essential pkg-config \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
   libxkbcommon-dev
 
 # Fedora
-sudo dnf install gcc pkg-config openssl-devel \
+sudo dnf install gcc pkg-config \
   libxcb-devel libxkbcommon-devel
 ```
 

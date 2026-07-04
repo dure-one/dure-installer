@@ -104,15 +104,6 @@ Created complete OpenBSD support for monoio (transitive dependency):
 
 ### 2. Build Configuration
 
-**OpenSSL Configuration** (`.cargo/config.toml`):
-```toml
-[env]
-OPENSSL_LIB_DIR = "/usr/local/lib/eopenssl35"
-OPENSSL_INCLUDE_DIR = "/usr/local/include/eopenssl35"
-```
-
-Required because OpenBSD ships LibreSSL by default, but webauthn-rs needs OpenSSL.
-
 **Cargo Patch** (`Cargo.toml`):
 ```toml
 [patch.crates-io]
