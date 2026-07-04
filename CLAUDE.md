@@ -125,6 +125,108 @@ Business logic controller layer (API → calc → DB → UI):
 5. **Security First** - Attestation, encryption, secure key storage
 6. **Dual Interface** - All features accessible via CLI and GUI
 
+## Distributed E-Commerce Architecture
+
+Dure implements a **federated e-commerce model** where independent shop servers can partner to share product catalogs while maintaining full control over their own data and operations.
+
+### Standard Installation
+
+```
+┌─────────────────────────────────┐
+│ GCP Debian VM                   │
+│  ┌───────────────────────────┐  │
+│  │ Dure WSS Service          │  │
+│  │ Ports: 80, 443 (HTTPS/WSS)│  │
+│  │ Backend: SQLite           │  │
+│  └───────────────────────────┘  │
+└─────────────────────────────────┘
+```
+
+**Deployment Characteristics:**
+- **Single-instance** - One VM per shop, SQLite backend
+- **TLS** - Automatic ACME certificates (Let's Encrypt)
+- **Scale** - Optimized for small shops (100s-1000s of products)
+
+### Federation Model
+
+```
+                    ┌─────────────────┐
+                    │ Chief Registry  │
+                    │ (Group Manager) │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+        ┌─────▼────┐   ┌────▼─────┐  ┌────▼─────┐
+        │ Shop A   │   │ Shop B   │  │ Shop C   │
+        │ (Owner)  │   │ (Partner)│  │ (Partner)│
+        └──────────┘   └──────────┘  └──────────┘
+```
+
+**Four Roles:**
+
+| Role | Authority | Scope |
+|------|-----------|-------|
+| **Dure Chief** | Group owner | Manages membership, sets policies (return/shipping standards) |
+| **Shop Owner** | Server owner | Full control over own products, orders, guests |
+| **Partner Shop** | Other shop owner | Product metadata visible to partners |
+| **Guest** | Customer | Per-shop authentication, isolated profiles |
+
+### Key Features
+
+**Product Federation:**
+- Partner shops share product **metadata** (ID, name, options)
+- Full product data stays on origin server
+- Browse partner products locally, checkout redirects to partner
+
+**Data Ownership:**
+- Orders always created on **partner's server** (no local copy)
+- Guest data **never shared** between shops
+- Each shop owns: products (full), orders (full), guests (full)
+- Partner products cached as **metadata only**
+
+**Authentication:**
+- **Site-to-Site**: DNS TXT records with ed25519 public keys
+- **Site-to-Guest**: OAuth (Kakao/Naver/Google), per-shop sessions
+- **Payment**: Direct webhooks (Portone/KakaoPay) to shop server
+
+**Privacy by Design:**
+- No cross-shop guest identity
+- No session federation
+- Orders owned by product's shop only
+- SQLite local-only (no replication)
+
+### Example: Cross-Shop Purchase Flow
+
+```
+1. Guest browses Shop A → sees Shop A + Shop B products (metadata)
+2. Guest clicks Shop B product → Shop A fetches full details from Shop B
+3. Guest adds to cart, checkout → Shop A redirects to Shop B
+4. Guest places order → Order created on Shop B's server
+5. Payment → Webhook goes directly to Shop B
+6. Shop A never stores the order (only optional tracking reference)
+```
+
+### Security Model
+
+- **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
+- **Site-to-Site**: DNS TXT public key verification (ed25519 signatures)
+- **Site-to-Guest**: OAuth 2.0, HTTP-only cookies, CSRF protection
+- **Payment**: HMAC webhook verification, timestamp validation, idempotency
+- **Trust**: Chief-mediated group membership, no shared secrets
+
+### Reference Documentation
+
+For complete architectural specification, see:
+**[Distributed Architecture Design Spec](./docs/superpowers/specs/2026-07-04-dure-distributed-architecture-design.md)**
+
+Includes:
+- Detailed layer diagrams (infrastructure, federation, auth, application)
+- Complete database schema (aligned with AsyncAPI messages)
+- End-to-end data flows
+- Security analysis
+- Implementation phases
+
 ## Core Features
 
 All function exists for both EGUI and CLI. 
@@ -151,7 +253,8 @@ All function exists for both EGUI and CLI.
 ### 5. Hosting Management
 - DNS management (octodns)
 - ACME License Management (lego)
-- Dure Chat Server Hosting (dure)
+- Dure Chat Server WSS Server(including webhook for PG) Hosting (dure)
+- Webhook Service for PG (Portone, KakaoPay)
 
 ### 6. Store Management (EGUI/CLI, WSS Client)
 - Promotions
@@ -163,10 +266,10 @@ All function exists for both EGUI and CLI.
 
 ### 7. Guest Front (WASM, WSS Client)
 - Minimum guest identity for customers
-- Product browsing and cart functionality
 - Product listings
 - Shopping cart
-- Payment integration (Portone, KakaoPay)
+- Payment using Portone and Kakaopay
+- Login with Kakao/Naver/Google Oauth
 
 ## Platform Support
 
