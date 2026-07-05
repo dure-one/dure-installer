@@ -280,6 +280,12 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn regenerate_vm(&self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::RegenerateVM {
+            platform_name, vm_name, zone
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn update_firewall(&self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
         self.platform_tx.send_blocking(platform::PlatformCommand::UpdateFirewall {
             platform_name, allow_ip

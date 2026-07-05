@@ -733,6 +733,12 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::VMRegenerated { vm_name, message, .. }) => {
+                        eprintln!("✓ {}", message);
+                        // Refresh to show updated VM details
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::VMDeleted { platform_name, vm_name }) => {
                         eprintln!("✓ VM {} deleted successfully", vm_name);
 
@@ -1018,8 +1024,8 @@ impl PlatformTab {
                     // Find platform and get vm_name
                     if let Ok((app_config, _)) = load_config() {
                         if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
-                            if let Some(vm) = platform.vms.first() {
-                                self.regenerate_vm(platform_name, vm.name.clone());
+                            if let Some(vm_cfg) = platform.vms.first() {
+                                self.regenerate_vm(platform_name, vm_cfg.name.clone(), vm);
                             }
                         }
                     }
@@ -1682,75 +1688,35 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn regenerate_vm(&mut self, platform_name: String, vm_name: String) {
-        use crate::calc::gcp_rest::GcpRestClient;
-        use crate::calc::hosting_gcp;
-
-        // Load config
-        let (mut app_config, config_path) = match load_config() {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("Failed to load config: {}", e);
-                self.load_error = Some(format!("Failed to load config: {}", e));
-                return;
-            }
-        };
-
-        // Find platform (mutable)
-        let platform = match app_config
-            .platforms
-            .iter_mut()
-            .find(|p| p.name == platform_name)
-        {
-            Some(p) => p,
-            None => {
-                eprintln!("Platform not found: {}", platform_name);
-                self.load_error = Some(format!("Platform not found: {}", platform_name));
-                return;
-            }
-        };
-
-        // Find VM to get zone
-        let zone = match platform.vms.iter().find(|v| v.name == vm_name) {
-            Some(v) => v.zone.clone(),
-            None => {
-                eprintln!("VM not found: {}", vm_name);
-                self.load_error = Some(format!("VM not found: {}", vm_name));
-                return;
-            }
-        };
-
-        // Get access token
-        let access_token = match &platform.gcp_oauth_access_token {
-            Some(token) => token.clone(),
-            None => {
-                eprintln!("No access token for platform: {}", platform_name);
-                self.load_error = Some("OAuth not connected".to_string());
-                return;
-            }
-        };
-
-        // Create GCP client
-        let client = GcpRestClient::new(access_token);
-
-        // Regenerate VM
-        match hosting_gcp::regenerate_vm(&client, platform, &zone) {
-            Ok(message) => {
-                eprintln!("✓ {}", message);
-
-                // Save updated config
-                if let Err(e) = app_config.save(&config_path) {
-                    eprintln!("Failed to save config: {}", e);
-                    self.load_error = Some(format!("Failed to save config: {}", e));
-                } else {
-                    self.loaded = false;
-                    self.load_error = None;
+    fn regenerate_vm(&mut self, platform_name: String, vm_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        if let Some(vm) = vm {
+            // Get zone from config
+            let zone = match load_config() {
+                Ok((app_config, _)) => {
+                    if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                        if let Some(vm_cfg) = platform.vms.iter().find(|v| v.name == vm_name) {
+                            vm_cfg.zone.clone()
+                        } else {
+                            self.load_error = Some(format!("VM not found: {}", vm_name));
+                            return;
+                        }
+                    } else {
+                        self.load_error = Some(format!("Platform not found: {}", platform_name));
+                        return;
+                    }
                 }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    return;
+                }
+            };
+
+            if let Err(e) = vm.regenerate_vm(platform_name.clone(), vm_name.clone(), zone) {
+                self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
             }
-            Err(e) => {
-                eprintln!("Failed to regenerate VM: {}", e);
-                self.load_error = Some(format!("Failed to regenerate VM: {}", e));
-            }
+            // Result will be delivered via VMRegenerated event
+        } else {
+            self.load_error = Some("ViewModel not available".to_string());
         }
     }
 

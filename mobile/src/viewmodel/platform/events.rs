@@ -31,6 +31,7 @@ pub enum PlatformEvent {
     VMCreated { platform_name: String, vm_name: String, external_ip: String },
     VMDeleted { platform_name: String, vm_name: String },
     VMRestarted { platform_name: String, vm_name: String },
+    VMRegenerated { platform_name: String, vm_name: String, message: String },
 
     // Firewall Events
     FirewallUpdated { platform_name: String, whitelisted_ip: String },

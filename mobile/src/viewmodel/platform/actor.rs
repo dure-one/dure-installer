@@ -48,6 +48,9 @@ impl PlatformActor {
             PlatformCommand::RestartVM { platform_name, vm_name, zone } => {
                 self.restart_vm(platform_name, vm_name, zone).await
             }
+            PlatformCommand::RegenerateVM { platform_name, vm_name, zone } => {
+                self.regenerate_vm(platform_name, vm_name, zone).await
+            }
             PlatformCommand::UpdateFirewall { platform_name, allow_ip } => {
                 self.update_firewall(platform_name, allow_ip).await
             }
@@ -175,6 +178,45 @@ impl PlatformActor {
         self.send_event(PlatformEvent::VMRestarted {
             platform_name,
             vm_name,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn regenerate_vm(&mut self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
+        self.send_progress("regenerate_vm", 0.3, "Regenerating VM...").await;
+
+        // Load platform and config
+        let (platform, config_path) = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<_> {
+                let (mut config, path) = crate::calc::db::load_config()?;
+                let platform = config.platforms
+                    .iter_mut()
+                    .find(|p| p.name == platform_name)
+                    .ok_or_else(|| anyhow::anyhow!("Platform not found"))?;
+                Ok((platform.clone(), path))
+            }
+        }).await?;
+
+        self.send_progress("regenerate_vm", 0.6, "Calling GCP API...").await;
+
+        // Regenerate VM
+        let message = runtime::unblock({
+            let platform = platform.clone();
+            let zone = zone.clone();
+            move || {
+                let client = crate::calc::gcp_rest::GcpRestClient::new(
+                    platform.gcp_oauth_access_token.unwrap_or_default()
+                );
+                crate::calc::hosting_gcp::regenerate_vm(&client, &platform, &zone)
+            }
+        }).await?;
+
+        self.send_event(PlatformEvent::VMRegenerated {
+            platform_name,
+            vm_name,
+            message,
         }).await;
 
         Ok(())

@@ -25,6 +25,7 @@ pub enum PlatformCommand {
         zone: String
     },
     RestartVM { platform_name: String, vm_name: String, zone: String },
+    RegenerateVM { platform_name: String, vm_name: String, zone: String },
 
     // Firewall Operations
     UpdateFirewall { platform_name: String, allow_ip: String },
