@@ -381,15 +381,18 @@ mod billing_tests {
             records: vec![
                 BillingRecord {
                     month: "2026-07".to_string(),
-                    cost: 12.45,
+                    currency: "USD".to_string(),
+                    total_net_cost: 12.45,
                 },
                 BillingRecord {
                     month: "2026-06".to_string(),
-                    cost: 11.89,
+                    currency: "USD".to_string(),
+                    total_net_cost: 11.89,
                 },
                 BillingRecord {
                     month: "2026-05".to_string(),
-                    cost: 13.20,
+                    currency: "USD".to_string(),
+                    total_net_cost: 13.20,
                 },
             ],
         });

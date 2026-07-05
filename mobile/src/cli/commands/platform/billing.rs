@@ -45,8 +45,8 @@ pub async fn execute_billing_inner(
 
         let mut total = 0.0;
         for record in &records {
-            println!("{:<12} ${:.2}", record.month, record.cost);
-            total += record.cost;
+            println!("{:<12} ${:.2}", record.month, record.total_net_cost);
+            total += record.total_net_cost;
         }
 
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
