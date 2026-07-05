@@ -10,6 +10,9 @@ use crate::install;
 use crate::ui_dlg::DlgSettings;
 use crate::{Config, Settings};
 
+// ViewModel (MVVM architecture)
+use crate::viewmodel::ViewModel;
+
 // Desktop-only imports
 use eframe::egui;
 use eframe::egui::Color32;
@@ -103,6 +106,10 @@ pub struct DureApp {
     // HTTP cache
     #[cfg_attr(feature = "serde", serde(skip))]
     pub ehttp_cache: Option<Arc<crate::api::ehttp_cache::EhttpCache>>,
+
+    // ViewModel (MVVM architecture)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub viewmodel: Option<ViewModel>,
 
     // Tabs state
     pub active_tab: crate::ui_tabs::Tab,
@@ -230,6 +237,7 @@ impl Default for DureApp {
             square_center,
             square_corners,
             ehttp_cache,
+            viewmodel: None,
             // Tabs
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             active_tab: crate::ui_tabs::Tab::Platform,
@@ -258,6 +266,17 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Initialize ViewModel on first update (lazy initialization)
+        if self.viewmodel.is_none() {
+            self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
+        }
+
+        // Poll ViewModel events
+        if let Some(ref mut vm) = self.viewmodel {
+            let _events = vm.poll_events(ctx);
+            // Events will be processed when actors are implemented
+        }
+
         // Apply Material3 theme to egui context
         self.apply_theme(ctx);
 
