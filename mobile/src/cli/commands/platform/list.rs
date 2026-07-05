@@ -115,3 +115,83 @@ pub fn execute_platform_show(name: String) -> Result<()> {
     println!("{}", output);
     Ok(())
 }
+
+/// Execute combined platform list and show (default when no subcommand)
+pub fn execute_platform_combined() -> Result<()> {
+    let config = load_config()?;
+
+    if config.platforms.is_empty() {
+        println!("No platforms configured");
+        println!();
+        println!("Add a platform with: dure platform add <name>");
+        println!("Example: dure platform add my-gcp --type gcp");
+        return Ok(());
+    }
+
+    // Show summary list
+    println!("Platform Summary:");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("{:<20} {:<8} {}", "Name", "Type", "Steps");
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    for platform in &config.platforms {
+        let steps = format_steps(platform);
+        println!("{:<20} {:<8} {}",
+            platform.name,
+            platform.platform_type.to_uppercase(),
+            steps.chars().take(50).collect::<String>()
+        );
+    }
+
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!("\nSteps: Connected → Project → VM → Firewall → SSH");
+    println!("\nTotal platforms: {}", config.platforms.len());
+    println!();
+
+    // Show details for each platform
+    for (idx, platform) in config.platforms.iter().enumerate() {
+        if idx > 0 {
+            println!();
+        }
+
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Platform: {}", platform.name);
+        println!("Type: {}", platform.platform_type.to_uppercase());
+        println!();
+
+        println!("Connection Steps:");
+        let steps = format_steps(platform);
+        for step in steps.split("→") {
+            println!("  {}", step.trim());
+        }
+        println!();
+
+        println!("Details:");
+        let details = format_drawer_content(platform);
+        for line in details.lines() {
+            println!("  {}", line);
+        }
+        println!();
+
+        println!("Available Actions:");
+        println!("  dure platform {} <action>", platform.name);
+        println!();
+        println!("  Actions:");
+        if platform.vms.is_empty() {
+            println!("    add-vm    - Add a new VM");
+        } else {
+            println!("    add-vm    - Add a new VM (disabled: VM exists)");
+        }
+        println!("    firewall  - Update firewall rules");
+        if !platform.vms.is_empty() {
+            println!("    restart   - Restart VM");
+            println!("    del-vm    - Delete VM");
+        }
+        if platform.gcp_selected_project_id.is_some() {
+            println!("    billing   - Show billing information");
+        }
+        println!("    delete    - Delete platform");
+    }
+
+    Ok(())
+}
