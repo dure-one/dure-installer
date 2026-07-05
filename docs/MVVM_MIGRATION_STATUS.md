@@ -53,13 +53,15 @@
 All three main UI tabs now have ViewModel integration prepared:
 
 - ✅ **Task 10**: Platform Tab ViewModel Integration
-  - **Status**: Signature updated, pattern established
-  - **File**: `mobile/src/ui_tabs/platform.rs` (2693 lines)
+  - **Status**: Incremental migration in progress
+  - **File**: `mobile/src/ui_tabs/platform.rs` (2721 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
-  - TODO comments show event processing pattern ✅
+  - Event processing pattern implemented ✅
   - Migration guide: `docs/TODO_PLATFORM_TAB_MIGRATION.md` ✅
-  - **Remaining**: Replace poll-promise calls incrementally
+  - **Completed Operations**:
+    - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing)
+  - **Remaining**: Replace other poll-promise/GcpRestClient calls incrementally
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
   - **Status**: Signature updated, pattern established
