@@ -309,6 +309,11 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn test_ssh_connection(&self, name: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::TestConnection { name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn docker_pull(&self, host_name: String, image: String) -> anyhow::Result<()> {
         self.ssh_tx.send_blocking(ssh::SshCommand::DockerPull {
             host_name, image

@@ -154,9 +154,25 @@ impl SshTab {
                             }
                         }
                     }
+                    ViewModelEvent::Ssh(SshEvent::ConnectionTested { name, success, latency_ms }) => {
+                        if success {
+                            let latency_str = if let Some(latency) = latency_ms {
+                                format!(" ({}ms)", latency)
+                            } else {
+                                String::new()
+                            };
+                            self.test_result = Some(Ok(format!("✓ Connection successful{}", latency_str)));
+                        } else {
+                            self.test_result = Some(Err(format!("✗ Connection failed to {}", name)));
+                        }
+                        self.test_in_progress = false;
+                    }
                     ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
                         if operation == "delete_host" {
                             self.load_error = Some(format!("Failed to delete host: {}", error));
+                        } else if operation == "test_connection" {
+                            self.test_result = Some(Err(format!("Connection test failed: {}", error)));
+                            self.test_in_progress = false;
                         }
                     }
                     _ => {}
@@ -214,7 +230,7 @@ impl SshTab {
                 if let Some(idx) = selected_row_idx {
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        self.execute_test_connection(host);
+                        self.execute_test_connection(host, vm);
                     }
                 }
             }
@@ -288,8 +304,8 @@ impl SshTab {
             self.render_init_progress(ui);
         }
 
-        // Poll for connection test completion
-        self.poll_connection_test();
+        // Poll for connection test completion (DEPRECATED - using ViewModel events now)
+        // self.poll_connection_test();
 
         // Show connection test result
         if let Some(result) = self.test_result.clone() {
@@ -584,43 +600,22 @@ impl SshTab {
         }
     }
 
-    fn execute_test_connection(&mut self, host: String) {
+    fn execute_test_connection(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.test_in_progress = true;
-            self.test_result = None;
+            if let Some(vm) = vm {
+                self.test_in_progress = true;
+                self.test_result = None;
 
-            // Load config and get host config
-            let host_config_clone = match load_config() {
-                Ok((app_config, _)) => app_config
-                    .ssh_hosts
-                    .iter()
-                    .find(|h| h.host == host)
-                    .cloned(),
-                Err(e) => {
-                    self.test_result = Some(Err(format!("Failed to load config: {e}")));
+                if let Err(e) = vm.test_ssh_connection(host.clone()) {
+                    self.test_result = Some(Err(format!("Failed to start connection test: {}", e)));
                     self.test_in_progress = false;
-                    return;
                 }
-            };
-
-            let Some(host_config) = host_config_clone else {
-                self.test_result = Some(Err(format!("SSH host '{}' not found", host)));
+                // Result will be delivered via ConnectionTested event
+            } else {
+                self.test_result = Some(Err("ViewModel not available".to_string()));
                 self.test_in_progress = false;
-                return;
-            };
-
-            // Spawn connection test in background thread
-            let promise = poll_promise::Promise::spawn_thread("ssh_test", move || {
-                // russh uses tokio internally, wrap with async-compat for smol
-                smol::block_on(async {
-                    async_compat::Compat::new(ssh::test_connection(&host_config))
-                        .await
-                        .map_err(|e| format!("{}", e))
-                })
-            });
-
-            self.test_promise = Some(promise);
+            }
         }
     }
 
