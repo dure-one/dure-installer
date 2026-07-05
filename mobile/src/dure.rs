@@ -416,9 +416,9 @@ impl DureApp {
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Ssh => self.tab_ssh.ui(ui),
+            Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Ns => self.tab_ns.ui(ui),
+            Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
             Tab::Roles => self.tab_roles.ui(ui),

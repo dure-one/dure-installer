@@ -743,8 +743,12 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
 impl NsTab {
     /// Render the NS tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        // Poll background task for adding provider
+    pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // TODO: Process ViewModel NS events when vm is Some
+        // Example: vm.add_dns_provider(), vm.add_dns_record(), vm.list_dns_records()
+        // See docs/TODO_PLATFORM_TAB_MIGRATION.md for migration pattern
+
+        // Poll background task for adding provider (TODO: Replace with ViewModel)
         let promise_result = if let Some(promise) = &self.add_provider_promise {
             promise.ready().cloned()
         } else {

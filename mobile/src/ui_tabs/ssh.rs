@@ -127,7 +127,11 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 
 impl SshTab {
     /// Render the SSH tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // TODO: Process ViewModel SSH events when vm is Some
+        // Example: vm.list_ssh_hosts(), vm.docker_run(), vm.port_open()
+        // See docs/TODO_PLATFORM_TAB_MIGRATION.md for migration pattern
+
         ui.heading("SSH Hosts");
         ui.add_space(4.0);
         ui.label("Manage SSH hosts for remote server deployment and management.");
