@@ -288,6 +288,17 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn list_vms(&self, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::ListVMs { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_vm(&self, platform_name: String, vm_name: String, zone: String, machine_type: String) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::CreateVM {
+            platform_name, vm_name, zone, machine_type
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn update_firewall(&self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
         self.platform_tx.send_blocking(platform::PlatformCommand::UpdateFirewall {
             platform_name, allow_ip
