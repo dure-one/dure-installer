@@ -226,3 +226,64 @@ mod runner_tests {
         assert!(result.unwrap_err().to_string().contains("Permission denied"));
     }
 }
+
+#[cfg(test)]
+mod list_tests {
+    use super::*;
+    use crate::cli::commands::platform::list::*;
+
+    #[test]
+    fn test_list_empty() {
+        let config = crate::config::AppConfig {
+            platforms: vec![],
+            ..Default::default()
+        };
+
+        let result = format_platform_list(&config);
+        assert!(result.contains("No platforms configured"));
+    }
+
+    #[test]
+    fn test_list_with_platforms() {
+        let config = crate::config::AppConfig {
+            platforms: vec![
+                mock_platform_connected(),
+                mock_platform_no_vm(),
+            ],
+            ..Default::default()
+        };
+
+        let result = format_platform_list(&config);
+        assert!(result.contains("test-gcp"));
+        assert!(result.contains("GCP"));
+        assert!(result.contains("✓"));
+        assert!(result.contains("→"));
+    }
+
+    #[test]
+    fn test_show_platform_not_found() {
+        let config = crate::config::AppConfig {
+            platforms: vec![mock_platform_connected()],
+            ..Default::default()
+        };
+
+        let result = format_platform_show(&config, "nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_show_platform_found() {
+        let config = crate::config::AppConfig {
+            platforms: vec![mock_platform_connected()],
+            ..Default::default()
+        };
+
+        let result = format_platform_show(&config, "test-gcp");
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("test-gcp"));
+        assert!(output.contains("test@example.com"));
+        assert!(output.contains("Available Actions"));
+    }
+}
