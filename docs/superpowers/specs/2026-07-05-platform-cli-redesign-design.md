@@ -126,8 +126,7 @@ Update `PlatformCommands` enum in `mobile/src/cli/mod.rs`:
 ```rust
 #[derive(Subcommand)]
 pub enum PlatformCommands {
-    /// List all platforms with status
-    #[command(flatten)]
+    /// List all platforms with status (default command)
     List,
     
     /// Show platform details and available actions
@@ -185,6 +184,11 @@ pub enum PlatformCommands {
 ```
 
 **Note:** Keep existing `Add`, `Del`, `Init` commands for backwards compatibility (mark as deprecated in help text).
+
+**Command Routing:** To support `dure platform` (no subcommand) defaulting to list, and `dure platform {name}` routing to show, the command handler will:
+1. Check if first argument matches a known subcommand (refresh, addvm, etc.)
+2. If no match, treat it as a platform name and route to Show
+3. If no arguments at all, route to List
 
 ## Output Format
 

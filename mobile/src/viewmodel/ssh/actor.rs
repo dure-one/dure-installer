@@ -34,6 +34,7 @@ impl SshActor {
 
     async fn handle_command(&mut self, cmd: SshCommand) -> anyhow::Result<()> {
         let operation = format!("{:?}", cmd);
+        eprintln!("🔍 SSH Actor: Received command: {}", operation);
 
         let result = match cmd {
             SshCommand::AddHost { name, host, port, user, ssh_key_path } => {
@@ -46,6 +47,7 @@ impl SshActor {
                 self.list_hosts().await
             }
             SshCommand::TestConnection { name } => {
+                eprintln!("🔍 SSH Actor: Handling TestConnection for '{}'", name);
                 self.test_connection(name).await
             }
             SshCommand::DockerPull { host_name, image } => {
@@ -81,12 +83,34 @@ impl SshActor {
         Ok(())
     }
 
-    async fn add_host(&mut self, name: String, host: String, port: u16, user: String, ssh_key_path: String) -> anyhow::Result<()> {
+    async fn add_host(&mut self, name: String, host: String, port: u16, _user: String, ssh_key_path: String) -> anyhow::Result<()> {
         self.send_progress("add_host", 0.5, "Adding SSH host...").await;
 
         runtime::unblock({
-            let name = name.clone();
-            move || crate::calc::db::save_ssh_host(&name, &host, port, &user, &ssh_key_path)
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Check if host already exists
+                if app_config.ssh_hosts.iter().any(|h| h.host == host) {
+                    anyhow::bail!("SSH host '{}' already exists", host);
+                }
+
+                // Create new SSH host config
+                let ssh_host = crate::config::SshHostConfig {
+                    host: host.clone(),
+                    password: None,
+                    private_key_path: if ssh_key_path.is_empty() { None } else { Some(ssh_key_path) },
+                    keyring_domain: None,
+                    port,
+                    initialized: false,
+                    last_status: None,
+                };
+
+                app_config.ssh_hosts.push(ssh_host);
+                app_config.save(&config_path)?;
+                Ok(())
+            }
         }).await?;
 
         self.send_event(SshEvent::HostAdded { name }).await;
@@ -97,8 +121,21 @@ impl SshActor {
         self.send_progress("delete_host", 0.5, "Deleting SSH host...").await;
 
         runtime::unblock({
-            let name = name.clone();
-            move || crate::calc::db::delete_ssh_host(&name)
+            let name_clone = name.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let initial_len = app_config.ssh_hosts.len();
+                app_config.ssh_hosts.retain(|h| h.host != name_clone);
+
+                if app_config.ssh_hosts.len() == initial_len {
+                    anyhow::bail!("SSH host '{}' not found", name_clone);
+                }
+
+                app_config.save(&config_path)?;
+                Ok(())
+            }
         }).await?;
 
         self.send_event(SshEvent::HostDeleted { name }).await;
@@ -108,174 +145,115 @@ impl SshActor {
     async fn list_hosts(&mut self) -> anyhow::Result<()> {
         self.send_progress("list_hosts", 0.5, "Loading SSH hosts...").await;
 
-        let hosts = runtime::unblock(|| {
-            crate::calc::db::load_ssh_hosts()
-        }).await?;
+        let host_infos = runtime::unblock(|| -> anyhow::Result<Vec<SshHostInfo>> {
+            let config_path = Self::get_config_path()?;
+            let app_config = crate::config::AppConfig::load_or_default(&config_path);
 
-        let host_infos: Vec<SshHostInfo> = hosts.into_iter().map(|h| SshHostInfo {
-            name: h.name,
-            host: h.host,
-            port: h.port,
-            user: h.user,
-        }).collect();
+            let hosts = app_config.ssh_hosts.into_iter().map(|h| SshHostInfo {
+                name: h.host.clone(),
+                host: h.host,
+                port: h.port,
+                user: String::new(), // Not stored separately
+            }).collect();
+
+            Ok(hosts)
+        }).await?;
 
         self.send_event(SshEvent::HostsListed { hosts: host_infos }).await;
         Ok(())
     }
 
+    /// Helper to get config file path
+    #[cfg(not(target_arch = "wasm32"))]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+            .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
+        Ok(proj_dirs.config_dir().join("config.yml"))
+    }
+
     async fn test_connection(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: test_connection called for '{}'", name);
         self.send_progress("test_connection", 0.5, "Testing SSH connection...").await;
 
         let start = std::time::Instant::now();
-        let result = runtime::unblock({
+
+        // Load host config first (blocking operation)
+        eprintln!("🔍 SSH Actor: Loading host config...");
+        let host_config = runtime::unblock({
             let name = name.clone();
-            move || crate::calc::ssh::test_connection(&name)
-        }).await;
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                eprintln!("🔍 SSH Actor: Found host config for '{}'", host_config.host);
+                Ok(host_config)
+            }
+        }).await?;
+
+        // Test connection (async operation - russh uses tokio internally)
+        eprintln!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port);
+        let result = async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config))
+            .await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
+        eprintln!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms);
 
         match result {
-            Ok(_) => {
+            Ok(conn_result) => {
+                eprintln!("✓ SSH Actor: Connection test succeeded: {}", conn_result.success);
                 self.send_event(SshEvent::ConnectionTested {
                     name,
-                    success: true,
+                    success: conn_result.success,
                     latency_ms: Some(latency_ms),
                 }).await;
+                Ok(())
             }
             Err(e) => {
+                eprintln!("✗ SSH Actor: Connection test failed: {}", e);
                 self.send_event(SshEvent::ConnectionTested {
                     name,
                     success: false,
                     latency_ms: None,
                 }).await;
-                return Err(e);
+                Err(e)
             }
         }
-
-        Ok(())
     }
 
-    async fn docker_pull(&mut self, host_name: String, image: String) -> anyhow::Result<()> {
-        self.send_progress("docker_pull", 0.0, "Pulling Docker image...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let image = image.clone();
-            move || crate::calc::ssh::docker_pull(&host_name, &image)
-        }).await?;
-
-        self.send_event(SshEvent::DockerImagePulled { host_name, image }).await;
-        Ok(())
+    async fn docker_pull(&mut self, _host_name: String, _image: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
     }
 
-    async fn docker_run(&mut self, host_name: String, image: String, container_name: String, ports: Vec<(u16, u16)>, env: Vec<(String, String)>) -> anyhow::Result<()> {
-        self.send_progress("docker_run", 0.0, "Starting Docker container...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let container_name = container_name.clone();
-            move || crate::calc::ssh::docker_run(&host_name, &image, &container_name, &ports, &env)
-        }).await?;
-
-        self.send_event(SshEvent::DockerContainerStarted { host_name, container_name }).await;
-        Ok(())
+    async fn docker_run(&mut self, _host_name: String, _image: String, _container_name: String, _ports: Vec<(u16, u16)>, _env: Vec<(String, String)>) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
     }
 
-    async fn docker_stop(&mut self, host_name: String, container_name: String) -> anyhow::Result<()> {
-        self.send_progress("docker_stop", 0.5, "Stopping Docker container...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let container_name = container_name.clone();
-            move || crate::calc::ssh::docker_stop(&host_name, &container_name)
-        }).await?;
-
-        self.send_event(SshEvent::DockerContainerStopped { host_name, container_name }).await;
-        Ok(())
+    async fn docker_stop(&mut self, _host_name: String, _container_name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
     }
 
-    async fn docker_list(&mut self, host_name: String) -> anyhow::Result<()> {
-        self.send_progress("docker_list", 0.5, "Listing Docker containers...").await;
-
-        let containers = runtime::unblock({
-            let host_name = host_name.clone();
-            move || crate::calc::ssh::docker_list(&host_name)
-        }).await?;
-
-        let container_infos: Vec<DockerContainer> = containers.into_iter().map(|c| DockerContainer {
-            name: c.name,
-            image: c.image,
-            status: c.status,
-        }).collect();
-
-        self.send_event(SshEvent::DockerContainersListed {
-            host_name,
-            containers: container_infos,
-        }).await;
-        Ok(())
+    async fn docker_list(&mut self, _host_name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
     }
 
-    async fn port_open(&mut self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.send_progress("port_open", 0.5, "Opening firewall port...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let protocol = protocol.clone();
-            move || crate::calc::nft::port_open(&host_name, port, &protocol)
-        }).await?;
-
-        self.send_event(SshEvent::PortOpened { host_name, port, protocol }).await;
-        Ok(())
+    async fn port_open(&mut self, _host_name: String, _port: u16, _protocol: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Port management not yet implemented in ViewModel"))
     }
 
-    async fn port_close(&mut self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.send_progress("port_close", 0.5, "Closing firewall port...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let protocol = protocol.clone();
-            move || crate::calc::nft::port_close(&host_name, port, &protocol)
-        }).await?;
-
-        self.send_event(SshEvent::PortClosed { host_name, port, protocol }).await;
-        Ok(())
+    async fn port_close(&mut self, _host_name: String, _port: u16, _protocol: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Port management not yet implemented in ViewModel"))
     }
 
-    async fn port_list(&mut self, host_name: String) -> anyhow::Result<()> {
-        self.send_progress("port_list", 0.5, "Listing open ports...").await;
-
-        let open_ports = runtime::unblock({
-            let host_name = host_name.clone();
-            move || crate::calc::nft::port_list(&host_name)
-        }).await?;
-
-        self.send_event(SshEvent::PortsListed { host_name, open_ports }).await;
-        Ok(())
+    async fn port_list(&mut self, _host_name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Port management not yet implemented in ViewModel"))
     }
 
-    async fn deploy_dure_wss(&mut self, host_name: String, domain: String, acme_email: String) -> anyhow::Result<()> {
-        self.send_progress("deploy_dure_wss", 0.0, "Deploying Dure WSS service...").await;
-
-        runtime::unblock({
-            let host_name = host_name.clone();
-            let domain = domain.clone();
-            move || crate::calc::wss::deploy_wss(&host_name, &domain, &acme_email)
-        }).await?;
-
-        self.send_progress("deploy_dure_wss", 0.9, "Checking service status...").await;
-
-        let status = runtime::unblock({
-            let host_name = host_name.clone();
-            move || crate::calc::wss::check_service_status(&host_name)
-        }).await?;
-
-        self.send_event(SshEvent::DureWssDeployed {
-            host_name,
-            domain,
-            service_status: status,
-        }).await;
-
-        Ok(())
+    async fn deploy_dure_wss(&mut self, _host_name: String, _domain: String, _acme_email: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Dure WSS deployment not yet implemented in ViewModel"))
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
@@ -289,7 +267,11 @@ impl SshActor {
     }
 
     async fn send_event(&self, event: SshEvent) {
-        let _ = self.event_tx.send(ViewModelEvent::Ssh(event)).await;
+        eprintln!("🔍 SSH Actor: Sending event: {:?}", event);
+        match self.event_tx.send(ViewModelEvent::Ssh(event.clone())).await {
+            Ok(_) => eprintln!("✓ SSH Actor: Event sent successfully"),
+            Err(e) => eprintln!("✗ SSH Actor: Failed to send event: {}", e),
+        }
     }
 
     async fn send_error(&self, operation: &str, error: anyhow::Error) {

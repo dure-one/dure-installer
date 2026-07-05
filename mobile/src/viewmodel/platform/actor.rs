@@ -2,7 +2,10 @@
 
 use super::{PlatformCommand, PlatformEvent, VmInfo};
 use crate::viewmodel::{ViewModelEvent, runtime};
+use crate::config::AppConfig;
+use crate::calc::gcp_rest::GcpRestClient;
 use smol::channel::{Receiver, Sender};
+use std::path::PathBuf;
 
 pub struct PlatformActor {
     command_rx: Receiver<PlatformCommand>,
@@ -79,29 +82,90 @@ impl PlatformActor {
         Ok(())
     }
 
+    /// Helper to get config file path
+    #[cfg(not(target_arch = "wasm32"))]
+    fn get_config_path() -> anyhow::Result<PathBuf> {
+        let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+            .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
+        Ok(proj_dirs.config_dir().join("config.yml"))
+    }
+
+    /// Helper to load platform config by name
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_platform_config(platform_name: &str) -> anyhow::Result<(crate::config::CloudPlatformConfig, PathBuf)> {
+        let config_path = Self::get_config_path()?;
+        let config = AppConfig::load_or_default(&config_path);
+        let platform = config.platforms
+            .into_iter()
+            .find(|p| p.name == platform_name)
+            .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+        Ok((platform, config_path))
+    }
+
     async fn list_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
         self.send_progress("list_vms", 0.1, "Loading platform config...").await;
 
-        // Load platform config from DB
+        // Load platform config
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
+        }).await?;
+
+        self.send_progress("list_vms", 0.3, "Fetching zones...").await;
+
+        let project_id = platform.gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+
+        // Get zones to query (from existing VMs or list all zones)
+        let zones = runtime::unblock({
+            let project_id = project_id.clone();
+            let access_token = access_token.clone();
+            let vms = platform.vms.clone();
+            move || -> anyhow::Result<Vec<String>> {
+                let client = GcpRestClient::new(access_token.clone());
+                if !vms.is_empty() {
+                    // Use zones from existing VMs
+                    let zones: std::collections::HashSet<String> = vms.iter()
+                        .map(|vm| vm.zone.clone())
+                        .collect();
+                    Ok(zones.into_iter().collect())
+                } else {
+                    // List all zones
+                    let zone_list = client.list_zones(&project_id)?;
+                    Ok(zone_list.items.into_iter().map(|z| z.name).collect())
+                }
+            }
         }).await?;
 
         self.send_progress("list_vms", 0.5, "Fetching VMs from GCP...").await;
 
-        // Call GCP API
-        let vms = runtime::unblock({
-            let project_id = platform.project_id.clone();
-            move || crate::calc::gcp_rest::list_vms(&project_id)
+        // List instances from all zones
+        let all_instances = runtime::unblock({
+            let project_id = project_id.clone();
+            move || -> anyhow::Result<Vec<crate::calc::gcp_rest::Instance>> {
+                let client = GcpRestClient::new(access_token);
+                let mut all_vms = Vec::new();
+                for zone in zones {
+                    match client.list_instances(&project_id, &zone) {
+                        Ok(list) => all_vms.extend(list.items),
+                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
+                    }
+                }
+                Ok(all_vms)
+            }
         }).await?;
 
         // Convert to VmInfo
-        let vm_infos: Vec<VmInfo> = vms.into_iter().map(|vm| VmInfo {
-            name: vm.name,
-            zone: vm.zone,
-            external_ip: vm.external_ip,
-            status: vm.status,
+        let vm_infos: Vec<VmInfo> = all_instances.into_iter().map(|vm| {
+            let external_ip = vm.external_ip();
+            VmInfo {
+                name: vm.name,
+                zone: vm.zone,
+                external_ip,
+                status: vm.status,
+            }
         }).collect();
 
         self.send_event(PlatformEvent::VMsListed {
@@ -117,20 +181,38 @@ impl PlatformActor {
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
+
+        let project_id = platform.gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         self.send_progress("create_vm", 0.3, "Creating VM instance...").await;
 
-        let vm = runtime::unblock({
-            let project_id = platform.project_id.clone();
-            move || crate::calc::gcp_rest::create_vm(&project_id, &vm_name, &zone, &machine_type)
+        let external_ip = runtime::unblock({
+            let vm_name_clone = vm_name.clone();
+            move || -> anyhow::Result<String> {
+                let client = GcpRestClient::new(access_token);
+
+                // Create instance request (debian-11 micro instance)
+                let instance_req = crate::calc::gcp_rest::InstanceRequest::debian_micro(
+                    vm_name_clone.clone(),
+                    zone.clone()
+                );
+
+                let operation = client.create_instance(&project_id, &zone, &instance_req)?;
+
+                // Wait for operation to complete
+                let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
+                client.wait_for_operation(&project_id, &zone, op_name, 120)?;
+
+                // Get instance details to fetch external IP
+                let instance = client.get_instance(&project_id, &zone, &vm_name_clone)?;
+                Ok(instance.external_ip().unwrap_or_else(|| "pending".to_string()))
+            }
         }).await?;
-
-        self.send_progress("create_vm", 0.7, "Waiting for external IP...").await;
-
-        // Wait for VM to get external IP
-        let external_ip = vm.external_ip.unwrap_or_else(|| "pending".to_string());
 
         self.send_event(PlatformEvent::VMCreated {
             platform_name,
@@ -146,12 +228,25 @@ impl PlatformActor {
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
 
+        let project_id = platform.gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+
         runtime::unblock({
-            let project_id = platform.project_id.clone();
-            move || crate::calc::gcp_rest::delete_vm(&project_id, &vm_name, &zone)
+            let vm_name_clone = vm_name.clone();
+            move || -> anyhow::Result<()> {
+                let client = GcpRestClient::new(access_token);
+                let operation = client.delete_instance(&project_id, &zone, &vm_name_clone)?;
+
+                // Wait for deletion to complete
+                let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
+                client.wait_for_operation(&project_id, &zone, op_name, 120)?;
+                Ok(())
+            }
         }).await?;
 
         self.send_event(PlatformEvent::VMDeleted {
@@ -167,12 +262,25 @@ impl PlatformActor {
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
 
+        let project_id = platform.gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+
         runtime::unblock({
-            let project_id = platform.project_id.clone();
-            move || crate::calc::gcp_rest::restart_vm(&project_id, &vm_name, &zone)
+            let vm_name_clone = vm_name.clone();
+            move || -> anyhow::Result<()> {
+                let client = GcpRestClient::new(access_token);
+                let operation = client.reset_instance(&project_id, &zone, &vm_name_clone)?;
+
+                // Wait for reset to complete
+                let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
+                client.wait_for_operation(&project_id, &zone, op_name, 120)?;
+                Ok(())
+            }
         }).await?;
 
         self.send_event(PlatformEvent::VMRestarted {
@@ -186,30 +294,23 @@ impl PlatformActor {
     async fn regenerate_vm(&mut self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
         self.send_progress("regenerate_vm", 0.3, "Regenerating VM...").await;
 
-        // Load platform and config
-        let (platform, config_path) = runtime::unblock({
+        // Load platform config
+        let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || -> anyhow::Result<_> {
-                let (mut config, path) = crate::calc::db::load_config()?;
-                let platform = config.platforms
-                    .iter_mut()
-                    .find(|p| p.name == platform_name)
-                    .ok_or_else(|| anyhow::anyhow!("Platform not found"))?;
-                Ok((platform.clone(), path))
-            }
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
 
         self.send_progress("regenerate_vm", 0.6, "Calling GCP API...").await;
 
         // Regenerate VM
         let message = runtime::unblock({
-            let platform = platform.clone();
+            let mut platform = platform.clone();
             let zone = zone.clone();
             move || {
-                let client = crate::calc::gcp_rest::GcpRestClient::new(
-                    platform.gcp_oauth_access_token.unwrap_or_default()
-                );
-                crate::calc::hosting_gcp::regenerate_vm(&client, &platform, &zone)
+                let access_token = platform.gcp_oauth_access_token.clone()
+                    .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+                let client = GcpRestClient::new(access_token);
+                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone)
             }
         }).await?;
 
@@ -227,13 +328,21 @@ impl PlatformActor {
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
 
+        let project_id = platform.gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+
         runtime::unblock({
-            let project_id = platform.project_id.clone();
             let allow_ip = allow_ip.clone();
-            move || crate::calc::gcp_rest::update_firewall(&project_id, &allow_ip)
+            move || -> anyhow::Result<()> {
+                let client = GcpRestClient::new(access_token);
+                client.add_ip_to_firewall(&project_id, &allow_ip)?;
+                Ok(())
+            }
         }).await?;
 
         self.send_event(PlatformEvent::FirewallUpdated {
@@ -247,8 +356,17 @@ impl PlatformActor {
     async fn fetch_billing(&mut self, platform_name: String, project_id: String, dataset: String, table: String) -> anyhow::Result<()> {
         self.send_progress("fetch_billing", 0.5, "Fetching billing data...").await;
 
-        let records = runtime::unblock(move || {
-            crate::calc::gcp_rest::fetch_billing(&project_id, &dataset, &table)
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
+        }).await?;
+
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+
+        let records = runtime::unblock(move || -> anyhow::Result<Vec<crate::calc::gcp_rest::BillingRecord>> {
+            let client = GcpRestClient::new(access_token);
+            client.get_current_month_billing(&project_id, &dataset, &table)
         }).await?;
 
         self.send_event(PlatformEvent::BillingFetched {
@@ -265,16 +383,18 @@ impl PlatformActor {
         // Load platform to get access token
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || crate::calc::db::load_platform(&platform_name)
+            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
         }).await?;
+
+        let access_token = platform.gcp_oauth_access_token
+            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         self.send_progress("list_projects", 0.6, "Retrieving project list...").await;
 
         // Fetch projects from GCP
         let project_list = runtime::unblock({
-            let token = platform.access_token.clone();
             move || {
-                let client = crate::calc::gcp_rest::GcpRestClient::new(token);
+                let client = GcpRestClient::new(access_token);
                 client.list_projects(None)
             }
         }).await?;
@@ -283,8 +403,8 @@ impl PlatformActor {
         let projects: Vec<(String, String)> = project_list.projects
             .into_iter()
             .map(|p| {
-                let name = p.display_name.unwrap_or_else(|| p.project_id.clone());
-                (p.project_id, name)
+                let name = p.display_name().to_string();
+                (p.id().to_string(), name)
             })
             .collect();
 

@@ -707,9 +707,9 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
 impl PlatformTab {
     /// Render the platform tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         // ViewModel event processing (MVVM pattern)
-        if let Some(vm) = vm {
+        if let Some(ref mut vm) = vm {
             // Process events first
             let events = vm.poll_events(ui.ctx());
             for event in events {
@@ -1009,7 +1009,7 @@ impl PlatformTab {
             {
                 if let Some(platform_name) = ui.data(|d|
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))) {
-                    self.update_firewall(platform_name, vm);
+                    self.update_firewall(platform_name, vm.as_deref_mut());
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_update_firewall")));
                 }
 
@@ -1025,7 +1025,7 @@ impl PlatformTab {
                     if let Ok((app_config, _)) = load_config() {
                         if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
                             if let Some(vm_cfg) = platform.vms.first() {
-                                self.regenerate_vm(platform_name, vm_cfg.name.clone(), vm);
+                                self.regenerate_vm(platform_name, vm_cfg.name.clone(), vm.as_deref_mut());
                             }
                         }
                     }
@@ -1038,7 +1038,7 @@ impl PlatformTab {
                     if let Ok((app_config, _)) = load_config() {
                         if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
                             if let Some(vm_config) = platform.vms.first() {
-                                self.restart_vm(platform_name, vm_config.name.clone(), vm_config.gcp_zone.clone(), vm);
+                                self.restart_vm(platform_name, vm_config.name.clone(), vm_config.zone.clone(), vm.as_deref_mut());
                             }
                         }
                     }
@@ -1054,7 +1054,7 @@ impl PlatformTab {
                 if let Some(_platform_name) = ui.data(|d|
                     d.get_temp::<String>(egui::Id::new("platform_action_billing"))) {
                     self.show_billing_dialog = true;
-                    self.fetch_billing_data();
+                    self.fetch_billing_data(vm.as_deref_mut());
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_billing")));
                 }
             }
@@ -1084,12 +1084,12 @@ impl PlatformTab {
 
         // Delete VM dialog
         if self.show_delete_vm_dialog {
-            self.render_delete_vm_dialog(ui.ctx(), vm);
+            self.render_delete_vm_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Billing dialog
         if self.show_billing_dialog {
-            self.render_billing_dialog(ui.ctx(), vm);
+            self.render_billing_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Init progress display
@@ -1150,13 +1150,10 @@ impl PlatformTab {
                         // Borrow platform after get_valid_access_token
                         let platform = &app_config.platforms[idx];
 
-                        // Compute firewall status string (fresh fetch from GCP)
-                        let firewall_status_str = compute_firewall_status(
-                            access_token.as_deref(),
-                            platform.gcp_selected_project_id.as_deref()
-                        );
+                        // Initialize with placeholder values - will be updated in background
+                        let firewall_status_str = "Checking...".to_string();
 
-                        // Compute SSH status and readiness flag
+                        // Compute SSH status from cached results only (no blocking)
                         let ssh_status_str = compute_ssh_status(
                             platform,
                             self.ssh_test_results.get(&platform.name)
@@ -1169,7 +1166,7 @@ impl PlatformTab {
                             false
                         };
 
-                        // Load SSH private key from KeePass if VM exists
+                        // Load SSH private key from KeePass if VM exists (quick local operation)
                         let (ssh_private_key, ssh_public_key, ssh_keyring_domain) = if let Some(vm) = platform.vms.first() {
                             let keyring_domain = vm.ssh_key_name.clone();
                             let (private_key, public_key) = load_ssh_key_from_keyring(&keyring_domain);
@@ -1186,12 +1183,12 @@ impl PlatformTab {
                             gcp_connected: platform.gcp_oauth_access_token.is_some(),
                             project_selected: platform.gcp_selected_project_id.is_some(),
                             vm_created: !platform.vms.is_empty(),
-                            firewall_updated: firewall_status_str.starts_with("✓"),
+                            firewall_updated: false, // Will be updated by background check
                             ssh_ready,
 
                             // Extract drawer data
                             email: platform.gcp_connected_email.clone(),
-                            total_project_count: fetch_project_count(access_token.as_deref()),
+                            total_project_count: 0, // Will be fetched in background
                             selected_project_id: platform.gcp_selected_project_id.clone(),
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
                             vm_external_ip: platform.vms.first().and_then(|vm| vm.external_ip.clone()),
@@ -1208,22 +1205,25 @@ impl PlatformTab {
 
                         self.rows.push(row);
 
-                        // Trigger SSH connection test on first load if VM has external IP
+                        // Trigger SSH connection test in background if VM has external IP
                         #[cfg(not(target_arch = "wasm32"))]
                         {
+                            let platform_name = platform.name.clone();
                             if platform.vms.first().and_then(|vm| vm.external_ip.as_ref()).is_some()
-                                && !self.ssh_test_results.contains_key(&platform.name)
-                                && !self.ssh_test_promises.contains_key(&platform.name)
+                                && !self.ssh_test_results.contains_key(&platform_name)
+                                && !self.ssh_test_promises.contains_key(&platform_name)
                             {
-                                self.execute_test_connection(platform.name.clone());
+                                self.execute_test_connection(platform_name);
                             }
                         }
                     }
 
+                    // Mark as loaded immediately - background checks will update rows
                     self.loaded = true;
                 }
                 Err(e) => {
                     self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.loaded = true; // Still mark as loaded to show error
                 }
             }
         }
@@ -1231,6 +1231,7 @@ impl PlatformTab {
         #[cfg(target_arch = "wasm32")]
         {
             self.load_error = Some("WASM platform not supported".to_string());
+            self.loaded = true;
         }
     }
 
@@ -1782,7 +1783,7 @@ impl PlatformTab {
         self.show_delete_vm_dialog = true;
     }
 
-    fn render_delete_vm_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_delete_vm_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_delete_vm_dialog;
 
         egui::Window::new("Delete VM")

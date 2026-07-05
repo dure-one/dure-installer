@@ -213,11 +213,13 @@ impl ViewModel {
         let mut events = Vec::new();
 
         while let Ok(event) = self.event_rx.try_recv() {
+            eprintln!("🔍 ViewModel: Received event: {:?}", event);
             self.apply_event(&event, Some(ctx));
             events.push(event);
         }
 
         if !events.is_empty() {
+            eprintln!("🔍 ViewModel: Collected {} events, requesting repaint", events.len());
             ctx.request_repaint();
         }
 

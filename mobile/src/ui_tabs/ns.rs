@@ -743,9 +743,9 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
 impl NsTab {
     /// Render the NS tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         // ViewModel event processing (MVVM pattern)
-        if let Some(vm) = vm {
+        if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
             for event in events {
                 use crate::viewmodel::ViewModelEvent;
@@ -3035,7 +3035,7 @@ impl NsTab {
     }
 
     /// Execute add record
-    fn execute_add_record(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_add_record(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let name = self.add_record_name.trim().to_string();
@@ -3066,7 +3066,7 @@ impl NsTab {
 
                 // If applying to DNS provider, use ViewModel
                 if self.add_record_apply {
-                    if let Some(vm) = vm {
+                    if let Some(ref mut vm) = vm {
                         // Send command to ViewModel
                         let record_type_str = self.add_record_type.to_uppercase();
                         match vm.add_dns_record(

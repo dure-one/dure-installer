@@ -271,11 +271,8 @@ impl eframe::App for DureApp {
             self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
         }
 
-        // Poll ViewModel events
-        if let Some(ref mut vm) = self.viewmodel {
-            let _events = vm.poll_events(ctx);
-            // Events will be processed when actors are implemented
-        }
+        // NOTE: Event polling moved to individual tabs to avoid consuming events centrally
+        // Each tab polls and processes its own events
 
         // Apply Material3 theme to egui context
         self.apply_theme(ctx);

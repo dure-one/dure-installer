@@ -127,14 +127,18 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 
 impl SshTab {
     /// Render the SSH tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         // ViewModel event processing (MVVM pattern)
-        if let Some(vm) = vm {
+        if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
+            if !events.is_empty() {
+                eprintln!("🔍 SSH UI: Polling events, found {} events", events.len());
+            }
             for event in events {
                 use crate::viewmodel::ViewModelEvent;
                 use crate::viewmodel::ssh::SshEvent;
 
+                eprintln!("🔍 SSH UI: Processing event: {:?}", event);
                 match event {
                     ViewModelEvent::Ssh(SshEvent::HostDeleted { name }) => {
                         eprintln!("✓ SSH host {} deleted successfully", name);
@@ -155,6 +159,7 @@ impl SshTab {
                         }
                     }
                     ViewModelEvent::Ssh(SshEvent::ConnectionTested { name, success, latency_ms }) => {
+                        eprintln!("🔍 SSH UI: Received ConnectionTested event - name: {}, success: {}, latency: {:?}", name, success, latency_ms);
                         if success {
                             let latency_str = if let Some(latency) = latency_ms {
                                 format!(" ({}ms)", latency)
@@ -162,8 +167,10 @@ impl SshTab {
                                 String::new()
                             };
                             self.test_result = Some(Ok(format!("✓ Connection successful{}", latency_str)));
+                            eprintln!("✓ SSH UI: Set test result to success");
                         } else {
                             self.test_result = Some(Err(format!("✗ Connection failed to {}", name)));
+                            eprintln!("✗ SSH UI: Set test result to failure");
                         }
                         self.test_in_progress = false;
                     }
@@ -213,7 +220,7 @@ impl SshTab {
                 if let Some(idx) = selected_row_idx {
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        self.execute_delete_host(host, vm);
+                        self.execute_delete_host(host, vm.as_deref_mut());
                     }
                 }
             }
@@ -227,11 +234,16 @@ impl SshTab {
             };
 
             if ui.add(check_button).clicked() {
+                eprintln!("🔍 Check Connection button clicked");
                 if let Some(idx) = selected_row_idx {
+                    eprintln!("🔍 Selected row index: {}", idx);
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        self.execute_test_connection(host, vm);
+                        eprintln!("🔍 Testing connection to host: {}", host);
+                        self.execute_test_connection(host, vm.as_deref_mut());
                     }
+                } else {
+                    eprintln!("⚠️ No row selected");
                 }
             }
 
@@ -533,11 +545,11 @@ impl SshTab {
         }
     }
 
-    fn execute_delete_host(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_host(&mut self, host: String, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // ViewModel-based implementation
-            if let Some(vm) = vm {
+            if let Some(ref mut vm) = vm {
                 // Send command to ViewModel
                 if let Err(e) = vm.delete_ssh_host(host.clone()) {
                     self.load_error = Some(format!("Failed to start host deletion: {}", e));
@@ -600,19 +612,28 @@ impl SshTab {
         }
     }
 
-    fn execute_test_connection(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_test_connection(&mut self, host: String, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        eprintln!("🔍 execute_test_connection called for host: {}", host);
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(vm) = vm {
+            if let Some(ref mut vm) = vm {
+                eprintln!("🔍 ViewModel available, sending test command");
                 self.test_in_progress = true;
                 self.test_result = None;
 
-                if let Err(e) = vm.test_ssh_connection(host.clone()) {
-                    self.test_result = Some(Err(format!("Failed to start connection test: {}", e)));
-                    self.test_in_progress = false;
+                match vm.test_ssh_connection(host.clone()) {
+                    Ok(_) => {
+                        eprintln!("✓ Test command sent successfully");
+                    }
+                    Err(e) => {
+                        eprintln!("✗ Failed to send test command: {}", e);
+                        self.test_result = Some(Err(format!("Failed to start connection test: {}", e)));
+                        self.test_in_progress = false;
+                    }
                 }
                 // Result will be delivered via ConnectionTested event
             } else {
+                eprintln!("✗ ViewModel not available");
                 self.test_result = Some(Err("ViewModel not available".to_string()));
                 self.test_in_progress = false;
             }
