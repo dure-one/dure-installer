@@ -744,9 +744,40 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 impl NsTab {
     /// Render the NS tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
-        // TODO: Process ViewModel NS events when vm is Some
-        // Example: vm.add_dns_provider(), vm.add_dns_record(), vm.list_dns_records()
-        // See docs/TODO_PLATFORM_TAB_MIGRATION.md for migration pattern
+        // ViewModel event processing (MVVM pattern)
+        if let Some(vm) = vm {
+            let events = vm.poll_events(ui.ctx());
+            for event in events {
+                use crate::viewmodel::ViewModelEvent;
+                use crate::viewmodel::ns::NsEvent;
+
+                match event {
+                    ViewModelEvent::Ns(NsEvent::RecordAdded { provider_name, domain, record_id }) => {
+                        self.add_progress(format!("✓ Record added (ID: {})", record_id));
+
+                        // Update config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        if let Ok(mut config) = load_ns_config() {
+                            // Note: Record details already in config from UI,
+                            // this event confirms API succeeded
+                            if let Err(e) = save_ns_config(&config) {
+                                self.add_progress(format!("Error saving config: {}", e));
+                            } else {
+                                self.load_records();
+                                self.load_data();
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::Error { operation, error }) => {
+                        if operation == "add_record" {
+                            self.error_message = format!("Failed to add DNS record:\n\n{}", error);
+                            self.show_error_dialog = true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         // Poll background task for adding provider (TODO: Replace with ViewModel)
         let promise_result = if let Some(promise) = &self.add_provider_promise {
@@ -959,7 +990,7 @@ impl NsTab {
         // Dialogs
         self.show_add_provider_dialog(ui.ctx());
         self.show_add_domain_dialog(ui.ctx());
-        self.show_add_record_dialog(ui.ctx());
+        self.show_add_record_dialog(ui.ctx(), vm);
         self.show_error_dialog(ui.ctx());
         self.show_nameservers_dialog(ui.ctx());
     }
@@ -1508,7 +1539,11 @@ impl NsTab {
     }
 
     /// Show add record dialog
-    fn show_add_record_dialog(&mut self, ctx: &egui::Context) {
+    fn show_add_record_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if !self.show_add_record_dialog {
             return;
         }
@@ -1553,7 +1588,7 @@ impl NsTab {
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.execute_add_record();
+                        self.execute_add_record(vm);
                         self.show_add_record_dialog = false;
                     }
 
@@ -3000,7 +3035,7 @@ impl NsTab {
     }
 
     /// Execute add record
-    fn execute_add_record(&mut self) {
+    fn execute_add_record(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let name = self.add_record_name.trim().to_string();
@@ -3016,96 +3051,124 @@ impl NsTab {
                     self.add_progress("Error: Invalid record type".to_string());
                     return;
                 }
-                let record_type = record_type.unwrap();
+                let record_type_enum = record_type.unwrap();
 
-                match load_ns_config() {
-                    Ok(mut config) => {
-                        // Normalize name based on provider
-                        let normalized_name = if provider == "cloudflare" || provider == "cf" {
-                            if name.is_empty() || name == "@" {
-                                domain.clone()
-                            } else {
-                                format!("{}.{}", name, domain)
-                            }
-                        } else {
-                            name.clone()
-                        };
+                // Normalize name based on provider
+                let normalized_name = if provider == "cloudflare" || provider == "cf" {
+                    if name.is_empty() || name == "@" {
+                        domain.clone()
+                    } else {
+                        format!("{}.{}", name, domain)
+                    }
+                } else {
+                    name.clone()
+                };
 
-                        // If applying to DNS provider, try API call first
-                        if self.add_record_apply {
-                            // Create a temporary record for the API call
-                            let temp_record = crate::calc::ns::DnsRecord {
-                                record_type: record_type.clone(),
-                                name: normalized_name.clone(),
-                                value: value.clone(),
-                                ttl: None,
-                            };
-
-                            let api_token = config.get_api_token(&provider).unwrap_or_default();
-                            match apply_record(&provider, &api_token, &domain, &temp_record) {
-                                Ok(_) => {
-                                    self.add_progress("✓ Applied to DNS provider".to_string());
-                                }
-                                Err(e) => {
-                                    // API call failed - show error dialog and don't save
-                                    self.error_message =
-                                        format!("Failed to apply DNS record to provider:\n\n{}", e);
-                                    self.show_error_dialog = true;
-                                    return;
-                                }
-                            }
-                        }
-
-                        // API succeeded (or not applying), now save to config
-                        match config.add_record(
-                            &provider,
-                            &domain,
-                            record_type.clone(),
+                // If applying to DNS provider, use ViewModel
+                if self.add_record_apply {
+                    if let Some(vm) = vm {
+                        // Send command to ViewModel
+                        let record_type_str = self.add_record_type.to_uppercase();
+                        match vm.add_dns_record(
+                            provider.clone(),
+                            domain.clone(),
+                            record_type_str.clone(),
                             normalized_name.clone(),
                             value.clone(),
+                            300, // Default TTL
                         ) {
                             Ok(_) => {
-                                match save_ns_config(&config) {
-                                    Ok(_) => {
-                                        // Record audit event
-                                        let record_desc = format!(
-                                            "{} {} {} {}",
-                                            domain, name, self.add_record_type, value
-                                        );
-                                        let _ = audit::push_gui(
-                                            "system",
-                                            "desktop",
-                                            "ns insert",
-                                            &record_desc,
-                                        );
-
-                                        self.add_progress(format!(
-                                            "✓ Added record: {} {} {} -> {}",
-                                            domain,
-                                            normalized_name,
-                                            self.add_record_type.to_uppercase(),
-                                            value
-                                        ));
-
-                                        self.load_records();
-                                        self.load_data(); // Refresh record count
+                                // Add to config optimistically
+                                match load_ns_config() {
+                                    Ok(mut config) => {
+                                        if let Ok(_) = config.add_record(
+                                            &provider,
+                                            &domain,
+                                            record_type_enum.clone(),
+                                            normalized_name.clone(),
+                                            value.clone(),
+                                        ) {
+                                            // Record audit event
+                                            let record_desc = format!(
+                                                "{} {} {} {}",
+                                                domain, name, record_type_str, value
+                                            );
+                                            let _ = audit::push_gui(
+                                                "system",
+                                                "desktop",
+                                                "ns insert",
+                                                &record_desc,
+                                            );
+                                        }
+                                        // Note: Config will be saved when RecordAdded event arrives
                                     }
                                     Err(e) => {
-                                        self.error_message =
-                                            format!("Failed to save config:\n\n{}", e);
+                                        self.error_message = format!("Failed to load config:\n\n{}", e);
                                         self.show_error_dialog = true;
                                     }
                                 }
                             }
                             Err(e) => {
-                                self.error_message = format!("Failed to add record:\n\n{}", e);
+                                self.error_message = format!("Failed to start record addition:\n\n{}", e);
                                 self.show_error_dialog = true;
                             }
                         }
-                    }
-                    Err(e) => {
-                        self.error_message = format!("Failed to load config:\n\n{}", e);
+                    } else {
+                        self.error_message = "ViewModel not available".to_string();
                         self.show_error_dialog = true;
+                    }
+                } else {
+                    // Not applying - just save to config (no API call)
+                    match load_ns_config() {
+                        Ok(mut config) => {
+                            match config.add_record(
+                                &provider,
+                                &domain,
+                                record_type_enum.clone(),
+                                normalized_name.clone(),
+                                value.clone(),
+                            ) {
+                                Ok(_) => {
+                                    match save_ns_config(&config) {
+                                        Ok(_) => {
+                                            let record_desc = format!(
+                                                "{} {} {} {}",
+                                                domain, name, self.add_record_type, value
+                                            );
+                                            let _ = audit::push_gui(
+                                                "system",
+                                                "desktop",
+                                                "ns insert",
+                                                &record_desc,
+                                            );
+
+                                            self.add_progress(format!(
+                                                "✓ Added record: {} {} {} -> {}",
+                                                domain,
+                                                normalized_name,
+                                                self.add_record_type.to_uppercase(),
+                                                value
+                                            ));
+
+                                            self.load_records();
+                                            self.load_data();
+                                        }
+                                        Err(e) => {
+                                            self.error_message = format!("Failed to save config:\n\n{}", e);
+                                            self.show_error_dialog = true;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    self.error_message = format!("Failed to add record:\n\n{}", e);
+                                    self.show_error_dialog = true;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.error_message = format!("Failed to load config:\n\n{}", e);
+                            self.show_error_dialog = true;
+                        }
                     }
                 }
             }
