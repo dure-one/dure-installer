@@ -13,6 +13,7 @@ pub enum SshCommand {
     DeleteHost { name: String },
     ListHosts,
     TestConnection { name: String },
+    InitHost { name: String },
 
     // Docker Operations
     DockerPull { host_name: String, image: String },

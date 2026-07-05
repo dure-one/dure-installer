@@ -50,6 +50,9 @@ impl SshActor {
                 eprintln!("🔍 SSH Actor: Handling TestConnection for '{}'", name);
                 self.test_connection(name).await
             }
+            SshCommand::InitHost { name } => {
+                self.init_host(name).await
+            }
             SshCommand::DockerPull { host_name, image } => {
                 self.docker_pull(host_name, image).await
             }
@@ -218,6 +221,51 @@ impl SshActor {
                     name,
                     success: false,
                     latency_ms: None,
+                }).await;
+                Err(e)
+            }
+        }
+    }
+
+    async fn init_host(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: init_host called for '{}'", name);
+        self.send_progress("init_host", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("init_host", 0.3, "Initializing SSH host...").await;
+
+        // Initialize host (async operation - russh uses tokio internally)
+        let result = async_compat::Compat::new(crate::calc::ssh::initialize_host(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("init_host", 1.0, "Host initialized").await;
+                self.send_event(SshEvent::HostInitialized {
+                    name,
+                    success: true,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Host initialization failed: {}", e);
+                self.send_event(SshEvent::HostInitialized {
+                    name,
+                    success: false,
                 }).await;
                 Err(e)
             }

@@ -22,6 +22,7 @@ pub enum SshEvent {
     HostDeleted { name: String },
     HostsListed { hosts: Vec<SshHostInfo> },
     ConnectionTested { name: String, success: bool, latency_ms: Option<u64> },
+    HostInitialized { name: String, success: bool },
 
     // Docker Events
     DockerImagePulled { host_name: String, image: String },

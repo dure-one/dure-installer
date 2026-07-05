@@ -181,6 +181,14 @@ impl SshTab {
                         }
                         self.test_in_progress = false;
                     }
+                    ViewModelEvent::Ssh(SshEvent::HostInitialized { name, success }) => {
+                        if success {
+                            self.init_progress_log.push(format!("✓ Host '{}' initialized successfully", name));
+                        } else {
+                            self.init_progress_log.push(format!("✗ Host '{}' initialization failed", name));
+                        }
+                        self.init_in_progress = false;
+                    }
                     ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
                         if operation == "add_host" {
                             self.load_error = Some(format!("Failed to add host: {}", error));
@@ -268,7 +276,7 @@ impl SshTab {
                 if let Some(idx) = selected_row_idx {
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        self.execute_init_host(host);
+                        self.execute_init_host(host, vm.as_deref_mut());
                     }
                 }
             }
@@ -565,48 +573,26 @@ impl SshTab {
         }
     }
 
-    fn execute_init_host(&mut self, host: String) {
+    fn execute_init_host(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.init_in_progress = true;
-            self.init_host = Some(host.clone());
-            self.init_progress_log.clear();
-            self.init_progress_log
-                .push(format!("Initializing SSH host: {}", host));
-
-            // Load config and get host config
-            let host_config_clone = match load_config() {
-                Ok((app_config, _)) => app_config
-                    .ssh_hosts
-                    .iter()
-                    .find(|h| h.host == host)
-                    .cloned(),
-                Err(e) => {
-                    self.init_progress_log
-                        .push(format!("✗ Failed to load config: {e}"));
-                    self.init_in_progress = false;
-                    return;
-                }
-            };
-
-            let Some(host_config) = host_config_clone else {
+            if let Some(vm) = vm {
+                self.init_in_progress = true;
+                self.init_host = Some(host.clone());
+                self.init_progress_log.clear();
                 self.init_progress_log
-                    .push(format!("✗ SSH host '{}' not found", host));
-                self.init_in_progress = false;
-                return;
-            };
+                    .push(format!("Initializing SSH host: {}", host));
 
-            // Spawn initialization in background thread
-            let promise = poll_promise::Promise::spawn_thread("ssh_init", move || {
-                // russh uses tokio internally, wrap with async-compat for smol
-                smol::block_on(async {
-                    async_compat::Compat::new(ssh::initialize_host(&host_config))
-                        .await
-                        .map_err(|e| format!("{}", e))
-                })
-            });
-
-            self.init_promise = Some(promise);
+                match vm.init_ssh_host(host) {
+                    Ok(_) => {
+                        eprintln!("✓ SSH host init command sent");
+                    }
+                    Err(e) => {
+                        self.init_progress_log.push(format!("✗ Failed to start initialization: {}", e));
+                        self.init_in_progress = false;
+                    }
+                }
+            }
         }
     }
 
