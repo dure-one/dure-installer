@@ -164,6 +164,49 @@ impl ViewModel {
         }
     }
 
+    /// Create ViewModel for WASM (browser)
+    #[cfg(target_arch = "wasm32")]
+    pub fn new_wasm() -> Self {
+        use wasm_bindgen_futures::spawn_local;
+
+        let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (ssh_tx, ssh_rx) = smol::channel::unbounded();
+        let (ns_tx, ns_rx) = smol::channel::unbounded();
+        let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Spawn actors in Web Worker context
+        spawn_local(async move {
+            log::info!("ViewModel runtime started (WASM)");
+
+            let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+            let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
+            let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
+
+            // SSH disabled in WASM (no native SSH in browser)
+            drop(ssh_rx);
+
+            // Run actors concurrently
+            futures::join!(
+                platform_actor.run(),
+                ns_actor.run(),
+                wss_actor.run(),
+            );
+        });
+
+        Self {
+            platform_tx,
+            ssh_tx,
+            ns_tx,
+            wss_tx,
+            event_rx,
+            state: ViewModelState::default(),
+            runtime_handle: None,
+            #[cfg(feature = "gui")]
+            egui_ctx: None,
+        }
+    }
+
     /// Poll for events and update state (GUI mode)
     #[cfg(feature = "gui")]
     pub fn poll_events(&mut self, ctx: &egui::Context) -> Vec<ViewModelEvent> {
