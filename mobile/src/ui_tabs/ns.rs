@@ -768,10 +768,51 @@ impl NsTab {
                             }
                         }
                     }
+                    ViewModelEvent::Ns(NsEvent::ProviderAdded { name, domains }) => {
+                        self.add_progress(format!("✓ Added {} provider with {} domain(s)", name, domains.len()));
+
+                        // Save domains to config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            if let Ok(mut config) = load_ns_config() {
+                                let api_token = if name == "porkbun" {
+                                    format!("{}::{}", self.add_token, self.add_secret_key)
+                                } else {
+                                    self.add_token.clone()
+                                };
+
+                                let mut added_count = 0;
+                                for (domain, records) in domains {
+                                    if let Ok(_) = config.add_domain(name.clone(), domain.clone(), api_token.clone()) {
+                                        added_count += 1;
+                                        // Add records to domain
+                                        if let Some(domain_entry) = config.get_domain_mut(&name, &domain) {
+                                            domain_entry.records.extend(records);
+                                        }
+                                        self.add_progress(format!("  ✓ Added domain: {}", domain));
+                                    }
+                                }
+
+                                if let Err(e) = save_ns_config(&config) {
+                                    self.add_progress(format!("Error saving config: {}", e));
+                                } else {
+                                    self.add_progress(format!("✓ Configuration saved ({} domains)", added_count));
+                                    self.load_data();
+                                }
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::Progress { operation, progress, status }) => {
+                        if operation == "add_provider" {
+                            self.add_progress(format!("[{:>3.0}%] {}", progress * 100.0, status));
+                        }
+                    }
                     ViewModelEvent::Ns(NsEvent::Error { operation, error }) => {
                         if operation == "add_record" {
                             self.error_message = format!("Failed to add DNS record:\n\n{}", error);
                             self.show_error_dialog = true;
+                        } else if operation == "add_provider" {
+                            self.add_progress(format!("❌ Failed to add provider: {}", error));
                         }
                     }
                     _ => {}
@@ -988,7 +1029,7 @@ impl NsTab {
         }
 
         // Dialogs
-        self.show_add_provider_dialog(ui.ctx());
+        self.show_add_provider_dialog(ui.ctx(), vm.as_deref_mut());
         self.show_add_domain_dialog(ui.ctx());
         self.show_add_record_dialog(ui.ctx(), vm);
         self.show_error_dialog(ui.ctx());
@@ -1118,7 +1159,7 @@ impl NsTab {
     }
 
     /// Show add nameserver provider dialog
-    fn show_add_provider_dialog(&mut self, ctx: &egui::Context) {
+    fn show_add_provider_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if !self.show_add_provider_dialog {
             return;
         }
@@ -1355,7 +1396,7 @@ impl NsTab {
                     };
 
                     if ui.add(add_button).clicked() {
-                        self.start_add_provider_background();
+                        self.start_add_provider_background(vm.as_deref_mut());
                         self.show_add_provider_dialog = false;
                     }
 
@@ -1631,12 +1672,38 @@ impl NsTab {
     }
 
     /// Start add nameserver provider in background (non-blocking)
-    fn start_add_provider_background(&mut self) {
+    fn start_add_provider_background(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let provider = self.add_provider_type.clone();
 
-            // For GCP, create account first and use "gcloud:email" as provider
+            // Use ViewModel for Cloudflare and Porkbun (simpler providers)
+            if (provider == "cloudflare" || provider == "porkbun") && vm.is_some() {
+                let api_token = if provider == "porkbun" {
+                    if self.add_token.is_empty() || self.add_secret_key.is_empty() {
+                        self.add_progress("Error: Both API Key and Secret Key are required for Porkbun".to_string());
+                        return;
+                    }
+                    format!("{}::{}", self.add_token, self.add_secret_key)
+                } else {
+                    if self.add_token.is_empty() {
+                        self.add_progress("Error: API Key is required".to_string());
+                        return;
+                    }
+                    self.add_token.clone()
+                };
+
+                self.add_progress(format!("Fetching domains from {}...", provider));
+
+                if let Some(ref mut vm) = vm {
+                    if let Err(e) = vm.add_dns_provider(provider.clone(), provider.clone(), api_token) {
+                        self.add_progress(format!("Failed to start provider addition: {}", e));
+                    }
+                }
+                return;
+            }
+
+            // Fallback to poll_promise for DuckDNS and GCP
             let (provider_id, token) = if provider == "gcloud" {
                 if let (Some(oauth), Some(email)) =
                     (&self.add_gcp_oauth_result, &self.add_gcp_connected_email)
