@@ -67,12 +67,14 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: OAuth flows, project listing, VM creation wizard, ~8 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
-  - **Status**: Signature updated, pattern established
-  - **File**: `mobile/src/ui_tabs/ssh.rs`
+  - **Status**: Incremental migration started (1 operation complete)
+  - **File**: `mobile/src/ui_tabs/ssh.rs` (766 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
-  - TODO comments show ViewModel usage ✅
-  - **Remaining**: Replace direct calc:: calls incrementally
+  - Event processing pattern implemented ✅
+  - **Completed Operations**:
+    - ✅ SSH host delete (execute_delete_host → vm.delete_ssh_host) - commit ccca9b4
+  - **Remaining**: Add host (needs UI refactor), test connection, docker ops, port ops
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
   - **Status**: Signature updated, pattern established
