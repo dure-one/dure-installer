@@ -37,6 +37,23 @@ Today's e-commerce solutions are server-centric, which makes them attractive tar
 
 **Note**: Some documentation files reference a different project and are being updated. See docs/INDEX.md for current status.
 
+## 🏗️ Architecture
+
+**Dure uses MVVM (Model-View-ViewModel) architecture with actor-based concurrency:**
+
+- **View**: egui UI (Desktop/Android), WASM (Browser), CLI (Headless)
+- **ViewModel**: Async actor coordinator with unified API for all platforms
+- **Model**: Business logic (calc layer), Database (Diesel ORM), External APIs
+
+**Key Benefits:**
+- ✅ Clean separation between UI and business logic
+- ✅ Async by default - all I/O is non-blocking
+- ✅ Cross-platform - same ViewModel for Desktop, CLI, Android, WASM
+- ✅ Testable - actors can be tested independently
+- ✅ Progress reporting - built-in progress events for long operations
+
+See [docs/MVVM_MIGRATION_STATUS.md](./docs/MVVM_MIGRATION_STATUS.md) for architecture details.
+
 ## Why Dure?
 
 ### General Comparison by Services
