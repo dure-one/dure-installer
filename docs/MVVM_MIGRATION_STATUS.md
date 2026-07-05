@@ -34,10 +34,10 @@
 - ✅ Record Management: add, delete, list
 - ✅ Refresh: refresh_all
 
-### UI Migration: 14/30 Operations (47%)
+### UI Migration: 15/30 Operations (50%)
 
 **Fully Migrated:**
-- Platform: 7 ops (billing, firewall, VM delete/restart/regenerate, projects list/select)
+- Platform: 8 ops (billing, firewall, VM delete/restart/regenerate, projects list/select, platform delete)
 - SSH: 3 ops (host add/delete, test connection)
 - NS: 4 ops (record add/delete, provider add CF/Porkbun, domain delete)
 
@@ -90,13 +90,13 @@
 All three main UI tabs now have ViewModel integration prepared:
 
 - ✅ **Task 10**: Platform Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (7/12+ operations complete)
+  - **Status**: Incremental migration in progress (8/12+ operations complete)
   - **File**: `mobile/src/ui_tabs/platform.rs` (2721 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
   - Event processing pattern implemented ✅
   - **Migration Guide**: `docs/MVVM_MIGRATION_GUIDE.md` ✅
-  - **Completed Operations** (code reduced ~330 → ~130 lines):
+  - **Completed Operations** (code reduced ~375 → ~140 lines):
     - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing) - commit 581c481
     - ✅ Firewall update (update_firewall → vm.update_firewall) - commit 16d0f92
     - ✅ VM restart (restart_vm → vm.restart_vm) - commit 16d0f92
@@ -104,6 +104,7 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ Project listing (show_select_project_dialog → vm.list_projects) - commit 99b42e5
     - ✅ Project selection (execute_select_project → vm.select_project) - commit 99b42e5
     - ✅ VM regeneration (regenerate_vm → vm.regenerate_vm) - commit 40c9e73
+    - ✅ Platform delete (execute_delete_platform → vm.delete_platform) - commit b12d09e
   - **Actor Implementations**:
     - ✅ list_projects() - fetches GCP projects - commit 1b3c500
     - ✅ regenerate_vm() - regenerates VM with new config - commit 40c9e73
@@ -182,13 +183,14 @@ These are placeholder function calls showing where business logic will connect.
 
 ## Remaining Operations Analysis
 
-### Platform Tab (7/~15 operations - 47%)
+### Platform Tab (8/~15 operations - 53%)
 
 **✅ Migrated:**
 - Billing fetch
 - Firewall update
 - VM delete, restart, regenerate
 - Project list, project select
+- Platform delete
 
 **🔨 Ready to Migrate (actor + ViewModel methods exist):**
 - list_vms - UI would need new implementation (no existing UI for this)
@@ -198,7 +200,6 @@ These are placeholder function calls showing where business logic will connect.
 - OAuth flows - Complex browser interaction, placeholders only
 - Platform test_connection - Uses poll_promise, interface mismatch
 - Add platform - No actor command
-- Delete platform - No actor command
 
 ### SSH Tab (3/~8 operations - 38%)
 
@@ -231,9 +232,9 @@ These are placeholder function calls showing where business logic will connect.
 
 ## Summary: Migration Complete Where Practical
 
-**Current Status: 14/30 UI operations (47%)**
+**Current Status: 15/30 UI operations (50%)**
 
-**Realistically Completable: 14/~20 useful operations (70%)**
+**Realistically Completable: 15/~20 useful operations (75%)**
 
 The remaining 16 "unmigrated" operations fall into three categories:
 1. **No UI exists** (6 ops): Docker (3), Port (2), Deploy WSS (1)
