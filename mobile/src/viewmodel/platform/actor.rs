@@ -72,6 +72,9 @@ impl PlatformActor {
             PlatformCommand::CompleteOAuth { platform_name, auth_code } => {
                 self.complete_oauth(platform_name, auth_code).await
             }
+            PlatformCommand::AddPlatform { name, platform_type, oauth_access_token, oauth_refresh_token, oauth_token_expiry, connected_email, selected_project_id } => {
+                self.add_platform(name, platform_type, oauth_access_token, oauth_refresh_token, oauth_token_expiry, connected_email, selected_project_id).await
+            }
             PlatformCommand::DeletePlatform { platform_name } => {
                 self.delete_platform(platform_name).await
             }
@@ -485,6 +488,72 @@ impl PlatformActor {
         self.send_event(PlatformEvent::OAuthCompleted {
             platform_name,
             email,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn add_platform(
+        &mut self,
+        name: String,
+        platform_type: String,
+        oauth_access_token: Option<String>,
+        oauth_refresh_token: Option<String>,
+        oauth_token_expiry: Option<i64>,
+        connected_email: Option<String>,
+        selected_project_id: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.send_progress("add_platform", 0.5, "Adding platform...").await;
+
+        runtime::unblock({
+            let name = name.clone();
+            let platform_type = platform_type.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Check if platform already exists
+                if app_config.platforms.iter().any(|p| p.name == name) {
+                    anyhow::bail!("Platform '{}' already exists", name);
+                }
+
+                // Create new platform
+                let platform = crate::config::CloudPlatformConfig {
+                    name: name.clone(),
+                    platform_type: platform_type.clone(),
+                    gcp_oauth_access_token: oauth_access_token,
+                    gcp_oauth_refresh_token: oauth_refresh_token,
+                    gcp_oauth_token_expiry: oauth_token_expiry,
+                    gcp_connected_email: connected_email,
+                    gcp_selected_project_id: selected_project_id,
+                    firebase_project_id: None,
+                    firebase_api_key: None,
+                    supabase_project_ref: None,
+                    supabase_api_url: None,
+                    supabase_anon_key: None,
+                    api_token: None,
+                    service_account_json: None,
+                    vms: Vec::new(),
+                };
+
+                // Add to config
+                app_config.platforms.push(platform);
+
+                // Save config
+                app_config.save(&config_path)?;
+
+                // Record audit event
+                let _ = crate::calc::audit::push_gui("system", "desktop", "platform add", &name);
+
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("add_platform", 1.0, "Platform added").await;
+
+        self.send_event(PlatformEvent::PlatformAdded {
+            platform_name: name,
+            platform_type,
         }).await;
 
         Ok(())

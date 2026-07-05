@@ -17,6 +17,7 @@ pub enum PlatformEvent {
     OAuthCompleted { platform_name: String, email: String },
 
     // Platform Management Events
+    PlatformAdded { platform_name: String, platform_type: String },
     PlatformDeleted { platform_name: String, vm_count: usize },
 
     // Project Events

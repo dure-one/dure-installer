@@ -333,6 +333,27 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn add_platform(
+        &self,
+        name: String,
+        platform_type: String,
+        oauth_access_token: Option<String>,
+        oauth_refresh_token: Option<String>,
+        oauth_token_expiry: Option<i64>,
+        connected_email: Option<String>,
+        selected_project_id: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::AddPlatform {
+            name,
+            platform_type,
+            oauth_access_token,
+            oauth_refresh_token,
+            oauth_token_expiry,
+            connected_email,
+            selected_project_id,
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn delete_platform(&self, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx.send_blocking(platform::PlatformCommand::DeletePlatform { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))

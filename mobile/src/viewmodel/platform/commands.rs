@@ -5,6 +5,15 @@ pub enum PlatformCommand {
     // OAuth & Platform Management
     StartOAuth { platform_name: String },
     CompleteOAuth { platform_name: String, auth_code: String },
+    AddPlatform {
+        name: String,
+        platform_type: String,
+        oauth_access_token: Option<String>,
+        oauth_refresh_token: Option<String>,
+        oauth_token_expiry: Option<i64>,
+        connected_email: Option<String>,
+        selected_project_id: Option<String>,
+    },
     DeletePlatform { platform_name: String },
 
     // Project Operations

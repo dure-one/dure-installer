@@ -773,6 +773,12 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::PlatformAdded { platform_name, platform_type }) => {
+                        eprintln!("✓ Platform '{}' ({}) added", platform_name, platform_type);
+                        // Refresh spreadsheet to show new platform
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::PlatformDeleted { platform_name, vm_count }) => {
                         eprintln!("✓ Platform '{}' deleted ({} VMs)", platform_name, vm_count);
                         // Refresh spreadsheet to show removal
@@ -1080,7 +1086,7 @@ impl PlatformTab {
 
         // Add platform dialog
         if self.show_add_dialog {
-            self.render_add_dialog(ui.ctx());
+            self.render_add_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Delete Platform dialog
@@ -1372,7 +1378,7 @@ impl PlatformTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context) {
+    fn render_add_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_add_dialog;
 
         egui::Window::new("Add Platform")
@@ -1523,7 +1529,7 @@ impl PlatformTab {
 
                     ui.add_enabled_ui(can_add, |ui| {
                         if ui.button("Add").clicked() {
-                            self.execute_add_platform();
+                            self.execute_add_platform(vm.as_deref_mut());
                             self.show_add_dialog = false;
                             self.add_platform_oauth_result = None;
                             self.add_platform_oauth_promise = None;
@@ -1557,96 +1563,46 @@ impl PlatformTab {
         }
     }
 
-    fn execute_add_platform(&mut self) {
+    fn execute_add_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_config() {
-                Ok((mut app_config, config_path)) => {
-                    // Check if platform already exists
-                    if app_config
-                        .platforms
-                        .iter()
-                        .any(|p| p.name == self.add_platform_name)
-                    {
-                        self.load_error = Some(format!(
-                            "Platform '{}' already exists",
-                            self.add_platform_name
-                        ));
-                        return;
+            // Extract OAuth info if GCP
+            let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
+                if self.add_platform_type == "gcp" {
+                    if let Some(oauth) = &self.add_platform_oauth_result {
+                        let project_id = self.add_platform_selected_project
+                            .and_then(|idx| self.add_platform_project_list.get(idx))
+                            .map(|(id, _)| id.clone());
+                        (
+                            Some(oauth.access_token.clone()),
+                            Some(oauth.refresh_token.clone()),
+                            Some(oauth.expires_at as i64),
+                            self.add_platform_connected_email.clone(),
+                            project_id,
+                        )
+                    } else {
+                        (None, None, None, None, None)
                     }
+                } else {
+                    (None, None, None, None, None)
+                };
 
-                    // Create new platform with OAuth info if GCP
-                    let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
-                        if self.add_platform_type == "gcp" {
-                            if let Some(oauth) = &self.add_platform_oauth_result {
-                                let project_id = self.add_platform_selected_project
-                                    .and_then(|idx| self.add_platform_project_list.get(idx))
-                                    .map(|(id, _)| id.clone());
-                                (
-                                    Some(oauth.access_token.clone()),
-                                    Some(oauth.refresh_token.clone()),
-                                    Some(oauth.expires_at as i64),
-                                    self.add_platform_connected_email.clone(),
-                                    project_id,
-                                )
-                            } else {
-                                (None, None, None, None, None)
-                            }
-                        } else {
-                            (None, None, None, None, None)
-                        };
-
-                    let platform = CloudPlatformConfig {
-                        name: self.add_platform_name.clone(),
-                        platform_type: self.add_platform_type.clone(),
-                        gcp_oauth_access_token: oauth_access,
-                        gcp_oauth_refresh_token: oauth_refresh,
-                        gcp_oauth_token_expiry: oauth_expiry,
-                        gcp_connected_email: connected_email,
-                        gcp_selected_project_id: selected_project,
-                        firebase_project_id: None,
-                        firebase_api_key: None,
-                        supabase_project_ref: None,
-                        supabase_api_url: None,
-                        supabase_anon_key: None,
-                        api_token: None,
-                        service_account_json: None,
-                        vms: Vec::new(),
-                    };
-
-                    // Add to config
-                    app_config.platforms.push(platform);
-
-                    // Save config
-                    match app_config.save(&config_path) {
-                        Ok(_) => {
-                            // Record audit event
-                            match audit::push_gui(
-                                "system",
-                                "desktop",
-                                "platform add",
-                                &self.add_platform_name,
-                            ) {
-                                Ok(audit_id) => {
-                                    eprintln!("✓ Audit record created: ID {}", audit_id);
-                                }
-                                Err(e) => {
-                                    eprintln!("⚠ Failed to record audit event: {}", e);
-                                    self.load_error = Some(format!("Audit tracking failed: {}", e));
-                                }
-                            }
-
-                            eprintln!("✓ Platform added, refreshing spreadsheet");
-                            self.loaded = false; // Trigger reload
-                            self.load_error = None;
-                        }
-                        Err(e) => {
-                            self.load_error = Some(format!("Failed to save config: {e}"));
-                        }
+            if let Some(vm) = vm {
+                match vm.add_platform(
+                    self.add_platform_name.clone(),
+                    self.add_platform_type.clone(),
+                    oauth_access,
+                    oauth_refresh,
+                    oauth_expiry,
+                    connected_email,
+                    selected_project,
+                ) {
+                    Ok(_) => {
+                        eprintln!("✓ Platform add command sent");
                     }
-                }
-                Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {e}"));
+                    Err(e) => {
+                        self.load_error = Some(format!("Failed to add platform: {}", e));
+                    }
                 }
             }
         }
