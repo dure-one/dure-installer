@@ -367,3 +367,39 @@ mod vm_tests {
         assert!(result.unwrap_err().to_string().contains("No VMs found"));
     }
 }
+
+#[cfg(test)]
+mod billing_tests {
+    use super::*;
+    use crate::calc::gcp_rest::BillingRecord;
+
+    #[smol::test]
+    async fn test_billing_success() {
+        let mut runner = MockPlatformRunner::new();
+        runner.expect_response(PlatformEvent::BillingFetched {
+            platform_name: "test-gcp".to_string(),
+            records: vec![
+                BillingRecord {
+                    month: "2026-07".to_string(),
+                    cost: 12.45,
+                },
+                BillingRecord {
+                    month: "2026-06".to_string(),
+                    cost: 11.89,
+                },
+                BillingRecord {
+                    month: "2026-05".to_string(),
+                    cost: 13.20,
+                },
+            ],
+        });
+
+        let platform = mock_platform_connected();
+        let result = crate::cli::commands::platform::billing::execute_billing_inner(
+            &mut runner,
+            &platform,
+        ).await;
+
+        assert!(result.is_ok());
+    }
+}
