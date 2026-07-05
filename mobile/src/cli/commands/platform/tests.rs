@@ -16,12 +16,19 @@ pub fn mock_platform_connected() -> CloudPlatformConfig {
         gcp_connected_email: Some("test@example.com".to_string()),
         gcp_selected_project_id: Some("test-project-123".to_string()),
         vms: vec![
-            crate::config::VmConfig {
+            crate::config::VmInstance {
                 name: "test-vm".to_string(),
+                instance_id: "test-vm-id".to_string(),
                 zone: "us-central1-a".to_string(),
+                gcp_region: "us-central1".to_string(),
                 machine_type: "e2-micro".to_string(),
+                status: "RUNNING".to_string(),
                 external_ip: Some("203.0.113.42".to_string()),
-                ..Default::default()
+                internal_ip: Some("10.0.0.1".to_string()),
+                gcp_project_id: "test-project-123".to_string(),
+                gcp_billing_account: None,
+                created_at: chrono::Utc::now().timestamp(),
+                ssh_key_name: None,
             }
         ],
         ..Default::default()
@@ -64,5 +71,103 @@ impl MockPlatformRunner {
     pub async fn execute_command(&mut self, _cmd: PlatformCommand) -> Result<PlatformEvent> {
         self.responses.pop_front()
             .ok_or_else(|| anyhow!("No more mock responses"))
+    }
+}
+
+#[cfg(test)]
+mod helpers_tests {
+    use super::*;
+    use crate::cli::commands::platform::helpers::*;
+
+    #[test]
+    fn test_format_steps_all_complete() {
+        let platform = mock_platform_connected();
+        let steps = format_steps(&platform);
+
+        assert!(steps.contains("✓"));
+        assert!(steps.contains("→"));
+        assert!(steps.contains("GCP Connected"));
+        assert!(steps.contains("Project Created"));
+        assert!(steps.contains("VM Created"));
+    }
+
+    #[test]
+    fn test_format_steps_no_vm() {
+        let platform = mock_platform_no_vm();
+        let steps = format_steps(&platform);
+
+        assert!(steps.contains("✓ GCP Connected"));
+        assert!(steps.contains("✓ Project Created"));
+        assert!(steps.contains("✗ VM Created"));
+    }
+
+    #[test]
+    fn test_format_steps_disconnected() {
+        let platform = mock_platform_disconnected();
+        let steps = format_steps(&platform);
+
+        assert!(steps.contains("✗ GCP Connected"));
+        assert!(steps.contains("✗ Project Created"));
+    }
+
+    #[test]
+    fn test_format_drawer_content_connected() {
+        let platform = mock_platform_connected();
+        let content = format_drawer_content(&platform);
+
+        assert!(content.contains("test@example.com"));
+        assert!(content.contains("test-project-123"));
+        assert!(content.contains("test-vm"));
+        assert!(content.contains("203.0.113.42"));
+    }
+
+    #[test]
+    fn test_format_drawer_content_no_vm() {
+        let platform = mock_platform_no_vm();
+        let content = format_drawer_content(&platform);
+
+        assert!(content.contains("test@example.com"));
+        assert!(content.contains("test-project-123"));
+        assert!(content.contains("No VM created"));
+    }
+
+    #[test]
+    fn test_validate_platform_not_connected() {
+        let platform = mock_platform_disconnected();
+        let result = validate_platform_ready(&platform, "addvm");
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("not connected"));
+        assert!(err.contains("dure platform init"));
+    }
+
+    #[test]
+    fn test_validate_platform_no_project() {
+        let mut platform = mock_platform_connected();
+        platform.gcp_selected_project_id = None;
+
+        let result = validate_platform_ready(&platform, "addvm");
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No project selected"));
+    }
+
+    #[test]
+    fn test_validate_platform_ready_success() {
+        let platform = mock_platform_connected();
+        let result = validate_platform_ready(&platform, "addvm");
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_platform_list_no_validation() {
+        let platform = mock_platform_disconnected();
+        let result = validate_platform_ready(&platform, "list");
+
+        // List command doesn't require connection
+        assert!(result.is_ok());
     }
 }
