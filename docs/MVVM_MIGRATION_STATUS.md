@@ -77,12 +77,14 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: Add host (needs UI refactor), test connection, docker ops, port ops
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
-  - **Status**: Signature updated, pattern established
+  - **Status**: Incremental migration started (1 operation complete)
   - **File**: `mobile/src/ui_tabs/ns.rs`
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅  
-  - TODO comments show ViewModel usage ✅
-  - **Remaining**: Replace poll-promise calls incrementally
+  - Event processing pattern implemented ✅
+  - **Completed Operations**:
+    - ✅ Add record (execute_add_record → vm.add_dns_record) - commit b43aaba
+  - **Remaining**: Add/delete provider, add/delete domain, delete record, list operations
 
 ### Code Cleanup
 - ⚠️ **Task 15**: Code Cleanup
