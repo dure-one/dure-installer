@@ -321,3 +321,49 @@ mod firewall_tests {
         assert!(result.is_err());
     }
 }
+
+#[cfg(test)]
+mod vm_tests {
+    use super::*;
+
+    #[smol::test]
+    async fn test_addvm_success() {
+        let mut runner = MockPlatformRunner::new();
+        runner.expect_response(PlatformEvent::VMCreated {
+            platform_name: "test-gcp".to_string(),
+            vm_name: "test-vm".to_string(),
+            external_ip: "203.0.113.50".to_string(),
+        });
+
+        let platform = mock_platform_no_vm();
+        let result = crate::cli::commands::platform::vm::execute_addvm_inner(
+            &mut runner,
+            &platform,
+            "test-vm".to_string(),
+            "us-central1-a".to_string(),
+            "e2-micro".to_string(),
+        ).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_select_vm_single() {
+        let platform = mock_platform_connected();
+        let result = crate::cli::commands::platform::vm::select_vm(&platform, None);
+
+        assert!(result.is_ok());
+        let (name, zone) = result.unwrap();
+        assert_eq!(name, "test-vm");
+        assert_eq!(zone, "us-central1-a");
+    }
+
+    #[test]
+    fn test_select_vm_none() {
+        let platform = mock_platform_no_vm();
+        let result = crate::cli::commands::platform::vm::select_vm(&platform, None);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No VMs found"));
+    }
+}
