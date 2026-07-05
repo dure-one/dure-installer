@@ -1,9 +1,9 @@
 # MVVM Migration Status
 
-## ✅ All 16 Tasks Complete!
+## ✅ All 16 Tasks Complete! (+ Actor Enhancements)
 
-**Branch:** `feat/mvvm-refactor` (16 commits)  
-**Status:** Ready for incremental UI refinement and testing  
+**Branch:** `feat/mvvm-refactor` (20+ commits)  
+**Status:** Core MVVM complete, ongoing UI migration (10 operations at 33%)  
 **Architecture:** Fully implemented MVVM with actor-based concurrency
 
 ## Completed Tasks (✅)
@@ -92,7 +92,12 @@ All three main UI tabs now have ViewModel integration prepared:
   - Event processing pattern implemented ✅
   - **Completed Operations**:
     - ✅ Add record (execute_add_record → vm.add_dns_record) - commit b43aaba
-  - **Remaining**: Add/delete provider, add/delete domain, delete record, list operations
+      - Actor implementation completed - commit 62d37a2
+  - **Actor Implementations**:
+    - ✅ add_record() - adds DNS records via calc::ns::apply_record - commit 62d37a2
+    - ✅ add_provider() - fetches domains from Cloudflare/Porkbun/DuckDNS - commit f56e7f9
+    - ⚠️ delete_record/provider, list operations - TODO placeholders
+  - **Remaining**: UI migration for add_provider (complex, uses poll_promise), delete operations, list operations
 
 ### Code Cleanup
 - ⚠️ **Task 15**: Code Cleanup
