@@ -219,10 +219,10 @@ match event {
 ## Migration Statistics
 
 **Total Operations Identified:** ~30
-**Migrated:** 6 (20%)
+**Migrated:** 7 (23%)
 **Blocked by Interface:** 2
 **Blocked by Missing Actor:** 2
 **Blocked by Architecture:** 4-5
-**Remaining Straightforward:** 15-20
+**Remaining Straightforward:** 14-19
 
 **Realistic Next Target:** 10-12 operations (40% total coverage)
