@@ -34,11 +34,11 @@
 - ✅ Record Management: add, delete, list
 - ✅ Refresh: refresh_all
 
-### UI Migration: 16/30 Operations (53%)
+### UI Migration: 17/30 Operations (57%)
 
 **Fully Migrated:**
 - Platform: 9 ops (billing, firewall, VM delete/restart/regenerate, projects list/select, platform add/delete)
-- SSH: 3 ops (host add/delete, test connection)
+- SSH: 4 ops (host add/delete/init, test connection)
 - NS: 4 ops (record add/delete, provider add CF/Porkbun, domain delete)
 
 **Code Reduction:** Average 60-80% per operation (~800+ lines total)
@@ -114,7 +114,7 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: OAuth flows (complex), VM creation wizard (78KB, complex), test_connection (interface mismatch), ~5 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (3 operations complete)
+  - **Status**: Incremental migration in progress (4 operations complete)
   - **File**: `mobile/src/ui_tabs/ssh.rs` (766 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
@@ -123,6 +123,7 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ SSH host add (execute_add_host → vm.add_ssh_host) - commit ed06cc5
     - ✅ SSH host delete (execute_delete_host → vm.delete_ssh_host) - commit ccca9b4
     - ✅ Test connection (execute_test_connection → vm.test_ssh_connection) - commit c71d4e6
+    - ✅ Init host (execute_init_host → vm.init_ssh_host) - commit 02062a5
   - **Remaining**: Docker ops, port ops, deploy Dure WSS
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
