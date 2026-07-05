@@ -2,8 +2,8 @@
 
 ## ✅ All 16 Tasks Complete! (+ Actor Enhancements)
 
-**Branch:** `feat/mvvm-refactor` (20+ commits)  
-**Status:** Core MVVM complete, ongoing UI migration (10 operations at 33%)  
+**Branch:** `feat/mvvm-refactor` (21+ commits)  
+**Status:** Core MVVM complete, ongoing UI migration (11 operations at 37%)  
 **Architecture:** Fully implemented MVVM with actor-based concurrency
 
 ## Completed Tasks (✅)
@@ -85,19 +85,20 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: Add host (needs UI refactor), docker ops, port ops
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
-  - **Status**: Incremental migration started (1 operation complete)
+  - **Status**: Incremental migration in progress (2 operations complete)
   - **File**: `mobile/src/ui_tabs/ns.rs`
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅  
   - Event processing pattern implemented ✅
   - **Completed Operations**:
-    - ✅ Add record (execute_add_record → vm.add_dns_record) - commit b43aaba
-      - Actor implementation completed - commit 62d37a2
+    - ✅ Add record (execute_add_record → vm.add_dns_record) - commit b43aaba, actor 62d37a2
+    - ✅ Add provider for Cloudflare/Porkbun (start_add_provider_background → vm.add_dns_provider) - commit 42d9393
+      - GCP and DuckDNS still use poll_promise (complex OAuth flow)
   - **Actor Implementations**:
     - ✅ add_record() - adds DNS records via calc::ns::apply_record - commit 62d37a2
     - ✅ add_provider() - fetches domains from Cloudflare/Porkbun/DuckDNS - commit f56e7f9
     - ⚠️ delete_record/provider, list operations - TODO placeholders
-  - **Remaining**: UI migration for add_provider (complex, uses poll_promise), delete operations, list operations
+  - **Remaining**: GCP/DuckDNS provider addition (complex OAuth), delete operations, list operations
 
 ### Code Cleanup
 - ⚠️ **Task 15**: Code Cleanup

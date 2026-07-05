@@ -219,16 +219,16 @@ match event {
 ## Migration Statistics
 
 **Total Operations Identified:** ~30
-**Migrated:** 9 (30%)
+**Migrated:** 11 (37%)
 **Blocked by Interface:** 3 (SSH Add Host, NS Delete Record, Platform Test Connection)
-**Blocked by Missing Actor:** 1 (OAuth - complex browser flow)
-**Blocked by Architecture:** 4-5
-**Remaining Straightforward:** 12-16
+**Blocked by Missing Actor:** 0 (all needed actors implemented)
+**Blocked by Architecture:** 4-5 (render-time operations, complex OAuth flows)
+**Remaining Straightforward:** 10-14
 
-**Current Target:** 10-12 operations (40% total coverage) - Almost reached!
+**Current Target:** 10-12 operations (40% total coverage) - **Target Reached!**
 
 **Recent Progress:**
-- Platform: 6 operations complete (billing, firewall, VM restart/delete/regen, project listing)
+- Platform: 7 operations complete (billing, firewall, VM restart/delete/regen, project listing, selection)
 - SSH: 2 operations complete (host delete, test connection)
-- NS: 1 operation complete (add record)
-- Actor implementations: list_projects, regenerate_vm, OAuth placeholders, create_vm exists
+- NS: 2 operations complete (add record, add provider for Cloudflare/Porkbun)
+- Actor implementations: list_projects, regenerate_vm, select_project, add_record, add_provider
