@@ -707,6 +707,27 @@ impl PlatformTab {
     pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
         // ViewModel event processing (MVVM pattern)
         if let Some(vm) = vm {
+            // Process events first
+            let events = vm.poll_events(ui.ctx());
+            for event in events {
+                use crate::viewmodel::ViewModelEvent;
+                use crate::viewmodel::platform::PlatformEvent;
+
+                match event {
+                    ViewModelEvent::Platform(PlatformEvent::BillingFetched { records, .. }) => {
+                        self.billing_data = Some(records);
+                        self.billing_loading = false;
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
+                        if operation == "fetch_billing" {
+                            self.billing_error = Some(error);
+                            self.billing_loading = false;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
             // Show active operations with progress bars
             for (_op_id, progress) in vm.active_operations() {
                 ui.horizontal(|ui| {
@@ -1020,7 +1041,7 @@ impl PlatformTab {
 
         // Billing dialog
         if self.show_billing_dialog {
-            self.render_billing_dialog(ui.ctx());
+            self.render_billing_dialog(ui.ctx(), vm);
         }
 
         // Init progress display
@@ -2454,105 +2475,79 @@ impl PlatformTab {
         }
     }
 
-    fn fetch_billing_data(&mut self) {
-        self.billing_loading = true;
-        self.billing_error = None;
-        self.billing_data = None;
+    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // ViewModel-based implementation
+        if let Some(vm) = vm {
+            self.billing_loading = true;
+            self.billing_error = None;
+            self.billing_data = None;
 
-        // Load config to get GCP platform with OAuth
-        let (app_config, _) = match load_config() {
-            Ok(config) => config,
-            Err(e) => {
-                self.billing_error = Some(format!("Failed to load config: {}", e));
-                self.billing_loading = false;
-                return;
-            }
-        };
-
-        // Find first GCP platform with OAuth token
-        let platform = match app_config
-            .platforms
-            .iter()
-            .find(|p| p.platform_type == "gcp" && p.gcp_oauth_access_token.is_some())
-        {
-            Some(p) => p,
-            None => {
-                self.billing_error = Some(
-                    "No connected GCP platform found. Please add a GCP platform first.".to_string(),
-                );
-                self.billing_loading = false;
-                return;
-            }
-        };
-
-        // Get access token
-        let access_token = match &platform.gcp_oauth_access_token {
-            Some(token) => token.clone(),
-            None => {
-                self.billing_error = Some("No OAuth token found".to_string());
-                self.billing_loading = false;
-                return;
-            }
-        };
-
-        // Get project ID from VMs
-        let project_id = if !platform.vms.is_empty() {
-            platform.vms[0].gcp_project_id.clone()
-        } else {
-            self.billing_error =
-                Some("No VMs found. Please create a VM to determine the project ID.".to_string());
-            self.billing_loading = false;
-            return;
-        };
-
-        // Create API client
-        let client = crate::calc::gcp_rest::GcpRestClient::new(access_token);
-
-        // Auto-discover billing table if not already configured
-        if self.billing_dataset.is_empty() || self.billing_table.is_empty() {
-            match client.discover_billing_table(&project_id) {
-                Ok((dataset, table)) => {
-                    self.billing_dataset = dataset;
-                    self.billing_table = table;
-                    self.billing_project_id = project_id.clone();
-                }
+            // Load config to get GCP platform with OAuth
+            let (app_config, _) = match load_config() {
+                Ok(config) => config,
                 Err(e) => {
-                    // Fall back to default names
-                    self.billing_dataset = "billing_export".to_string();
-                    self.billing_table =
-                        format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                    self.billing_project_id = project_id.clone();
-                    self.billing_error = Some(format!(
-                        "Auto-discovery failed: {}\n\nUsing default names. Please configure below if different.",
-                        e
-                    ));
+                    self.billing_error = Some(format!("Failed to load config: {}", e));
                     self.billing_loading = false;
                     return;
                 }
-            }
-        }
+            };
 
-        // Fetch billing data
-        match client.get_current_month_billing(
-            &project_id,
-            &self.billing_dataset,
-            &self.billing_table,
-        ) {
-            Ok(records) => {
-                self.billing_data = Some(records);
+            // Find first GCP platform with OAuth token
+            let platform = match app_config
+                .platforms
+                .iter()
+                .find(|p| p.platform_type == "gcp" && p.gcp_oauth_access_token.is_some())
+            {
+                Some(p) => p,
+                None => {
+                    self.billing_error = Some(
+                        "No connected GCP platform found. Please add a GCP platform first.".to_string(),
+                    );
+                    self.billing_loading = false;
+                    return;
+                }
+            };
+
+            // Get project ID from VMs
+            let project_id = if !platform.vms.is_empty() {
+                platform.vms[0].gcp_project_id.clone()
+            } else {
+                self.billing_error =
+                    Some("No VMs found. Please create a VM to determine the project ID.".to_string());
+                self.billing_loading = false;
+                return;
+            };
+
+            // Use default dataset/table if not configured
+            if self.billing_dataset.is_empty() {
+                self.billing_dataset = "billing_export".to_string();
+            }
+            if self.billing_table.is_empty() {
+                self.billing_table = format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
+            }
+            if self.billing_project_id.is_empty() {
+                self.billing_project_id = project_id.clone();
+            }
+
+            // Send command to ViewModel
+            if let Err(e) = vm.fetch_billing(
+                platform.name.clone(),
+                project_id,
+                self.billing_dataset.clone(),
+                self.billing_table.clone(),
+            ) {
+                self.billing_error = Some(format!("Failed to start billing fetch: {}", e));
                 self.billing_loading = false;
             }
-            Err(e) => {
-                self.billing_error = Some(format!(
-                    "Failed to fetch billing data: {}\n\nCurrent settings:\n• Project: {}\n• Dataset: {}\n• Table: {}\n\nPlease verify these settings below.",
-                    e, project_id, self.billing_dataset, self.billing_table
-                ));
-                self.billing_loading = false;
-            }
+            // Note: billing_data will be set by event processing when BillingFetched event arrives
+        } else {
+            // Fallback: no ViewModel available (shouldn't happen in normal operation)
+            self.billing_error = Some("ViewModel not available".to_string());
+            self.billing_loading = false;
         }
     }
 
-    fn render_billing_dialog(&mut self, ctx: &egui::Context) {
+    fn render_billing_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         egui::Window::new("Monthly Billing")
             .collapsible(false)
             .resizable(true)
@@ -2709,7 +2704,7 @@ impl PlatformTab {
 
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data();
+                        self.fetch_billing_data(vm);
                     }
 
                     if ui.add(MaterialButton::outlined("Close")).clicked() {
