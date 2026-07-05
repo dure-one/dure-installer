@@ -333,6 +333,11 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn delete_platform(&self, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::DeletePlatform { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     // SSH commands
     pub fn add_ssh_host(&self, name: String, host: String, port: u16, user: String, ssh_key_path: String) -> anyhow::Result<()> {
         self.ssh_tx.send_blocking(ssh::SshCommand::AddHost {

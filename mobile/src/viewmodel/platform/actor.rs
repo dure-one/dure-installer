@@ -72,6 +72,9 @@ impl PlatformActor {
             PlatformCommand::CompleteOAuth { platform_name, auth_code } => {
                 self.complete_oauth(platform_name, auth_code).await
             }
+            PlatformCommand::DeletePlatform { platform_name } => {
+                self.delete_platform(platform_name).await
+            }
             _ => {
                 // Unimplemented commands
                 Err(anyhow::anyhow!("Command not implemented: {:?}", cmd))
@@ -482,6 +485,48 @@ impl PlatformActor {
         self.send_event(PlatformEvent::OAuthCompleted {
             platform_name,
             email,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn delete_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
+        self.send_progress("delete_platform", 0.5, "Deleting platform...").await;
+
+        let vm_count = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<usize> {
+                let config_path = Self::get_config_path()?;
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Find and remove platform
+                let platform_idx = app_config.platforms.iter()
+                    .position(|p| p.name == platform_name)
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+
+                let platform = app_config.platforms.remove(platform_idx);
+                let vm_count = platform.vms.len();
+
+                // Save config
+                app_config.save(&config_path)?;
+
+                // Record audit event
+                let _ = crate::calc::audit::push_gui(
+                    "system",
+                    "desktop",
+                    "platform delete",
+                    &format!("{} ({} VMs)", platform_name, vm_count),
+                );
+
+                Ok(vm_count)
+            }
+        }).await?;
+
+        self.send_progress("delete_platform", 1.0, "Platform deleted").await;
+
+        self.send_event(PlatformEvent::PlatformDeleted {
+            platform_name,
+            vm_count,
         }).await;
 
         Ok(())

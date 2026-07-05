@@ -773,6 +773,12 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::PlatformDeleted { platform_name, vm_count }) => {
+                        eprintln!("✓ Platform '{}' deleted ({} VMs)", platform_name, vm_count);
+                        // Refresh spreadsheet to show removal
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
                         if operation == "fetch_billing" {
                             self.billing_error = Some(error);
@@ -1079,7 +1085,7 @@ impl PlatformTab {
 
         // Delete Platform dialog
         if self.show_delete_platform_dialog {
-            self.render_delete_platform_dialog(ui.ctx());
+            self.render_delete_platform_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Select Project dialog
@@ -2086,7 +2092,7 @@ impl PlatformTab {
         self.show_delete_platform_dialog = true;
     }
 
-    fn render_delete_platform_dialog(&mut self, ctx: &egui::Context) {
+    fn render_delete_platform_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_delete_platform_dialog;
 
         egui::Window::new("Delete Platform")
@@ -2137,7 +2143,7 @@ impl PlatformTab {
                         .add(MaterialButton::filled("Yes, Delete Platform"))
                         .clicked()
                     {
-                        self.execute_delete_platform();
+                        self.execute_delete_platform(vm.as_deref_mut());
                         self.show_delete_platform_dialog = false;
                     }
                 });
@@ -2237,49 +2243,15 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_platform(&mut self) {
-        if let Ok((mut app_config, config_path)) = load_config() {
-            // Find and remove platform
-            if let Some(idx) = app_config
-                .platforms
-                .iter()
-                .position(|p| p.name == self.delete_platform_name)
-            {
-                let platform = app_config.platforms.remove(idx);
-
-                // Save config
-                match app_config.save(&config_path) {
-                    Ok(_) => {
-                        self.load_error = None;
-
-                        // Record audit event
-                        match audit::push_gui(
-                            "system",
-                            "desktop",
-                            "platform delete",
-                            &format!("{} ({} VMs)", self.delete_platform_name, platform.vms.len()),
-                        ) {
-                            Ok(audit_id) => {
-                                eprintln!("✓ Audit record created: ID {}", audit_id);
-                            }
-                            Err(e) => {
-                                eprintln!("⚠ Failed to record audit event: {}", e);
-                            }
-                        }
-
-                        eprintln!("✓ Platform deleted, refreshing spreadsheet");
-                        // Refresh the list
-                        self.loaded = false;
-                    }
-                    Err(e) => {
-                        self.load_error = Some(format!("Failed to save config: {}", e));
-                    }
+    fn execute_delete_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        if let Some(vm) = vm {
+            match vm.delete_platform(self.delete_platform_name.clone()) {
+                Ok(_) => {
+                    eprintln!("✓ Platform delete command sent");
                 }
-            } else {
-                self.load_error = Some(format!(
-                    "Platform '{}' not found",
-                    self.delete_platform_name
-                ));
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to delete platform: {}", e));
+                }
             }
         }
     }
