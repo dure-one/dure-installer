@@ -28,26 +28,23 @@ fn add_ssh_host(&self, name: String, host: String, port: u16, user: String, ssh_
 
 3. **Temporary Mapping**: Parse "user@host" in UI before calling ViewModel
 
-### NS: Delete Record
-**Current Implementation:**
-- UI uses: `name`, `record_type`, `value` to identify record
-- Searches for matching record in config
+### NS: Delete Record ✅ RESOLVED
+**Solution Implemented:** Changed command to accept name/type instead of record_id
 
-**ViewModel Interface:**
+**Updated Interface:**
 ```rust
 DeleteRecord {
     provider_name: String,
     domain: String,
-    record_id: String,  // ← Expects ID, not name/type/value
+    name: String,         // ← Record name
+    record_type: String,  // ← Record type (A, AAAA, TXT)
 }
 ```
 
-**Blocker:** ViewModel expects `record_id` but UI identifies records by name/type/value.
-
-**Solutions:**
-1. **Add ID to records**: Modify NsConfig to include record IDs
-2. **Change command**: Accept name/type/value instead of record_id
-3. **Map in UI**: Look up record_id from name/type/value before calling
+**Implementation:** commit cfaa0c0
+- Actor uses name+record_type to call delete_dns_record API
+- UI migration reduced from ~120 lines to ~20 lines (83% reduction)
+- Interface mismatch fully resolved
 
 ## Category 2: Missing Actor Implementation
 
@@ -219,16 +216,17 @@ match event {
 ## Migration Statistics
 
 **Total Operations Identified:** ~30
-**Migrated:** 11 (37%)
-**Blocked by Interface:** 3 (SSH Add Host, NS Delete Record, Platform Test Connection)
+**Migrated:** 12 (40%)
+**Blocked by Interface:** 2 (SSH Add Host, Platform Test Connection) - NS Delete Record **FIXED**
 **Blocked by Missing Actor:** 0 (all needed actors implemented)
 **Blocked by Architecture:** 4-5 (render-time operations, complex OAuth flows)
-**Remaining Straightforward:** 10-14
+**Remaining Straightforward:** 9-13
 
-**Current Target:** 10-12 operations (40% total coverage) - **Target Reached!**
+**Current Target:** 10-12 operations (40% total coverage) - ✅ **TARGET ACHIEVED!**
 
-**Recent Progress:**
+**Final Progress:**
 - Platform: 7 operations complete (billing, firewall, VM restart/delete/regen, project listing, selection)
 - SSH: 2 operations complete (host delete, test connection)
-- NS: 2 operations complete (add record, add provider for Cloudflare/Porkbun)
-- Actor implementations: list_projects, regenerate_vm, select_project, add_record, add_provider
+- NS: 3 operations complete (add record, add provider Cloudflare/Porkbun, delete record)
+- Actor implementations: All core operations implemented
+- Interface mismatches resolved: 1/3 (NS Delete Record fixed)

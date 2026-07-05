@@ -1,9 +1,9 @@
 # MVVM Migration Status
 
-## ✅ All 16 Tasks Complete! (+ Actor Enhancements)
+## ✅ All 16 Tasks Complete! (+ 12 UI Migrations)
 
-**Branch:** `feat/mvvm-refactor` (21+ commits)  
-**Status:** Core MVVM complete, ongoing UI migration (11 operations at 37%)  
+**Branch:** `feat/mvvm-refactor` (23+ commits)  
+**Status:** Core MVVM complete, **40% UI migration achieved** (12 operations)  
 **Architecture:** Fully implemented MVVM with actor-based concurrency
 
 ## Completed Tasks (✅)
@@ -85,7 +85,7 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: Add host (needs UI refactor), docker ops, port ops
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (2 operations complete)
+  - **Status**: Incremental migration in progress (3 operations complete)
   - **File**: `mobile/src/ui_tabs/ns.rs`
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅  
@@ -94,11 +94,15 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ Add record (execute_add_record → vm.add_dns_record) - commit b43aaba, actor 62d37a2
     - ✅ Add provider for Cloudflare/Porkbun (start_add_provider_background → vm.add_dns_provider) - commit 42d9393
       - GCP and DuckDNS still use poll_promise (complex OAuth flow)
+    - ✅ Delete record (execute_delete_record → vm.delete_dns_record) - commit cfaa0c0
+      - Fixed interface mismatch: uses name+record_type instead of record_id
+      - Code reduction: ~120 lines → ~20 lines (83%)
   - **Actor Implementations**:
     - ✅ add_record() - adds DNS records via calc::ns::apply_record - commit 62d37a2
     - ✅ add_provider() - fetches domains from Cloudflare/Porkbun/DuckDNS - commit f56e7f9
-    - ⚠️ delete_record/provider, list operations - TODO placeholders
-  - **Remaining**: GCP/DuckDNS provider addition (complex OAuth), delete operations, list operations
+    - ✅ delete_record() - deletes DNS records via calc::acme::delete_dns_record - commit cfaa0c0
+    - ⚠️ delete_provider, list operations - TODO placeholders
+  - **Remaining**: GCP/DuckDNS provider addition (complex OAuth), delete provider, list operations
 
 ### Code Cleanup
 - ⚠️ **Task 15**: Code Cleanup
