@@ -34,12 +34,12 @@
 - ✅ Record Management: add, delete, list
 - ✅ Refresh: refresh_all
 
-### UI Migration: 13/30 Operations (43%)
+### UI Migration: 14/30 Operations (47%)
 
 **Fully Migrated:**
-- Platform: 7 ops (billing, firewall, VM ops, projects)
+- Platform: 7 ops (billing, firewall, VM delete/restart/regenerate, projects list/select)
 - SSH: 3 ops (host add/delete, test connection)
-- NS: 3 ops (record add/delete, provider add CF/Porkbun)
+- NS: 4 ops (record add/delete, provider add CF/Porkbun, domain delete)
 
 **Code Reduction:** Average 60-80% per operation (~800+ lines total)
 
@@ -90,7 +90,7 @@
 All three main UI tabs now have ViewModel integration prepared:
 
 - ✅ **Task 10**: Platform Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (6/12+ operations complete)
+  - **Status**: Incremental migration in progress (7/12+ operations complete)
   - **File**: `mobile/src/ui_tabs/platform.rs` (2721 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
@@ -102,6 +102,7 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ VM restart (restart_vm → vm.restart_vm) - commit 16d0f92
     - ✅ VM delete (execute_delete_vm → vm.delete_vm) - commit 6d04f14
     - ✅ Project listing (show_select_project_dialog → vm.list_projects) - commit 99b42e5
+    - ✅ Project selection (execute_select_project → vm.select_project) - commit 99b42e5
     - ✅ VM regeneration (regenerate_vm → vm.regenerate_vm) - commit 40c9e73
   - **Actor Implementations**:
     - ✅ list_projects() - fetches GCP projects - commit 1b3c500
@@ -111,18 +112,19 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: OAuth flows (complex), VM creation wizard (78KB, complex), test_connection (interface mismatch), ~5 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (2 operations complete)
+  - **Status**: Incremental migration in progress (3 operations complete)
   - **File**: `mobile/src/ui_tabs/ssh.rs` (766 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
   - Event processing pattern implemented ✅
   - **Completed Operations**:
+    - ✅ SSH host add (execute_add_host → vm.add_ssh_host) - commit ed06cc5
     - ✅ SSH host delete (execute_delete_host → vm.delete_ssh_host) - commit ccca9b4
     - ✅ Test connection (execute_test_connection → vm.test_ssh_connection) - commit c71d4e6
-  - **Remaining**: Add host (needs UI refactor), docker ops, port ops
+  - **Remaining**: Docker ops, port ops, deploy Dure WSS
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (3 operations complete)
+  - **Status**: Incremental migration in progress (4 operations complete)
   - **File**: `mobile/src/ui_tabs/ns.rs`
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅  
@@ -134,12 +136,16 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ Delete record (execute_delete_record → vm.delete_dns_record) - commit cfaa0c0
       - Fixed interface mismatch: uses name+record_type instead of record_id
       - Code reduction: ~120 lines → ~20 lines (83%)
+    - ✅ Delete domain (execute_delete_domain → vm.delete_dns_domain) - commit 6b36f90
+      - Code reduction: ~65 lines → ~35 lines (46%)
   - **Actor Implementations**:
     - ✅ add_record() - adds DNS records via calc::ns::apply_record - commit 62d37a2
     - ✅ add_provider() - fetches domains from Cloudflare/Porkbun/DuckDNS - commit f56e7f9
     - ✅ delete_record() - deletes DNS records via calc::acme::delete_dns_record - commit cfaa0c0
-    - ⚠️ delete_provider, list operations - TODO placeholders
-  - **Remaining**: GCP/DuckDNS provider addition (complex OAuth), delete provider, list operations
+    - ✅ delete_domain() - deletes domains from config - commit f963744
+    - ✅ delete_provider() - removes DNS providers - commit 8579274
+    - ✅ list_providers() / list_records() / add_domain() - list operations - commit 8579274, f963744
+  - **Remaining**: GCP/DuckDNS provider addition (complex OAuth)
 
 ### Code Cleanup
 - ⚠️ **Task 15**: Code Cleanup
