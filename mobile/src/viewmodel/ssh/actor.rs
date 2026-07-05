@@ -224,28 +224,163 @@ impl SshActor {
         }
     }
 
-    async fn docker_pull(&mut self, _host_name: String, _image: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
+    async fn docker_pull(&mut self, host_name: String, image: String) -> anyhow::Result<()> {
+        self.send_progress("docker_pull", 0.3, &format!("Pulling Docker image {}...", image)).await;
+
+        // Execute docker pull via SSH
+        runtime::unblock({
+            let host_name = host_name.clone();
+            let image = image.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.iter()
+                    .find(|h| h.host == host_name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", host_name))?;
+
+                // Execute docker pull via SSH using calc::ssh
+                crate::calc::ssh::docker_pull(host_config, &image)?;
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("docker_pull", 1.0, "Image pulled").await;
+
+        self.send_event(SshEvent::DockerImagePulled {
+            host_name,
+            image,
+        }).await;
+
+        Ok(())
     }
 
-    async fn docker_run(&mut self, _host_name: String, _image: String, _container_name: String, _ports: Vec<(u16, u16)>, _env: Vec<(String, String)>) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
+    async fn docker_run(&mut self, host_name: String, image: String, container_name: String, ports: Vec<(u16, u16)>, env: Vec<(String, String)>) -> anyhow::Result<()> {
+        self.send_progress("docker_run", 0.3, &format!("Starting container {}...", container_name)).await;
+
+        // Execute docker run via SSH
+        runtime::unblock({
+            let host_name = host_name.clone();
+            let container_name = container_name.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.iter()
+                    .find(|h| h.host == host_name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", host_name))?;
+
+                // Execute docker run via SSH
+                crate::calc::ssh::docker_run(host_config, &image, &container_name, &ports, &env)?;
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("docker_run", 1.0, "Container started").await;
+
+        self.send_event(SshEvent::DockerContainerStarted {
+            host_name,
+            container_name,
+        }).await;
+
+        Ok(())
     }
 
-    async fn docker_stop(&mut self, _host_name: String, _container_name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
+    async fn docker_stop(&mut self, host_name: String, container_name: String) -> anyhow::Result<()> {
+        self.send_progress("docker_stop", 0.3, &format!("Stopping container {}...", container_name)).await;
+
+        // Execute docker stop via SSH
+        runtime::unblock({
+            let host_name = host_name.clone();
+            let container_name = container_name.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.iter()
+                    .find(|h| h.host == host_name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", host_name))?;
+
+                // Execute docker stop via SSH
+                crate::calc::ssh::docker_stop(host_config, &container_name)?;
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("docker_stop", 1.0, "Container stopped").await;
+
+        self.send_event(SshEvent::DockerContainerStopped {
+            host_name,
+            container_name,
+        }).await;
+
+        Ok(())
     }
 
     async fn docker_list(&mut self, _host_name: String) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("Docker management not yet implemented in ViewModel"))
     }
 
-    async fn port_open(&mut self, _host_name: String, _port: u16, _protocol: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Port management not yet implemented in ViewModel"))
+    async fn port_open(&mut self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
+        self.send_progress("port_open", 0.3, &format!("Opening port {}...", port)).await;
+
+        // Execute port open via SSH (nftables)
+        runtime::unblock({
+            let host_name = host_name.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.iter()
+                    .find(|h| h.host == host_name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", host_name))?;
+
+                // Execute nftables command via SSH
+                crate::calc::ssh::port_open(host_config, port, &protocol)?;
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("port_open", 1.0, "Port opened").await;
+
+        self.send_event(SshEvent::PortOpened {
+            host_name,
+            port,
+            protocol,
+        }).await;
+
+        Ok(())
     }
 
-    async fn port_close(&mut self, _host_name: String, _port: u16, _protocol: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Port management not yet implemented in ViewModel"))
+    async fn port_close(&mut self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
+        self.send_progress("port_close", 0.3, &format!("Closing port {}...", port)).await;
+
+        // Execute port close via SSH (nftables)
+        runtime::unblock({
+            let host_name = host_name.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.iter()
+                    .find(|h| h.host == host_name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", host_name))?;
+
+                // Execute nftables command via SSH
+                crate::calc::ssh::port_close(host_config, port, &protocol)?;
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("port_close", 1.0, "Port closed").await;
+
+        self.send_event(SshEvent::PortClosed {
+            host_name,
+            port,
+            protocol,
+        }).await;
+
+        Ok(())
     }
 
     async fn port_list(&mut self, _host_name: String) -> anyhow::Result<()> {
