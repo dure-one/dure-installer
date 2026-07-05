@@ -99,8 +99,31 @@ impl NsActor {
         Err(anyhow::anyhow!("DNS domain management not yet implemented in ViewModel"))
     }
 
-    async fn add_record(&mut self, _provider_name: String, _domain: String, _record_type: String, _name: String, _value: String, _ttl: u32) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("DNS record management not yet implemented in ViewModel"))
+    async fn add_record(&mut self, provider_name: String, domain: String, record_type: String, name: String, value: String, ttl: u32) -> anyhow::Result<()> {
+        self.send_progress("add_record", 0.3, "Adding DNS record...").await;
+
+        // Add record via API in blocking thread
+        let record_id = runtime::unblock({
+            let provider_name = provider_name.clone();
+            let domain = domain.clone();
+            let record_type = record_type.clone();
+            let name = name.clone();
+            let value = value.clone();
+            move || -> anyhow::Result<String> {
+                use crate::calc::ns::apply_record;
+                apply_record(&provider_name, &domain, &record_type, &name, &value, ttl)
+            }
+        }).await?;
+
+        self.send_progress("add_record", 1.0, "Record added").await;
+
+        self.send_event(NsEvent::RecordAdded {
+            provider_name,
+            domain,
+            record_id,
+        }).await;
+
+        Ok(())
     }
 
     async fn delete_record(&mut self, _provider_name: String, _domain: String, _record_id: String) -> anyhow::Result<()> {
