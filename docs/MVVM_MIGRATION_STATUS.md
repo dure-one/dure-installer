@@ -120,15 +120,26 @@ These are placeholder function calls showing where business logic will connect.
 ## Next Steps
 
 ### For UI Migration (Tasks 10-12):
-1. **Platform Tab** (Highest Priority):
-   - Search for `poll_promise::Promise` usage
-   - Replace with ViewModel command calls
-   - Add event processing in show() method
-   - Test each operation manually
 
-2. **SSH Tab** and **NS Tab**:
-   - Follow same pattern as Platform tab
-   - Can be done incrementally (one operation at a time)
+**Immediate priorities:**
+1. **Platform Tab** - Continue migrating remaining operations:
+   - OAuth flows (complex - needs StartOAuth/CompleteOAuth implementation)
+   - Project listing (needs ListProjects actor command)
+   - VM creation wizard (complex - may stay with GcpWizard dialog)
+   - Helper methods during render (low priority - used for display only)
+
+2. **SSH Tab** - Continue migrating:
+   - Add host operation (needs UI refactor to match ViewModel interface)
+   - Test connection (uses poll_promise)
+   - Docker operations (docker_pull, docker_run, docker_stop)
+   - Port operations (port_open, port_close)
+   - Deploy Dure WSS
+
+3. **NS Tab** - Start migration:
+   - Add/delete provider operations
+   - Add/delete domain operations
+   - Add/delete record operations (has interface mismatch - record_id vs name/type/value)
+   - List operations
 
 ### For Final Cleanup (Task 15):
 1. Run `cargo +nightly udeps` to check unused deps
@@ -209,9 +220,21 @@ These are placeholder function calls showing where business logic will connect.
 ## Known Issues
 
 1. **OpenBSD Testing**: winhttpd-sys linking fails, preventing test execution
-2. **UI Tabs**: Not yet migrated to ViewModel (manual work required)
-3. **Calc Layer**: Function stubs need implementation for full E2E testing
-4. **WASM**: Not tested in browser environment
+2. **Calc Layer**: Function stubs need implementation for full E2E testing
+3. **WASM**: Not tested in browser environment
+
+## Interface Mismatches
+
+Some UI operations have parameter mismatches with ViewModel commands:
+
+1. **SSH Add Host**: UI stores "username@hostname" in single field, ViewModel expects separate name/host/user
+2. **NS Delete Record**: UI uses name/type/value, ViewModel expects record_id
+3. **Platform OAuth**: Currently uses poll_promise, needs StartOAuth/CompleteOAuth in actor
+
+These require either:
+- UI refactoring to match ViewModel interface (preferred)
+- ViewModel command redesign (requires actor changes)
+- Custom mapping layer in UI (temporary solution)
 
 ## Recommendations
 
