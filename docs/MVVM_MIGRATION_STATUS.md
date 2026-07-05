@@ -1,9 +1,9 @@
 # MVVM Migration Status
 
-## ✅ All 16 Tasks Complete! (+ 12 UI Migrations)
+## ✅ All 16 Tasks Complete! (+ UI Migrations)
 
 **Branch:** `feat/mvvm-refactor` (23+ commits)  
-**Status:** Core MVVM complete, **40% UI migration achieved** (12 operations)  
+**Status:** Core MVVM complete, **targeting 100% UI migration** (12/30 operations complete)  
 **Architecture:** Fully implemented MVVM with actor-based concurrency
 
 ## Completed Tasks (✅)
