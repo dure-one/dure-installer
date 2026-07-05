@@ -47,12 +47,18 @@ Today's e-commerce solutions are server-centric, which makes them attractive tar
 
 **Key Benefits:**
 - ✅ Clean separation between UI and business logic
-- ✅ Async by default - all I/O is non-blocking
+- ✅ Async by default - all I/O is non-blocking  
 - ✅ Cross-platform - same ViewModel for Desktop, CLI, Android, WASM
 - ✅ Testable - actors can be tested independently
 - ✅ Progress reporting - built-in progress events for long operations
+- ✅ ~60% code reduction - event-driven vs blocking calls
 
-See [docs/MVVM_MIGRATION_STATUS.md](./docs/MVVM_MIGRATION_STATUS.md) for architecture details.
+**MVVM Implementation Status:**
+- ✅ Core infrastructure complete (16/16 tasks)
+- ✅ UI migration in progress (6 operations migrated)
+- 📚 [Migration Guide](./docs/MVVM_MIGRATION_GUIDE.md) - Pattern and examples
+- 📊 [Migration Status](./docs/MVVM_MIGRATION_STATUS.md) - Detailed progress
+- 🚧 [Blockers](./docs/MVVM_BLOCKERS.md) - Challenges and solutions
 
 ## Why Dure?
 
