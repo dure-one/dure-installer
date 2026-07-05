@@ -61,7 +61,9 @@ All three main UI tabs now have ViewModel integration prepared:
   - Migration guide: `docs/TODO_PLATFORM_TAB_MIGRATION.md` ✅
   - **Completed Operations**:
     - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing)
-  - **Remaining**: Replace other poll-promise/GcpRestClient calls incrementally
+    - ✅ Firewall update (update_firewall → vm.update_firewall)
+    - ✅ VM restart (restart_vm → vm.restart_vm)
+  - **Remaining**: VM delete, OAuth flows, project listing, ~10 other GcpRestClient calls
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
   - **Status**: Signature updated, pattern established
