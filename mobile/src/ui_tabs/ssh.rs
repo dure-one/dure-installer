@@ -128,9 +128,41 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 impl SshTab {
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
-        // TODO: Process ViewModel SSH events when vm is Some
-        // Example: vm.list_ssh_hosts(), vm.docker_run(), vm.port_open()
-        // See docs/TODO_PLATFORM_TAB_MIGRATION.md for migration pattern
+        // ViewModel event processing (MVVM pattern)
+        if let Some(vm) = vm {
+            let events = vm.poll_events(ui.ctx());
+            for event in events {
+                use crate::viewmodel::ViewModelEvent;
+                use crate::viewmodel::ssh::SshEvent;
+
+                match event {
+                    ViewModelEvent::Ssh(SshEvent::HostDeleted { name }) => {
+                        eprintln!("✓ SSH host {} deleted successfully", name);
+
+                        // Remove host from config
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Ok((mut app_config, config_path)) = load_config() {
+                            app_config.ssh_hosts.retain(|h| h.host != name);
+
+                            if let Err(e) = app_config.save(&config_path) {
+                                self.load_error = Some(format!("Failed to save config: {}", e));
+                            } else {
+                                eprintln!("✓ Config updated, refreshing list");
+                                self.loaded = false;
+                                self.selected_row = None;
+                                self.load_error = None;
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
+                        if operation == "delete_host" {
+                            self.load_error = Some(format!("Failed to delete host: {}", error));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         ui.heading("SSH Hosts");
         ui.add_space(4.0);
@@ -165,7 +197,7 @@ impl SshTab {
                 if let Some(idx) = selected_row_idx {
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        self.execute_delete_host(host);
+                        self.execute_delete_host(host, vm);
                     }
                 }
             }
@@ -485,37 +517,24 @@ impl SshTab {
         }
     }
 
-    fn execute_delete_host(&mut self, host: String) {
+    fn execute_delete_host(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_config() {
-                Ok((mut app_config, config_path)) => {
-                    // Find and remove host
-                    if let Some(idx) = app_config.ssh_hosts.iter().position(|h| h.host == host) {
-                        app_config.ssh_hosts.remove(idx);
-
-                        // Save config
-                        match app_config.save(&config_path) {
-                            Ok(_) => {
-                                // Record audit event
-                                let _ = audit::push_gui("system", "desktop", "ssh del", &host);
-
-                                eprintln!("✓ SSH host deleted, refreshing spreadsheet");
-                                self.loaded = false; // Trigger reload
-                                self.selected_row = None;
-                                self.load_error = None;
-                            }
-                            Err(e) => {
-                                self.load_error = Some(format!("Failed to save config: {e}"));
-                            }
-                        }
-                    } else {
-                        self.load_error = Some(format!("SSH host '{}' not found", host));
-                    }
+            // ViewModel-based implementation
+            if let Some(vm) = vm {
+                // Send command to ViewModel
+                if let Err(e) = vm.delete_ssh_host(host.clone()) {
+                    self.load_error = Some(format!("Failed to start host deletion: {}", e));
+                    return;
                 }
-                Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {e}"));
-                }
+
+                // Record audit event
+                let _ = audit::push_gui("system", "desktop", "ssh del", &host);
+
+                // Note: Config will be updated when HostDeleted event arrives
+            } else {
+                // Fallback: no ViewModel available
+                self.load_error = Some("ViewModel not available".to_string());
             }
         }
     }
