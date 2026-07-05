@@ -458,23 +458,81 @@ pub enum HostingCommands {
 
 #[derive(Subcommand)]
 pub enum PlatformCommands {
-    /// List all configured platforms and their status
-    Status,
-    /// Add a new platform configuration
-    Add {
-        /// Platform name (e.g., "my-gcp")
+    /// List all platforms with status (default command)
+    List,
+
+    /// Show platform details and available actions
+    Show {
+        name: String
+    },
+
+    /// Refresh platform data
+    Refresh {
+        name: String
+    },
+
+    /// Add a new VM to the platform
+    AddVm {
         name: String,
-        /// Platform type (gcp, firebase, supabase)
+        #[arg(long)]
+        vm_name: Option<String>,
+        #[arg(long)]
+        zone: Option<String>,
+        #[arg(long)]
+        machine_type: Option<String>,
+    },
+
+    /// Update firewall rules (whitelist current IP)
+    Firewall {
+        name: String,
+        #[arg(long)]
+        ip: Option<String>,
+    },
+
+    /// Restart VM
+    Restart {
+        name: String,
+        #[arg(long)]
+        vm: Option<String>,
+    },
+
+    /// Delete VM
+    DelVm {
+        name: String,
+        #[arg(long)]
+        vm: Option<String>,
+    },
+
+    /// Show billing information
+    Billing {
+        name: String
+    },
+
+    /// Delete platform configuration
+    Delete {
+        name: String
+    },
+
+    // Legacy commands (kept for backwards compatibility)
+    /// [Deprecated] List all platforms (use 'list' instead)
+    #[command(hide = true)]
+    Status,
+
+    /// [Deprecated] Add a new platform (use GUI or init)
+    #[command(hide = true)]
+    Add {
+        name: String,
         platform_type: String,
     },
-    /// Delete a platform configuration
+
+    /// [Deprecated] Delete a platform (use 'delete' instead)
+    #[command(hide = true)]
     Del {
-        /// Platform name
         name: String,
     },
-    /// Initialize a platform (OAuth, project setup, resources)
+
+    /// Initialize a platform (OAuth, project setup)
     Init {
-        /// Platform name
         name: String,
     },
 }
@@ -744,17 +802,45 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             }
         },
         Commands::Platform { command } => match command {
-            PlatformCommands::Status => {
-                commands::platform::execute_platform_status()?;
+            PlatformCommands::List => {
+                commands::platform::list::execute_platform_list()?;
             }
-            PlatformCommands::Add {
-                name,
-                platform_type,
-            } => {
+            PlatformCommands::Show { name } => {
+                commands::platform::list::execute_platform_show(name)?;
+            }
+            PlatformCommands::Refresh { name } => {
+                commands::platform::execute_refresh_command(name)?;
+            }
+            PlatformCommands::AddVm { name, vm_name, zone, machine_type } => {
+                commands::platform::vm::execute_addvm_command(name, vm_name, zone, machine_type)?;
+            }
+            PlatformCommands::Firewall { name, ip } => {
+                commands::platform::firewall::execute_firewall_command(name, ip)?;
+            }
+            PlatformCommands::Restart { name, vm } => {
+                commands::platform::vm::execute_restart_command(name, vm)?;
+            }
+            PlatformCommands::DelVm { name, vm } => {
+                commands::platform::vm::execute_delvm_command(name, vm)?;
+            }
+            PlatformCommands::Billing { name } => {
+                commands::platform::billing::execute_billing_command(name)?;
+            }
+            PlatformCommands::Delete { name } => {
+                commands::platform::execute_delete_command(name)?;
+            }
+            // Legacy commands
+            PlatformCommands::Status => {
+                eprintln!("Warning: 'status' is deprecated, use 'list' instead");
+                commands::platform::list::execute_platform_list()?;
+            }
+            PlatformCommands::Add { name, platform_type } => {
+                eprintln!("Warning: 'add' is deprecated");
                 commands::platform::execute_platform_add(name, platform_type)?;
             }
             PlatformCommands::Del { name } => {
-                commands::platform::execute_platform_del(name)?;
+                eprintln!("Warning: 'del' is deprecated, use 'delete' instead");
+                commands::platform::execute_delete_command(name)?;
             }
             PlatformCommands::Init { name } => {
                 commands::platform::execute_platform_init(name)?;
