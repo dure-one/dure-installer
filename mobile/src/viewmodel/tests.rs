@@ -19,3 +19,17 @@ fn test_viewmodel_poll_events_empty() {
     let events = vm.poll_events_headless();
     assert_eq!(events.len(), 0);
 }
+
+#[test]
+fn test_viewmodel_create_vm_command() {
+    let vm = ViewModel::new_headless();
+
+    let result = vm.create_vm(
+        "test-platform".to_string(),
+        "test-vm".to_string(),
+        "us-central1-a".to_string(),
+        "e2-micro".to_string(),
+    );
+
+    assert!(result.is_ok());
+}
