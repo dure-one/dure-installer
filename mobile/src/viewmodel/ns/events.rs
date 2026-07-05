@@ -24,7 +24,10 @@ pub struct DnsRecord {
 #[derive(Debug, Clone)]
 pub enum NsEvent {
     // Provider Events
-    ProviderAdded { name: String },
+    ProviderAdded {
+        name: String,
+        domains: Vec<(String, Vec<crate::calc::ns::DnsRecord>)>,
+    },
     ProviderDeleted { name: String },
     ProvidersListed { providers: Vec<DnsProvider> },
 
