@@ -54,6 +54,15 @@ impl PlatformActor {
             PlatformCommand::FetchBilling { platform_name, project_id, dataset, table } => {
                 self.fetch_billing(platform_name, project_id, dataset, table).await
             }
+            PlatformCommand::ListProjects { platform_name } => {
+                self.list_projects(platform_name).await
+            }
+            PlatformCommand::StartOAuth { platform_name } => {
+                self.start_oauth(platform_name).await
+            }
+            PlatformCommand::CompleteOAuth { platform_name, auth_code } => {
+                self.complete_oauth(platform_name, auth_code).await
+            }
             _ => {
                 // Unimplemented commands
                 Err(anyhow::anyhow!("Command not implemented: {:?}", cmd))
@@ -203,6 +212,81 @@ impl PlatformActor {
         self.send_event(PlatformEvent::BillingFetched {
             platform_name,
             records,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn list_projects(&mut self, platform_name: String) -> anyhow::Result<()> {
+        self.send_progress("list_projects", 0.3, "Fetching GCP projects...").await;
+
+        // Load platform to get access token
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || crate::calc::db::load_platform(&platform_name)
+        }).await?;
+
+        self.send_progress("list_projects", 0.6, "Retrieving project list...").await;
+
+        // Fetch projects from GCP
+        let project_list = runtime::unblock({
+            let token = platform.access_token.clone();
+            move || {
+                let client = crate::calc::gcp_rest::GcpRestClient::new(token);
+                client.list_projects(None)
+            }
+        }).await?;
+
+        // Convert to (id, name) tuples
+        let projects: Vec<(String, String)> = project_list.projects
+            .into_iter()
+            .map(|p| {
+                let name = p.display_name.unwrap_or_else(|| p.project_id.clone());
+                (p.project_id, name)
+            })
+            .collect();
+
+        self.send_event(PlatformEvent::ProjectsListed {
+            platform_name,
+            projects,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn start_oauth(&mut self, platform_name: String) -> anyhow::Result<()> {
+        self.send_progress("start_oauth", 0.2, "Starting OAuth flow...").await;
+
+        // TODO: OAuth flow requires browser interaction and is complex
+        // The current implementation uses poll_promise with run_oauth_flow()
+        // which handles: auth URL generation, browser launch, callback server,
+        // token exchange, and user info fetching all in one blocking operation.
+        //
+        // For now, return a placeholder URL. The UI should continue using
+        // poll_promise for OAuth until this is properly refactored.
+        let auth_url = "https://accounts.google.com/o/oauth2/auth?...".to_string();
+
+        self.send_event(PlatformEvent::OAuthStarted {
+            platform_name,
+            auth_url,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn complete_oauth(&mut self, platform_name: String, _auth_code: String) -> anyhow::Result<()> {
+        self.send_progress("complete_oauth", 0.3, "Completing OAuth...").await;
+
+        // TODO: OAuth completion is handled by run_oauth_flow() in the current implementation
+        // which runs a callback server and exchanges the auth code for tokens.
+        // This needs proper refactoring to work with the actor pattern.
+        //
+        // For now, return a placeholder. The UI should continue using poll_promise.
+        let email = "user@example.com".to_string();
+
+        self.send_event(PlatformEvent::OAuthCompleted {
+            platform_name,
+            email,
         }).await;
 
         Ok(())
