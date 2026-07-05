@@ -57,8 +57,8 @@ impl NsActor {
             NsCommand::AddRecord { provider_name, domain, record_type, name, value, ttl } => {
                 self.add_record(provider_name, domain, record_type, name, value, ttl).await
             }
-            NsCommand::DeleteRecord { provider_name, domain, record_id } => {
-                self.delete_record(provider_name, domain, record_id).await
+            NsCommand::DeleteRecord { provider_name, domain, name, record_type } => {
+                self.delete_record(provider_name, domain, name, record_type).await
             }
             NsCommand::ListRecords { provider_name, domain } => {
                 self.list_records(provider_name, domain).await
@@ -226,8 +226,68 @@ impl NsActor {
         Ok(())
     }
 
-    async fn delete_record(&mut self, _provider_name: String, _domain: String, _record_id: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("DNS record management not yet implemented in ViewModel"))
+    async fn delete_record(&mut self, provider_name: String, domain: String, name: String, record_type: String) -> anyhow::Result<()> {
+        self.send_progress("delete_record", 0.3, "Deleting DNS record...").await;
+
+        // Delete record via API in blocking thread
+        runtime::unblock({
+            let provider_name = provider_name.clone();
+            let domain = domain.clone();
+            let name = name.clone();
+            let record_type = record_type.clone();
+            move || -> anyhow::Result<()> {
+                use crate::calc::acme::{DnsProvider, DnsProviderType, delete_dns_record};
+                use crate::calc::ns::NsConfig;
+
+                // Load config to get API token and provider type
+                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
+                    .config_dir()
+                    .join("config.yml");
+
+                let yaml = std::fs::read_to_string(&config_path)?;
+                let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+                let ns_config: NsConfig = if let Some(ns) = full_config.get("ns") {
+                    serde_yaml::from_value(ns.clone())?
+                } else {
+                    NsConfig::default()
+                };
+
+                // Determine provider type
+                let provider_type = if provider_name.starts_with("gcloud:") {
+                    DnsProviderType::GoogleCloud
+                } else {
+                    match provider_name.to_lowercase().as_str() {
+                        "cloudflare" | "cf" => DnsProviderType::Cloudflare,
+                        "gcloud" | "googlecloud" | "gcp" => DnsProviderType::GoogleCloud,
+                        "duckdns" => DnsProviderType::DuckDNS,
+                        "porkbun" => DnsProviderType::Porkbun,
+                        _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
+                    }
+                };
+
+                let api_token = ns_config.get_api_token(&provider_name).unwrap_or_default();
+                let dns_provider = DnsProvider {
+                    provider_type,
+                    api_token,
+                };
+
+                // Delete the record
+                delete_dns_record(&dns_provider, &domain, &name, &record_type)?;
+
+                Ok(())
+            }
+        }).await?;
+
+        self.send_progress("delete_record", 1.0, "Record deleted").await;
+
+        self.send_event(NsEvent::RecordDeleted {
+            provider_name,
+            domain,
+            record_id: format!("{}:{}", name, record_type),
+        }).await;
+
+        Ok(())
     }
 
     async fn list_records(&mut self, _provider_name: String, _domain: String) -> anyhow::Result<()> {

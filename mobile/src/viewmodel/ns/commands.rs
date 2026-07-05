@@ -28,7 +28,8 @@ pub enum NsCommand {
     DeleteRecord {
         provider_name: String,
         domain: String,
-        record_id: String,
+        name: String,
+        record_type: String,
     },
     ListRecords { provider_name: String, domain: String },
 

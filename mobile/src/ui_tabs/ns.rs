@@ -807,12 +807,43 @@ impl NsTab {
                             self.add_progress(format!("[{:>3.0}%] {}", progress * 100.0, status));
                         }
                     }
+                    ViewModelEvent::Ns(NsEvent::RecordDeleted { provider_name, domain, record_id }) => {
+                        self.add_progress(format!("✓ Deleted record: {}", record_id));
+
+                        // Remove record from config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            // Parse record_id as "name:type"
+                            let parts: Vec<&str> = record_id.split(':').collect();
+                            if parts.len() == 2 {
+                                let name = parts[0];
+                                let record_type = parts[1];
+
+                                if let Ok(mut config) = load_ns_config() {
+                                    if let Some(domain_entry) = config.get_domain_mut(&provider_name, &domain) {
+                                        domain_entry.records.retain(|r| {
+                                            !(r.name == name && r.record_type.to_string().to_lowercase() == record_type.to_lowercase())
+                                        });
+
+                                        if let Err(e) = save_ns_config(&config) {
+                                            self.add_progress(format!("Error saving config: {}", e));
+                                        } else {
+                                            self.load_records();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ViewModelEvent::Ns(NsEvent::Error { operation, error }) => {
                         if operation == "add_record" {
                             self.error_message = format!("Failed to add DNS record:\n\n{}", error);
                             self.show_error_dialog = true;
                         } else if operation == "add_provider" {
                             self.add_progress(format!("❌ Failed to add provider: {}", error));
+                        } else if operation == "delete_record" {
+                            self.error_message = format!("Failed to delete DNS record:\n\n{}", error);
+                            self.show_error_dialog = true;
                         }
                     }
                     _ => {}
@@ -996,7 +1027,7 @@ impl NsTab {
                             let name = self.record_rows[idx][0].clone();
                             let record_type = self.record_rows[idx][1].clone();
                             let value = self.record_rows[idx][2].clone();
-                            self.execute_delete_record(&name, &record_type, &value);
+                            self.execute_delete_record(&name, &record_type, &value, vm.as_deref_mut());
                         }
                     }
                 }
@@ -3243,7 +3274,7 @@ impl NsTab {
     }
 
     /// Execute delete record
-    fn execute_delete_record(&mut self, name: &str, record_type: &str, value: &str) {
+    fn execute_delete_record(&mut self, name: &str, record_type: &str, _value: &str, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let (provider, domain) = if let Some((ref p, ref d)) = self.selected_domain {
@@ -3251,115 +3282,25 @@ impl NsTab {
             } else {
                 return;
             };
-            {
-                let rec_type = RecordType::from_str(&record_type.to_lowercase());
-                if rec_type.is_none() {
-                    self.add_progress("Error: Invalid record type".to_string());
-                    return;
-                }
 
-                match load_ns_config() {
-                    Ok(mut config) => {
-                        let rec_type_unwrapped = rec_type.unwrap();
+            // ViewModel-based implementation
+            if let Some(vm) = vm {
+                self.add_progress(format!("Deleting record: {} {}...", name, record_type));
 
-                        // Verify record exists
-                        let record_exists =
-                            if let Some(domain_entry) = config.get_domain(&provider, &domain) {
-                                domain_entry.records.iter().any(|r| {
-                                    r.name == name
-                                        && r.record_type == rec_type_unwrapped
-                                        && r.value == value
-                                })
-                            } else {
-                                self.error_message = "Domain not found".to_string();
-                                self.show_error_dialog = true;
-                                return;
-                            };
-
-                        if !record_exists {
-                            self.error_message = "Record not found".to_string();
-                            self.show_error_dialog = true;
-                            return;
-                        }
-
-                        // Try to delete from DNS provider first
-                        use crate::calc::acme::{DnsProvider, DnsProviderType, delete_dns_record};
-
-                        let provider_type = if provider.starts_with("gcloud:") {
-                            // GCP provider with email format: "gcloud:email"
-                            DnsProviderType::GoogleCloud
-                        } else {
-                            match provider.to_lowercase().as_str() {
-                                "cloudflare" | "cf" => DnsProviderType::Cloudflare,
-                                "gcloud" | "googlecloud" | "gcp" => DnsProviderType::GoogleCloud,
-                                "duckdns" => DnsProviderType::DuckDNS,
-                                "porkbun" => DnsProviderType::Porkbun,
-                                _ => {
-                                    self.error_message = format!("Unknown provider: {}", provider);
-                                    self.show_error_dialog = true;
-                                    return;
-                                }
-                            }
-                        };
-
-                        let api_token = config.get_api_token(&provider).unwrap_or_default();
-                        let dns_provider = DnsProvider {
-                            provider_type,
-                            api_token,
-                        };
-
-                        self.add_progress(format!("Deleting from DNS provider..."));
-                        match delete_dns_record(&dns_provider, &domain, name, record_type) {
-                            Ok(_) => {
-                                self.add_progress(format!("✓ Deleted from DNS provider"));
-                            }
-                            Err(e) => {
-                                // API call failed - show error dialog and don't delete from config
-                                self.error_message =
-                                    format!("Failed to delete DNS record from provider:\n\n{}", e);
-                                self.show_error_dialog = true;
-                                return;
-                            }
-                        }
-
-                        // API succeeded, now delete from config
-                        if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
-                            let index = domain_entry.records.iter().position(|r| {
-                                r.name == name
-                                    && r.record_type == rec_type_unwrapped
-                                    && r.value == value
-                            });
-
-                            if let Some(idx) = index {
-                                domain_entry.records.remove(idx);
-                            }
-                        }
-
-                        // Save config
-                        match save_ns_config(&config) {
-                            Ok(_) => {
-                                // Record audit event
-                                let record_desc =
-                                    format!("{} {} {} {}", domain, name, record_type, value);
-                                let _ =
-                                    audit::push_gui("system", "desktop", "ns remove", &record_desc);
-
-                                self.add_progress(format!(
-                                    "✓ Deleted record: {} {} {} {}",
-                                    domain, name, record_type, value
-                                ));
-
-                                self.load_records();
-                                self.load_data(); // Refresh record count
-                            }
-                            Err(e) => {
-                                self.error_message = format!("Failed to save config:\n\n{}", e);
-                                self.show_error_dialog = true;
-                            }
-                        }
+                match vm.delete_dns_record(
+                    provider.clone(),
+                    domain.clone(),
+                    name.to_string(),
+                    record_type.to_string(),
+                ) {
+                    Ok(_) => {
+                        // Record audit event
+                        let record_desc = format!("{} {} {}", domain, name, record_type);
+                        let _ = audit::push_gui("system", "desktop", "ns remove", &record_desc);
+                        // Config will be updated when RecordDeleted event arrives
                     }
                     Err(e) => {
-                        self.error_message = format!("Failed to load config:\n\n{}", e);
+                        self.error_message = format!("Failed to start record deletion:\n\n{}", e);
                         self.show_error_dialog = true;
                     }
                 }

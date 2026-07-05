@@ -397,9 +397,9 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn delete_dns_record(&self, provider_name: String, domain: String, record_id: String) -> anyhow::Result<()> {
+    pub fn delete_dns_record(&self, provider_name: String, domain: String, name: String, record_type: String) -> anyhow::Result<()> {
         self.ns_tx.send_blocking(ns::NsCommand::DeleteRecord {
-            provider_name, domain, record_id
+            provider_name, domain, name, record_type
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
