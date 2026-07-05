@@ -835,6 +835,41 @@ impl NsTab {
                             }
                         }
                     }
+                    ViewModelEvent::Ns(NsEvent::DomainDeleted { provider_name, domain }) => {
+                        self.add_progress(format!("✓ Deleted domain: {}", domain));
+
+                        // Remove domain from config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            if let Ok(mut config) = load_ns_config() {
+                                let _ = config.remove_domain(&provider_name, &domain);
+
+                                // Handle GCP placeholder logic
+                                if provider_name.starts_with("gcloud:") {
+                                    let email = &provider_name[7..];
+                                    if let Some(account) = config.get_gcp_account(email) {
+                                        if account.domains.is_empty() {
+                                            let stub_domain = format!("gcloud ({})", account.project_id);
+                                            let token = account.access_token.clone();
+                                            let _ = config.add_domain(provider_name.clone(), stub_domain, token);
+                                        }
+                                    }
+                                }
+
+                                if let Err(e) = save_ns_config(&config) {
+                                    self.add_progress(format!("Error saving config: {}", e));
+                                } else {
+                                    if let Some((sel_prov, sel_dom)) = &self.selected_domain {
+                                        if sel_prov == &provider_name && sel_dom == &domain {
+                                            self.selected_domain = None;
+                                            self.record_rows.clear();
+                                        }
+                                    }
+                                    self.load_data();
+                                }
+                            }
+                        }
+                    }
                     ViewModelEvent::Ns(NsEvent::Error { operation, error }) => {
                         if operation == "add_record" {
                             self.error_message = format!("Failed to add DNS record:\n\n{}", error);
@@ -844,6 +879,8 @@ impl NsTab {
                         } else if operation == "delete_record" {
                             self.error_message = format!("Failed to delete DNS record:\n\n{}", error);
                             self.show_error_dialog = true;
+                        } else if operation == "delete_domain" {
+                            self.add_progress(format!("❌ Failed to delete domain: {}", error));
                         }
                     }
                     _ => {}
@@ -931,7 +968,7 @@ impl NsTab {
                 {
                     if idx < self.domain_rows.len() {
                         let domain = self.domain_rows[idx][0].clone();
-                        self.execute_delete_domain(&domain);
+                        self.execute_delete_domain(&domain, vm.as_deref_mut());
                     }
                 }
             }
@@ -3066,67 +3103,39 @@ impl NsTab {
     }
 
     /// Execute delete domain
-    fn execute_delete_domain(&mut self, domain: &str) {
+    fn execute_delete_domain(&mut self, domain: &str, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
-            match load_ns_config() {
-                Ok(mut config) => {
-                    // Find which provider has this domain
-                    let provider = if let Some((prov, _)) = config.get_domain_any_provider(domain) {
-                        prov.to_string()
-                    } else {
-                        return; // Domain not found
-                    };
-
-                    match config.remove_domain(&provider, domain) {
-                        Ok(_) => {
-                            // Check if this was the last domain for a GCP account
-                            // If so, add back the stub placeholder row
-                            if provider.starts_with("gcloud:") {
-                                let email = &provider[7..];
-                                if let Some(account) = config.get_gcp_account(email) {
-                                    if account.domains.is_empty() {
-                                        let stub_domain =
-                                            format!("gcloud ({})", account.project_id);
-                                        let token = account.access_token.clone();
-                                        let _ = config.add_domain(
-                                            provider.clone(),
-                                            stub_domain.clone(),
-                                            token,
-                                        );
-                                        self.add_progress(format!(
-                                            "Added placeholder for GCP account"
-                                        ));
-                                    }
-                                }
-                            }
-
-                            match save_ns_config(&config) {
-                                Ok(_) => {
-                                    // Record audit event
-                                    let _ = audit::push_gui("system", "desktop", "ns del", domain);
-
-                                    self.add_progress(format!("✓ Deleted domain: {}", domain));
-                                    if let Some((sel_prov, sel_dom)) = &self.selected_domain {
-                                        if sel_prov == &provider && sel_dom == domain {
-                                            self.selected_domain = None;
-                                            self.record_rows.clear();
-                                        }
-                                    }
-                                    self.load_data();
-                                }
-                                Err(e) => {
-                                    self.add_progress(format!("Error saving config: {}", e));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            self.add_progress(format!("Error: {}", e));
+            // Find which provider has this domain
+            let provider = if let Some((ref p, _)) = self.selected_domain {
+                p.clone()
+            } else {
+                // If no selection, try to find it in loaded data
+                match load_ns_config() {
+                    Ok(config) => {
+                        if let Some((prov, _)) = config.get_domain_any_provider(domain) {
+                            prov.to_string()
+                        } else {
+                            self.add_progress(format!("Error: Domain '{}' not found", domain));
+                            return;
                         }
                     }
+                    Err(e) => {
+                        self.add_progress(format!("Error loading config: {}", e));
+                        return;
+                    }
                 }
-                Err(e) => {
-                    self.add_progress(format!("Error loading config: {}", e));
+            };
+
+            if let Some(vm) = vm {
+                self.add_progress(format!("Deleting domain: {}...", domain));
+                match vm.delete_dns_domain(provider, domain.to_string()) {
+                    Ok(_) => {
+                        let _ = audit::push_gui("system", "desktop", "ns del", domain);
+                    }
+                    Err(e) => {
+                        self.add_progress(format!("Failed to start domain deletion: {}", e));
+                    }
                 }
             }
         }

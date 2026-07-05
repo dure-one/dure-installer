@@ -317,7 +317,7 @@ impl SshTab {
 
         // Add host dialog
         if self.show_add_dialog {
-            self.render_add_dialog(ui.ctx());
+            self.render_add_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Init progress display
@@ -411,7 +411,7 @@ impl SshTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context) {
+    fn render_add_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = true;
 
         egui::Window::new("Add SSH Host")

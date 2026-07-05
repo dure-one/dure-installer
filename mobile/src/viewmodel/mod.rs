@@ -391,6 +391,24 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn add_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
+        self.ns_tx.send_blocking(ns::NsCommand::AddDomain {
+            provider_name, domain
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn delete_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
+        self.ns_tx.send_blocking(ns::NsCommand::DeleteDomain {
+            provider_name, domain
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_dns_domains(&self, provider_name: String) -> anyhow::Result<()> {
+        self.ns_tx.send_blocking(ns::NsCommand::ListDomains {
+            provider_name
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn add_dns_record(&self, provider_name: String, domain: String, record_type: String, name: String, value: String, ttl: u32) -> anyhow::Result<()> {
         self.ns_tx.send_blocking(ns::NsCommand::AddRecord {
             provider_name, domain, record_type, name, value, ttl
