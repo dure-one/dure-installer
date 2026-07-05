@@ -705,14 +705,33 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 impl PlatformTab {
     /// Render the platform tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
-        // TODO: Process ViewModel events when vm is Some
-        // When fully migrated, this will replace poll-promise pattern below
-        // Example:
-        // if let Some(vm) = vm {
-        //     for (op_name, progress) in vm.active_operations() {
-        //         ui.add(egui::ProgressBar::new(progress.progress).text(&progress.status));
-        //     }
-        // }
+        // ViewModel event processing (MVVM pattern)
+        if let Some(vm) = vm {
+            // Show active operations with progress bars
+            for (_op_id, progress) in vm.active_operations() {
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::ProgressBar::new(progress.progress)
+                            .text(format!("{}: {}", progress.operation, progress.status))
+                            .desired_width(400.0)
+                    );
+                });
+            }
+
+            // Show recent errors
+            if let Some(error) = vm.recent_errors()
+                .iter()
+                .filter(|e| e.actor == "platform")
+                .rev()
+                .next()
+            {
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 100, 100),
+                    format!("⚠ Error in {}: {}", error.operation, error.error)
+                );
+                ui.add_space(4.0);
+            }
+        }
 
         ui.heading("Cloud Platforms");
         ui.add_space(4.0);
