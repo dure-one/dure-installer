@@ -171,3 +171,58 @@ mod helpers_tests {
         assert!(result.is_ok());
     }
 }
+
+#[cfg(test)]
+mod runner_tests {
+    use super::*;
+    use crate::cli::commands::platform::runner::*;
+
+    #[test]
+    fn test_runner_creation() {
+        let runner = PlatformCliRunner::new();
+        // Just verify it compiles and creates successfully
+        drop(runner);
+    }
+
+    #[smol::test]
+    async fn test_execute_command_success() {
+        let mut runner = MockPlatformRunner::new();
+        runner.expect_response(PlatformEvent::FirewallUpdated {
+            platform_name: "test-gcp".to_string(),
+            whitelisted_ip: "203.0.113.42".to_string(),
+        });
+
+        let result = runner.execute_command(
+            PlatformCommand::UpdateFirewall {
+                platform_name: "test-gcp".to_string(),
+                allow_ip: "203.0.113.42".to_string(),
+            }
+        ).await;
+
+        assert!(result.is_ok());
+        if let Ok(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) = result {
+            assert_eq!(whitelisted_ip, "203.0.113.42");
+        } else {
+            panic!("Expected FirewallUpdated event");
+        }
+    }
+
+    #[smol::test]
+    async fn test_execute_command_error() {
+        let mut runner = MockPlatformRunner::new();
+        runner.expect_response(PlatformEvent::Error {
+            operation: "update_firewall".to_string(),
+            error: "Permission denied".to_string(),
+        });
+
+        let result = runner.execute_command(
+            PlatformCommand::UpdateFirewall {
+                platform_name: "test-gcp".to_string(),
+                allow_ip: "203.0.113.42".to_string(),
+            }
+        ).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Permission denied"));
+    }
+}
