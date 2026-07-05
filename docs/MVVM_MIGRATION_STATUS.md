@@ -53,18 +53,23 @@
 All three main UI tabs now have ViewModel integration prepared:
 
 - ✅ **Task 10**: Platform Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (4/12+ operations complete)
+  - **Status**: Incremental migration in progress (5/12+ operations complete)
   - **File**: `mobile/src/ui_tabs/platform.rs` (2721 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
   - Event processing pattern implemented ✅
   - **Migration Guide**: `docs/MVVM_MIGRATION_GUIDE.md` ✅
-  - **Completed Operations** (code reduced ~240 → ~80 lines):
+  - **Completed Operations** (code reduced ~270 → ~100 lines):
     - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing) - commit 581c481
     - ✅ Firewall update (update_firewall → vm.update_firewall) - commit 16d0f92
     - ✅ VM restart (restart_vm → vm.restart_vm) - commit 16d0f92
     - ✅ VM delete (execute_delete_vm → vm.delete_vm) - commit 6d04f14
-  - **Remaining**: OAuth flows, project listing, VM creation wizard, ~8 other operations
+    - ✅ Project listing (show_select_project_dialog → vm.list_projects) - commit 99b42e5
+  - **Actor Implementations**:
+    - ✅ list_projects() - fetches GCP projects - commit 1b3c500
+    - ⚠️ start_oauth() / complete_oauth() - TODO placeholders (complex browser flow)
+    - ✅ create_vm() - already implemented (needs UI migration)
+  - **Remaining**: OAuth flows (complex), VM creation wizard (78KB, complex), ~7 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
   - **Status**: Incremental migration in progress (2 operations complete)
