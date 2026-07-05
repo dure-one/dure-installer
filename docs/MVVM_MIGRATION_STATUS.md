@@ -63,7 +63,8 @@ All three main UI tabs now have ViewModel integration prepared:
     - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing)
     - ✅ Firewall update (update_firewall → vm.update_firewall)
     - ✅ VM restart (restart_vm → vm.restart_vm)
-  - **Remaining**: VM delete, OAuth flows, project listing, ~10 other GcpRestClient calls
+    - ✅ VM delete (execute_delete_vm → vm.delete_vm)
+  - **Remaining**: OAuth flows, project listing, VM creation wizard, ~8 other GcpRestClient calls
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
   - **Status**: Signature updated, pattern established
