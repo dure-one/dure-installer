@@ -718,10 +718,26 @@ impl PlatformTab {
                         self.billing_data = Some(records);
                         self.billing_loading = false;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) => {
+                        eprintln!("✓ Successfully added {} to firewall whitelist", whitelisted_ip);
+                        // Refresh to show updated status
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::VMRestarted { vm_name, .. }) => {
+                        eprintln!("✓ VM {} restarted successfully", vm_name);
+                        // Refresh to show updated status
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
                         if operation == "fetch_billing" {
                             self.billing_error = Some(error);
                             self.billing_loading = false;
+                        } else if operation == "update_firewall" {
+                            self.load_error = Some(format!("Failed to update firewall: {}", error));
+                        } else if operation == "restart_vm" {
+                            self.load_error = Some(format!("Failed to restart VM: {}", error));
                         }
                     }
                     _ => {}
@@ -954,14 +970,7 @@ impl PlatformTab {
             {
                 if let Some(platform_name) = ui.data(|d|
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))) {
-                    // Find platform and get project_id
-                    if let Ok((app_config, _)) = load_config() {
-                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
-                            if let Some(project_id) = &platform.gcp_selected_project_id {
-                                self.update_firewall(platform_name, project_id.clone());
-                            }
-                        }
-                    }
+                    self.update_firewall(platform_name, vm);
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_update_firewall")));
                 }
 
@@ -986,11 +995,11 @@ impl PlatformTab {
 
                 if let Some(platform_name) = ui.data(|d|
                     d.get_temp::<String>(egui::Id::new("platform_action_restart_vm"))) {
-                    // Find platform and get vm_name
+                    // Find platform and get vm_name and zone
                     if let Ok((app_config, _)) = load_config() {
                         if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
-                            if let Some(vm) = platform.vms.first() {
-                                self.restart_vm(platform_name, vm.name.clone());
+                            if let Some(vm_config) = platform.vms.first() {
+                                self.restart_vm(platform_name, vm_config.name.clone(), vm_config.gcp_zone.clone(), vm);
                             }
                         }
                     }
@@ -1625,68 +1634,17 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn restart_vm(&mut self, platform_name: String, vm_name: String) {
-        use crate::calc::gcp_rest::GcpRestClient;
-        use crate::calc::hosting_gcp;
-
-        // Load config
-        let (app_config, config_path) = match load_config() {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("Failed to load config: {}", e);
-                self.load_error = Some(format!("Failed to load config: {}", e));
-                return;
+    fn restart_vm(&mut self, platform_name: String, vm_name: String, zone: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // ViewModel-based implementation
+        if let Some(vm) = vm {
+            // Send command to ViewModel
+            if let Err(e) = vm.restart_vm(platform_name, vm_name, zone) {
+                self.load_error = Some(format!("Failed to start VM restart: {}", e));
             }
-        };
-
-        // Find platform
-        let platform = match app_config
-            .platforms
-            .iter()
-            .find(|p| p.name == platform_name)
-        {
-            Some(p) => p,
-            None => {
-                eprintln!("Platform not found: {}", platform_name);
-                self.load_error = Some(format!("Platform not found: {}", platform_name));
-                return;
-            }
-        };
-
-        // Find VM
-        let vm = match platform.vms.iter().find(|v| v.name == vm_name) {
-            Some(v) => v,
-            None => {
-                eprintln!("VM not found: {}", vm_name);
-                self.load_error = Some(format!("VM not found: {}", vm_name));
-                return;
-            }
-        };
-
-        // Get access token
-        let access_token = match &platform.gcp_oauth_access_token {
-            Some(token) => token.clone(),
-            None => {
-                eprintln!("No access token for platform: {}", platform_name);
-                self.load_error = Some("OAuth not connected".to_string());
-                return;
-            }
-        };
-
-        // Create GCP client
-        let client = GcpRestClient::new(access_token);
-
-        // Restart VM
-        match hosting_gcp::restart_vm(&client, vm) {
-            Ok(message) => {
-                eprintln!("✓ {}", message);
-                self.loaded = false;
-                self.load_error = None;
-            }
-            Err(e) => {
-                eprintln!("Failed to restart VM: {}", e);
-                self.load_error = Some(format!("Failed to restart VM: {}", e));
-            }
+            // Note: UI will be updated by event processing when VMRestarted event arrives
+        } else {
+            // Fallback: no ViewModel available
+            self.load_error = Some("ViewModel not available".to_string());
         }
     }
 
@@ -1764,68 +1722,29 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn update_firewall(&mut self, platform_name: String, project_id: String) {
-        use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+    fn update_firewall(&mut self, platform_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        use crate::calc::gcp_rest::get_current_ip;
 
-        // Get current IP
-        let current_ip = match get_current_ip() {
-            Ok(ip) => ip,
-            Err(e) => {
-                eprintln!("Failed to get current IP: {}", e);
-                self.load_error = Some(format!("Failed to get current IP: {}", e));
-                return;
-            }
-        };
+        // ViewModel-based implementation
+        if let Some(vm) = vm {
+            // Get current IP
+            let current_ip = match get_current_ip() {
+                Ok(ip) => ip,
+                Err(e) => {
+                    eprintln!("Failed to get current IP: {}", e);
+                    self.load_error = Some(format!("Failed to get current IP: {}", e));
+                    return;
+                }
+            };
 
-        // Load config to get access token
-        let (app_config, _) = match load_config() {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("Failed to load config: {}", e);
-                self.load_error = Some(format!("Failed to load config: {}", e));
-                return;
+            // Send command to ViewModel
+            if let Err(e) = vm.update_firewall(platform_name, current_ip) {
+                self.load_error = Some(format!("Failed to start firewall update: {}", e));
             }
-        };
-
-        // Find platform
-        let platform = match app_config
-            .platforms
-            .iter()
-            .find(|p| p.name == platform_name)
-        {
-            Some(p) => p,
-            None => {
-                eprintln!("Platform not found: {}", platform_name);
-                self.load_error = Some(format!("Platform not found: {}", platform_name));
-                return;
-            }
-        };
-
-        // Get access token
-        let access_token = match &platform.gcp_oauth_access_token {
-            Some(token) => token.clone(),
-            None => {
-                eprintln!("No access token for platform: {}", platform_name);
-                self.load_error = Some("OAuth not connected".to_string());
-                return;
-            }
-        };
-
-        // Create GCP client
-        let client = GcpRestClient::new(access_token);
-
-        // Add IP to firewall
-        match client.add_ip_to_firewall(&project_id, &current_ip) {
-            Ok(()) => {
-                eprintln!("✓ Successfully added {} to firewall whitelist", current_ip);
-                // Refresh to show updated status
-                self.loaded = false;
-                self.load_error = None;
-            }
-            Err(e) => {
-                eprintln!("Failed to update firewall: {}", e);
-                self.load_error = Some(format!("Failed to update firewall: {}", e));
-            }
+            // Note: UI will be updated by event processing when FirewallUpdated event arrives
+        } else {
+            // Fallback: no ViewModel available
+            self.load_error = Some("ViewModel not available".to_string());
         }
     }
 
