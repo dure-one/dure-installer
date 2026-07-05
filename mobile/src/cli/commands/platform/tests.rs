@@ -287,3 +287,37 @@ mod list_tests {
         assert!(output.contains("Available Actions"));
     }
 }
+
+#[cfg(test)]
+mod firewall_tests {
+    use super::*;
+
+    #[smol::test]
+    async fn test_firewall_with_explicit_ip() {
+        let mut runner = MockPlatformRunner::new();
+        runner.expect_response(PlatformEvent::FirewallUpdated {
+            platform_name: "test-gcp".to_string(),
+            whitelisted_ip: "203.0.113.42".to_string(),
+        });
+
+        let platform = mock_platform_connected();
+        let result = crate::cli::commands::platform::firewall::execute_firewall_inner(
+            &mut runner,
+            &platform,
+            Some("203.0.113.42".to_string())
+        ).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_firewall_validation_not_connected() {
+        let platform = mock_platform_disconnected();
+        let result = crate::cli::commands::platform::helpers::validate_platform_ready(
+            &platform,
+            "firewall"
+        );
+
+        assert!(result.is_err());
+    }
+}
