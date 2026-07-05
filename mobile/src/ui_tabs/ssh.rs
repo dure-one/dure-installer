@@ -140,6 +140,13 @@ impl SshTab {
 
                 eprintln!("🔍 SSH UI: Processing event: {:?}", event);
                 match event {
+                    ViewModelEvent::Ssh(SshEvent::HostAdded { name }) => {
+                        eprintln!("✓ SSH host {} added successfully", name);
+
+                        // Refresh the list
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Ssh(SshEvent::HostDeleted { name }) => {
                         eprintln!("✓ SSH host {} deleted successfully", name);
 
@@ -175,7 +182,9 @@ impl SshTab {
                         self.test_in_progress = false;
                     }
                     ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
-                        if operation == "delete_host" {
+                        if operation == "add_host" {
+                            self.load_error = Some(format!("Failed to add host: {}", error));
+                        } else if operation == "delete_host" {
                             self.load_error = Some(format!("Failed to delete host: {}", error));
                         } else if operation == "test_connection" {
                             self.test_result = Some(Err(format!("Connection test failed: {}", error)));
@@ -466,7 +475,7 @@ impl SshTab {
                             self.load_error =
                                 Some("Invalid host format. Use: username@hostname".to_string());
                         } else {
-                            self.execute_add_host();
+                            self.execute_add_host(vm.as_deref_mut());
                             self.show_add_dialog = false;
                         }
                     }
@@ -478,69 +487,58 @@ impl SshTab {
         }
     }
 
-    fn execute_add_host(&mut self) {
+    fn execute_add_host(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_config() {
-                Ok((mut app_config, config_path)) => {
-                    // Check if host already exists
-                    if app_config.ssh_hosts.iter().any(|h| h.host == self.add_host) {
-                        self.load_error =
-                            Some(format!("SSH host '{}' already exists", self.add_host));
-                        return;
+            // Parse port
+            let port = match self.add_port.parse::<u16>() {
+                Ok(p) => p,
+                Err(_) => {
+                    self.load_error = Some("Invalid port number".to_string());
+                    return;
+                }
+            };
+
+            // Parse user@host format
+            let (user, host) = if self.add_host.contains('@') {
+                let parts: Vec<&str> = self.add_host.split('@').collect();
+                if parts.len() == 2 {
+                    (parts[0].to_string(), parts[1].to_string())
+                } else {
+                    self.load_error = Some("Invalid format. Use: username@hostname".to_string());
+                    return;
+                }
+            } else {
+                self.load_error = Some("Invalid format. Use: username@hostname".to_string());
+                return;
+            };
+
+            let ssh_key_path = if self.add_use_private_key && !self.add_private_key_path.is_empty() {
+                shellexpand::tilde(&self.add_private_key_path).to_string()
+            } else {
+                String::new()
+            };
+
+            // ViewModel-based implementation
+            if let Some(vm) = vm {
+                match vm.add_ssh_host(
+                    self.add_host.clone(), // name (full user@host)
+                    host,
+                    port,
+                    user,
+                    ssh_key_path,
+                ) {
+                    Ok(_) => {
+                        // Record audit event
+                        let _ = audit::push_gui("system", "desktop", "ssh add", &self.add_host);
+                        // Config will be updated when HostAdded event arrives
                     }
-
-                    // Parse port
-                    let port = match self.add_port.parse::<u16>() {
-                        Ok(p) => p,
-                        Err(_) => {
-                            self.load_error = Some("Invalid port number".to_string());
-                            return;
-                        }
-                    };
-
-                    // Create new SSH host config
-                    let ssh_host = SshHostConfig {
-                        host: self.add_host.clone(),
-                        password: if self.add_use_password && !self.add_password.is_empty() {
-                            Some(self.add_password.clone())
-                        } else {
-                            None
-                        },
-                        private_key_path: if self.add_use_private_key
-                            && !self.add_private_key_path.is_empty()
-                        {
-                            Some(shellexpand::tilde(&self.add_private_key_path).to_string())
-                        } else {
-                            None
-                        },
-                        keyring_domain: None,
-                        port,
-                        initialized: false,
-                        last_status: None,
-                    };
-
-                    // Add to config
-                    app_config.ssh_hosts.push(ssh_host);
-
-                    // Save config
-                    match app_config.save(&config_path) {
-                        Ok(_) => {
-                            // Record audit event
-                            let _ = audit::push_gui("system", "desktop", "ssh add", &self.add_host);
-
-                            eprintln!("✓ SSH host added, refreshing spreadsheet");
-                            self.loaded = false; // Trigger reload
-                            self.load_error = None;
-                        }
-                        Err(e) => {
-                            self.load_error = Some(format!("Failed to save config: {e}"));
-                        }
+                    Err(e) => {
+                        self.load_error = Some(format!("Failed to add SSH host: {}", e));
                     }
                 }
-                Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {e}"));
-                }
+            } else {
+                self.load_error = Some("ViewModel not available".to_string());
             }
         }
     }
