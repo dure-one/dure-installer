@@ -155,6 +155,8 @@ pub struct PlatformTab {
     select_project_list: Vec<(String, String)>, // (project_id, project_name)
     #[cfg_attr(feature = "serde", serde(skip))]
     select_project_selected: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    select_project_loading: bool,
 
     // SSH connection test state (per platform)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -204,6 +206,7 @@ impl Default for PlatformTab {
             select_project_platform_name: String::new(),
             select_project_list: Vec::new(),
             select_project_selected: None,
+            select_project_loading: false,
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
         }
@@ -746,6 +749,16 @@ impl PlatformTab {
                                     self.load_error = None;
                                 }
                             }
+                        }
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::ProjectsListed { platform_name, projects }) => {
+                        eprintln!("✓ Projects listed for {}: {} projects", platform_name, projects.len());
+                        self.select_project_list = projects;
+                        self.select_project_loading = false;
+
+                        // Show the dialog now that projects are loaded
+                        if !self.show_select_project_dialog {
+                            self.show_select_project_dialog = true;
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
@@ -1769,44 +1782,24 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn show_select_project_dialog(&mut self, platform_name: String) {
-        use crate::calc::gcp_rest::GcpRestClient;
-
+    fn show_select_project_dialog(&mut self, platform_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
         self.select_project_platform_name = platform_name.clone();
         self.select_project_list.clear();
         self.select_project_selected = None;
+        self.select_project_loading = true;
 
-        // Load projects from GCP
-        if let Ok((app_config, _)) = load_config() {
-            if let Some(platform) = app_config
-                .platforms
-                .iter()
-                .find(|p| p.name == platform_name)
-            {
-                if let Some(access_token) = &platform.gcp_oauth_access_token {
-                    let client = GcpRestClient::new(access_token.clone());
-                    match client.list_projects(None) {
-                        Ok(list) => {
-                            for project in list.projects {
-                                self.select_project_list.push((
-                                    project.project_id.clone(),
-                                    project
-                                        .name
-                                        .clone()
-                                        .unwrap_or_else(|| project.project_id.clone()),
-                                ));
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to load projects: {}", e);
-                            self.load_error = Some(format!("Failed to load projects: {}", e));
-                        }
-                    }
-                }
+        // Trigger ViewModel to fetch projects
+        if let Some(vm) = vm {
+            if let Err(e) = vm.list_projects(platform_name.clone()) {
+                self.load_error = Some(format!("Failed to start project listing: {}", e));
+                self.select_project_loading = false;
             }
+            // Dialog will be shown when ProjectsListed event arrives
+        } else {
+            // Fallback: No ViewModel available, show error
+            self.load_error = Some("ViewModel not available".to_string());
+            self.select_project_loading = false;
         }
-
-        self.show_select_project_dialog = true;
     }
 
     fn show_delete_vm_confirmation(
