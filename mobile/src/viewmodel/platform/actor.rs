@@ -63,6 +63,9 @@ impl PlatformActor {
             PlatformCommand::ListProjects { platform_name } => {
                 self.list_projects(platform_name).await
             }
+            PlatformCommand::SelectProject { platform_name, project_id } => {
+                self.select_project(platform_name, project_id).await
+            }
             PlatformCommand::StartOAuth { platform_name } => {
                 self.start_oauth(platform_name).await
             }
@@ -411,6 +414,36 @@ impl PlatformActor {
         self.send_event(PlatformEvent::ProjectsListed {
             platform_name,
             projects,
+        }).await;
+
+        Ok(())
+    }
+
+    async fn select_project(&mut self, platform_name: String, project_id: String) -> anyhow::Result<()> {
+        self.send_progress("select_project", 0.5, "Updating project selection...").await;
+
+        // Update config
+        runtime::unblock({
+            let platform_name = platform_name.clone();
+            let project_id = project_id.clone();
+            move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut config = AppConfig::load_or_default(&config_path);
+
+                if let Some(platform) = config.platforms.iter_mut().find(|p| p.name == platform_name) {
+                    platform.gcp_selected_project_id = Some(project_id.clone());
+                    config.save(&config_path)?;
+                } else {
+                    return Err(anyhow::anyhow!("Platform '{}' not found", platform_name));
+                }
+
+                Ok(())
+            }
+        }).await?;
+
+        self.send_event(PlatformEvent::ProjectSelected {
+            platform_name,
+            project_id,
         }).await;
 
         Ok(())

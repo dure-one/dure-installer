@@ -767,6 +767,12 @@ impl PlatformTab {
                             self.show_select_project_dialog = true;
                         }
                     }
+                    ViewModelEvent::Platform(PlatformEvent::ProjectSelected { project_id, .. }) => {
+                        eprintln!("✓ Project selected: {}", project_id);
+                        // Refresh spreadsheet to show updated project
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
                         if operation == "fetch_billing" {
                             self.billing_error = Some(error);
@@ -1079,7 +1085,7 @@ impl PlatformTab {
         // Select Project dialog
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         if self.show_select_project_dialog {
-            self.render_select_project_dialog(ui.ctx());
+            self.render_select_project_dialog(ui.ctx(), vm.as_deref_mut());
         }
 
         // Delete VM dialog
@@ -2143,7 +2149,7 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn render_select_project_dialog(&mut self, ctx: &egui::Context) {
+    fn render_select_project_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_select_project_dialog;
 
         egui::Window::new("Select GCP Project")
@@ -2200,7 +2206,7 @@ impl PlatformTab {
                     };
 
                     if ui.add(select_button).clicked() {
-                        self.execute_select_project(ctx);
+                        self.execute_select_project(vm);
                         self.show_select_project_dialog = false;
                     }
                 });
@@ -2212,34 +2218,19 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn execute_select_project(&mut self, ctx: &egui::Context) {
+    fn execute_select_project(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {
                 let (project_id, _) = &self.select_project_list[selected_idx];
                 let platform_name = self.select_project_platform_name.clone();
 
-                // Update config with selected project
-                if let Ok((mut app_config, config_path)) = load_config() {
-                    if let Some(platform) = app_config
-                        .platforms
-                        .iter_mut()
-                        .find(|p| p.name == platform_name)
-                    {
-                        platform.gcp_selected_project_id = Some(project_id.clone());
-
-                        // Save config
-                        if let Err(e) = app_config.save(&config_path) {
-                            eprintln!("Failed to save config: {}", e);
-                            self.load_error = Some(format!("Failed to save config: {}", e));
-                        } else {
-                            eprintln!("✓ Selected project: {}", project_id);
-                            // Refresh the table
-                            self.loaded = false;
-                            self.load_error = None;
-                            // Request repaint to ensure UI updates
-                            ctx.request_repaint();
-                        }
+                if let Some(vm) = vm {
+                    if let Err(e) = vm.select_project(platform_name.clone(), project_id.clone()) {
+                        self.load_error = Some(format!("Failed to select project: {}", e));
                     }
+                    // Result will be delivered via ProjectSelected event
+                } else {
+                    self.load_error = Some("ViewModel not available".to_string());
                 }
             }
         }

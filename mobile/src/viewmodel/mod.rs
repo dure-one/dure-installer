@@ -305,6 +305,12 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn select_project(&self, platform_name: String, project_id: String) -> anyhow::Result<()> {
+        self.platform_tx.send_blocking(platform::PlatformCommand::SelectProject {
+            platform_name, project_id
+        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn start_oauth(&self, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx.send_blocking(platform::PlatformCommand::StartOAuth { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
