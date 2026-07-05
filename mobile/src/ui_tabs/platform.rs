@@ -730,6 +730,24 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::VMDeleted { platform_name, vm_name }) => {
+                        eprintln!("✓ VM {} deleted successfully", vm_name);
+
+                        // Remove VM from config
+                        if let Ok((mut app_config, config_path)) = load_config() {
+                            if let Some(platform) = app_config.platforms.iter_mut().find(|p| p.name == platform_name) {
+                                platform.vms.retain(|vm| vm.name != vm_name);
+
+                                if let Err(e) = app_config.save(&config_path) {
+                                    self.load_error = Some(format!("Failed to save config: {}", e));
+                                } else {
+                                    eprintln!("✓ Config updated, refreshing spreadsheet");
+                                    self.loaded = false;
+                                    self.load_error = None;
+                                }
+                            }
+                        }
+                    }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
                         if operation == "fetch_billing" {
                             self.billing_error = Some(error);
@@ -738,6 +756,8 @@ impl PlatformTab {
                             self.load_error = Some(format!("Failed to update firewall: {}", error));
                         } else if operation == "restart_vm" {
                             self.load_error = Some(format!("Failed to restart VM: {}", error));
+                        } else if operation == "delete_vm" {
+                            self.load_error = Some(format!("Failed to delete VM: {}", error));
                         }
                     }
                     _ => {}
@@ -1045,7 +1065,7 @@ impl PlatformTab {
 
         // Delete VM dialog
         if self.show_delete_vm_dialog {
-            self.render_delete_vm_dialog(ui.ctx());
+            self.render_delete_vm_dialog(ui.ctx(), vm);
         }
 
         // Billing dialog
@@ -1803,7 +1823,7 @@ impl PlatformTab {
         self.show_delete_vm_dialog = true;
     }
 
-    fn render_delete_vm_dialog(&mut self, ctx: &egui::Context) {
+    fn render_delete_vm_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_delete_vm_dialog;
 
         egui::Window::new("Delete VM")
@@ -1838,7 +1858,7 @@ impl PlatformTab {
                                 }
 
                                 if ui.add(MaterialButton::filled("Yes, Delete")).clicked() {
-                                    self.execute_delete_vm(name_clone, zone_clone);
+                                    self.execute_delete_vm(name_clone, zone_clone, vm);
                                     self.show_delete_vm_dialog = false;
                                 }
                             });
@@ -1908,44 +1928,21 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_vm(&mut self, instance_name: String, zone: String) {
-        if let Ok((mut app_config, config_path)) = load_config() {
-            // Find platform and VM to get project_id
-            let platform_idx = app_config
-                .platforms
-                .iter()
-                .position(|p| p.name == self.delete_vm_platform);
+    fn execute_delete_vm(&mut self, instance_name: String, zone: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // ViewModel-based implementation
+        if let Some(vm) = vm {
+            // Send command to ViewModel
+            if let Err(e) = vm.delete_vm(self.delete_vm_platform.clone(), instance_name.clone(), zone) {
+                self.load_error = Some(format!("Failed to start VM deletion: {}", e));
+                return;
+            }
 
-            if let Some(idx) = platform_idx {
-                let platform = &app_config.platforms[idx];
-
-                // Find the VM to get its project_id
-                let vm = platform.vms.iter().find(|vm| vm.name == instance_name);
-                if vm.is_none() {
-                    self.load_error = Some(format!("VM '{}' not found in config", instance_name));
-                    return;
-                }
-                let project_id = vm.unwrap().gcp_project_id.clone();
-
-                // Get valid access token (refresh if expired)
-                let access_token =
-                    match self.get_valid_access_token(&mut app_config, idx, &config_path) {
-                        Ok(token) => token,
-                        Err(e) => {
-                            self.load_error = Some(format!("Failed to get access token: {}", e));
-                            return;
-                        }
-                    };
-
-                // Delete from GCP
-                use crate::calc::gcp_rest::GcpRestClient;
-                let client = GcpRestClient::new(access_token);
-
-                match client.delete_instance(&project_id, &zone, &instance_name) {
-                    Ok(_operation) => {
-                        self.load_error = None;
-
-                        // Record audit event
+            // Record audit event
+            // TODO: This should be moved to the actor/calc layer
+            if let Ok((app_config, _)) = load_config() {
+                if let Some(platform) = app_config.platforms.iter().find(|p| p.name == self.delete_vm_platform) {
+                    if let Some(vm_config) = platform.vms.iter().find(|v| v.name == instance_name) {
+                        let project_id = &vm_config.gcp_project_id;
                         match audit::push_gui(
                             "system",
                             "desktop",
@@ -1960,29 +1957,13 @@ impl PlatformTab {
                             }
                         }
                     }
-                    Err(e) => {
-                        self.load_error = Some(format!("Failed to delete VM from GCP: {}", e));
-                        return;
-                    }
                 }
-
-                // Remove VM from config after successful deletion
-                app_config.platforms[idx]
-                    .vms
-                    .retain(|vm| vm.name != instance_name);
-
-                // Save config
-                if let Err(e) = app_config.save(&config_path) {
-                    self.load_error = Some(format!("Failed to save config: {}", e));
-                    return;
-                }
-
-                eprintln!("✓ VM deleted, refreshing spreadsheet");
-                // Refresh the list
-                self.loaded = false;
-            } else {
-                self.load_error = Some(format!("Platform '{}' not found", self.delete_vm_platform));
             }
+
+            // Note: Config will be updated when VMDeleted event arrives
+        } else {
+            // Fallback: no ViewModel available
+            self.load_error = Some("ViewModel not available".to_string());
         }
     }
 
