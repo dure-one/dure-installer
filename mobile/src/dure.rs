@@ -414,7 +414,7 @@ impl DureApp {
         match self.active_tab {
             Tab::Client => self.tab_client.ui(ui),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Platform => self.tab_platform.ui(ui),
+            Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Ssh => self.tab_ssh.ui(ui),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
