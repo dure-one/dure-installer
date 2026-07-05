@@ -53,18 +53,18 @@
 All three main UI tabs now have ViewModel integration prepared:
 
 - ✅ **Task 10**: Platform Tab ViewModel Integration
-  - **Status**: Incremental migration in progress
+  - **Status**: Incremental migration in progress (4/12+ operations complete)
   - **File**: `mobile/src/ui_tabs/platform.rs` (2721 lines)
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
   - Event processing pattern implemented ✅
-  - Migration guide: `docs/TODO_PLATFORM_TAB_MIGRATION.md` ✅
-  - **Completed Operations**:
-    - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing)
-    - ✅ Firewall update (update_firewall → vm.update_firewall)
-    - ✅ VM restart (restart_vm → vm.restart_vm)
-    - ✅ VM delete (execute_delete_vm → vm.delete_vm)
-  - **Remaining**: OAuth flows, project listing, VM creation wizard, ~8 other GcpRestClient calls
+  - **Migration Guide**: `docs/MVVM_MIGRATION_GUIDE.md` ✅
+  - **Completed Operations** (code reduced ~240 → ~80 lines):
+    - ✅ Billing fetch (fetch_billing_data → vm.fetch_billing) - commit 581c481
+    - ✅ Firewall update (update_firewall → vm.update_firewall) - commit 16d0f92
+    - ✅ VM restart (restart_vm → vm.restart_vm) - commit 16d0f92
+    - ✅ VM delete (execute_delete_vm → vm.delete_vm) - commit 6d04f14
+  - **Remaining**: OAuth flows, project listing, VM creation wizard, ~8 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
   - **Status**: Signature updated, pattern established
