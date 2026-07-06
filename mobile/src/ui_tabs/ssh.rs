@@ -623,15 +623,25 @@ impl SshTab {
         let Some(vm) = vm else { return };
 
         // Check all possible action IDs
-        for (idx, _row) in self.rows.iter().enumerate() {
+        for idx in 0..self.rows.len() {
             // Refresh
-            if let Some(host) =
-                ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_refresh_{}", idx))))
-            {
-                let _ = vm.get_linux_status(host.clone());
-                let _ = vm.get_docker_status(host.clone());
-                let _ = vm.get_ansible_status(host.clone());
-                let _ = vm.get_dure_wss_status(host);
+            let refresh_id = egui::Id::new(format!("ssh_refresh_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(refresh_id)) {
+                // Clear temp data immediately to prevent continuous firing
+                ui.data_mut(|d| d.remove::<String>(refresh_id));
+
+                // Only start refresh if not already refreshing
+                if let Some(row) = self.rows.get_mut(idx) {
+                    if !row.refreshing {
+                        row.refreshing = true;
+                        row.refresh_pending_count = 4;
+
+                        let _ = vm.get_linux_status(host.clone());
+                        let _ = vm.get_docker_status(host.clone());
+                        let _ = vm.get_ansible_status(host.clone());
+                        let _ = vm.get_dure_wss_status(host);
+                    }
+                }
             }
 
             // Docker operations
