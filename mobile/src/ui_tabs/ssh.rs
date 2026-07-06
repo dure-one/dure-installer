@@ -790,20 +790,17 @@ impl SshTab {
                 ui.data_mut(|d| d.remove::<String>(docker_status_id));
                 let _ = vm.get_docker_status(host);
             }
-            if let Some(_host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_image_{}", idx)))
-            }) {
+            let install_image_id = egui::Id::new(format!("ssh_install_docker_image_{}", idx));
+            if let Some(_host) = ui.data(|d| d.get_temp::<String>(install_image_id)) {
+                // Clear temp data immediately to prevent continuous triggering
+                ui.data_mut(|d| d.remove::<String>(install_image_id));
+
                 self.show_docker_install_dialog = true;
                 self.docker_install_host_idx = Some(idx);
                 self.docker_image_input.clear();
                 self.docker_container_name.clear();
-                // COMMENTED OUT: Old dialog initialization - will be replaced in Task 7
-                // self.docker_tag = "latest".to_string();
-                // self.docker_metadata = None;
                 self.docker_port_mappings.clear();
                 self.docker_env_vars.clear();
-                // self.docker_validating = false;
-                // self.docker_validation_error = None;
             }
 
             // Docker remove containers trigger
