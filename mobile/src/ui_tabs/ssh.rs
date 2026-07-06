@@ -2635,17 +2635,20 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                             )
                         });
                     }
-                    if ui
-                        .add(MaterialButton::outlined("Uninstall Docker").small())
-                        .on_hover_text("Uninstall Docker")
-                        .clicked()
-                    {
-                        ui.data_mut(|d| {
-                            d.insert_temp(
-                                egui::Id::new(format!("ssh_uninstall_docker_{}", idx)),
-                                row.host.clone(),
-                            )
-                        });
+                    // Only show if Docker is enabled AND has containers
+                    if !row.docker_containers.is_empty() {
+                        if ui
+                            .add(MaterialButton::outlined("Remove Containers").small())
+                            .on_hover_text("Remove Docker containers")
+                            .clicked()
+                        {
+                            ui.data_mut(|d| {
+                                d.insert_temp(
+                                    egui::Id::new(format!("ssh_remove_containers_{}", idx)),
+                                    row.host.clone(),
+                                )
+                            });
+                        }
                     }
                 }
 
