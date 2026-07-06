@@ -9,6 +9,8 @@ pub mod keyring;
 pub mod nft;
 pub mod ns;
 pub mod platform;
+#[cfg(feature = "gui")]
+pub mod platform_vm; // ViewModel-based async platform VM commands
 pub mod site;
 pub mod ssh;
 pub mod webhook;

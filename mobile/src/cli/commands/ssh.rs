@@ -89,9 +89,8 @@ pub fn execute_ssh_status() -> Result<()> {
 
         // Test connection (russh uses tokio, wrap with async-compat)
         eprint!("   Status: ");
-        match smol::block_on(async {
-            async_compat::Compat::new(ssh::test_connection(host)).await
-        }) {
+        match smol::block_on(async { async_compat::Compat::new(ssh::test_connection(host)).await })
+        {
             Ok(result) => {
                 if result.success {
                     eprintln!("✓ Connected");
@@ -139,13 +138,16 @@ pub fn execute_ssh_add(
         port,
         initialized: false,
         last_status: None,
+        platform_name: None,
+        docker_containers: Vec::new(),
+        ansible_roles: Vec::new(),
+        dure_wss_config: None,
     };
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
     eprintln!("Testing SSH connection to {}...", host);
-    match smol::block_on(async {
-        async_compat::Compat::new(ssh::test_connection(&ssh_host)).await
-    }) {
+    match smol::block_on(async { async_compat::Compat::new(ssh::test_connection(&ssh_host)).await })
+    {
         Ok(result) => {
             if result.success {
                 eprintln!("✓ Connection successful");

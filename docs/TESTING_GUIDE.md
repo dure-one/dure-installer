@@ -22,14 +22,6 @@
 rustc --version  # Should show 1.85 or newer
 ```
 
-**OpenBSD Only:**
-```bash
-# OpenSSL (not LibreSSL)
-pkg_add openssl-3.5.7v0
-export OPENSSL_LIB_DIR=/usr/local/lib/eopenssl35
-export OPENSSL_INCLUDE_DIR=/usr/local/include/eopenssl35
-```
-
 ## Quick Start
 
 ### 1. Clone and Checkout
@@ -270,10 +262,6 @@ cargo run --bin wss-client -- --url wss://echo.websocket.org
 ### Build on OpenBSD
 
 ```bash
-# Set OpenSSL paths (if not in .cargo/config.toml)
-export OPENSSL_LIB_DIR=/usr/local/lib/eopenssl35
-export OPENSSL_INCLUDE_DIR=/usr/local/include/eopenssl35
-
 # Build (may have non-migration errors)
 cargo build
 

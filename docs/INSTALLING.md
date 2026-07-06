@@ -252,10 +252,10 @@ Install build tools:
 
 ```bash
 # Ubuntu/Debian
-sudo apt install build-essential pkg-config libssl-dev
+sudo apt install build-essential pkg-config
 
 # Fedora
-sudo dnf install gcc pkg-config openssl-devel
+sudo dnf install gcc pkg-config
 
 # macOS
 xcode-select --install
@@ -267,10 +267,10 @@ xcode-select --install
 ```bash
 # Ubuntu/Debian
 sudo apt install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-  libxkbcommon-dev libssl-dev
+  libxkbcommon-dev
 
 # Fedora
-sudo dnf install libxcb-devel libxkbcommon-devel openssl-devel
+sudo dnf install libxcb-devel libxkbcommon-devel
 ```
 
 **macOS:**

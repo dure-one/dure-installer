@@ -10,6 +10,9 @@ use crate::install;
 use crate::ui_dlg::DlgSettings;
 use crate::{Config, Settings};
 
+// ViewModel (MVVM architecture)
+use crate::viewmodel::ViewModel;
+
 // Desktop-only imports
 use eframe::egui;
 use eframe::egui::Color32;
@@ -103,6 +106,10 @@ pub struct DureApp {
     // HTTP cache
     #[cfg_attr(feature = "serde", serde(skip))]
     pub ehttp_cache: Option<Arc<crate::api::ehttp_cache::EhttpCache>>,
+
+    // ViewModel (MVVM architecture)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub viewmodel: Option<ViewModel>,
 
     // Tabs state
     pub active_tab: crate::ui_tabs::Tab,
@@ -230,6 +237,7 @@ impl Default for DureApp {
             square_center,
             square_corners,
             ehttp_cache,
+            viewmodel: None,
             // Tabs
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             active_tab: crate::ui_tabs::Tab::Platform,
@@ -258,6 +266,14 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Initialize ViewModel on first update (lazy initialization)
+        if self.viewmodel.is_none() {
+            self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
+        }
+
+        // NOTE: Event polling moved to individual tabs to avoid consuming events centrally
+        // Each tab polls and processes its own events
+
         // Apply Material3 theme to egui context
         self.apply_theme(ctx);
 
@@ -395,11 +411,11 @@ impl DureApp {
         match self.active_tab {
             Tab::Client => self.tab_client.ui(ui),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Platform => self.tab_platform.ui(ui),
+            Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Ssh => self.tab_ssh.ui(ui),
+            Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-            Tab::Ns => self.tab_ns.ui(ui),
+            Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
             Tab::Roles => self.tab_roles.ui(ui),
