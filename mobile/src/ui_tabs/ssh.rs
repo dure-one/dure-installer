@@ -123,6 +123,54 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 }
 
 impl SshTab {
+    /// Load SSH hosts from config and build row data
+    fn load_rows(&mut self) {
+        self.rows.clear();
+        self.load_error = None;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            match load_config() {
+                Ok((app_config, _)) => {
+                    for host_config in &app_config.ssh_hosts {
+                        // Resolve platform relationship
+                        let (platform_name, platform_type) = if let Some(pname) = &host_config.platform_name {
+                            let ptype = app_config.platforms
+                                .iter()
+                                .find(|p| &p.name == pname)
+                                .map(|p| p.platform_type.clone());
+                            (Some(pname.clone()), ptype)
+                        } else {
+                            (None, None)
+                        };
+
+                        self.rows.push(SshRowData {
+                            host: host_config.host.clone(),
+                            port: host_config.port,
+                            platform_name,
+                            platform_type,
+                            linux_detected: false,
+                            linux_os: None,
+                            ansible_enabled: false,
+                            docker_enabled: false,
+                            dure_wss_enabled: false,
+                            linux_status: None,
+                            connection_status: ConnectionStatus::Unknown,
+                        });
+                    }
+                }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                }
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.load_error = Some("SSH management not available on WASM".to_string());
+        }
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         /* OLD ui() - being rewritten in Tasks 8-14
