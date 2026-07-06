@@ -319,6 +319,18 @@ impl SshTab {
         }
     }
 
+    /// Decrement refresh counter and clear refreshing flag when complete
+    fn decrement_refresh_counter(&mut self, host: &str) {
+        if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+            if row.refreshing && row.refresh_pending_count > 0 {
+                row.refresh_pending_count -= 1;
+                if row.refresh_pending_count == 0 {
+                    row.refreshing = false;
+                }
+            }
+        }
+    }
+
     /// Handle ViewModel events to update UI state
     fn handle_event(&mut self, event: crate::viewmodel::ViewModelEvent) {
         use crate::viewmodel::ViewModelEvent;
