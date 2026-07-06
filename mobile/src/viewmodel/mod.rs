@@ -288,17 +288,6 @@ impl ViewModel {
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn list_vms(&self, platform_name: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::ListVMs { platform_name })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn create_vm(&self, platform_name: String, vm_name: String, zone: String, machine_type: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::CreateVM {
-            platform_name, vm_name, zone, machine_type
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
     pub fn update_firewall(&self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
         self.platform_tx.send_blocking(platform::PlatformCommand::UpdateFirewall {
             platform_name, allow_ip
@@ -414,6 +403,57 @@ impl ViewModel {
         self.ssh_tx.send_blocking(ssh::SshCommand::PortClose {
             host_name, port, protocol
         }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // Service management commands
+    pub fn get_linux_status(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::GetLinuxStatus { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn install_docker(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::InstallDocker { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_docker_status(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::GetDockerStatus { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn uninstall_docker(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallDocker { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn install_ansible(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::InstallAnsible { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_ansible_status(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::GetAnsibleStatus { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn uninstall_ansible(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallAnsible { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn install_dure_wss(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::InstallDureWss { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_dure_wss_status(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::GetDureWssStatus { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn uninstall_dure_wss(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallDureWss { name: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // NS commands
