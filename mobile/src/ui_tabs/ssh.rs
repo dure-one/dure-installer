@@ -171,6 +171,144 @@ impl SshTab {
         }
     }
 
+    /// Handle ViewModel events to update UI state
+    fn handle_event(&mut self, event: crate::viewmodel::ViewModelEvent) {
+        use crate::viewmodel::ViewModelEvent;
+        use crate::viewmodel::ssh::SshEvent;
+
+        match event {
+            ViewModelEvent::Ssh(SshEvent::HostAdded { name }) => {
+                eprintln!("✓ SSH host {} added", name);
+                self.loaded = false; // Trigger reload
+            }
+
+            ViewModelEvent::Ssh(SshEvent::HostDeleted { name }) => {
+                eprintln!("✓ SSH host {} deleted", name);
+
+                // Remove from config
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Ok((mut app_config, config_path)) = load_config() {
+                    app_config.ssh_hosts.retain(|h| h.host != name);
+                    let _ = app_config.save(&config_path);
+                }
+
+                self.loaded = false; // Trigger reload
+            }
+
+            ViewModelEvent::Ssh(SshEvent::LinuxStatusRetrieved {
+                name,
+                uptime,
+                external_ip,
+                load_average,
+                memory_usage,
+                disk_usage,
+                top_processes,
+            }) => {
+                eprintln!("✓ Linux status retrieved for {}", name);
+
+                // Update row
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.linux_status = Some(LinuxStatus {
+                        uptime,
+                        external_ip,
+                        load_average,
+                        memory_usage,
+                        disk_usage,
+                        top_processes,
+                    });
+                    row.linux_detected = true;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerInstalled { name }) => {
+                eprintln!("✓ Docker installed on {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.docker_enabled = true;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerStatusRetrieved { name, installed, running: _ }) => {
+                eprintln!("✓ Docker status for {}: installed={}", name, installed);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.docker_enabled = installed;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerUninstalled { name }) => {
+                eprintln!("✓ Docker uninstalled from {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.docker_enabled = false;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleInstalled { name }) => {
+                eprintln!("✓ Ansible installed on {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.ansible_enabled = true;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleStatusRetrieved { name, installed }) => {
+                eprintln!("✓ Ansible status for {}: installed={}", name, installed);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.ansible_enabled = installed;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleUninstalled { name }) => {
+                eprintln!("✓ Ansible uninstalled from {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.ansible_enabled = false;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureWssInstalled { name }) => {
+                eprintln!("✓ Dure-WSS installed on {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.dure_wss_enabled = true;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureWssStatusRetrieved { name, installed }) => {
+                eprintln!("✓ Dure-WSS status for {}: installed={}", name, installed);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.dure_wss_enabled = installed;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { name }) => {
+                eprintln!("✓ Dure-WSS uninstalled from {}", name);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    row.dure_wss_enabled = false;
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::ServiceError { name, service, operation, error }) => {
+                self.load_error = Some(format!(
+                    "Failed to {} {} on {}: {}", operation, service, name, error
+                ));
+            }
+
+            ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
+                self.load_error = Some(format!(
+                    "SSH operation '{}' failed: {}", operation, error
+                ));
+            }
+
+            // Keep existing event handlers (ConnectionTested, HostInitialized, etc.)
+            _ => {}
+        }
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         /* OLD ui() - being rewritten in Tasks 8-14
