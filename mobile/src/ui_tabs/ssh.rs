@@ -2050,7 +2050,13 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
     ui.add_space(4.0);
 
     // Docker containers
-    ui.label(egui::RichText::new("docker:").strong());
+    let docker_status = if row.docker_enabled {
+        "installed ✓"
+    } else {
+        "not installed"
+    };
+    ui.label(egui::RichText::new(format!("docker: [{}]", docker_status)).strong());
+
     if row.docker_containers.is_empty() {
         ui.colored_label(ui.visuals().weak_text_color(), "  (no containers installed)");
     } else {
