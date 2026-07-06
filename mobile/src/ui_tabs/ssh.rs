@@ -1016,8 +1016,154 @@ impl SshTab {
         self.docker_install_error = None;
     }
 
-    fn render_install_step2(&mut self, ui: &mut egui::Ui, _vm: Option<&mut crate::viewmodel::ViewModel>) {
-        ui.label("Step 2 placeholder - will be implemented in next task");
+    fn render_install_step2(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        use egui_material3::MaterialButton;
+
+        ui.label(egui::RichText::new("Step 2: Configuration").strong());
+        ui.add_space(8.0);
+
+        // Show image info
+        ui.label(format!("Image: {}:{}", self.docker_parsed_image, self.docker_parsed_tag));
+        ui.add_space(8.0);
+
+        // Container name
+        ui.horizontal(|ui| {
+            ui.label("Container Name:");
+            ui.text_edit_singleline(&mut self.docker_container_name);
+        });
+        ui.add_space(8.0);
+
+        // Port mappings
+        ui.label(egui::RichText::new("Port Mappings:").strong());
+        ui.add_space(4.0);
+
+        let mut to_remove = None;
+        for (idx, (host_port, container_port)) in self.docker_port_mappings.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label("Host:");
+                ui.add(egui::TextEdit::singleline(host_port).desired_width(80.0));
+                ui.label("→ Container:");
+                ui.add(egui::TextEdit::singleline(container_port).desired_width(80.0));
+                if ui.button("−").clicked() {
+                    to_remove = Some(idx);
+                }
+            });
+        }
+        if let Some(idx) = to_remove {
+            self.docker_port_mappings.remove(idx);
+        }
+
+        if ui.add(MaterialButton::text("+ Add Port Mapping")).clicked() {
+            self.docker_port_mappings.push(("".to_string(), "".to_string()));
+        }
+        ui.add_space(8.0);
+
+        // Environment variables
+        ui.label(egui::RichText::new("Environment Variables:").strong());
+        ui.add_space(4.0);
+
+        let mut to_remove_env = None;
+        for (idx, (key, value)) in self.docker_env_overrides.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.add(egui::TextEdit::singleline(key).desired_width(150.0).hint_text("KEY"));
+                ui.label("=");
+                ui.add(egui::TextEdit::singleline(value).desired_width(200.0).hint_text("value"));
+                if ui.button("−").clicked() {
+                    to_remove_env = Some(idx);
+                }
+            });
+        }
+        if let Some(idx) = to_remove_env {
+            self.docker_env_overrides.remove(idx);
+        }
+
+        if ui.add(MaterialButton::text("+ Add Environment Variable")).clicked() {
+            self.docker_env_overrides.push(("".to_string(), "".to_string()));
+        }
+        ui.add_space(16.0);
+
+        // Installation status
+        if self.docker_installing {
+            ui.spinner();
+            ui.label("Installing container...");
+        } else if self.docker_install_success {
+            ui.colored_label(egui::Color32::GREEN, "✓ Container installed successfully");
+        } else if let Some(error) = &self.docker_install_error {
+            ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+        }
+        ui.add_space(8.0);
+
+        // Action buttons
+        ui.horizontal(|ui| {
+            // Back button (not shown if install succeeded)
+            if !self.docker_install_success {
+                if ui.add(MaterialButton::text("Back")).clicked() {
+                    self.docker_install_step = 1;
+                    self.docker_inspecting = false;
+                    self.docker_inspect_error = None;
+                }
+            }
+
+            // Install or Close button
+            if self.docker_install_success {
+                if ui.add(MaterialButton::filled("Close")).clicked() {
+                    self.show_docker_install_dialog = false;
+                    self.reset_install_dialog_state();
+                }
+            } else {
+                let can_install = !self.docker_container_name.is_empty() && !self.docker_installing;
+
+                if ui.add_enabled(can_install, MaterialButton::filled("Install")).clicked() {
+                    self.start_container_installation(vm.as_deref_mut());
+                }
+
+                if ui.add(MaterialButton::text("Cancel")).clicked() {
+                    self.show_docker_install_dialog = false;
+                    self.reset_install_dialog_state();
+                }
+            }
+        });
+    }
+
+    fn start_container_installation(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        if let Some(host_idx) = self.docker_install_host_idx {
+            if let Some(row) = self.rows.get(host_idx) {
+                if let Some(vm) = vm.as_deref_mut() {
+                    // Parse port mappings
+                    let ports: Vec<(u16, u16)> = self.docker_port_mappings
+                        .iter()
+                        .filter_map(|(h, c)| {
+                            let host = h.parse::<u16>().ok()?;
+                            let container = c.parse::<u16>().ok()?;
+                            Some((host, container))
+                        })
+                        .collect();
+
+                    // Filter out empty env vars
+                    let env: Vec<(String, String)> = self.docker_env_overrides
+                        .iter()
+                        .filter(|(k, _)| !k.is_empty())
+                        .cloned()
+                        .collect();
+
+                    self.docker_installing = true;
+                    self.docker_install_error = None;
+
+                    eprintln!("🔍 UI: Starting container installation");
+                    eprintln!("  Container: {}", self.docker_container_name);
+                    eprintln!("  Image: {}:{}", self.docker_parsed_image, self.docker_parsed_tag);
+
+                    let _ = vm.install_docker_image(
+                        row.host.clone(),
+                        self.docker_container_name.clone(),
+                        self.docker_parsed_image.clone(),
+                        self.docker_parsed_tag.clone(),
+                        ports,
+                        env,
+                    );
+                }
+            }
+        }
     }
 
     /// Render Ansible role installation dialog
