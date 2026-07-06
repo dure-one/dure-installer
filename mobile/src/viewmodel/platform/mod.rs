@@ -1,12 +1,12 @@
 //! Platform actor for GCP operations
 
+mod actor;
 mod commands;
 mod events;
-mod actor;
 
 #[cfg(test)]
 mod tests;
 
+pub use actor::PlatformActor;
 pub use commands::PlatformCommand;
 pub use events::{PlatformEvent, VmInfo};
-pub use actor::PlatformActor;

@@ -1,10 +1,10 @@
 //! VM operation commands
 
-use crate::config::{AppConfig, CloudPlatformConfig};
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
+use crate::config::{AppConfig, CloudPlatformConfig};
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -21,9 +21,15 @@ fn load_config() -> Result<AppConfig> {
 }
 
 /// Select VM from platform (auto-select if one, error if none)
-pub fn select_vm(platform: &CloudPlatformConfig, vm_flag: Option<String>) -> Result<(String, String)> {
+pub fn select_vm(
+    platform: &CloudPlatformConfig,
+    vm_flag: Option<String>,
+) -> Result<(String, String)> {
     if let Some(vm_name) = vm_flag {
-        let vm = platform.vms.iter().find(|v| v.name == vm_name)
+        let vm = platform
+            .vms
+            .iter()
+            .find(|v| v.name == vm_name)
             .ok_or_else(|| anyhow!("VM '{}' not found", vm_name))?;
         return Ok((vm.name.clone(), vm.zone.clone()));
     }
@@ -38,7 +44,9 @@ pub fn select_vm(platform: &CloudPlatformConfig, vm_flag: Option<String>) -> Res
             // Multiple VMs - in real CLI would prompt, for now error
             Err(anyhow!(
                 "Multiple VMs found. Use --vm <name> to specify:\n{}",
-                platform.vms.iter()
+                platform
+                    .vms
+                    .iter()
                     .map(|v| format!("  • {} ({})", v.name, v.zone))
                     .collect::<Vec<_>>()
                     .join("\n")
@@ -56,14 +64,21 @@ pub async fn execute_addvm_inner(
     zone: String,
     machine_type: String,
 ) -> Result<()> {
-    let event = runner.execute_command(PlatformCommand::CreateVM {
-        platform_name: platform.name.clone(),
-        vm_name: vm_name.clone(),
-        zone: zone.clone(),
-        machine_type: machine_type.clone(),
-    }).await?;
+    let event = runner
+        .execute_command(PlatformCommand::CreateVM {
+            platform_name: platform.name.clone(),
+            vm_name: vm_name.clone(),
+            zone: zone.clone(),
+            machine_type: machine_type.clone(),
+        })
+        .await?;
 
-    if let PlatformEvent::VMCreated { vm_name, external_ip, .. } = event {
+    if let PlatformEvent::VMCreated {
+        vm_name,
+        external_ip,
+        ..
+    } = event
+    {
         println!("✓ VM created successfully");
         println!("  Name: {}", vm_name);
         println!("  Zone: {}", zone);
@@ -83,7 +98,9 @@ pub fn execute_addvm_command(
 ) -> Result<()> {
     let config = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -103,9 +120,7 @@ pub fn execute_addvm_command(
     }
 
     // Get VM parameters (use defaults or prompt)
-    let vm_name = vm_name_flag.ok_or_else(||
-        anyhow!("VM name required. Use --vm-name <name>")
-    )?;
+    let vm_name = vm_name_flag.ok_or_else(|| anyhow!("VM name required. Use --vm-name <name>"))?;
     let zone = zone_flag.unwrap_or_else(|| "us-central1-a".to_string());
     let machine_type = machine_type_flag.unwrap_or_else(|| "e2-micro".to_string());
 
@@ -118,14 +133,21 @@ pub fn execute_addvm_command(
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        let event = runner.execute_command(PlatformCommand::CreateVM {
-            platform_name: platform.name.clone(),
-            vm_name: vm_name.clone(),
-            zone: zone.clone(),
-            machine_type: machine_type.clone(),
-        }).await?;
+        let event = runner
+            .execute_command(PlatformCommand::CreateVM {
+                platform_name: platform.name.clone(),
+                vm_name: vm_name.clone(),
+                zone: zone.clone(),
+                machine_type: machine_type.clone(),
+            })
+            .await?;
 
-        if let PlatformEvent::VMCreated { vm_name, external_ip, .. } = event {
+        if let PlatformEvent::VMCreated {
+            vm_name,
+            external_ip,
+            ..
+        } = event
+        {
             println!("✓ VM created successfully");
             println!("  Name: {}", vm_name);
             println!("  Zone: {}", zone);
@@ -141,7 +163,9 @@ pub fn execute_addvm_command(
 pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<()> {
     let config = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -156,11 +180,13 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        let event = runner.execute_command(PlatformCommand::RestartVM {
-            platform_name: platform.name.clone(),
-            vm_name: vm_name.clone(),
-            zone: zone.clone(),
-        }).await?;
+        let event = runner
+            .execute_command(PlatformCommand::RestartVM {
+                platform_name: platform.name.clone(),
+                vm_name: vm_name.clone(),
+                zone: zone.clone(),
+            })
+            .await?;
 
         if let PlatformEvent::VMRestarted { vm_name, .. } = event {
             println!("✓ VM '{}' restarted successfully", vm_name);
@@ -175,7 +201,9 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
 pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()> {
     let config = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -202,11 +230,13 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        let event = runner.execute_command(PlatformCommand::DeleteVM {
-            platform_name: platform.name.clone(),
-            vm_name: vm_name.clone(),
-            zone: zone.clone(),
-        }).await?;
+        let event = runner
+            .execute_command(PlatformCommand::DeleteVM {
+                platform_name: platform.name.clone(),
+                vm_name: vm_name.clone(),
+                zone: zone.clone(),
+            })
+            .await?;
 
         if let PlatformEvent::VMDeleted { vm_name, .. } = event {
             println!("✓ VM '{}' deleted successfully", vm_name);

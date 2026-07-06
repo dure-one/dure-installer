@@ -741,7 +741,10 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 // Default: show combined list + show for all platforms
                 commands::platform::list::execute_platform_combined()?;
             }
-            Some(PlatformCommands::Add { name, platform_type }) => {
+            Some(PlatformCommands::Add {
+                name,
+                platform_type,
+            }) => {
                 commands::platform::execute_platform_add(name, platform_type)?;
             }
             Some(PlatformCommands::External(args)) => {
@@ -788,10 +791,19 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
 
             // Define command categories
             let categories = vec![
-                ("Hosting Control Commands", vec!["ns", "platform", "hosting"]),
-                ("Server Control Commands", vec!["acme", "nft", "wss", "webhook"]),
+                (
+                    "Hosting Control Commands",
+                    vec!["ns", "platform", "hosting"],
+                ),
+                (
+                    "Server Control Commands",
+                    vec!["acme", "nft", "wss", "webhook"],
+                ),
                 ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
-                ("Common/Utility Commands", vec!["crypt", "site", "info", "init"]),
+                (
+                    "Common/Utility Commands",
+                    vec!["crypt", "site", "info", "init"],
+                ),
             ];
 
             let mut cmd = Cli::command();
@@ -800,7 +812,10 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 println!("{}:", category);
                 for name in command_names {
                     if let Some(subcmd) = cmd.find_subcommand_mut(name) {
-                        let about = subcmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+                        let about = subcmd
+                            .get_about()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default();
                         println!("  {:<8} - {}", name, about);
 
                         // Print subcommands if any
@@ -808,7 +823,8 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                             if sub.get_name() == "help" {
                                 continue;
                             }
-                            let sub_about = sub.get_about().map(|s| s.to_string()).unwrap_or_default();
+                            let sub_about =
+                                sub.get_about().map(|s| s.to_string()).unwrap_or_default();
                             println!("    {:<10} - {}", sub.get_name(), sub_about);
                         }
                     }

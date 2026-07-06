@@ -1,9 +1,9 @@
 //! Platform actor implementation
 
 use super::{PlatformCommand, PlatformEvent, VmInfo};
-use crate::viewmodel::{ViewModelEvent, runtime};
-use crate::config::AppConfig;
 use crate::calc::gcp_rest::GcpRestClient;
+use crate::config::AppConfig;
+use crate::viewmodel::{ViewModelEvent, runtime};
 use smol::channel::{Receiver, Sender};
 use std::path::PathBuf;
 
@@ -14,7 +14,10 @@ pub struct PlatformActor {
 
 impl PlatformActor {
     pub fn new(command_rx: Receiver<PlatformCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
-        Self { command_rx, event_tx }
+        Self {
+            command_rx,
+            event_tx,
+        }
     }
 
     pub async fn run(mut self) {
@@ -39,41 +42,75 @@ impl PlatformActor {
         let operation = format!("{:?}", cmd);
 
         let result = match cmd {
-            PlatformCommand::ListVMs { platform_name } => {
-                self.list_vms(platform_name).await
+            PlatformCommand::ListVMs { platform_name } => self.list_vms(platform_name).await,
+            PlatformCommand::CreateVM {
+                platform_name,
+                vm_name,
+                zone,
+                machine_type,
+            } => {
+                self.create_vm(platform_name, vm_name, zone, machine_type)
+                    .await
             }
-            PlatformCommand::CreateVM { platform_name, vm_name, zone, machine_type } => {
-                self.create_vm(platform_name, vm_name, zone, machine_type).await
-            }
-            PlatformCommand::DeleteVM { platform_name, vm_name, zone } => {
-                self.delete_vm(platform_name, vm_name, zone).await
-            }
-            PlatformCommand::RestartVM { platform_name, vm_name, zone } => {
-                self.restart_vm(platform_name, vm_name, zone).await
-            }
-            PlatformCommand::RegenerateVM { platform_name, vm_name, zone } => {
-                self.regenerate_vm(platform_name, vm_name, zone).await
-            }
-            PlatformCommand::UpdateFirewall { platform_name, allow_ip } => {
-                self.update_firewall(platform_name, allow_ip).await
-            }
-            PlatformCommand::FetchBilling { platform_name, project_id, dataset, table } => {
-                self.fetch_billing(platform_name, project_id, dataset, table).await
+            PlatformCommand::DeleteVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => self.delete_vm(platform_name, vm_name, zone).await,
+            PlatformCommand::RestartVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => self.restart_vm(platform_name, vm_name, zone).await,
+            PlatformCommand::RegenerateVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => self.regenerate_vm(platform_name, vm_name, zone).await,
+            PlatformCommand::UpdateFirewall {
+                platform_name,
+                allow_ip,
+            } => self.update_firewall(platform_name, allow_ip).await,
+            PlatformCommand::FetchBilling {
+                platform_name,
+                project_id,
+                dataset,
+                table,
+            } => {
+                self.fetch_billing(platform_name, project_id, dataset, table)
+                    .await
             }
             PlatformCommand::ListProjects { platform_name } => {
                 self.list_projects(platform_name).await
             }
-            PlatformCommand::SelectProject { platform_name, project_id } => {
-                self.select_project(platform_name, project_id).await
-            }
-            PlatformCommand::StartOAuth { platform_name } => {
-                self.start_oauth(platform_name).await
-            }
-            PlatformCommand::CompleteOAuth { platform_name, auth_code } => {
-                self.complete_oauth(platform_name, auth_code).await
-            }
-            PlatformCommand::AddPlatform { name, platform_type, oauth_access_token, oauth_refresh_token, oauth_token_expiry, connected_email, selected_project_id } => {
-                self.add_platform(name, platform_type, oauth_access_token, oauth_refresh_token, oauth_token_expiry, connected_email, selected_project_id).await
+            PlatformCommand::SelectProject {
+                platform_name,
+                project_id,
+            } => self.select_project(platform_name, project_id).await,
+            PlatformCommand::StartOAuth { platform_name } => self.start_oauth(platform_name).await,
+            PlatformCommand::CompleteOAuth {
+                platform_name,
+                auth_code,
+            } => self.complete_oauth(platform_name, auth_code).await,
+            PlatformCommand::AddPlatform {
+                name,
+                platform_type,
+                oauth_access_token,
+                oauth_refresh_token,
+                oauth_token_expiry,
+                connected_email,
+                selected_project_id,
+            } => {
+                self.add_platform(
+                    name,
+                    platform_type,
+                    oauth_access_token,
+                    oauth_refresh_token,
+                    oauth_token_expiry,
+                    connected_email,
+                    selected_project_id,
+                )
+                .await
             }
             PlatformCommand::DeletePlatform { platform_name } => {
                 self.delete_platform(platform_name).await
@@ -101,10 +138,13 @@ impl PlatformActor {
 
     /// Helper to load platform config by name
     #[cfg(not(target_arch = "wasm32"))]
-    fn load_platform_config(platform_name: &str) -> anyhow::Result<(crate::config::CloudPlatformConfig, PathBuf)> {
+    fn load_platform_config(
+        platform_name: &str,
+    ) -> anyhow::Result<(crate::config::CloudPlatformConfig, PathBuf)> {
         let config_path = Self::get_config_path()?;
         let config = AppConfig::load_or_default(&config_path);
-        let platform = config.platforms
+        let platform = config
+            .platforms
             .into_iter()
             .find(|p| p.name == platform_name)
             .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
@@ -112,19 +152,24 @@ impl PlatformActor {
     }
 
     async fn list_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("list_vms", 0.1, "Loading platform config...").await;
+        self.send_progress("list_vms", 0.1, "Loading platform config...")
+            .await;
 
         // Load platform config
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        self.send_progress("list_vms", 0.3, "Fetching zones...").await;
+        self.send_progress("list_vms", 0.3, "Fetching zones...")
+            .await;
 
-        let project_id = platform.gcp_selected_project_id
+        let project_id = platform
+            .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         // Get zones to query (from existing VMs or list all zones)
@@ -136,9 +181,8 @@ impl PlatformActor {
                 let client = GcpRestClient::new(access_token.clone());
                 if !vms.is_empty() {
                     // Use zones from existing VMs
-                    let zones: std::collections::HashSet<String> = vms.iter()
-                        .map(|vm| vm.zone.clone())
-                        .collect();
+                    let zones: std::collections::HashSet<String> =
+                        vms.iter().map(|vm| vm.zone.clone()).collect();
                     Ok(zones.into_iter().collect())
                 } else {
                     // List all zones
@@ -146,9 +190,11 @@ impl PlatformActor {
                     Ok(zone_list.items.into_iter().map(|z| z.name).collect())
                 }
             }
-        }).await?;
+        })
+        .await?;
 
-        self.send_progress("list_vms", 0.5, "Fetching VMs from GCP...").await;
+        self.send_progress("list_vms", 0.5, "Fetching VMs from GCP...")
+            .await;
 
         // List instances from all zones
         let all_instances = runtime::unblock({
@@ -164,41 +210,57 @@ impl PlatformActor {
                 }
                 Ok(all_vms)
             }
-        }).await?;
+        })
+        .await?;
 
         // Convert to VmInfo
-        let vm_infos: Vec<VmInfo> = all_instances.into_iter().map(|vm| {
-            let external_ip = vm.external_ip();
-            VmInfo {
-                name: vm.name,
-                zone: vm.zone,
-                external_ip,
-                status: vm.status,
-            }
-        }).collect();
+        let vm_infos: Vec<VmInfo> = all_instances
+            .into_iter()
+            .map(|vm| {
+                let external_ip = vm.external_ip();
+                VmInfo {
+                    name: vm.name,
+                    zone: vm.zone,
+                    external_ip,
+                    status: vm.status,
+                }
+            })
+            .collect();
 
         self.send_event(PlatformEvent::VMsListed {
             platform_name,
             vms: vm_infos,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn create_vm(&mut self, platform_name: String, vm_name: String, zone: String, machine_type: String) -> anyhow::Result<()> {
-        self.send_progress("create_vm", 0.0, "Starting VM creation...").await;
+    async fn create_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        machine_type: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("create_vm", 0.0, "Starting VM creation...")
+            .await;
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let project_id = platform.gcp_selected_project_id
+        let project_id = platform
+            .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        self.send_progress("create_vm", 0.3, "Creating VM instance...").await;
+        self.send_progress("create_vm", 0.3, "Creating VM instance...")
+            .await;
 
         let external_ip = runtime::unblock({
             let vm_name_clone = vm_name.clone();
@@ -208,7 +270,7 @@ impl PlatformActor {
                 // Create instance request (debian-11 micro instance)
                 let instance_req = crate::calc::gcp_rest::InstanceRequest::debian_micro(
                     vm_name_clone.clone(),
-                    zone.clone()
+                    zone.clone(),
                 );
 
                 let operation = client.create_instance(&project_id, &zone, &instance_req)?;
@@ -219,30 +281,42 @@ impl PlatformActor {
 
                 // Get instance details to fetch external IP
                 let instance = client.get_instance(&project_id, &zone, &vm_name_clone)?;
-                Ok(instance.external_ip().unwrap_or_else(|| "pending".to_string()))
+                Ok(instance
+                    .external_ip()
+                    .unwrap_or_else(|| "pending".to_string()))
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::VMCreated {
             platform_name,
             vm_name,
             external_ip,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn delete_vm(&mut self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
+    async fn delete_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
         self.send_progress("delete_vm", 0.5, "Deleting VM...").await;
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let project_id = platform.gcp_selected_project_id
+        let project_id = platform
+            .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         runtime::unblock({
@@ -256,27 +330,38 @@ impl PlatformActor {
                 client.wait_for_operation(&project_id, &zone, op_name, 120)?;
                 Ok(())
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::VMDeleted {
             platform_name,
             vm_name,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn restart_vm(&mut self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
-        self.send_progress("restart_vm", 0.5, "Restarting VM...").await;
+    async fn restart_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("restart_vm", 0.5, "Restarting VM...")
+            .await;
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let project_id = platform.gcp_selected_project_id
+        let project_id = platform
+            .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         runtime::unblock({
@@ -290,59 +375,81 @@ impl PlatformActor {
                 client.wait_for_operation(&project_id, &zone, op_name, 120)?;
                 Ok(())
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::VMRestarted {
             platform_name,
             vm_name,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn regenerate_vm(&mut self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
-        self.send_progress("regenerate_vm", 0.3, "Regenerating VM...").await;
+    async fn regenerate_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("regenerate_vm", 0.3, "Regenerating VM...")
+            .await;
 
         // Load platform config
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        self.send_progress("regenerate_vm", 0.6, "Calling GCP API...").await;
+        self.send_progress("regenerate_vm", 0.6, "Calling GCP API...")
+            .await;
 
         // Regenerate VM
         let message = runtime::unblock({
             let mut platform = platform.clone();
             let zone = zone.clone();
             move || {
-                let access_token = platform.gcp_oauth_access_token.clone()
+                let access_token = platform
+                    .gcp_oauth_access_token
+                    .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
                 crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone)
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::VMRegenerated {
             platform_name,
             vm_name,
             message,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn update_firewall(&mut self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
-        self.send_progress("update_firewall", 0.5, "Updating firewall rules...").await;
+    async fn update_firewall(
+        &mut self,
+        platform_name: String,
+        allow_ip: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("update_firewall", 0.5, "Updating firewall rules...")
+            .await;
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let project_id = platform.gcp_selected_project_id
+        let project_id = platform
+            .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         runtime::unblock({
@@ -352,53 +459,72 @@ impl PlatformActor {
                 client.add_ip_to_firewall(&project_id, &allow_ip)?;
                 Ok(())
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::FirewallUpdated {
             platform_name,
             whitelisted_ip: allow_ip,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn fetch_billing(&mut self, platform_name: String, project_id: String, dataset: String, table: String) -> anyhow::Result<()> {
-        self.send_progress("fetch_billing", 0.5, "Fetching billing data...").await;
+    async fn fetch_billing(
+        &mut self,
+        platform_name: String,
+        project_id: String,
+        dataset: String,
+        table: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("fetch_billing", 0.5, "Fetching billing data...")
+            .await;
 
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        let records = runtime::unblock(move || -> anyhow::Result<Vec<crate::calc::gcp_rest::BillingRecord>> {
-            let client = GcpRestClient::new(access_token);
-            client.get_current_month_billing(&project_id, &dataset, &table)
-        }).await?;
+        let records = runtime::unblock(
+            move || -> anyhow::Result<Vec<crate::calc::gcp_rest::BillingRecord>> {
+                let client = GcpRestClient::new(access_token);
+                client.get_current_month_billing(&project_id, &dataset, &table)
+            },
+        )
+        .await?;
 
         self.send_event(PlatformEvent::BillingFetched {
             platform_name,
             records,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
     async fn list_projects(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("list_projects", 0.3, "Fetching GCP projects...").await;
+        self.send_progress("list_projects", 0.3, "Fetching GCP projects...")
+            .await;
 
         // Load platform to get access token
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        }).await?;
+        })
+        .await?;
 
-        let access_token = platform.gcp_oauth_access_token
+        let access_token = platform
+            .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        self.send_progress("list_projects", 0.6, "Retrieving project list...").await;
+        self.send_progress("list_projects", 0.6, "Retrieving project list...")
+            .await;
 
         // Fetch projects from GCP
         let project_list = runtime::unblock({
@@ -406,10 +532,12 @@ impl PlatformActor {
                 let client = GcpRestClient::new(access_token);
                 client.list_projects(None)
             }
-        }).await?;
+        })
+        .await?;
 
         // Convert to (id, name) tuples
-        let projects: Vec<(String, String)> = project_list.projects
+        let projects: Vec<(String, String)> = project_list
+            .projects
             .into_iter()
             .map(|p| {
                 let name = p.display_name().to_string();
@@ -420,13 +548,19 @@ impl PlatformActor {
         self.send_event(PlatformEvent::ProjectsListed {
             platform_name,
             projects,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn select_project(&mut self, platform_name: String, project_id: String) -> anyhow::Result<()> {
-        self.send_progress("select_project", 0.5, "Updating project selection...").await;
+    async fn select_project(
+        &mut self,
+        platform_name: String,
+        project_id: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("select_project", 0.5, "Updating project selection...")
+            .await;
 
         // Update config
         runtime::unblock({
@@ -436,7 +570,11 @@ impl PlatformActor {
                 let config_path = Self::get_config_path()?;
                 let mut config = AppConfig::load_or_default(&config_path);
 
-                if let Some(platform) = config.platforms.iter_mut().find(|p| p.name == platform_name) {
+                if let Some(platform) = config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.name == platform_name)
+                {
                     platform.gcp_selected_project_id = Some(project_id.clone());
                     config.save(&config_path)?;
                 } else {
@@ -445,18 +583,21 @@ impl PlatformActor {
 
                 Ok(())
             }
-        }).await?;
+        })
+        .await?;
 
         self.send_event(PlatformEvent::ProjectSelected {
             platform_name,
             project_id,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
     async fn start_oauth(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("start_oauth", 0.2, "Starting OAuth flow...").await;
+        self.send_progress("start_oauth", 0.2, "Starting OAuth flow...")
+            .await;
 
         // TODO: OAuth flow requires browser interaction and is complex
         // The current implementation uses poll_promise with run_oauth_flow()
@@ -470,13 +611,19 @@ impl PlatformActor {
         self.send_event(PlatformEvent::OAuthStarted {
             platform_name,
             auth_url,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
-    async fn complete_oauth(&mut self, platform_name: String, _auth_code: String) -> anyhow::Result<()> {
-        self.send_progress("complete_oauth", 0.3, "Completing OAuth...").await;
+    async fn complete_oauth(
+        &mut self,
+        platform_name: String,
+        _auth_code: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("complete_oauth", 0.3, "Completing OAuth...")
+            .await;
 
         // TODO: OAuth completion is handled by run_oauth_flow() in the current implementation
         // which runs a callback server and exchanges the auth code for tokens.
@@ -488,7 +635,8 @@ impl PlatformActor {
         self.send_event(PlatformEvent::OAuthCompleted {
             platform_name,
             email,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
@@ -503,7 +651,8 @@ impl PlatformActor {
         connected_email: Option<String>,
         selected_project_id: Option<String>,
     ) -> anyhow::Result<()> {
-        self.send_progress("add_platform", 0.5, "Adding platform...").await;
+        self.send_progress("add_platform", 0.5, "Adding platform...")
+            .await;
 
         runtime::unblock({
             let name = name.clone();
@@ -547,20 +696,24 @@ impl PlatformActor {
 
                 Ok(())
             }
-        }).await?;
+        })
+        .await?;
 
-        self.send_progress("add_platform", 1.0, "Platform added").await;
+        self.send_progress("add_platform", 1.0, "Platform added")
+            .await;
 
         self.send_event(PlatformEvent::PlatformAdded {
             platform_name: name,
             platform_type,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
     async fn delete_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("delete_platform", 0.5, "Deleting platform...").await;
+        self.send_progress("delete_platform", 0.5, "Deleting platform...")
+            .await;
 
         let vm_count = runtime::unblock({
             let platform_name = platform_name.clone();
@@ -569,7 +722,9 @@ impl PlatformActor {
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
                 // Find and remove platform
-                let platform_idx = app_config.platforms.iter()
+                let platform_idx = app_config
+                    .platforms
+                    .iter()
                     .position(|p| p.name == platform_name)
                     .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
 
@@ -589,26 +744,30 @@ impl PlatformActor {
 
                 Ok(vm_count)
             }
-        }).await?;
+        })
+        .await?;
 
-        self.send_progress("delete_platform", 1.0, "Platform deleted").await;
+        self.send_progress("delete_platform", 1.0, "Platform deleted")
+            .await;
 
         self.send_event(PlatformEvent::PlatformDeleted {
             platform_name,
             vm_count,
-        }).await;
+        })
+        .await;
 
         Ok(())
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
-        let _ = self.event_tx.send(ViewModelEvent::Platform(
-            PlatformEvent::Progress {
+        let _ = self
+            .event_tx
+            .send(ViewModelEvent::Platform(PlatformEvent::Progress {
                 operation: operation.to_string(),
                 progress,
                 status: status.to_string(),
-            }
-        )).await;
+            }))
+            .await;
     }
 
     async fn send_event(&self, event: PlatformEvent) {
@@ -616,11 +775,12 @@ impl PlatformActor {
     }
 
     async fn send_error(&self, operation: &str, error: anyhow::Error) {
-        let _ = self.event_tx.send(ViewModelEvent::Platform(
-            PlatformEvent::Error {
+        let _ = self
+            .event_tx
+            .send(ViewModelEvent::Platform(PlatformEvent::Error {
                 operation: operation.to_string(),
                 error: format!("{:#}", error),
-            }
-        )).await;
+            }))
+            .await;
     }
 }

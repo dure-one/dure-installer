@@ -25,16 +25,16 @@ struct PlatformRow {
     ssh_ready: bool,        // VM has external_ip.is_some()
 
     // Drawer content data
-    email: Option<String>,           // Connected Google account
-    total_project_count: usize,      // Fetched from GCP API
+    email: Option<String>,      // Connected Google account
+    total_project_count: usize, // Fetched from GCP API
     selected_project_id: Option<String>,
-    vm_name: Option<String>,         // First VM name
-    vm_external_ip: Option<String>,  // First VM external IP
-    ssh_private_key: Option<String>, // SSH private key from KeePass
-    ssh_public_key: Option<String>,  // Derived SSH public key for verification
+    vm_name: Option<String>,            // First VM name
+    vm_external_ip: Option<String>,     // First VM external IP
+    ssh_private_key: Option<String>,    // SSH private key from KeePass
+    ssh_public_key: Option<String>,     // Derived SSH public key for verification
     ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
-    firewall_status: String,         // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
-    ssh_status: String,              // "✓ Ready" or "? No external IP"
+    firewall_status: String,            // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
+    ssh_status: String,                 // "✓ Ready" or "? No external IP"
 
     // Action button state
     has_vm: bool,            // Enable/disable VM operation buttons
@@ -160,9 +160,13 @@ pub struct PlatformTab {
 
     // SSH connection test state (per platform)
     #[cfg_attr(feature = "serde", serde(skip))]
-    ssh_test_promises: std::collections::HashMap<String, poll_promise::Promise<Result<crate::calc::ssh::SshConnectionResult, String>>>,
+    ssh_test_promises: std::collections::HashMap<
+        String,
+        poll_promise::Promise<Result<crate::calc::ssh::SshConnectionResult, String>>,
+    >,
     #[cfg_attr(feature = "serde", serde(skip))]
-    ssh_test_results: std::collections::HashMap<String, Result<crate::calc::ssh::SshConnectionResult, String>>,
+    ssh_test_results:
+        std::collections::HashMap<String, Result<crate::calc::ssh::SshConnectionResult, String>>,
 }
 
 impl Default for PlatformTab {
@@ -402,7 +406,12 @@ fn read_ssh_string(data: &[u8], offset: &mut usize) -> Option<Vec<u8>> {
         return None;
     }
 
-    let len = u32::from_be_bytes([data[*offset], data[*offset + 1], data[*offset + 2], data[*offset + 3]]) as usize;
+    let len = u32::from_be_bytes([
+        data[*offset],
+        data[*offset + 1],
+        data[*offset + 2],
+        data[*offset + 3],
+    ]) as usize;
     *offset += 4;
 
     if *offset + len > data.len() {
@@ -425,8 +434,9 @@ fn extract_pubkey_from_openssh(openssh_key: &str) -> Option<String> {
 
     let decoded = base64::Engine::decode(
         &base64::engine::general_purpose::STANDARD,
-        key_data.as_bytes()
-    ).ok()?;
+        key_data.as_bytes(),
+    )
+    .ok()?;
 
     let mut offset = 0;
 
@@ -451,10 +461,8 @@ fn extract_pubkey_from_openssh(openssh_key: &str) -> Option<String> {
     let public_key_blob = read_ssh_string(&decoded, &mut offset)?;
 
     // Encode as SSH public key
-    let public_key_b64 = base64::Engine::encode(
-        &base64::engine::general_purpose::STANDARD,
-        &public_key_blob
-    );
+    let public_key_b64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &public_key_blob);
     Some(format!("ssh-ed25519 {} dure-generated", public_key_b64))
 }
 
@@ -473,7 +481,10 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
 
     // Otherwise, treat as raw 32-byte Ed25519 key
     if raw_bytes.len() != 32 {
-        eprintln!("DEBUG: Key is neither OpenSSH format nor raw 32 bytes (length: {})", raw_bytes.len());
+        eprintln!(
+            "DEBUG: Key is neither OpenSSH format nor raw 32 bytes (length: {})",
+            raw_bytes.len()
+        );
         return None;
     }
 
@@ -537,8 +548,12 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
         Ok(k) => {
             eprintln!("DEBUG: Found {} keys in keyring", k.len());
             for key in &k {
-                eprintln!("  - Domain: {}, Username: {}, Has SSH: {}",
-                    key.domain, key.username, key.ssh_key.is_some());
+                eprintln!(
+                    "  - Domain: {}, Username: {}, Has SSH: {}",
+                    key.domain,
+                    key.username,
+                    key.ssh_key.is_some()
+                );
             }
             k
         }
@@ -663,7 +678,8 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
             // }
 
             // Show SSH connection command if we have the key and external IP
-            if let (Some(external_ip), Some(ssh_key)) = (&row.vm_external_ip, &row.ssh_private_key) {
+            if let (Some(external_ip), Some(ssh_key)) = (&row.vm_external_ip, &row.ssh_private_key)
+            {
                 ui.add_space(4.0);
                 ui.label("        • SSH Connect:");
 
@@ -684,7 +700,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
                                 .font(egui::TextStyle::Monospace)
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(3)
-                                .interactive(true)
+                                .interactive(true),
                         );
                     });
 
@@ -694,7 +710,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
                 ui.add_space(4.0);
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 152, 0),
-                    "        ⚠ SSH key not found in keyring"
+                    "        ⚠ SSH key not found in keyring",
                 );
             }
         } else {
@@ -721,8 +737,14 @@ impl PlatformTab {
                         self.billing_data = Some(records);
                         self.billing_loading = false;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) => {
-                        eprintln!("✓ Successfully added {} to firewall whitelist", whitelisted_ip);
+                    ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
+                        whitelisted_ip,
+                        ..
+                    }) => {
+                        eprintln!(
+                            "✓ Successfully added {} to firewall whitelist",
+                            whitelisted_ip
+                        );
                         // Refresh to show updated status
                         self.loaded = false;
                         self.load_error = None;
@@ -733,18 +755,29 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::VMRegenerated { vm_name, message, .. }) => {
+                    ViewModelEvent::Platform(PlatformEvent::VMRegenerated {
+                        vm_name,
+                        message,
+                        ..
+                    }) => {
                         eprintln!("✓ {}", message);
                         // Refresh to show updated VM details
                         self.loaded = false;
                         self.load_error = None;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::VMDeleted { platform_name, vm_name }) => {
+                    ViewModelEvent::Platform(PlatformEvent::VMDeleted {
+                        platform_name,
+                        vm_name,
+                    }) => {
                         eprintln!("✓ VM {} deleted successfully", vm_name);
 
                         // Remove VM from config
                         if let Ok((mut app_config, config_path)) = load_config() {
-                            if let Some(platform) = app_config.platforms.iter_mut().find(|p| p.name == platform_name) {
+                            if let Some(platform) = app_config
+                                .platforms
+                                .iter_mut()
+                                .find(|p| p.name == platform_name)
+                            {
                                 platform.vms.retain(|vm| vm.name != vm_name);
 
                                 if let Err(e) = app_config.save(&config_path) {
@@ -757,8 +790,15 @@ impl PlatformTab {
                             }
                         }
                     }
-                    ViewModelEvent::Platform(PlatformEvent::ProjectsListed { platform_name, projects }) => {
-                        eprintln!("✓ Projects listed for {}: {} projects", platform_name, projects.len());
+                    ViewModelEvent::Platform(PlatformEvent::ProjectsListed {
+                        platform_name,
+                        projects,
+                    }) => {
+                        eprintln!(
+                            "✓ Projects listed for {}: {} projects",
+                            platform_name,
+                            projects.len()
+                        );
                         self.select_project_list = projects;
                         self.select_project_loading = false;
 
@@ -767,19 +807,27 @@ impl PlatformTab {
                             self.show_select_project_dialog = true;
                         }
                     }
-                    ViewModelEvent::Platform(PlatformEvent::ProjectSelected { project_id, .. }) => {
+                    ViewModelEvent::Platform(PlatformEvent::ProjectSelected {
+                        project_id, ..
+                    }) => {
                         eprintln!("✓ Project selected: {}", project_id);
                         // Refresh spreadsheet to show updated project
                         self.loaded = false;
                         self.load_error = None;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::PlatformAdded { platform_name, platform_type }) => {
+                    ViewModelEvent::Platform(PlatformEvent::PlatformAdded {
+                        platform_name,
+                        platform_type,
+                    }) => {
                         eprintln!("✓ Platform '{}' ({}) added", platform_name, platform_type);
                         // Refresh spreadsheet to show new platform
                         self.loaded = false;
                         self.load_error = None;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::PlatformDeleted { platform_name, vm_count }) => {
+                    ViewModelEvent::Platform(PlatformEvent::PlatformDeleted {
+                        platform_name,
+                        vm_count,
+                    }) => {
                         eprintln!("✓ Platform '{}' deleted ({} VMs)", platform_name, vm_count);
                         // Refresh spreadsheet to show removal
                         self.loaded = false;
@@ -807,13 +855,14 @@ impl PlatformTab {
                     ui.add(
                         egui::ProgressBar::new(progress.progress)
                             .text(format!("{}: {}", progress.operation, progress.status))
-                            .desired_width(400.0)
+                            .desired_width(400.0),
                     );
                 });
             }
 
             // Show recent errors
-            if let Some(error) = vm.recent_errors()
+            if let Some(error) = vm
+                .recent_errors()
                 .iter()
                 .filter(|e| e.actor == "platform")
                 .rev()
@@ -821,7 +870,7 @@ impl PlatformTab {
             {
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 100, 100),
-                    format!("⚠ Error in {}: {}", error.operation, error.error)
+                    format!("⚠ Error in {}: {}", error.operation, error.error),
                 );
                 ui.add_space(4.0);
             }
@@ -841,7 +890,8 @@ impl PlatformTab {
             for (platform_name, promise) in &self.ssh_test_promises {
                 if let Some(result) = promise.ready() {
                     completed.push(platform_name.clone());
-                    self.ssh_test_results.insert(platform_name.clone(), result.clone());
+                    self.ssh_test_results
+                        .insert(platform_name.clone(), result.clone());
                 }
             }
             for platform_name in completed {
@@ -922,53 +972,107 @@ impl PlatformTab {
                                 .show(ui, |ui| {
                                     ui.horizontal_wrapped(|ui| {
                                         ui.spacing_mut().item_spacing.x = 2.0;
-                                        ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
+                                        ui.style_mut().spacing.button_padding =
+                                            egui::vec2(6.0, 2.0);
 
                                         // 0. Refresh
-                                        if ui.add(MaterialButton::outlined("Refresh").small()).on_hover_text("Refresh platform data").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_refresh"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        if ui
+                                            .add(MaterialButton::outlined("Refresh").small())
+                                            .on_hover_text("Refresh platform data")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_refresh"),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
 
                                         // 1. Add VM
-                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                                        if ui.add_enabled(!row_for_actions.has_vm && row_for_actions.project_selected,
-                                            MaterialButton::outlined("Add VM").small()).on_hover_text("Add VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_add_vm"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        #[cfg(not(any(
+                                            target_os = "android",
+                                            target_arch = "wasm32"
+                                        )))]
+                                        if ui
+                                            .add_enabled(
+                                                !row_for_actions.has_vm
+                                                    && row_for_actions.project_selected,
+                                                MaterialButton::outlined("Add VM").small(),
+                                            )
+                                            .on_hover_text("Add VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_add_vm"),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
 
                                         // 2. Firewall
-                                        if ui.add_enabled(row_for_actions.project_selected && !row_for_actions.firewall_updated,
-                                            MaterialButton::outlined("Firewall").small()).on_hover_text("Update Firewall").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_update_firewall"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected
+                                                    && !row_for_actions.firewall_updated,
+                                                MaterialButton::outlined("Firewall").small(),
+                                            )
+                                            .on_hover_text("Update Firewall")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new(
+                                                        "platform_action_update_firewall",
+                                                    ),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
 
                                         // 3. Restart
-                                        if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Restart").small()).on_hover_text("Restart VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_restart_vm"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.has_vm,
+                                                MaterialButton::outlined("Restart").small(),
+                                            )
+                                            .on_hover_text("Restart VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_restart_vm"),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
 
                                         // 4. Del VM
-                                        if ui.add_enabled(row_for_actions.has_vm,
-                                            MaterialButton::outlined("Del VM").small()).on_hover_text("Delete VM").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_delete_vm"),
-                                                (row_for_actions.platform_name.clone(),
-                                                 row_for_actions.vm_name.clone().unwrap_or_default(),
-                                                 row_for_actions.vm_zone.clone().unwrap_or_default())
-                                            ));
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.has_vm,
+                                                MaterialButton::outlined("Del VM").small(),
+                                            )
+                                            .on_hover_text("Delete VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_delete_vm"),
+                                                    (
+                                                        row_for_actions.platform_name.clone(),
+                                                        row_for_actions
+                                                            .vm_name
+                                                            .clone()
+                                                            .unwrap_or_default(),
+                                                        row_for_actions
+                                                            .vm_zone
+                                                            .clone()
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                )
+                                            });
                                         }
 
                                         // 5. Regen
@@ -981,21 +1085,40 @@ impl PlatformTab {
                                         // }
 
                                         // 6. Billing
-                                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-                                        if ui.add_enabled(row_for_actions.project_selected,
-                                            MaterialButton::outlined("Billing").small()).on_hover_text("Estimated Billing").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_billing"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        #[cfg(not(any(
+                                            target_os = "android",
+                                            target_arch = "wasm32"
+                                        )))]
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected,
+                                                MaterialButton::outlined("Billing").small(),
+                                            )
+                                            .on_hover_text("Estimated Billing")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_billing"),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
 
                                         // 7. Delete
-                                        if ui.add(MaterialButton::outlined("Delete").small()).on_hover_text("Delete Platform").clicked() {
-                                            ui.data_mut(|d| d.insert_temp(
-                                                egui::Id::new("platform_action_delete_platform"),
-                                                row_for_actions.platform_name.clone()
-                                            ));
+                                        if ui
+                                            .add(MaterialButton::outlined("Delete").small())
+                                            .on_hover_text("Delete Platform")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new(
+                                                        "platform_action_delete_platform",
+                                                    ),
+                                                    row_for_actions.platform_name.clone(),
+                                                )
+                                            });
                                         }
                                     });
                                 });
@@ -1005,15 +1128,16 @@ impl PlatformTab {
                         })
                 });
             }
-            
+
             egui::ScrollArea::vertical().show(ui, |ui| {
                 table.show(ui);
             });
 
             // Process pending actions from button clicks
             // Refresh action (available on all platforms)
-            if let Some(platform_name) = ui.data(|d|
-                d.get_temp::<String>(egui::Id::new("platform_action_refresh"))) {
+            if let Some(platform_name) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_refresh")))
+            {
                 self.loaded = false;
 
                 // Trigger SSH connection test for this platform
@@ -1025,62 +1149,98 @@ impl PlatformTab {
 
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             {
-                if let Some(platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))) {
+                if let Some(platform_name) = ui.data(|d| {
+                    d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))
+                }) {
                     self.update_firewall(platform_name, vm.as_deref_mut());
-                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_update_firewall")));
+                    ui.data_mut(|d| {
+                        d.remove::<String>(egui::Id::new("platform_action_update_firewall"))
+                    });
                 }
 
-                if let Some((platform_name, vm_name, vm_zone)) = ui.data(|d|
-                    d.get_temp::<(String, String, String)>(egui::Id::new("platform_action_delete_vm"))) {
+                if let Some((platform_name, vm_name, vm_zone)) = ui.data(|d| {
+                    d.get_temp::<(String, String, String)>(egui::Id::new(
+                        "platform_action_delete_vm",
+                    ))
+                }) {
                     self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
-                    ui.data_mut(|d| d.remove::<(String, String, String)>(egui::Id::new("platform_action_delete_vm")));
+                    ui.data_mut(|d| {
+                        d.remove::<(String, String, String)>(egui::Id::new(
+                            "platform_action_delete_vm",
+                        ))
+                    });
                 }
 
-                if let Some(platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_regen_vm"))) {
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_regen_vm")))
+                {
                     // Find platform and get vm_name
                     if let Ok((app_config, _)) = load_config() {
-                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                        if let Some(platform) = app_config
+                            .platforms
+                            .iter()
+                            .find(|p| p.name == platform_name)
+                        {
                             if let Some(vm_cfg) = platform.vms.first() {
-                                self.regenerate_vm(platform_name, vm_cfg.name.clone(), vm.as_deref_mut());
+                                self.regenerate_vm(
+                                    platform_name,
+                                    vm_cfg.name.clone(),
+                                    vm.as_deref_mut(),
+                                );
                             }
                         }
                     }
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_regen_vm")));
                 }
 
-                if let Some(platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_restart_vm"))) {
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_restart_vm")))
+                {
                     // Find platform and get vm_name and zone
                     if let Ok((app_config, _)) = load_config() {
-                        if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                        if let Some(platform) = app_config
+                            .platforms
+                            .iter()
+                            .find(|p| p.name == platform_name)
+                        {
                             if let Some(vm_config) = platform.vms.first() {
-                                self.restart_vm(platform_name, vm_config.name.clone(), vm_config.zone.clone(), vm.as_deref_mut());
+                                self.restart_vm(
+                                    platform_name,
+                                    vm_config.name.clone(),
+                                    vm_config.zone.clone(),
+                                    vm.as_deref_mut(),
+                                );
                             }
                         }
                     }
-                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_restart_vm")));
+                    ui.data_mut(|d| {
+                        d.remove::<String>(egui::Id::new("platform_action_restart_vm"))
+                    });
                 }
 
-                if let Some(platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_add_vm"))) {
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_add_vm")))
+                {
                     self.show_gcp_wizard(platform_name);
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
-                if let Some(_platform_name) = ui.data(|d|
-                    d.get_temp::<String>(egui::Id::new("platform_action_billing"))) {
+                if let Some(_platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing")))
+                {
                     self.show_billing_dialog = true;
                     self.fetch_billing_data(vm.as_deref_mut());
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_billing")));
                 }
             }
 
-            if let Some(platform_name) = ui.data(|d|
-                d.get_temp::<String>(egui::Id::new("platform_action_delete_platform"))) {
+            if let Some(platform_name) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_delete_platform")))
+            {
                 self.show_delete_platform_confirmation(platform_name);
-                ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_delete_platform")));
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("platform_action_delete_platform"))
+                });
             }
         }
 
@@ -1152,12 +1312,17 @@ impl PlatformTab {
 
                         // Get valid access token (refreshes if expired)
                         // Note: get_valid_access_token() saves config if it refreshes the token
-                        let access_token = if app_config.platforms[idx].gcp_oauth_access_token.is_some() {
+                        let access_token = if app_config.platforms[idx]
+                            .gcp_oauth_access_token
+                            .is_some()
+                        {
                             match self.get_valid_access_token(&mut app_config, idx, &config_path) {
                                 Ok(token) => Some(token),
                                 Err(e) => {
-                                    eprintln!("Failed to get valid access token for platform '{}': {}",
-                                        app_config.platforms[idx].name, e);
+                                    eprintln!(
+                                        "Failed to get valid access token for platform '{}': {}",
+                                        app_config.platforms[idx].name, e
+                                    );
                                     None
                                 }
                             }
@@ -1172,26 +1337,27 @@ impl PlatformTab {
                         let firewall_status_str = "Checking...".to_string();
 
                         // Compute SSH status from cached results only (no blocking)
-                        let ssh_status_str = compute_ssh_status(
-                            platform,
-                            self.ssh_test_results.get(&platform.name)
-                        );
+                        let ssh_status_str =
+                            compute_ssh_status(platform, self.ssh_test_results.get(&platform.name));
 
                         // ssh_ready should match ssh_status: only true if actually connected
-                        let ssh_ready = if let Some(result) = self.ssh_test_results.get(&platform.name) {
-                            matches!(result, Ok(conn_result) if conn_result.success)
-                        } else {
-                            false
-                        };
+                        let ssh_ready =
+                            if let Some(result) = self.ssh_test_results.get(&platform.name) {
+                                matches!(result, Ok(conn_result) if conn_result.success)
+                            } else {
+                                false
+                            };
 
                         // Load SSH private key from KeePass if VM exists (quick local operation)
-                        let (ssh_private_key, ssh_public_key, ssh_keyring_domain) = if let Some(vm) = platform.vms.first() {
-                            let keyring_domain = vm.ssh_key_name.clone();
-                            let (private_key, public_key) = load_ssh_key_from_keyring(&keyring_domain);
-                            (private_key, public_key, keyring_domain)
-                        } else {
-                            (None, None, None)
-                        };
+                        let (ssh_private_key, ssh_public_key, ssh_keyring_domain) =
+                            if let Some(vm) = platform.vms.first() {
+                                let keyring_domain = vm.ssh_key_name.clone();
+                                let (private_key, public_key) =
+                                    load_ssh_key_from_keyring(&keyring_domain);
+                                (private_key, public_key, keyring_domain)
+                            } else {
+                                (None, None, None)
+                            };
 
                         let row = PlatformRow {
                             platform_name: platform.name.clone(),
@@ -1209,7 +1375,10 @@ impl PlatformTab {
                             total_project_count: 0, // Will be fetched in background
                             selected_project_id: platform.gcp_selected_project_id.clone(),
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
-                            vm_external_ip: platform.vms.first().and_then(|vm| vm.external_ip.clone()),
+                            vm_external_ip: platform
+                                .vms
+                                .first()
+                                .and_then(|vm| vm.external_ip.clone()),
                             ssh_private_key,
                             ssh_public_key,
                             ssh_keyring_domain,
@@ -1227,7 +1396,11 @@ impl PlatformTab {
                         #[cfg(not(target_arch = "wasm32"))]
                         {
                             let platform_name = platform.name.clone();
-                            if platform.vms.first().and_then(|vm| vm.external_ip.as_ref()).is_some()
+                            if platform
+                                .vms
+                                .first()
+                                .and_then(|vm| vm.external_ip.as_ref())
+                                .is_some()
                                 && !self.ssh_test_results.contains_key(&platform_name)
                                 && !self.ssh_test_promises.contains_key(&platform_name)
                             {
@@ -1378,7 +1551,11 @@ impl PlatformTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_add_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let mut open = self.show_add_dialog;
 
         egui::Window::new("Add Platform")
@@ -1454,7 +1631,9 @@ impl PlatformTab {
                                             .projects
                                             .into_iter()
                                             .filter(|p| p.is_active())
-                                            .map(|p| (p.id().to_string(), p.display_name().to_string()))
+                                            .map(|p| {
+                                                (p.id().to_string(), p.display_name().to_string())
+                                            })
                                             .collect();
                                     }
                                     Err(e) => {
@@ -1477,7 +1656,8 @@ impl PlatformTab {
                                 for (idx, (project_id, project_name)) in
                                     self.add_platform_project_list.iter().enumerate()
                                 {
-                                    let is_selected = self.add_platform_selected_project == Some(idx);
+                                    let is_selected =
+                                        self.add_platform_selected_project == Some(idx);
                                     if ui
                                         .selectable_label(
                                             is_selected,
@@ -1570,7 +1750,8 @@ impl PlatformTab {
             let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
                 if self.add_platform_type == "gcp" {
                     if let Some(oauth) = &self.add_platform_oauth_result {
-                        let project_id = self.add_platform_selected_project
+                        let project_id = self
+                            .add_platform_selected_project
                             .and_then(|idx| self.add_platform_project_list.get(idx))
                             .map(|(id, _)| id.clone());
                         (
@@ -1642,7 +1823,13 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn restart_vm(&mut self, platform_name: String, vm_name: String, zone: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn restart_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
             // Send command to ViewModel
@@ -1657,12 +1844,21 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn regenerate_vm(&mut self, platform_name: String, vm_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn regenerate_vm(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if let Some(vm) = vm {
             // Get zone from config
             let zone = match load_config() {
                 Ok((app_config, _)) => {
-                    if let Some(platform) = app_config.platforms.iter().find(|p| p.name == platform_name) {
+                    if let Some(platform) = app_config
+                        .platforms
+                        .iter()
+                        .find(|p| p.name == platform_name)
+                    {
                         if let Some(vm_cfg) = platform.vms.iter().find(|v| v.name == vm_name) {
                             vm_cfg.zone.clone()
                         } else {
@@ -1690,7 +1886,11 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn update_firewall(&mut self, platform_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn update_firewall(
+        &mut self,
+        platform_name: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         use crate::calc::gcp_rest::get_current_ip;
 
         // ViewModel-based implementation
@@ -1717,7 +1917,11 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn show_select_project_dialog(&mut self, platform_name: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn show_select_project_dialog(
+        &mut self,
+        platform_name: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         self.select_project_platform_name = platform_name.clone();
         self.select_project_list.clear();
         self.select_project_selected = None;
@@ -1751,7 +1955,11 @@ impl PlatformTab {
         self.show_delete_vm_dialog = true;
     }
 
-    fn render_delete_vm_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_delete_vm_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let mut open = self.show_delete_vm_dialog;
 
         egui::Window::new("Delete VM")
@@ -1856,11 +2064,18 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_vm(&mut self, instance_name: String, zone: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_vm(
+        &mut self,
+        instance_name: String,
+        zone: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
             // Send command to ViewModel
-            if let Err(e) = vm.delete_vm(self.delete_vm_platform.clone(), instance_name.clone(), zone) {
+            if let Err(e) =
+                vm.delete_vm(self.delete_vm_platform.clone(), instance_name.clone(), zone)
+            {
                 self.load_error = Some(format!("Failed to start VM deletion: {}", e));
                 return;
             }
@@ -1868,7 +2083,11 @@ impl PlatformTab {
             // Record audit event
             // TODO: This should be moved to the actor/calc layer
             if let Ok((app_config, _)) = load_config() {
-                if let Some(platform) = app_config.platforms.iter().find(|p| p.name == self.delete_vm_platform) {
+                if let Some(platform) = app_config
+                    .platforms
+                    .iter()
+                    .find(|p| p.name == self.delete_vm_platform)
+                {
                     if let Some(vm_config) = platform.vms.iter().find(|v| v.name == instance_name) {
                         let project_id = &vm_config.gcp_project_id;
                         match audit::push_gui(
@@ -1972,10 +2191,8 @@ impl PlatformTab {
                             let host = format!("root@{}", external_ip);
                             (Some(host), vm.ssh_key_name.clone())
                         } else {
-                            self.ssh_test_results.insert(
-                                platform_name,
-                                Err("VM has no external IP".to_string()),
-                            );
+                            self.ssh_test_results
+                                .insert(platform_name, Err("VM has no external IP".to_string()));
                             return;
                         }
                     } else {
@@ -1990,10 +2207,8 @@ impl PlatformTab {
                 }
             }
             Err(e) => {
-                self.ssh_test_results.insert(
-                    platform_name,
-                    Err(format!("Failed to load config: {}", e)),
-                );
+                self.ssh_test_results
+                    .insert(platform_name, Err(format!("Failed to load config: {}", e)));
                 return;
             }
         };
@@ -2049,7 +2264,11 @@ impl PlatformTab {
         self.show_delete_platform_dialog = true;
     }
 
-    fn render_delete_platform_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_delete_platform_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let mut open = self.show_delete_platform_dialog;
 
         egui::Window::new("Delete Platform")
@@ -2112,7 +2331,11 @@ impl PlatformTab {
     }
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-    fn render_select_project_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_select_project_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let mut open = self.show_select_project_dialog;
 
         egui::Window::new("Select GCP Project")
@@ -2281,7 +2504,8 @@ impl PlatformTab {
                 Some(p) => p,
                 None => {
                     self.billing_error = Some(
-                        "No connected GCP platform found. Please add a GCP platform first.".to_string(),
+                        "No connected GCP platform found. Please add a GCP platform first."
+                            .to_string(),
                     );
                     self.billing_loading = false;
                     return;
@@ -2292,8 +2516,9 @@ impl PlatformTab {
             let project_id = if !platform.vms.is_empty() {
                 platform.vms[0].gcp_project_id.clone()
             } else {
-                self.billing_error =
-                    Some("No VMs found. Please create a VM to determine the project ID.".to_string());
+                self.billing_error = Some(
+                    "No VMs found. Please create a VM to determine the project ID.".to_string(),
+                );
                 self.billing_loading = false;
                 return;
             };
@@ -2303,7 +2528,8 @@ impl PlatformTab {
                 self.billing_dataset = "billing_export".to_string();
             }
             if self.billing_table.is_empty() {
-                self.billing_table = format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
+                self.billing_table =
+                    format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
             }
             if self.billing_project_id.is_empty() {
                 self.billing_project_id = project_id.clone();
@@ -2327,7 +2553,11 @@ impl PlatformTab {
         }
     }
 
-    fn render_billing_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_billing_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         egui::Window::new("Monthly Billing")
             .collapsible(false)
             .resizable(true)
@@ -2394,73 +2624,89 @@ impl PlatformTab {
                                 for record in records {
                                     ui.group(|ui| {
                                         ui.horizontal(|ui| {
-                                            ui.label(format!("📅 {} ({})", record.month, record.currency));
+                                            ui.label(format!(
+                                                "📅 {} ({})",
+                                                record.month, record.currency
+                                            ));
 
                                             // Helper to format currency with thousand separators
-                                            let format_currency = |amount: f64, currency: &str| -> String {
-                                                // Determine if currency uses decimals
-                                                let uses_decimals = match currency {
-                                                    "KRW" | "JPY" | "VND" | "IDR" => false,
-                                                    _ => true,
-                                                };
+                                            let format_currency =
+                                                |amount: f64, currency: &str| -> String {
+                                                    // Determine if currency uses decimals
+                                                    let uses_decimals = match currency {
+                                                        "KRW" | "JPY" | "VND" | "IDR" => false,
+                                                        _ => true,
+                                                    };
 
-                                                // Get currency symbol
-                                                let symbol = match currency {
-                                                    "USD" => "$",
-                                                    "EUR" => "€",
-                                                    "GBP" => "£",
-                                                    "JPY" => "¥",
-                                                    "KRW" => "₩",
-                                                    "CNY" => "¥",
-                                                    "INR" => "₹",
-                                                    "AUD" => "A$",
-                                                    "CAD" => "C$",
-                                                    "SGD" => "S$",
-                                                    "HKD" => "HK$",
-                                                    "TWD" => "NT$",
-                                                    "THB" => "฿",
-                                                    "VND" => "₫",
-                                                    "IDR" => "Rp",
-                                                    "BRL" => "R$",
-                                                    _ => currency, // Fallback to currency code
-                                                };
+                                                    // Get currency symbol
+                                                    let symbol = match currency {
+                                                        "USD" => "$",
+                                                        "EUR" => "€",
+                                                        "GBP" => "£",
+                                                        "JPY" => "¥",
+                                                        "KRW" => "₩",
+                                                        "CNY" => "¥",
+                                                        "INR" => "₹",
+                                                        "AUD" => "A$",
+                                                        "CAD" => "C$",
+                                                        "SGD" => "S$",
+                                                        "HKD" => "HK$",
+                                                        "TWD" => "NT$",
+                                                        "THB" => "฿",
+                                                        "VND" => "₫",
+                                                        "IDR" => "Rp",
+                                                        "BRL" => "R$",
+                                                        _ => currency, // Fallback to currency code
+                                                    };
 
-                                                if uses_decimals {
-                                                    format!("{}{:.2}", symbol, amount)
-                                                } else {
-                                                    let int_amount = amount as i64;
-                                                    let abs_amount = int_amount.abs();
-                                                    let formatted = abs_amount
-                                                        .to_string()
-                                                        .as_bytes()
-                                                        .rchunks(3)
-                                                        .rev()
-                                                        .map(std::str::from_utf8)
-                                                        .collect::<Result<Vec<&str>, _>>()
-                                                        .unwrap()
-                                                        .join(",");
-                                                    if int_amount < 0 {
-                                                        format!("-{}{}", symbol, formatted)
+                                                    if uses_decimals {
+                                                        format!("{}{:.2}", symbol, amount)
                                                     } else {
-                                                        format!("{}{}", symbol, formatted)
+                                                        let int_amount = amount as i64;
+                                                        let abs_amount = int_amount.abs();
+                                                        let formatted = abs_amount
+                                                            .to_string()
+                                                            .as_bytes()
+                                                            .rchunks(3)
+                                                            .rev()
+                                                            .map(std::str::from_utf8)
+                                                            .collect::<Result<Vec<&str>, _>>()
+                                                            .unwrap()
+                                                            .join(",");
+                                                        if int_amount < 0 {
+                                                            format!("-{}{}", symbol, formatted)
+                                                        } else {
+                                                            format!("{}{}", symbol, formatted)
+                                                        }
                                                     }
-                                                }
-                                            };
+                                                };
 
                                             let (color, text) = if record.total_net_cost < 0.0 {
                                                 (
                                                     egui::Color32::from_rgb(72, 187, 120),
-                                                    format!("{} (credit)", format_currency(record.total_net_cost, &record.currency))
+                                                    format!(
+                                                        "{} (credit)",
+                                                        format_currency(
+                                                            record.total_net_cost,
+                                                            &record.currency
+                                                        )
+                                                    ),
                                                 )
                                             } else if record.total_net_cost == 0.0 {
                                                 (
                                                     egui::Color32::GRAY,
-                                                    format!("{} (no charges)", format_currency(0.0, &record.currency))
+                                                    format!(
+                                                        "{} (no charges)",
+                                                        format_currency(0.0, &record.currency)
+                                                    ),
                                                 )
                                             } else {
                                                 (
                                                     egui::Color32::from_rgb(255, 200, 87),
-                                                    format_currency(record.total_net_cost, &record.currency)
+                                                    format_currency(
+                                                        record.total_net_cost,
+                                                        &record.currency,
+                                                    ),
                                                 )
                                             };
 

@@ -28,7 +28,6 @@ use dure::dure::DureApp;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
 
-
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
     // Parse command-line arguments FIRST to check for explicit mode flags and log configuration

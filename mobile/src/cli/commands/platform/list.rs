@@ -1,8 +1,8 @@
 //! List and show commands for platforms
 
-use crate::config::AppConfig;
 use crate::cli::commands::platform::helpers::*;
-use anyhow::{anyhow, Result};
+use crate::config::AppConfig;
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -21,7 +21,8 @@ fn load_config() -> Result<AppConfig> {
 /// Format platform list for display
 pub fn format_platform_list(config: &AppConfig) -> String {
     if config.platforms.is_empty() {
-        return "No platforms configured\n\nAdd a platform with: dure platform add <name> <type>".to_string();
+        return "No platforms configured\n\nAdd a platform with: dure platform add <name> <type>"
+            .to_string();
     }
 
     let mut output = String::new();
@@ -32,7 +33,8 @@ pub fn format_platform_list(config: &AppConfig) -> String {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
-        output.push_str(&format!("{:<20} {:<8} {}\n",
+        output.push_str(&format!(
+            "{:<20} {:<8} {}\n",
             platform.name,
             platform.platform_type.to_uppercase(),
             steps.chars().take(50).collect::<String>()
@@ -40,7 +42,9 @@ pub fn format_platform_list(config: &AppConfig) -> String {
     }
 
     output.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    output.push_str(&format!("\nSteps: Connected → Project → VM → Firewall → SSH\n"));
+    output.push_str(&format!(
+        "\nSteps: Connected → Project → VM → Firewall → SSH\n"
+    ));
     output.push_str(&format!("\nTotal platforms: {}\n", config.platforms.len()));
     output.push_str("\nUse 'dure platform <name>' to see details and available actions.\n");
 
@@ -49,20 +53,29 @@ pub fn format_platform_list(config: &AppConfig) -> String {
 
 /// Format platform show output
 pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| {
             let available: Vec<_> = config.platforms.iter().map(|p| &p.name).collect();
             anyhow!(
                 "Platform '{}' not found\n\nAvailable platforms:\n{}",
                 name,
-                available.iter().map(|n| format!("  • {}", n)).collect::<Vec<_>>().join("\n")
+                available
+                    .iter()
+                    .map(|n| format!("  • {}", n))
+                    .collect::<Vec<_>>()
+                    .join("\n")
             )
         })?;
 
     let mut output = String::new();
     output.push_str(&format!("Platform: {}\n", platform.name));
-    output.push_str(&format!("Type: {}\n", platform.platform_type.to_uppercase()));
+    output.push_str(&format!(
+        "Type: {}\n",
+        platform.platform_type.to_uppercase()
+    ));
     output.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
     output.push_str("Connection Steps:\n");
@@ -136,7 +149,8 @@ pub fn execute_platform_combined() -> Result<()> {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
-        println!("{:<20} {:<8} {}",
+        println!(
+            "{:<20} {:<8} {}",
             platform.name,
             platform.platform_type.to_uppercase(),
             steps.chars().take(50).collect::<String>()

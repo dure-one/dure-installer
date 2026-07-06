@@ -1,10 +1,10 @@
 //! Billing command implementation
 
-use crate::config::AppConfig;
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
+use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -27,15 +27,19 @@ pub async fn execute_billing_inner(
     platform: &crate::config::CloudPlatformConfig,
 ) -> Result<()> {
     // For testing, use placeholder values
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .ok_or_else(|| anyhow!("No project selected"))?;
 
-    let event = runner.execute_command(PlatformCommand::FetchBilling {
-        platform_name: platform.name.clone(),
-        project_id: project_id.clone(),
-        dataset: "billing_export".to_string(),
-        table: "gcp_billing_export".to_string(),
-    }).await?;
+    let event = runner
+        .execute_command(PlatformCommand::FetchBilling {
+            platform_name: platform.name.clone(),
+            project_id: project_id.clone(),
+            dataset: "billing_export".to_string(),
+            table: "gcp_billing_export".to_string(),
+        })
+        .await?;
 
     if let PlatformEvent::BillingFetched { records, .. } = event {
         println!("Billing Summary (Last 3 Months):");
@@ -62,7 +66,9 @@ pub async fn execute_billing_inner(
 pub fn execute_billing_command(name: String) -> Result<()> {
     let config = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -70,7 +76,9 @@ pub fn execute_billing_command(name: String) -> Result<()> {
     validate_platform_ready(platform, "billing")?;
 
     // Check billing configuration
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .ok_or_else(|| anyhow!("No project selected for platform '{}'", platform.name))?;
 
     // Use hardcoded billing export settings (could be made configurable later)
@@ -82,12 +90,14 @@ pub fn execute_billing_command(name: String) -> Result<()> {
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        let event = runner.execute_command(PlatformCommand::FetchBilling {
-            platform_name: platform.name.clone(),
-            project_id: project_id.clone(),
-            dataset,
-            table,
-        }).await?;
+        let event = runner
+            .execute_command(PlatformCommand::FetchBilling {
+                platform_name: platform.name.clone(),
+                project_id: project_id.clone(),
+                dataset,
+                table,
+            })
+            .await?;
 
         if let PlatformEvent::BillingFetched { records, .. } = event {
             println!("\nBilling Summary (Last 3 Months):");

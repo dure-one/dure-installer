@@ -3,8 +3,8 @@
 //! Example CLI commands demonstrating MVVM pattern for async operations.
 
 use crate::viewmodel::{ViewModel, ViewModelEvent, platform::PlatformEvent};
-use std::time::Duration;
 use anyhow::Result;
+use std::time::Duration;
 
 /// Create a VM using ViewModel (async with progress display)
 pub async fn create_vm(
@@ -24,12 +24,18 @@ pub async fn create_vm(
         let events = vm.poll_events_headless();
         for event in events {
             match event {
-                ViewModelEvent::Platform(PlatformEvent::Progress { progress, status, .. }) => {
+                ViewModelEvent::Platform(PlatformEvent::Progress {
+                    progress, status, ..
+                }) => {
                     print!("\r[{:>3.0}%] {}", progress * 100.0, status);
                     use std::io::Write;
                     std::io::stdout().flush()?;
                 }
-                ViewModelEvent::Platform(PlatformEvent::VMCreated { vm_name, external_ip, .. }) => {
+                ViewModelEvent::Platform(PlatformEvent::VMCreated {
+                    vm_name,
+                    external_ip,
+                    ..
+                }) => {
                     println!("\n✓ VM created: {} at {}", vm_name, external_ip);
                     return Ok(());
                 }
@@ -60,10 +66,14 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
                 ViewModelEvent::Platform(PlatformEvent::VMsListed { vms, .. }) => {
                     println!("\nVMs:");
                     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                    println!("{:<20} {:<20} {:<15} {:<10}", "Name", "Zone", "External IP", "Status");
+                    println!(
+                        "{:<20} {:<20} {:<15} {:<10}",
+                        "Name", "Zone", "External IP", "Status"
+                    );
                     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
                     for vm in vms {
-                        println!("{:<20} {:<20} {:<15} {:<10}",
+                        println!(
+                            "{:<20} {:<20} {:<15} {:<10}",
                             vm.name,
                             vm.zone,
                             vm.external_ip.unwrap_or_else(|| "-".to_string()),
@@ -84,11 +94,7 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
 }
 
 /// Delete a VM using ViewModel
-pub async fn delete_vm(
-    platform_name: String,
-    vm_name: String,
-    zone: String,
-) -> Result<()> {
+pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> Result<()> {
     let mut vm = ViewModel::new_headless();
 
     vm.delete_vm(platform_name.clone(), vm_name.clone(), zone)?;
@@ -100,7 +106,9 @@ pub async fn delete_vm(
         let events = vm.poll_events_headless();
         for event in events {
             match event {
-                ViewModelEvent::Platform(PlatformEvent::Progress { progress, status, .. }) => {
+                ViewModelEvent::Platform(PlatformEvent::Progress {
+                    progress, status, ..
+                }) => {
                     print!("\r[{:>3.0}%] {}", progress * 100.0, status);
                     use std::io::Write;
                     std::io::stdout().flush()?;

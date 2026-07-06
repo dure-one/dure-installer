@@ -6,8 +6,8 @@ mod events;
 pub use commands::WssCommand;
 pub use events::WssEvent;
 
-use smol::channel::{Receiver, Sender};
 use crate::viewmodel::ViewModelEvent;
+use smol::channel::{Receiver, Sender};
 
 pub struct WssActor {
     command_rx: Receiver<WssCommand>,
@@ -16,7 +16,10 @@ pub struct WssActor {
 
 impl WssActor {
     pub fn new(command_rx: Receiver<WssCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
-        Self { command_rx, event_tx }
+        Self {
+            command_rx,
+            event_tx,
+        }
     }
 
     pub async fn run(mut self) {
@@ -24,13 +27,17 @@ impl WssActor {
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
-                    log::warn!("WssActor received command but is not implemented: {:?}", cmd);
-                    let _ = self.event_tx.send(ViewModelEvent::Wss(
-                        WssEvent::Error {
+                    log::warn!(
+                        "WssActor received command but is not implemented: {:?}",
+                        cmd
+                    );
+                    let _ = self
+                        .event_tx
+                        .send(ViewModelEvent::Wss(WssEvent::Error {
                             operation: format!("{:?}", cmd),
                             error: "WSS not implemented yet".to_string(),
-                        }
-                    )).await;
+                        }))
+                        .await;
                 }
                 Err(_) => {
                     log::info!("WssActor: channel closed");

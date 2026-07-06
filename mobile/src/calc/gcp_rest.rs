@@ -150,7 +150,12 @@ impl GcpRestClient {
             Ok(response) => Ok(response),
             Err(ureq::Error::Status(code, response)) => {
                 let body = response.into_string().unwrap_or_default();
-                Err(anyhow::anyhow!("HTTP {} error for {}:\n{}", code, url, body))
+                Err(anyhow::anyhow!(
+                    "HTTP {} error for {}:\n{}",
+                    code,
+                    url,
+                    body
+                ))
             }
             Err(ureq::Error::Transport(transport)) => {
                 Err(anyhow::anyhow!("Network error for {}: {}", url, transport))
@@ -1074,9 +1079,7 @@ impl GcpRestClient {
         let rules = self.list_firewall_rules(project_id)?;
 
         // Find specifically the "allow-ssh-dure" rule
-        let ssh_rule = rules.iter().find(|rule| {
-            rule.name == "allow-ssh-dure"
-        });
+        let ssh_rule = rules.iter().find(|rule| rule.name == "allow-ssh-dure");
 
         if let Some(rule) = ssh_rule {
             // Update existing rule
@@ -1095,7 +1098,10 @@ impl GcpRestClient {
                     GCP_COMPUTE_API_BASE, project_id, rule.name
                 );
 
-                eprintln!("DEBUG: Updating firewall rule '{}' with IP: {}", rule.name, ip);
+                eprintln!(
+                    "DEBUG: Updating firewall rule '{}' with IP: {}",
+                    rule.name, ip
+                );
                 eprintln!("DEBUG: PATCH URL: {}", url);
                 eprintln!("DEBUG: Body: {}", body.to_string());
 
@@ -1123,7 +1129,10 @@ impl GcpRestClient {
                 GCP_COMPUTE_API_BASE, project_id
             );
 
-            eprintln!("DEBUG: Creating new firewall rule 'allow-ssh-dure' with IP: {}", ip);
+            eprintln!(
+                "DEBUG: Creating new firewall rule 'allow-ssh-dure' with IP: {}",
+                ip
+            );
             eprintln!("DEBUG: POST URL: {}", url);
             eprintln!("DEBUG: Body: {}", body.to_string());
 

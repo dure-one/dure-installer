@@ -13,9 +13,12 @@ mod tests {
             smol::spawn(actor.run()).detach();
 
             // Send command
-            cmd_tx.send(PlatformCommand::ListVMs {
-                platform_name: "test-platform".to_string()
-            }).await.unwrap();
+            cmd_tx
+                .send(PlatformCommand::ListVMs {
+                    platform_name: "test-platform".to_string(),
+                })
+                .await
+                .unwrap();
 
             // Should receive event (or error)
             let timeout = smol::Timer::after(std::time::Duration::from_secs(5));

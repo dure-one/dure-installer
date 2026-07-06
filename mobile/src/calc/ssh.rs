@@ -62,7 +62,9 @@ pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectio
     // Authenticate
     authenticate(&mut session, &username, host_config).await?;
 
-    session.disconnect(russh::Disconnect::ByApplication, "", "").await?;
+    session
+        .disconnect(russh::Disconnect::ByApplication, "", "")
+        .await?;
 
     Ok(SshConnectionResult {
         success: true,
@@ -119,7 +121,9 @@ pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Resu
         }
     }
 
-    session.disconnect(russh::Disconnect::ByApplication, "", "").await?;
+    session
+        .disconnect(russh::Disconnect::ByApplication, "", "")
+        .await?;
 
     if let Some(exit_code) = code {
         if exit_code != 0 {
@@ -143,7 +147,8 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
 
     // Step 2: Check and install swap if needed
     progress_log.push("Checking swap memory...".to_string());
-    let swap_output = execute_command(host_config, "free -m | grep Swap | awk '{print $2}'").await?;
+    let swap_output =
+        execute_command(host_config, "free -m | grep Swap | awk '{print $2}'").await?;
     let swap_mb: u32 = swap_output.trim().parse().unwrap_or(0);
 
     if swap_mb < 8000 {
@@ -161,7 +166,9 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
         ];
 
         for cmd in swap_commands {
-            execute_command(host_config, cmd).await.context(format!("Failed to execute: {}", cmd))?;
+            execute_command(host_config, cmd)
+                .await
+                .context(format!("Failed to execute: {}", cmd))?;
         }
 
         progress_log.push("✓ 8GB swap installed and enabled".to_string());
@@ -179,7 +186,9 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
     ];
 
     for cmd in nft_commands {
-        execute_command(host_config, cmd).await.context(format!("Failed to execute: {}", cmd))?;
+        execute_command(host_config, cmd)
+            .await
+            .context(format!("Failed to execute: {}", cmd))?;
     }
 
     progress_log.push("✓ nftables installed".to_string());
@@ -274,24 +283,22 @@ async fn authenticate(
         attempted_methods.push("keyring".to_string());
 
         match load_private_key_from_keyring(keyring_domain, username) {
-            Ok(private_key_pem) => {
-                match russh_keys::decode_secret_key(&private_key_pem, None) {
-                    Ok(key_pair) => {
-                        let auth_res = session
-                            .authenticate_publickey(username, Arc::new(key_pair))
-                            .await;
+            Ok(private_key_pem) => match russh_keys::decode_secret_key(&private_key_pem, None) {
+                Ok(key_pair) => {
+                    let auth_res = session
+                        .authenticate_publickey(username, Arc::new(key_pair))
+                        .await;
 
-                        if auth_res.is_ok() {
-                            return Ok(());
-                        } else if let Err(e) = auth_res {
-                            errors.push(format!("Keyring: {}", e));
-                        }
-                    }
-                    Err(e) => {
-                        errors.push(format!("Keyring key decode: {}", e));
+                    if auth_res.is_ok() {
+                        return Ok(());
+                    } else if let Err(e) = auth_res {
+                        errors.push(format!("Keyring: {}", e));
                     }
                 }
-            }
+                Err(e) => {
+                    errors.push(format!("Keyring key decode: {}", e));
+                }
+            },
             Err(e) => {
                 errors.push(format!("Keyring: {}", e));
             }
@@ -305,24 +312,22 @@ async fn authenticate(
         let key_path = Path::new(key_path);
         if key_path.exists() {
             match std::fs::read_to_string(key_path) {
-                Ok(key_content) => {
-                    match russh_keys::decode_secret_key(&key_content, None) {
-                        Ok(key_pair) => {
-                            let auth_res = session
-                                .authenticate_publickey(username, Arc::new(key_pair))
-                                .await;
+                Ok(key_content) => match russh_keys::decode_secret_key(&key_content, None) {
+                    Ok(key_pair) => {
+                        let auth_res = session
+                            .authenticate_publickey(username, Arc::new(key_pair))
+                            .await;
 
-                            if auth_res.is_ok() {
-                                return Ok(());
-                            } else if let Err(e) = auth_res {
-                                errors.push(format!("Private key: {}", e));
-                            }
-                        }
-                        Err(e) => {
-                            errors.push(format!("Private key decode: {}", e));
+                        if auth_res.is_ok() {
+                            return Ok(());
+                        } else if let Err(e) = auth_res {
+                            errors.push(format!("Private key: {}", e));
                         }
                     }
-                }
+                    Err(e) => {
+                        errors.push(format!("Private key decode: {}", e));
+                    }
+                },
                 Err(e) => {
                     errors.push(format!("Private key read: {}", e));
                 }
@@ -463,7 +468,12 @@ pub struct LinuxStatus {
 /// Detect OS distribution via SSH
 pub async fn detect_os(host_config: &SshHostConfig) -> Result<String> {
     // Try /etc/os-release first (modern standard)
-    if let Ok(output) = execute_command(host_config, "cat /etc/os-release | grep '^ID=' | cut -d= -f2 | tr -d '\"'").await {
+    if let Ok(output) = execute_command(
+        host_config,
+        "cat /etc/os-release | grep '^ID=' | cut -d= -f2 | tr -d '\"'",
+    )
+    .await
+    {
         let os = output.trim().to_string();
         if !os.is_empty() {
             return Ok(os);
@@ -484,33 +494,48 @@ pub async fn detect_os(host_config: &SshHostConfig) -> Result<String> {
 /// Get comprehensive Linux system status via SSH
 pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus> {
     // Execute multiple commands - use unwrap_or for resilience
-    let uptime = execute_command(host_config, "uptime -p").await
+    let uptime = execute_command(host_config, "uptime -p")
+        .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
         .to_string();
 
-    let external_ip = execute_command(host_config, "curl -s ifconfig.me").await
+    let external_ip = execute_command(host_config, "curl -s ifconfig.me")
+        .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
         .to_string();
 
-    let load = execute_command(host_config, "cat /proc/loadavg | awk '{print $1, $2, $3}'").await
+    let load = execute_command(host_config, "cat /proc/loadavg | awk '{print $1, $2, $3}'")
+        .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
         .to_string();
 
-    let memory = execute_command(host_config, "free -h | grep Mem | awk '{print $3 \" / \" $2}'").await
-        .unwrap_or_else(|_| "unknown".to_string())
-        .trim()
-        .to_string();
+    let memory = execute_command(
+        host_config,
+        "free -h | grep Mem | awk '{print $3 \" / \" $2}'",
+    )
+    .await
+    .unwrap_or_else(|_| "unknown".to_string())
+    .trim()
+    .to_string();
 
-    let disk = execute_command(host_config, "df -h / | tail -1 | awk '{print $3 \" / \" $2 \" (\" $5 \")\"}}'").await
-        .unwrap_or_else(|_| "unknown".to_string())
-        .trim()
-        .to_string();
+    let disk = execute_command(
+        host_config,
+        "df -h / | tail -1 | awk '{print $3 \" / \" $2 \" (\" $5 \")\"}}'",
+    )
+    .await
+    .unwrap_or_else(|_| "unknown".to_string())
+    .trim()
+    .to_string();
 
-    let processes_output = execute_command(host_config, "ps aux --sort=-%mem | head -6 | tail -5 | awk '{print $11}'").await
-        .unwrap_or_else(|_| "".to_string());
+    let processes_output = execute_command(
+        host_config,
+        "ps aux --sort=-%mem | head -6 | tail -5 | awk '{print $11}'",
+    )
+    .await
+    .unwrap_or_else(|_| "".to_string());
 
     let top_processes: Vec<String> = processes_output
         .lines()
@@ -615,16 +640,27 @@ pub fn docker_run(
 }
 
 /// Docker stop (stub implementation)
-pub fn docker_stop(_config: &crate::config::SshHostConfig, _container_name: &str) -> anyhow::Result<()> {
+pub fn docker_stop(
+    _config: &crate::config::SshHostConfig,
+    _container_name: &str,
+) -> anyhow::Result<()> {
     anyhow::bail!("Docker stop not yet implemented")
 }
 
 /// Port open (stub implementation)
-pub fn port_open(_config: &crate::config::SshHostConfig, _port: u16, _protocol: &str) -> anyhow::Result<()> {
+pub fn port_open(
+    _config: &crate::config::SshHostConfig,
+    _port: u16,
+    _protocol: &str,
+) -> anyhow::Result<()> {
     anyhow::bail!("Port open not yet implemented")
 }
 
 /// Port close (stub implementation)
-pub fn port_close(_config: &crate::config::SshHostConfig, _port: u16, _protocol: &str) -> anyhow::Result<()> {
+pub fn port_close(
+    _config: &crate::config::SshHostConfig,
+    _port: u16,
+    _protocol: &str,
+) -> anyhow::Result<()> {
     anyhow::bail!("Port close not yet implemented")
 }

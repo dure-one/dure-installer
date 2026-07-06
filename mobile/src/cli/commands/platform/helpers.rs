@@ -1,19 +1,36 @@
 //! Helper functions for formatting and validation
 
 use crate::config::CloudPlatformConfig;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 /// Format connection progress steps with status indicators
 pub fn format_steps(platform: &CloudPlatformConfig) -> String {
-    let gcp = if platform.gcp_oauth_access_token.is_some() { "✓" } else { "✗" };
-    let proj = if platform.gcp_selected_project_id.is_some() { "✓" } else { "✗" };
-    let vm = if !platform.vms.is_empty() { "✓" } else { "✗" };
+    let gcp = if platform.gcp_oauth_access_token.is_some() {
+        "✓"
+    } else {
+        "✗"
+    };
+    let proj = if platform.gcp_selected_project_id.is_some() {
+        "✓"
+    } else {
+        "✗"
+    };
+    let vm = if !platform.vms.is_empty() {
+        "✓"
+    } else {
+        "✗"
+    };
 
     // Firewall check simplified for now (would need GCP API call)
     let firewall = "?";
 
     // SSH ready if VM has external IP
-    let ssh = if platform.vms.first().and_then(|v| v.external_ip.as_ref()).is_some() {
+    let ssh = if platform
+        .vms
+        .first()
+        .and_then(|v| v.external_ip.as_ref())
+        .is_some()
+    {
         "✓"
     } else {
         "✗"
@@ -59,10 +76,7 @@ pub fn format_drawer_content(platform: &CloudPlatformConfig) -> String {
 }
 
 /// Validate platform is ready for the requested operation
-pub fn validate_platform_ready(
-    platform: &CloudPlatformConfig,
-    operation: &str,
-) -> Result<()> {
+pub fn validate_platform_ready(platform: &CloudPlatformConfig, operation: &str) -> Result<()> {
     // List/show commands don't require validation
     if ["list", "show", "delete"].contains(&operation) {
         return Ok(());
@@ -73,7 +87,8 @@ pub fn validate_platform_ready(
         return Err(anyhow!(
             "Platform '{}' is not connected\n\
              Run 'dure platform init {}' to authenticate",
-            platform.name, platform.name
+            platform.name,
+            platform.name
         ));
     }
 
@@ -95,7 +110,8 @@ pub fn validate_platform_ready(
             return Err(anyhow!(
                 "No project selected for platform '{}'\n\
                  Run 'dure platform init {}' to select a project",
-                platform.name, platform.name
+                platform.name,
+                platform.name
             ));
         }
     }

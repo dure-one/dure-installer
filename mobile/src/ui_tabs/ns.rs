@@ -752,7 +752,11 @@ impl NsTab {
                 use crate::viewmodel::ns::NsEvent;
 
                 match event {
-                    ViewModelEvent::Ns(NsEvent::RecordAdded { provider_name, domain, record_id }) => {
+                    ViewModelEvent::Ns(NsEvent::RecordAdded {
+                        provider_name,
+                        domain,
+                        record_id,
+                    }) => {
                         self.add_progress(format!("✓ Record added (ID: {})", record_id));
 
                         // Update config
@@ -769,7 +773,11 @@ impl NsTab {
                         }
                     }
                     ViewModelEvent::Ns(NsEvent::ProviderAdded { name, domains }) => {
-                        self.add_progress(format!("✓ Added {} provider with {} domain(s)", name, domains.len()));
+                        self.add_progress(format!(
+                            "✓ Added {} provider with {} domain(s)",
+                            name,
+                            domains.len()
+                        ));
 
                         // Save domains to config
                         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -783,10 +791,16 @@ impl NsTab {
 
                                 let mut added_count = 0;
                                 for (domain, records) in domains {
-                                    if let Ok(_) = config.add_domain(name.clone(), domain.clone(), api_token.clone()) {
+                                    if let Ok(_) = config.add_domain(
+                                        name.clone(),
+                                        domain.clone(),
+                                        api_token.clone(),
+                                    ) {
                                         added_count += 1;
                                         // Add records to domain
-                                        if let Some(domain_entry) = config.get_domain_mut(&name, &domain) {
+                                        if let Some(domain_entry) =
+                                            config.get_domain_mut(&name, &domain)
+                                        {
                                             domain_entry.records.extend(records);
                                         }
                                         self.add_progress(format!("  ✓ Added domain: {}", domain));
@@ -796,18 +810,29 @@ impl NsTab {
                                 if let Err(e) = save_ns_config(&config) {
                                     self.add_progress(format!("Error saving config: {}", e));
                                 } else {
-                                    self.add_progress(format!("✓ Configuration saved ({} domains)", added_count));
+                                    self.add_progress(format!(
+                                        "✓ Configuration saved ({} domains)",
+                                        added_count
+                                    ));
                                     self.load_data();
                                 }
                             }
                         }
                     }
-                    ViewModelEvent::Ns(NsEvent::Progress { operation, progress, status }) => {
+                    ViewModelEvent::Ns(NsEvent::Progress {
+                        operation,
+                        progress,
+                        status,
+                    }) => {
                         if operation == "add_provider" {
                             self.add_progress(format!("[{:>3.0}%] {}", progress * 100.0, status));
                         }
                     }
-                    ViewModelEvent::Ns(NsEvent::RecordDeleted { provider_name, domain, record_id }) => {
+                    ViewModelEvent::Ns(NsEvent::RecordDeleted {
+                        provider_name,
+                        domain,
+                        record_id,
+                    }) => {
                         self.add_progress(format!("✓ Deleted record: {}", record_id));
 
                         // Remove record from config
@@ -820,13 +845,20 @@ impl NsTab {
                                 let record_type = parts[1];
 
                                 if let Ok(mut config) = load_ns_config() {
-                                    if let Some(domain_entry) = config.get_domain_mut(&provider_name, &domain) {
+                                    if let Some(domain_entry) =
+                                        config.get_domain_mut(&provider_name, &domain)
+                                    {
                                         domain_entry.records.retain(|r| {
-                                            !(r.name == name && r.record_type.as_str().to_lowercase() == record_type.to_lowercase())
+                                            !(r.name == name
+                                                && r.record_type.as_str().to_lowercase()
+                                                    == record_type.to_lowercase())
                                         });
 
                                         if let Err(e) = save_ns_config(&config) {
-                                            self.add_progress(format!("Error saving config: {}", e));
+                                            self.add_progress(format!(
+                                                "Error saving config: {}",
+                                                e
+                                            ));
                                         } else {
                                             self.load_records();
                                         }
@@ -835,7 +867,10 @@ impl NsTab {
                             }
                         }
                     }
-                    ViewModelEvent::Ns(NsEvent::DomainDeleted { provider_name, domain }) => {
+                    ViewModelEvent::Ns(NsEvent::DomainDeleted {
+                        provider_name,
+                        domain,
+                    }) => {
                         self.add_progress(format!("✓ Deleted domain: {}", domain));
 
                         // Remove domain from config
@@ -849,9 +884,14 @@ impl NsTab {
                                     let email = &provider_name[7..];
                                     if let Some(account) = config.get_gcp_account(email) {
                                         if account.domains.is_empty() {
-                                            let stub_domain = format!("gcloud ({})", account.project_id);
+                                            let stub_domain =
+                                                format!("gcloud ({})", account.project_id);
                                             let token = account.access_token.clone();
-                                            let _ = config.add_domain(provider_name.clone(), stub_domain, token);
+                                            let _ = config.add_domain(
+                                                provider_name.clone(),
+                                                stub_domain,
+                                                token,
+                                            );
                                         }
                                     }
                                 }
@@ -877,7 +917,8 @@ impl NsTab {
                         } else if operation == "add_provider" {
                             self.add_progress(format!("❌ Failed to add provider: {}", error));
                         } else if operation == "delete_record" {
-                            self.error_message = format!("Failed to delete DNS record:\n\n{}", error);
+                            self.error_message =
+                                format!("Failed to delete DNS record:\n\n{}", error);
                             self.show_error_dialog = true;
                         } else if operation == "delete_domain" {
                             self.add_progress(format!("❌ Failed to delete domain: {}", error));
@@ -1064,7 +1105,12 @@ impl NsTab {
                             let name = self.record_rows[idx][0].clone();
                             let record_type = self.record_rows[idx][1].clone();
                             let value = self.record_rows[idx][2].clone();
-                            self.execute_delete_record(&name, &record_type, &value, vm.as_deref_mut());
+                            self.execute_delete_record(
+                                &name,
+                                &record_type,
+                                &value,
+                                vm.as_deref_mut(),
+                            );
                         }
                     }
                 }
@@ -1227,7 +1273,11 @@ impl NsTab {
     }
 
     /// Show add nameserver provider dialog
-    fn show_add_provider_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn show_add_provider_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if !self.show_add_provider_dialog {
             return;
         }
@@ -1749,7 +1799,10 @@ impl NsTab {
             if (provider == "cloudflare" || provider == "porkbun") && vm.is_some() {
                 let api_token = if provider == "porkbun" {
                     if self.add_token.is_empty() || self.add_secret_key.is_empty() {
-                        self.add_progress("Error: Both API Key and Secret Key are required for Porkbun".to_string());
+                        self.add_progress(
+                            "Error: Both API Key and Secret Key are required for Porkbun"
+                                .to_string(),
+                        );
                         return;
                     }
                     format!("{}::{}", self.add_token, self.add_secret_key)
@@ -1764,7 +1817,9 @@ impl NsTab {
                 self.add_progress(format!("Fetching domains from {}...", provider));
 
                 if let Some(ref mut vm) = vm {
-                    if let Err(e) = vm.add_dns_provider(provider.clone(), provider.clone(), api_token) {
+                    if let Err(e) =
+                        vm.add_dns_provider(provider.clone(), provider.clone(), api_token)
+                    {
                         self.add_progress(format!("Failed to start provider addition: {}", e));
                     }
                 }
@@ -3103,7 +3158,11 @@ impl NsTab {
     }
 
     /// Execute delete domain
-    fn execute_delete_domain(&mut self, domain: &str, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_domain(
+        &mut self,
+        domain: &str,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             // Find which provider has this domain
@@ -3210,13 +3269,15 @@ impl NsTab {
                                         // Note: Config will be saved when RecordAdded event arrives
                                     }
                                     Err(e) => {
-                                        self.error_message = format!("Failed to load config:\n\n{}", e);
+                                        self.error_message =
+                                            format!("Failed to load config:\n\n{}", e);
                                         self.show_error_dialog = true;
                                     }
                                 }
                             }
                             Err(e) => {
-                                self.error_message = format!("Failed to start record addition:\n\n{}", e);
+                                self.error_message =
+                                    format!("Failed to start record addition:\n\n{}", e);
                                 self.show_error_dialog = true;
                             }
                         }
@@ -3235,37 +3296,36 @@ impl NsTab {
                                 normalized_name.clone(),
                                 value.clone(),
                             ) {
-                                Ok(_) => {
-                                    match save_ns_config(&config) {
-                                        Ok(_) => {
-                                            let record_desc = format!(
-                                                "{} {} {} {}",
-                                                domain, name, self.add_record_type, value
-                                            );
-                                            let _ = audit::push_gui(
-                                                "system",
-                                                "desktop",
-                                                "ns insert",
-                                                &record_desc,
-                                            );
+                                Ok(_) => match save_ns_config(&config) {
+                                    Ok(_) => {
+                                        let record_desc = format!(
+                                            "{} {} {} {}",
+                                            domain, name, self.add_record_type, value
+                                        );
+                                        let _ = audit::push_gui(
+                                            "system",
+                                            "desktop",
+                                            "ns insert",
+                                            &record_desc,
+                                        );
 
-                                            self.add_progress(format!(
-                                                "✓ Added record: {} {} {} -> {}",
-                                                domain,
-                                                normalized_name,
-                                                self.add_record_type.to_uppercase(),
-                                                value
-                                            ));
+                                        self.add_progress(format!(
+                                            "✓ Added record: {} {} {} -> {}",
+                                            domain,
+                                            normalized_name,
+                                            self.add_record_type.to_uppercase(),
+                                            value
+                                        ));
 
-                                            self.load_records();
-                                            self.load_data();
-                                        }
-                                        Err(e) => {
-                                            self.error_message = format!("Failed to save config:\n\n{}", e);
-                                            self.show_error_dialog = true;
-                                        }
+                                        self.load_records();
+                                        self.load_data();
                                     }
-                                }
+                                    Err(e) => {
+                                        self.error_message =
+                                            format!("Failed to save config:\n\n{}", e);
+                                        self.show_error_dialog = true;
+                                    }
+                                },
                                 Err(e) => {
                                     self.error_message = format!("Failed to add record:\n\n{}", e);
                                     self.show_error_dialog = true;
@@ -3283,7 +3343,13 @@ impl NsTab {
     }
 
     /// Execute delete record
-    fn execute_delete_record(&mut self, name: &str, record_type: &str, _value: &str, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_record(
+        &mut self,
+        name: &str,
+        record_type: &str,
+        _value: &str,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let (provider, domain) = if let Some((ref p, ref d)) = self.selected_domain {

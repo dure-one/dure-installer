@@ -2,7 +2,6 @@
 
 use eframe::egui;
 use egui_material3::MaterialButton;
-use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
 use crate::calc::audit;
 use crate::calc::ssh;
@@ -134,15 +133,17 @@ impl SshTab {
                 Ok((app_config, _)) => {
                     for host_config in &app_config.ssh_hosts {
                         // Resolve platform relationship
-                        let (platform_name, platform_type) = if let Some(pname) = &host_config.platform_name {
-                            let ptype = app_config.platforms
-                                .iter()
-                                .find(|p| &p.name == pname)
-                                .map(|p| p.platform_type.clone());
-                            (Some(pname.clone()), ptype)
-                        } else {
-                            (None, None)
-                        };
+                        let (platform_name, platform_type) =
+                            if let Some(pname) = &host_config.platform_name {
+                                let ptype = app_config
+                                    .platforms
+                                    .iter()
+                                    .find(|p| &p.name == pname)
+                                    .map(|p| p.platform_type.clone());
+                                (Some(pname.clone()), ptype)
+                            } else {
+                                (None, None)
+                            };
 
                         self.rows.push(SshRowData {
                             host: host_config.host.clone(),
@@ -228,7 +229,11 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DockerStatusRetrieved { name, installed, running: _ }) => {
+            ViewModelEvent::Ssh(SshEvent::DockerStatusRetrieved {
+                name,
+                installed,
+                running: _,
+            }) => {
                 eprintln!("✓ Docker status for {}: installed={}", name, installed);
 
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
@@ -292,16 +297,20 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::ServiceError { name, service, operation, error }) => {
+            ViewModelEvent::Ssh(SshEvent::ServiceError {
+                name,
+                service,
+                operation,
+                error,
+            }) => {
                 self.load_error = Some(format!(
-                    "Failed to {} {} on {}: {}", operation, service, name, error
+                    "Failed to {} {} on {}: {}",
+                    operation, service, name, error
                 ));
             }
 
             ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
-                self.load_error = Some(format!(
-                    "SSH operation '{}' failed: {}", operation, error
-                ));
+                self.load_error = Some(format!("SSH operation '{}' failed: {}", operation, error));
             }
 
             // Keep existing event handlers (ConnectionTested, HostInitialized, etc.)
@@ -310,13 +319,19 @@ impl SshTab {
     }
 
     /// Process action triggers from operation buttons
-    fn process_action_triggers(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn process_action_triggers(
+        &mut self,
+        ui: &mut egui::Ui,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let Some(vm) = vm else { return };
 
         // Check all possible action IDs
         for (idx, _row) in self.rows.iter().enumerate() {
             // Refresh
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_refresh_{}", idx)))) {
+            if let Some(host) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_refresh_{}", idx))))
+            {
                 let _ = vm.get_linux_status(host.clone());
                 let _ = vm.get_docker_status(host.clone());
                 let _ = vm.get_ansible_status(host.clone());
@@ -324,40 +339,60 @@ impl SshTab {
             }
 
             // Docker operations
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_{}", idx)))
+            }) {
                 let _ = vm.install_docker(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx)))) {
+            if let Some(host) = ui
+                .data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx))))
+            {
                 let _ = vm.get_docker_status(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))
+            }) {
                 let _ = vm.uninstall_docker(host);
             }
 
             // Ansible operations
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_{}", idx)))
+            }) {
                 let _ = vm.install_ansible(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))
+            }) {
                 let _ = vm.get_ansible_status(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))
+            }) {
                 let _ = vm.uninstall_ansible(host);
             }
 
             // Dure-WSS operations
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))
+            }) {
                 let _ = vm.install_dure_wss(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))
+            }) {
                 let _ = vm.get_dure_wss_status(host);
             }
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)))) {
+            if let Some(host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)))
+            }) {
                 let _ = vm.uninstall_dure_wss(host);
             }
 
             // Delete
-            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_delete_{}", idx)))) {
+            if let Some(host) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_delete_{}", idx))))
+            {
                 let _ = vm.delete_ssh_host(host);
             }
         }
@@ -394,14 +429,14 @@ impl SshTab {
 
             table = table.row(move |r| {
                 r.cell(&format!("{}:{}", row_for_cells.host, row_for_cells.port))
-                 .cell(&format_platform(&row_for_cells))
-                 .cell(&format_status(&row_for_cells))
-                 .widget_cell(move |ui| {
-                     render_operations(ui, &row_for_ops, idx);
-                 })
-                 .drawer(move |ui| {
-                     render_drawer_content(ui, &row_for_drawer);
-                 })
+                    .cell(&format_platform(&row_for_cells))
+                    .cell(&format_status(&row_for_cells))
+                    .widget_cell(move |ui| {
+                        render_operations(ui, &row_for_ops, idx);
+                    })
+                    .drawer(move |ui| {
+                        render_drawer_content(ui, &row_for_drawer);
+                    })
             });
         }
 
@@ -431,13 +466,14 @@ impl SshTab {
                     ui.add(
                         egui::ProgressBar::new(progress.progress)
                             .text(format!("{}: {}", progress.operation, progress.status))
-                            .desired_width(400.0)
+                            .desired_width(400.0),
                     );
                 });
             }
 
             // 3. Show recent errors
-            if let Some(error) = vm.recent_errors()
+            if let Some(error) = vm
+                .recent_errors()
                 .iter()
                 .filter(|e| e.actor == "ssh")
                 .rev()
@@ -445,7 +481,7 @@ impl SshTab {
             {
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 100, 100),
-                    format!("⚠ Error in {}: {}", error.operation, error.error)
+                    format!("⚠ Error in {}: {}", error.operation, error.error),
                 );
                 ui.add_space(4.0);
             }
@@ -790,7 +826,11 @@ impl SshTab {
     }
     */
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_add_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         let mut open = true;
 
         egui::Window::new("Add SSH Host")
@@ -892,7 +932,8 @@ impl SshTab {
                 return;
             };
 
-            let ssh_key_path = if self.add_use_private_key && !self.add_private_key_path.is_empty() {
+            let ssh_key_path = if self.add_use_private_key && !self.add_private_key_path.is_empty()
+            {
                 shellexpand::tilde(&self.add_private_key_path).to_string()
             } else {
                 String::new()
@@ -922,7 +963,11 @@ impl SshTab {
         }
     }
 
-    fn execute_delete_host(&mut self, host: String, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_host(
+        &mut self,
+        host: String,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // ViewModel-based implementation
@@ -943,221 +988,6 @@ impl SshTab {
             }
         }
     }
-
-    /* OLD - will be replaced in later tasks
-    fn execute_init_host(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Some(vm) = vm {
-                self.init_in_progress = true;
-                self.init_host = Some(host.clone());
-                self.init_progress_log.clear();
-                self.init_progress_log
-                    .push(format!("Initializing SSH host: {}", host));
-
-                match vm.init_ssh_host(host) {
-                    Ok(_) => {
-                        eprintln!("✓ SSH host init command sent");
-                    }
-                    Err(e) => {
-                        self.init_progress_log.push(format!("✗ Failed to start initialization: {}", e));
-                        self.init_in_progress = false;
-                    }
-                }
-            }
-        }
-    }
-
-    */
-
-    /* OLD methods using removed fields - commented out during Task 8
-    fn execute_test_connection(&mut self, host: String, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
-        eprintln!("🔍 execute_test_connection called for host: {}", host);
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Some(ref mut vm) = vm {
-                eprintln!("🔍 ViewModel available, sending test command");
-                self.test_in_progress = true;
-                self.test_result = None;
-
-                match vm.test_ssh_connection(host.clone()) {
-                    Ok(_) => {
-                        eprintln!("✓ Test command sent successfully");
-                    }
-                    Err(e) => {
-                        eprintln!("✗ Failed to send test command: {}", e);
-                        self.test_result = Some(Err(format!("Failed to start connection test: {}", e)));
-                        self.test_in_progress = false;
-                    }
-                }
-                // Result will be delivered via ConnectionTested event
-            } else {
-                eprintln!("✗ ViewModel not available");
-                self.test_result = Some(Err("ViewModel not available".to_string()));
-                self.test_in_progress = false;
-            }
-        }
-    }
-
-    fn poll_connection_test(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(promise) = &self.test_promise {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(conn_result) => {
-                        self.test_result = Some(Ok(conn_result.message.clone()));
-                    }
-                    Err(e) => {
-                        self.test_result = Some(Err(e.clone()));
-                    }
-                }
-
-                self.test_promise = None;
-                self.test_in_progress = false;
-            }
-        }
-    }
-
-    fn render_test_result(&mut self, ctx: &egui::Context, result: &Result<String, String>) {
-        let mut open = true;
-
-        egui::Window::new("Connection Test Result")
-            .open(&mut open)
-            .resizable(false)
-            .collapsible(false)
-            .show(ctx, |ui| {
-                match result {
-                    Ok(msg) => {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("✓")
-                                    .color(egui::Color32::GREEN)
-                                    .size(20.0),
-                            );
-                            ui.label(egui::RichText::new("Connection successful").strong());
-                        });
-                        ui.add_space(8.0);
-                        ui.label(msg);
-                    }
-                    Err(msg) => {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("✗")
-                                    .color(egui::Color32::RED)
-                                    .size(20.0),
-                            );
-                            ui.label(egui::RichText::new("Connection failed").strong());
-                        });
-                        ui.add_space(8.0);
-                        ui.colored_label(egui::Color32::RED, msg);
-                    }
-                }
-
-                ui.add_space(12.0);
-
-                if ui.button("Close").clicked() {
-                    self.test_result = None;
-                }
-            });
-
-        if !open {
-            self.test_result = None;
-        }
-    }
-
-    fn render_init_progress(&mut self, ui: &mut egui::Ui) {
-        // Poll for completion
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(promise) = &self.init_promise {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(progress_log) => {
-                        self.init_progress_log.extend(progress_log.clone());
-
-                        // Mark host as initialized and save config
-                        if let Some(host) = &self.init_host {
-                            if let Ok((mut app_config, config_path)) = load_config() {
-                                if let Some(host_config) =
-                                    app_config.ssh_hosts.iter_mut().find(|h| &h.host == host)
-                                {
-                                    host_config.initialized = true;
-
-                                    match app_config.save(&config_path) {
-                                        Ok(_) => {
-                                            eprintln!(
-                                                "✓ SSH host initialized, refreshing spreadsheet"
-                                            );
-                                            self.loaded = false; // Trigger reload
-                                            self.init_progress_log
-                                                .push("✓ Configuration saved".to_string());
-                                        }
-                                        Err(e) => {
-                                            self.init_progress_log
-                                                .push(format!("⚠ Failed to save config: {e}"));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        self.init_progress_log
-                            .push(format!("✗ Initialization failed: {}", e));
-                    }
-                }
-
-                self.init_promise = None;
-            }
-        }
-
-        ui.add_space(12.0);
-        ui.separator();
-        ui.heading("Initialization Progress");
-
-        if let Some(host) = &self.init_host {
-            ui.label(format!("Host: {}", host));
-        }
-
-        ui.add_space(8.0);
-
-        // Show spinner if still in progress
-        #[cfg(not(target_arch = "wasm32"))]
-        if self.init_promise.is_some() {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label("Initialization in progress...");
-            });
-            ui.add_space(8.0);
-        }
-
-        egui::ScrollArea::vertical()
-            .max_height(200.0)
-            .show(ui, |ui| {
-                for log in &self.init_progress_log {
-                    ui.label(log);
-                }
-            });
-
-        ui.add_space(8.0);
-
-        let can_close = self.init_promise.is_none();
-        if ui
-            .add_enabled(can_close, egui::Button::new("Close"))
-            .clicked()
-        {
-            self.init_in_progress = false;
-            self.init_host = None;
-            self.init_progress_log.clear();
-        }
-
-        if !can_close {
-            ui.colored_label(
-                egui::Color32::GRAY,
-                "Please wait for initialization to complete",
-            );
-        }
-    }
-    */
 }
 
 /// Format platform relationship for display
@@ -1223,7 +1053,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
     } else {
         ui.colored_label(
             ui.visuals().weak_text_color(),
-            "  (status not loaded - click Refresh to load)"
+            "  (status not loaded - click Refresh to load)",
         );
     }
 
@@ -1261,109 +1091,150 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                 ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
                 // Refresh - always available
-                if ui.add(MaterialButton::outlined("Refresh").small())
+                if ui
+                    .add(MaterialButton::outlined("Refresh").small())
                     .on_hover_text("Refresh host status")
                     .clicked()
                 {
-                    ui.data_mut(|d| d.insert_temp(
-                        egui::Id::new(format!("ssh_refresh_{}", idx)),
-                        row.host.clone()
-                    ));
+                    ui.data_mut(|d| {
+                        d.insert_temp(
+                            egui::Id::new(format!("ssh_refresh_{}", idx)),
+                            row.host.clone(),
+                        )
+                    });
                 }
 
                 // Docker operations - dynamic based on state
                 if !row.docker_enabled {
-                    if ui.add(MaterialButton::outlined("Install Docker").small())
+                    if ui
+                        .add(MaterialButton::outlined("Install Docker").small())
                         .on_hover_text("Install Docker")
                         .clicked()
                     {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_install_docker_{}", idx)),
-                            row.host.clone()
-                        ));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_install_docker_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 } else {
-                    if ui.add(MaterialButton::outlined("Docker Status").small())
+                    if ui
+                        .add(MaterialButton::outlined("Docker Status").small())
                         .on_hover_text("Check Docker status")
                         .clicked()
                     {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_docker_status_{}", idx)),
-                            row.host.clone()
-                        ));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_docker_status_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
-                    if ui.add(MaterialButton::outlined("Uninstall Docker").small())
+                    if ui
+                        .add(MaterialButton::outlined("Uninstall Docker").small())
                         .on_hover_text("Uninstall Docker")
                         .clicked()
                     {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_uninstall_docker_{}", idx)),
-                            row.host.clone()
-                        ));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_uninstall_docker_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 }
 
                 // Ansible operations - similar pattern
                 if !row.ansible_enabled {
-                    if ui.add(MaterialButton::outlined("Install Ansible").small())
+                    if ui
+                        .add(MaterialButton::outlined("Install Ansible").small())
                         .on_hover_text("Install Ansible (placeholder)")
                         .clicked()
                     {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_install_ansible_{}", idx)),
-                            row.host.clone()
-                        ));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_install_ansible_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 } else {
-                    if ui.add(MaterialButton::outlined("Ansible Status").small()).clicked() {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_ansible_status_{}", idx)),
-                            row.host.clone()
-                        ));
+                    if ui
+                        .add(MaterialButton::outlined("Ansible Status").small())
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_ansible_status_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
-                    if ui.add(MaterialButton::outlined("Uninstall Ansible").small()).clicked() {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)),
-                            row.host.clone()
-                        ));
+                    if ui
+                        .add(MaterialButton::outlined("Uninstall Ansible").small())
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 }
 
                 // Dure-WSS operations - similar pattern
                 if !row.dure_wss_enabled {
-                    if ui.add(MaterialButton::outlined("Install Dure-WSS").small())
+                    if ui
+                        .add(MaterialButton::outlined("Install Dure-WSS").small())
                         .on_hover_text("Install Dure-WSS (placeholder)")
                         .clicked()
                     {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_install_dure_wss_{}", idx)),
-                            row.host.clone()
-                        ));
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_install_dure_wss_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 } else {
-                    if ui.add(MaterialButton::outlined("Dure-WSS Status").small()).clicked() {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_dure_wss_status_{}", idx)),
-                            row.host.clone()
-                        ));
+                    if ui
+                        .add(MaterialButton::outlined("Dure-WSS Status").small())
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_dure_wss_status_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
-                    if ui.add(MaterialButton::outlined("Uninstall Dure-WSS").small()).clicked() {
-                        ui.data_mut(|d| d.insert_temp(
-                            egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)),
-                            row.host.clone()
-                        ));
+                    if ui
+                        .add(MaterialButton::outlined("Uninstall Dure-WSS").small())
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
                     }
                 }
 
                 // Delete - always available
-                if ui.add(MaterialButton::outlined("Delete").small())
+                if ui
+                    .add(MaterialButton::outlined("Delete").small())
                     .on_hover_text("Delete SSH host")
                     .clicked()
                 {
-                    ui.data_mut(|d| d.insert_temp(
-                        egui::Id::new(format!("ssh_delete_{}", idx)),
-                        row.host.clone()
-                    ));
+                    ui.data_mut(|d| {
+                        d.insert_temp(
+                            egui::Id::new(format!("ssh_delete_{}", idx)),
+                            row.host.clone(),
+                        )
+                    });
                 }
             });
         });

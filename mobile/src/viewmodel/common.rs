@@ -1,6 +1,6 @@
 //! Common types shared across ViewModel and actors
 
-use crate::viewmodel::{platform, ssh, ns, wss};
+use crate::viewmodel::{ns, platform, ssh, wss};
 
 /// Unified event type from all actors
 #[derive(Clone, Debug)]

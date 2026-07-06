@@ -2,7 +2,7 @@
 
 use crate::config::CloudPlatformConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::collections::VecDeque;
 
 /// Mock platform with full OAuth and VM
@@ -15,22 +15,20 @@ pub fn mock_platform_connected() -> CloudPlatformConfig {
         gcp_oauth_token_expiry: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
         gcp_connected_email: Some("test@example.com".to_string()),
         gcp_selected_project_id: Some("test-project-123".to_string()),
-        vms: vec![
-            crate::config::VmInstance {
-                name: "test-vm".to_string(),
-                instance_id: "test-vm-id".to_string(),
-                zone: "us-central1-a".to_string(),
-                gcp_region: "us-central1".to_string(),
-                machine_type: "e2-micro".to_string(),
-                status: "RUNNING".to_string(),
-                external_ip: Some("203.0.113.42".to_string()),
-                internal_ip: Some("10.0.0.1".to_string()),
-                gcp_project_id: "test-project-123".to_string(),
-                gcp_billing_account: None,
-                created_at: chrono::Utc::now().timestamp(),
-                ssh_key_name: None,
-            }
-        ],
+        vms: vec![crate::config::VmInstance {
+            name: "test-vm".to_string(),
+            instance_id: "test-vm-id".to_string(),
+            zone: "us-central1-a".to_string(),
+            gcp_region: "us-central1".to_string(),
+            machine_type: "e2-micro".to_string(),
+            status: "RUNNING".to_string(),
+            external_ip: Some("203.0.113.42".to_string()),
+            internal_ip: Some("10.0.0.1".to_string()),
+            gcp_project_id: "test-project-123".to_string(),
+            gcp_billing_account: None,
+            created_at: chrono::Utc::now().timestamp(),
+            ssh_key_name: None,
+        }],
         ..Default::default()
     }
 }
@@ -69,7 +67,8 @@ impl MockPlatformRunner {
     }
 
     pub async fn execute_command(&mut self, _cmd: PlatformCommand) -> Result<PlatformEvent> {
-        self.responses.pop_front()
+        self.responses
+            .pop_front()
             .ok_or_else(|| anyhow!("No more mock responses"))
     }
 }
@@ -192,12 +191,12 @@ mod runner_tests {
             whitelisted_ip: "203.0.113.42".to_string(),
         });
 
-        let result = runner.execute_command(
-            PlatformCommand::UpdateFirewall {
+        let result = runner
+            .execute_command(PlatformCommand::UpdateFirewall {
                 platform_name: "test-gcp".to_string(),
                 allow_ip: "203.0.113.42".to_string(),
-            }
-        ).await;
+            })
+            .await;
 
         assert!(result.is_ok());
         if let Ok(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) = result {
@@ -215,15 +214,20 @@ mod runner_tests {
             error: "Permission denied".to_string(),
         });
 
-        let result = runner.execute_command(
-            PlatformCommand::UpdateFirewall {
+        let result = runner
+            .execute_command(PlatformCommand::UpdateFirewall {
                 platform_name: "test-gcp".to_string(),
                 allow_ip: "203.0.113.42".to_string(),
-            }
-        ).await;
+            })
+            .await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Permission denied"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Permission denied")
+        );
     }
 }
 
@@ -246,10 +250,7 @@ mod list_tests {
     #[test]
     fn test_list_with_platforms() {
         let config = crate::config::AppConfig {
-            platforms: vec![
-                mock_platform_connected(),
-                mock_platform_no_vm(),
-            ],
+            platforms: vec![mock_platform_connected(), mock_platform_no_vm()],
             ..Default::default()
         };
 
@@ -304,8 +305,9 @@ mod firewall_tests {
         let result = crate::cli::commands::platform::firewall::execute_firewall_inner(
             &mut runner,
             &platform,
-            Some("203.0.113.42".to_string())
-        ).await;
+            Some("203.0.113.42".to_string()),
+        )
+        .await;
 
         assert!(result.is_ok());
     }
@@ -313,10 +315,8 @@ mod firewall_tests {
     #[test]
     fn test_firewall_validation_not_connected() {
         let platform = mock_platform_disconnected();
-        let result = crate::cli::commands::platform::helpers::validate_platform_ready(
-            &platform,
-            "firewall"
-        );
+        let result =
+            crate::cli::commands::platform::helpers::validate_platform_ready(&platform, "firewall");
 
         assert!(result.is_err());
     }
@@ -342,7 +342,8 @@ mod vm_tests {
             "test-vm".to_string(),
             "us-central1-a".to_string(),
             "e2-micro".to_string(),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
     }
@@ -398,10 +399,9 @@ mod billing_tests {
         });
 
         let platform = mock_platform_connected();
-        let result = crate::cli::commands::platform::billing::execute_billing_inner(
-            &mut runner,
-            &platform,
-        ).await;
+        let result =
+            crate::cli::commands::platform::billing::execute_billing_inner(&mut runner, &platform)
+                .await;
 
         assert!(result.is_ok());
     }

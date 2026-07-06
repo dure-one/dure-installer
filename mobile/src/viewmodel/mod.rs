@@ -1,11 +1,11 @@
 //! ViewModel layer for actor-based MVVM architecture
 
 pub mod common;
-pub mod runtime;
 pub mod io;
-pub mod platform;
-pub mod ssh;
 pub mod ns;
+pub mod platform;
+pub mod runtime;
+pub mod ssh;
 pub mod wss;
 
 #[cfg(test)]
@@ -187,11 +187,7 @@ impl ViewModel {
             drop(ssh_rx);
 
             // Run actors concurrently
-            futures::join!(
-                platform_actor.run(),
-                ns_actor.run(),
-                wss_actor.run(),
-            );
+            futures::join!(platform_actor.run(), ns_actor.run(), wss_actor.run(),);
         });
 
         Self {
@@ -219,7 +215,10 @@ impl ViewModel {
         }
 
         if !events.is_empty() {
-            eprintln!("🔍 ViewModel: Collected {} events, requesting repaint", events.len());
+            eprintln!(
+                "🔍 ViewModel: Collected {} events, requesting repaint",
+                events.len()
+            );
             ctx.request_repaint();
         }
 
@@ -259,67 +258,128 @@ impl ViewModel {
     }
 
     // Platform commands
-    pub fn create_vm(&self, platform_name: String, vm_name: String, zone: String, machine_type: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::CreateVM {
-            platform_name, vm_name, zone, machine_type
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn list_vms(&self, platform_name: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::ListVMs { platform_name })
+    pub fn create_vm(
+        &self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        machine_type: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CreateVM {
+                platform_name,
+                vm_name,
+                zone,
+                machine_type,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn delete_vm(&self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::DeleteVM {
-            platform_name, vm_name, zone
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn list_vms(&self, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::ListVMs { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn restart_vm(&self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::RestartVM {
-            platform_name, vm_name, zone
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn delete_vm(
+        &self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::DeleteVM {
+                platform_name,
+                vm_name,
+                zone,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn regenerate_vm(&self, platform_name: String, vm_name: String, zone: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::RegenerateVM {
-            platform_name, vm_name, zone
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn restart_vm(
+        &self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::RestartVM {
+                platform_name,
+                vm_name,
+                zone,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn regenerate_vm(
+        &self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::RegenerateVM {
+                platform_name,
+                vm_name,
+                zone,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn update_firewall(&self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::UpdateFirewall {
-            platform_name, allow_ip
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::UpdateFirewall {
+                platform_name,
+                allow_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn fetch_billing(&self, platform_name: String, project_id: String, dataset: String, table: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::FetchBilling {
-            platform_name, project_id, dataset, table
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn fetch_billing(
+        &self,
+        platform_name: String,
+        project_id: String,
+        dataset: String,
+        table: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::FetchBilling {
+                platform_name,
+                project_id,
+                dataset,
+                table,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn list_projects(&self, platform_name: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::ListProjects { platform_name })
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::ListProjects { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn select_project(&self, platform_name: String, project_id: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::SelectProject {
-            platform_name, project_id
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::SelectProject {
+                platform_name,
+                project_id,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn start_oauth(&self, platform_name: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::StartOAuth { platform_name })
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::StartOAuth { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn complete_oauth(&self, platform_name: String, auth_code: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::CompleteOAuth {
-            platform_name, auth_code
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CompleteOAuth {
+                platform_name,
+                auth_code,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn add_platform(
@@ -332,180 +392,280 @@ impl ViewModel {
         connected_email: Option<String>,
         selected_project_id: Option<String>,
     ) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::AddPlatform {
-            name,
-            platform_type,
-            oauth_access_token,
-            oauth_refresh_token,
-            oauth_token_expiry,
-            connected_email,
-            selected_project_id,
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::AddPlatform {
+                name,
+                platform_type,
+                oauth_access_token,
+                oauth_refresh_token,
+                oauth_token_expiry,
+                connected_email,
+                selected_project_id,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn delete_platform(&self, platform_name: String) -> anyhow::Result<()> {
-        self.platform_tx.send_blocking(platform::PlatformCommand::DeletePlatform { platform_name })
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::DeletePlatform { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // SSH commands
-    pub fn add_ssh_host(&self, name: String, host: String, port: u16, user: String, ssh_key_path: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::AddHost {
-            name, host, port, user, ssh_key_path
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn add_ssh_host(
+        &self,
+        name: String,
+        host: String,
+        port: u16,
+        user: String,
+        ssh_key_path: String,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::AddHost {
+                name,
+                host,
+                port,
+                user,
+                ssh_key_path,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn delete_ssh_host(&self, name: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::DeleteHost { name })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::DeleteHost { name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn list_ssh_hosts(&self) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::ListHosts)
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::ListHosts)
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn test_ssh_connection(&self, name: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::TestConnection { name })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::TestConnection { name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn init_ssh_host(&self, name: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::InitHost { name })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InitHost { name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn docker_pull(&self, host_name: String, image: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::DockerPull {
-            host_name, image
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::DockerPull { host_name, image })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn docker_run(&self, host_name: String, image: String, container_name: String, ports: Vec<(u16, u16)>, env: Vec<(String, String)>) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::DockerRun {
-            host_name, image, container_name, ports, env
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn docker_run(
+        &self,
+        host_name: String,
+        image: String,
+        container_name: String,
+        ports: Vec<(u16, u16)>,
+        env: Vec<(String, String)>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::DockerRun {
+                host_name,
+                image,
+                container_name,
+                ports,
+                env,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn docker_stop(&self, host_name: String, container_name: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::DockerStop {
-            host_name, container_name
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::DockerStop {
+                host_name,
+                container_name,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn port_open(&self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::PortOpen {
-            host_name, port, protocol
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::PortOpen {
+                host_name,
+                port,
+                protocol,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn port_close(&self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::PortClose {
-            host_name, port, protocol
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::PortClose {
+                host_name,
+                port,
+                protocol,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // Service management commands
     pub fn get_linux_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::GetLinuxStatus { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::GetLinuxStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn install_docker(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::InstallDocker { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDocker { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn get_docker_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::GetDockerStatus { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::GetDockerStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn uninstall_docker(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallDocker { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::UninstallDocker { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn install_ansible(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::InstallAnsible { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallAnsible { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn get_ansible_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::GetAnsibleStatus { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::GetAnsibleStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn uninstall_ansible(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallAnsible { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::UninstallAnsible { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn install_dure_wss(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::InstallDureWss { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDureWss { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn get_dure_wss_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::GetDureWssStatus { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::GetDureWssStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn uninstall_dure_wss(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx.send_blocking(ssh::SshCommand::UninstallDureWss { name: host })
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::UninstallDureWss { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // NS commands
-    pub fn add_dns_provider(&self, name: String, provider_type: String, api_token: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::AddProvider {
-            name, provider_type, api_token
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn add_dns_provider(
+        &self,
+        name: String,
+        provider_type: String,
+        api_token: String,
+    ) -> anyhow::Result<()> {
+        self.ns_tx
+            .send_blocking(ns::NsCommand::AddProvider {
+                name,
+                provider_type,
+                api_token,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn delete_dns_provider(&self, name: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::DeleteProvider { name })
+        self.ns_tx
+            .send_blocking(ns::NsCommand::DeleteProvider { name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn list_dns_providers(&self) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::ListProviders)
+        self.ns_tx
+            .send_blocking(ns::NsCommand::ListProviders)
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn add_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::AddDomain {
-            provider_name, domain
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ns_tx
+            .send_blocking(ns::NsCommand::AddDomain {
+                provider_name,
+                domain,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn delete_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::DeleteDomain {
-            provider_name, domain
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ns_tx
+            .send_blocking(ns::NsCommand::DeleteDomain {
+                provider_name,
+                domain,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn list_dns_domains(&self, provider_name: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::ListDomains {
-            provider_name
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ns_tx
+            .send_blocking(ns::NsCommand::ListDomains { provider_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn add_dns_record(&self, provider_name: String, domain: String, record_type: String, name: String, value: String, ttl: u32) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::AddRecord {
-            provider_name, domain, record_type, name, value, ttl
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn add_dns_record(
+        &self,
+        provider_name: String,
+        domain: String,
+        record_type: String,
+        name: String,
+        value: String,
+        ttl: u32,
+    ) -> anyhow::Result<()> {
+        self.ns_tx
+            .send_blocking(ns::NsCommand::AddRecord {
+                provider_name,
+                domain,
+                record_type,
+                name,
+                value,
+                ttl,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn delete_dns_record(&self, provider_name: String, domain: String, name: String, record_type: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::DeleteRecord {
-            provider_name, domain, name, record_type
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    pub fn delete_dns_record(
+        &self,
+        provider_name: String,
+        domain: String,
+        name: String,
+        record_type: String,
+    ) -> anyhow::Result<()> {
+        self.ns_tx
+            .send_blocking(ns::NsCommand::DeleteRecord {
+                provider_name,
+                domain,
+                name,
+                record_type,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn list_dns_records(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx.send_blocking(ns::NsCommand::ListRecords {
-            provider_name, domain
-        }).map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+        self.ns_tx
+            .send_blocking(ns::NsCommand::ListRecords {
+                provider_name,
+                domain,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 }

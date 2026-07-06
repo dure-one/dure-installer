@@ -1,8 +1,8 @@
 //! PlatformCliRunner - ViewModel wrapper for CLI commands
 
-use crate::viewmodel::{ViewModel, ViewModelEvent};
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{anyhow, Result};
+use crate::viewmodel::{ViewModel, ViewModelEvent};
+use anyhow::{Result, anyhow};
 use std::time::{Duration, Instant};
 
 /// CLI-specific ViewModel runner
@@ -27,23 +27,62 @@ impl PlatformCliRunner {
         // For now, we'll need to match on the command type and call the appropriate method
         // However, for the CLI runner, we can use a helper pattern
         match &cmd {
-            PlatformCommand::CreateVM { platform_name, vm_name, zone, machine_type } => {
-                self.vm.create_vm(platform_name.clone(), vm_name.clone(), zone.clone(), machine_type.clone())?;
+            PlatformCommand::CreateVM {
+                platform_name,
+                vm_name,
+                zone,
+                machine_type,
+            } => {
+                self.vm.create_vm(
+                    platform_name.clone(),
+                    vm_name.clone(),
+                    zone.clone(),
+                    machine_type.clone(),
+                )?;
             }
-            PlatformCommand::DeleteVM { platform_name, vm_name, zone } => {
-                self.vm.delete_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+            PlatformCommand::DeleteVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => {
+                self.vm
+                    .delete_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
             }
-            PlatformCommand::RestartVM { platform_name, vm_name, zone } => {
-                self.vm.restart_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+            PlatformCommand::RestartVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => {
+                self.vm
+                    .restart_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
             }
-            PlatformCommand::RegenerateVM { platform_name, vm_name, zone } => {
-                self.vm.regenerate_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+            PlatformCommand::RegenerateVM {
+                platform_name,
+                vm_name,
+                zone,
+            } => {
+                self.vm
+                    .regenerate_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
             }
-            PlatformCommand::UpdateFirewall { platform_name, allow_ip } => {
-                self.vm.update_firewall(platform_name.clone(), allow_ip.clone())?;
+            PlatformCommand::UpdateFirewall {
+                platform_name,
+                allow_ip,
+            } => {
+                self.vm
+                    .update_firewall(platform_name.clone(), allow_ip.clone())?;
             }
-            PlatformCommand::FetchBilling { platform_name, project_id, dataset, table } => {
-                self.vm.fetch_billing(platform_name.clone(), project_id.clone(), dataset.clone(), table.clone())?;
+            PlatformCommand::FetchBilling {
+                platform_name,
+                project_id,
+                dataset,
+                table,
+            } => {
+                self.vm.fetch_billing(
+                    platform_name.clone(),
+                    project_id.clone(),
+                    dataset.clone(),
+                    table.clone(),
+                )?;
             }
             PlatformCommand::ListProjects { platform_name } => {
                 self.vm.list_projects(platform_name.clone())?;

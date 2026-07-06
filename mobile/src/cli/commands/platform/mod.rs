@@ -1,28 +1,28 @@
 //! Platform command implementation with ViewModel integration
 
 #[cfg(feature = "gui")]
-pub mod runner;
-pub mod list;
-#[cfg(feature = "gui")]
-pub mod vm;
+pub mod billing;
 #[cfg(feature = "gui")]
 pub mod firewall;
-#[cfg(feature = "gui")]
-pub mod billing;
 pub mod helpers;
+pub mod list;
+#[cfg(feature = "gui")]
+pub mod runner;
+#[cfg(feature = "gui")]
+pub mod vm;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export for CLI router
-pub use list::{execute_platform_list, execute_platform_show, execute_platform_combined};
+pub use list::{execute_platform_combined, execute_platform_list, execute_platform_show};
 
 #[cfg(feature = "gui")]
-pub use vm::{execute_addvm_command, execute_restart_command, execute_delvm_command};
+pub use billing::execute_billing_command;
 #[cfg(feature = "gui")]
 pub use firewall::execute_firewall_command;
 #[cfg(feature = "gui")]
-pub use billing::execute_billing_command;
+pub use vm::{execute_addvm_command, execute_delvm_command, execute_restart_command};
 
 // Stub implementations for non-GUI builds
 #[cfg(not(feature = "gui"))]
@@ -32,31 +32,41 @@ pub fn execute_addvm_command(
     _zone: Option<String>,
     _machine_type: Option<String>,
 ) -> Result<()> {
-    Err(anyhow!("VM operations require GUI feature. Please use the GUI to add VMs."))
+    Err(anyhow!(
+        "VM operations require GUI feature. Please use the GUI to add VMs."
+    ))
 }
 
 #[cfg(not(feature = "gui"))]
 pub fn execute_restart_command(_name: String, _vm: Option<String>) -> Result<()> {
-    Err(anyhow!("VM operations require GUI feature. Please use the GUI to restart VMs."))
+    Err(anyhow!(
+        "VM operations require GUI feature. Please use the GUI to restart VMs."
+    ))
 }
 
 #[cfg(not(feature = "gui"))]
 pub fn execute_delvm_command(_name: String, _vm: Option<String>) -> Result<()> {
-    Err(anyhow!("VM operations require GUI feature. Please use the GUI to delete VMs."))
+    Err(anyhow!(
+        "VM operations require GUI feature. Please use the GUI to delete VMs."
+    ))
 }
 
 #[cfg(not(feature = "gui"))]
 pub fn execute_firewall_command(_name: String, _ip: Option<String>) -> Result<()> {
-    Err(anyhow!("Firewall operations require GUI feature. Please use the GUI to update firewall rules."))
+    Err(anyhow!(
+        "Firewall operations require GUI feature. Please use the GUI to update firewall rules."
+    ))
 }
 
 #[cfg(not(feature = "gui"))]
 pub fn execute_billing_command(_name: String) -> Result<()> {
-    Err(anyhow!("Billing operations require GUI feature. Please use the GUI to view billing information."))
+    Err(anyhow!(
+        "Billing operations require GUI feature. Please use the GUI to view billing information."
+    ))
 }
 
 use crate::config::AppConfig;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -77,7 +87,9 @@ fn load_config() -> Result<(AppConfig, PathBuf)> {
 pub fn execute_refresh_command(name: String) -> Result<()> {
     let (config, _) = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -93,7 +105,9 @@ pub fn execute_refresh_command(name: String) -> Result<()> {
 pub fn execute_delete_command(name: String) -> Result<()> {
     let (mut config, config_path) = load_config()?;
 
-    let platform_idx = config.platforms.iter()
+    let platform_idx = config
+        .platforms
+        .iter()
         .position(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -102,7 +116,13 @@ pub fn execute_delete_command(name: String) -> Result<()> {
     println!("⚠️  Delete platform '{}'?", name);
     println!("  Type: {}", platform.platform_type);
     println!("  VMs: {}", platform.vms.len());
-    println!("  Project: {}", platform.gcp_selected_project_id.as_deref().unwrap_or("none"));
+    println!(
+        "  Project: {}",
+        platform
+            .gcp_selected_project_id
+            .as_deref()
+            .unwrap_or("none")
+    );
     print!("Type 'yes' to confirm: ");
     std::io::Write::flush(&mut std::io::stdout())?;
 
@@ -131,8 +151,7 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
 
     // Reserved platform names that cannot be used
     const RESERVED_NAMES: &[&str] = &[
-        "add", "delete", "add-vm", "firewall", "restart",
-        "del-vm", "billing", "help", "refresh"
+        "add", "delete", "add-vm", "firewall", "restart", "del-vm", "billing", "help", "refresh",
     ];
 
     // Check if name is reserved
@@ -187,15 +206,16 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
 /// Execute platform external commands (platform <name> <action>)
 pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
     if args.is_empty() {
-        return Err(anyhow!("Platform name required. Usage: dure platform <name> <action>"));
+        return Err(anyhow!(
+            "Platform name required. Usage: dure platform <name> <action>"
+        ));
     }
 
     let platform_name = &args[0];
 
     // Reserved platform names that cannot be used as platform names
     const RESERVED_NAMES: &[&str] = &[
-        "add", "delete", "add-vm", "firewall", "restart",
-        "del-vm", "billing", "help", "refresh"
+        "add", "delete", "add-vm", "firewall", "restart", "del-vm", "billing", "help", "refresh",
     ];
 
     if RESERVED_NAMES.contains(&platform_name.as_str()) {
@@ -231,35 +251,21 @@ pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
     let action = &args[1];
 
     match action.as_str() {
-        "refresh" => {
-            execute_refresh_command(platform_name.clone())
-        }
+        "refresh" => execute_refresh_command(platform_name.clone()),
         "add-vm" => {
             // Parse optional flags from remaining args
             // For now, just call with None for optional params
             execute_addvm_command(platform_name.clone(), None, None, None)
         }
-        "firewall" => {
-            execute_firewall_command(platform_name.clone(), None)
-        }
-        "restart" => {
-            execute_restart_command(platform_name.clone(), None)
-        }
-        "del-vm" => {
-            execute_delvm_command(platform_name.clone(), None)
-        }
-        "billing" => {
-            execute_billing_command(platform_name.clone())
-        }
-        "delete" => {
-            execute_delete_command(platform_name.clone())
-        }
-        _ => {
-            Err(anyhow!(
-                "Unknown action '{}' for platform '{}'.\n\nAvailable actions:\n  • refresh   - Refresh platform data\n  • add-vm    - Add a new VM\n  • firewall  - Update firewall rules\n  • restart   - Restart VM\n  • del-vm    - Delete VM\n  • billing   - Show billing information\n  • delete    - Delete platform",
-                action,
-                platform_name
-            ))
-        }
+        "firewall" => execute_firewall_command(platform_name.clone(), None),
+        "restart" => execute_restart_command(platform_name.clone(), None),
+        "del-vm" => execute_delvm_command(platform_name.clone(), None),
+        "billing" => execute_billing_command(platform_name.clone()),
+        "delete" => execute_delete_command(platform_name.clone()),
+        _ => Err(anyhow!(
+            "Unknown action '{}' for platform '{}'.\n\nAvailable actions:\n  • refresh   - Refresh platform data\n  • add-vm    - Add a new VM\n  • firewall  - Update firewall rules\n  • restart   - Restart VM\n  • del-vm    - Delete VM\n  • billing   - Show billing information\n  • delete    - Delete platform",
+            action,
+            platform_name
+        )),
     }
 }

@@ -33,14 +33,18 @@ mod wasm {
 
     pub async fn http_get(url: &str) -> anyhow::Result<Vec<u8>> {
         let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("no window"))?;
-        let resp_value = JsFuture::from(window.fetch_with_str(url)).await
-            .map_err(|_| anyhow::anyhow!("fetch failed"))?;
-        let resp: Response = resp_value.dyn_into()
-            .map_err(|_| anyhow::anyhow!("not a Response"))?;
-        let array_buffer = JsFuture::from(resp.array_buffer()
-            .map_err(|_| anyhow::anyhow!("array_buffer failed"))?)
+        let resp_value = JsFuture::from(window.fetch_with_str(url))
             .await
-            .map_err(|_| anyhow::anyhow!("array_buffer promise failed"))?;
+            .map_err(|_| anyhow::anyhow!("fetch failed"))?;
+        let resp: Response = resp_value
+            .dyn_into()
+            .map_err(|_| anyhow::anyhow!("not a Response"))?;
+        let array_buffer = JsFuture::from(
+            resp.array_buffer()
+                .map_err(|_| anyhow::anyhow!("array_buffer failed"))?,
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("array_buffer promise failed"))?;
         let uint8_array = js_sys::Uint8Array::new(&array_buffer);
         Ok(uint8_array.to_vec())
     }
@@ -53,14 +57,18 @@ mod wasm {
         let request = Request::new_with_str_and_init(url, &opts)
             .map_err(|_| anyhow::anyhow!("Request creation failed"))?;
         let window = web_sys::window().ok_or_else(|| anyhow::anyhow!("no window"))?;
-        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await
-            .map_err(|_| anyhow::anyhow!("fetch failed"))?;
-        let resp: Response = resp_value.dyn_into()
-            .map_err(|_| anyhow::anyhow!("not a Response"))?;
-        let array_buffer = JsFuture::from(resp.array_buffer()
-            .map_err(|_| anyhow::anyhow!("array_buffer failed"))?)
+        let resp_value = JsFuture::from(window.fetch_with_request(&request))
             .await
-            .map_err(|_| anyhow::anyhow!("array_buffer promise failed"))?;
+            .map_err(|_| anyhow::anyhow!("fetch failed"))?;
+        let resp: Response = resp_value
+            .dyn_into()
+            .map_err(|_| anyhow::anyhow!("not a Response"))?;
+        let array_buffer = JsFuture::from(
+            resp.array_buffer()
+                .map_err(|_| anyhow::anyhow!("array_buffer failed"))?,
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("array_buffer promise failed"))?;
         let uint8_array = js_sys::Uint8Array::new(&array_buffer);
         Ok(uint8_array.to_vec())
     }

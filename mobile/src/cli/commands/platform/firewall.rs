@@ -1,10 +1,10 @@
 //! Firewall command implementation
 
-use crate::config::AppConfig;
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
+use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -29,13 +29,11 @@ async fn get_current_ip(ip_flag: Option<String>) -> Result<String> {
     // Try ipify API
     match ureq::get("https://api.ipify.org").call() {
         Ok(resp) => Ok(resp.into_string()?),
-        Err(e) => {
-            Err(anyhow!(
-                "Failed to auto-detect IP: {}\n\
+        Err(e) => Err(anyhow!(
+            "Failed to auto-detect IP: {}\n\
                  Use --ip <address> to specify manually",
-                e
-            ))
-        }
+            e
+        )),
     }
 }
 
@@ -48,10 +46,12 @@ pub async fn execute_firewall_inner(
 ) -> Result<()> {
     let allow_ip = get_current_ip(ip).await?;
 
-    let event = runner.execute_command(PlatformCommand::UpdateFirewall {
-        platform_name: platform.name.clone(),
-        allow_ip: allow_ip.clone(),
-    }).await?;
+    let event = runner
+        .execute_command(PlatformCommand::UpdateFirewall {
+            platform_name: platform.name.clone(),
+            allow_ip: allow_ip.clone(),
+        })
+        .await?;
 
     if let PlatformEvent::FirewallUpdated { whitelisted_ip, .. } = event {
         println!("✓ Updated firewall rules");
@@ -66,7 +66,9 @@ pub async fn execute_firewall_inner(
 pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> {
     let config = load_config()?;
 
-    let platform = config.platforms.iter()
+    let platform = config
+        .platforms
+        .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
@@ -79,14 +81,21 @@ pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> 
 
         println!("✓ Detected current IP: {}", allow_ip);
 
-        let event = runner.execute_command(PlatformCommand::UpdateFirewall {
-            platform_name: platform.name.clone(),
-            allow_ip: allow_ip.clone(),
-        }).await?;
+        let event = runner
+            .execute_command(PlatformCommand::UpdateFirewall {
+                platform_name: platform.name.clone(),
+                allow_ip: allow_ip.clone(),
+            })
+            .await?;
 
         if let PlatformEvent::FirewallUpdated { whitelisted_ip, .. } = event {
-            println!("✓ Updated firewall rules for project '{}'",
-                platform.gcp_selected_project_id.as_deref().unwrap_or("unknown"));
+            println!(
+                "✓ Updated firewall rules for project '{}'",
+                platform
+                    .gcp_selected_project_id
+                    .as_deref()
+                    .unwrap_or("unknown")
+            );
             println!("✓ Whitelisted IP: {}", whitelisted_ip);
             Ok(())
         } else {

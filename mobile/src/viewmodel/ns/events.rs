@@ -28,13 +28,26 @@ pub enum NsEvent {
         name: String,
         domains: Vec<(String, Vec<crate::calc::ns::DnsRecord>)>,
     },
-    ProviderDeleted { name: String },
-    ProvidersListed { providers: Vec<DnsProvider> },
+    ProviderDeleted {
+        name: String,
+    },
+    ProvidersListed {
+        providers: Vec<DnsProvider>,
+    },
 
     // Domain Events
-    DomainAdded { provider_name: String, domain: String },
-    DomainDeleted { provider_name: String, domain: String },
-    DomainsListed { provider_name: String, domains: Vec<DnsDomain> },
+    DomainAdded {
+        provider_name: String,
+        domain: String,
+    },
+    DomainDeleted {
+        provider_name: String,
+        domain: String,
+    },
+    DomainsListed {
+        provider_name: String,
+        domains: Vec<DnsDomain>,
+    },
 
     // Record Events
     RecordAdded {
@@ -59,5 +72,8 @@ pub enum NsEvent {
         progress: f32,
         status: String,
     },
-    Error { operation: String, error: String },
+    Error {
+        operation: String,
+        error: String,
+    },
 }

@@ -18,25 +18,65 @@ pub struct DockerContainer {
 #[derive(Debug, Clone)]
 pub enum SshEvent {
     // Host Events
-    HostAdded { name: String },
-    HostDeleted { name: String },
-    HostsListed { hosts: Vec<SshHostInfo> },
-    ConnectionTested { name: String, success: bool, latency_ms: Option<u64> },
-    HostInitialized { name: String, success: bool },
+    HostAdded {
+        name: String,
+    },
+    HostDeleted {
+        name: String,
+    },
+    HostsListed {
+        hosts: Vec<SshHostInfo>,
+    },
+    ConnectionTested {
+        name: String,
+        success: bool,
+        latency_ms: Option<u64>,
+    },
+    HostInitialized {
+        name: String,
+        success: bool,
+    },
 
     // Docker Events
-    DockerImagePulled { host_name: String, image: String },
-    DockerContainerStarted { host_name: String, container_name: String },
-    DockerContainerStopped { host_name: String, container_name: String },
-    DockerContainersListed { host_name: String, containers: Vec<DockerContainer> },
+    DockerImagePulled {
+        host_name: String,
+        image: String,
+    },
+    DockerContainerStarted {
+        host_name: String,
+        container_name: String,
+    },
+    DockerContainerStopped {
+        host_name: String,
+        container_name: String,
+    },
+    DockerContainersListed {
+        host_name: String,
+        containers: Vec<DockerContainer>,
+    },
 
     // Port Events
-    PortOpened { host_name: String, port: u16, protocol: String },
-    PortClosed { host_name: String, port: u16, protocol: String },
-    PortsListed { host_name: String, open_ports: Vec<(u16, String)> },
+    PortOpened {
+        host_name: String,
+        port: u16,
+        protocol: String,
+    },
+    PortClosed {
+        host_name: String,
+        port: u16,
+        protocol: String,
+    },
+    PortsListed {
+        host_name: String,
+        open_ports: Vec<(u16, String)>,
+    },
 
     // Deployment Events
-    DureWssDeployed { host_name: String, domain: String, service_status: String },
+    DureWssDeployed {
+        host_name: String,
+        domain: String,
+        service_status: String,
+    },
 
     // Service Management Events
     LinuxStatusRetrieved {
@@ -49,27 +89,39 @@ pub enum SshEvent {
         top_processes: Vec<String>,
     },
 
-    DockerInstalled { name: String },
+    DockerInstalled {
+        name: String,
+    },
     DockerStatusRetrieved {
         name: String,
         installed: bool,
         running: bool,
     },
-    DockerUninstalled { name: String },
+    DockerUninstalled {
+        name: String,
+    },
 
-    AnsibleInstalled { name: String },
+    AnsibleInstalled {
+        name: String,
+    },
     AnsibleStatusRetrieved {
         name: String,
         installed: bool,
     },
-    AnsibleUninstalled { name: String },
+    AnsibleUninstalled {
+        name: String,
+    },
 
-    DureWssInstalled { name: String },
+    DureWssInstalled {
+        name: String,
+    },
     DureWssStatusRetrieved {
         name: String,
         installed: bool,
     },
-    DureWssUninstalled { name: String },
+    DureWssUninstalled {
+        name: String,
+    },
 
     ServiceError {
         name: String,
@@ -79,6 +131,13 @@ pub enum SshEvent {
     },
 
     // Progress & Errors
-    Progress { operation: String, progress: f32, status: String },
-    Error { operation: String, error: String },
+    Progress {
+        operation: String,
+        progress: f32,
+        status: String,
+    },
+    Error {
+        operation: String,
+        error: String,
+    },
 }
