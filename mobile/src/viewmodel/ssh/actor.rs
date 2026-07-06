@@ -294,9 +294,50 @@ impl SshActor {
                 return Ok(());
             }
             SshCommand::RemoveDockerContainers { host_name, container_names } => {
-                eprintln!("🔍 SSH Actor: RemoveDockerContainers stub for '{}'", host_name);
-                eprintln!("  Containers: {:?}", container_names);
-                // TODO: Implement in Task 4
+                eprintln!("🔍 SSH Actor: remove_docker_containers called for '{}'", host_name);
+                eprintln!("  Containers to remove: {:?}", container_names);
+
+                // Load host config
+                let host_config = match self.load_host_config(&host_name) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "RemoveDockerContainers".to_string(),
+                            error: format!("Host not found: {}", e),
+                        }).await;
+                        return Ok(());
+                    }
+                };
+
+                let mut removed = Vec::new();
+                let mut failed = Vec::new();
+
+                for container_name in container_names {
+                    let rm_cmd = format!("docker rm {}", container_name);
+                    let host_config_clone = host_config.clone();
+                    match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &rm_cmd)).await {
+                        Ok(_) => {
+                            eprintln!("✓ SSH Actor: Removed container '{}'", container_name);
+                            removed.push(container_name.clone());
+                        }
+                        Err(e) => {
+                            eprintln!("❌ SSH Actor: Failed to remove '{}': {}", container_name, e);
+                            failed.push((container_name.clone(), e.to_string()));
+                        }
+                    }
+                }
+
+                eprintln!("🔍 SSH Actor: Sending DockerContainersRemoved event");
+                eprintln!("  Removed: {} containers", removed.len());
+                eprintln!("  Failed: {} containers", failed.len());
+
+                self.send_event(SshEvent::DockerContainersRemoved {
+                    host_name: host_name.clone(),
+                    removed,
+                    failed,
+                }).await;
+                eprintln!("✓ SSH Actor: DockerContainersRemoved event sent");
+
                 return Ok(());
             }
 
