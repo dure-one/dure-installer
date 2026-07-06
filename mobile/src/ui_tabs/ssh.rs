@@ -86,6 +86,28 @@ pub struct SshTab {
     add_use_password: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_use_private_key: bool,
+
+    // Docker Install Dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_docker_install_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_install_host_idx: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_image_input: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_container_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_tag: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_metadata: Option<crate::calc::docker::DockerImageMetadata>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_port_mappings: Vec<(String, String)>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_env_vars: Vec<(String, String)>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_validating: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_validation_error: Option<String>,
 }
 
 impl Default for SshTab {
@@ -101,6 +123,16 @@ impl Default for SshTab {
             add_port: "22".to_string(),
             add_use_password: false,
             add_use_private_key: false,
+            show_docker_install_dialog: false,
+            docker_install_host_idx: None,
+            docker_image_input: String::new(),
+            docker_container_name: String::new(),
+            docker_tag: "latest".to_string(),
+            docker_metadata: None,
+            docker_port_mappings: Vec::new(),
+            docker_env_vars: Vec::new(),
+            docker_validating: false,
+            docker_validation_error: None,
         }
     }
 }
@@ -310,7 +342,45 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
+                // Docker validation errors
+                if operation.contains("Docker") && self.show_docker_install_dialog {
+                    self.docker_validation_error = Some(error.clone());
+                    self.docker_validating = false;
+                }
                 self.load_error = Some(format!("SSH operation '{}' failed: {}", operation, error));
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerImageValidated { image, metadata }) => {
+                eprintln!("✓ Docker image {} validated", image);
+                self.docker_metadata = Some(metadata.clone());
+
+                // Populate port mappings from metadata
+                self.docker_port_mappings.clear();
+                for port in &metadata.exposed_ports {
+                    self.docker_port_mappings.push((port.to_string(), port.to_string()));
+                }
+
+                // Populate env vars from metadata
+                self.docker_env_vars.clear();
+                for env in &metadata.env_vars {
+                    if let Some(idx) = env.find('=') {
+                        let (key, value) = env.split_at(idx);
+                        self.docker_env_vars.push((key.to_string(), value[1..].to_string()));
+                    }
+                }
+
+                self.docker_validating = false;
+                self.docker_validation_error = None;
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerImageInstalled { host_name, container_name }) => {
+                eprintln!("✓ Docker container {} installed on {}", container_name, host_name);
+                self.show_docker_install_dialog = false;
+                self.loaded = false; // Trigger reload
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerDaemonInstalled { host_name }) => {
+                eprintln!("✓ Docker daemon installed on {}", host_name);
             }
 
             // Keep existing event handlers (ConnectionTested, HostInitialized, etc.)
@@ -348,6 +418,20 @@ impl SshTab {
                 .data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx))))
             {
                 let _ = vm.get_docker_status(host);
+            }
+            if let Some(_host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_image_{}", idx)))
+            }) {
+                self.show_docker_install_dialog = true;
+                self.docker_install_host_idx = Some(idx);
+                self.docker_image_input.clear();
+                self.docker_container_name.clear();
+                self.docker_tag = "latest".to_string();
+                self.docker_metadata = None;
+                self.docker_port_mappings.clear();
+                self.docker_env_vars.clear();
+                self.docker_validating = false;
+                self.docker_validation_error = None;
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))
@@ -449,7 +533,182 @@ impl SshTab {
         self.process_action_triggers(ui, vm);
     }
 
-    /// Render the SSH tab UI
+    /// Render Docker image installation dialog
+    fn render_docker_install_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use egui_material3::MaterialButton;
+
+        let mut dialog_open = self.show_docker_install_dialog;
+
+        egui::Window::new("Install Docker Image")
+            .collapsible(false)
+            .resizable(true)
+            .default_width(600.0)
+            .open(&mut dialog_open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(8.0);
+
+                    // Image input with validation
+                    ui.horizontal(|ui| {
+                        ui.label("Image:");
+                        let response = ui.text_edit_singleline(&mut self.docker_image_input);
+                        if response.lost_focus() && !self.docker_image_input.is_empty() {
+                            if let Some(ref mut vm) = vm {
+                                self.docker_validating = true;
+                                self.docker_validation_error = None;
+                                vm.validate_docker_image(self.docker_image_input.clone());
+                            }
+                        }
+                    });
+                    ui.label("Format: owner/repository or library/image");
+                    ui.add_space(4.0);
+
+                    // Validation status
+                    if self.docker_validating {
+                        ui.spinner();
+                        ui.label("Validating image...");
+                    } else if let Some(error) = &self.docker_validation_error {
+                        ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+                    } else if let Some(ref metadata) = self.docker_metadata {
+                        ui.colored_label(egui::Color32::GREEN, "✓ Image validated");
+                        ui.label(format!("Description: {}", metadata.description));
+                        ui.label(format!("Stars: {}", metadata.star_count));
+                    }
+                    ui.add_space(8.0);
+
+                    // Tag selection
+                    ui.horizontal(|ui| {
+                        ui.label("Tag:");
+                        egui::ComboBox::from_id_salt("docker_tag")
+                            .selected_text(&self.docker_tag)
+                            .show_ui(ui, |ui| {
+                                if let Some(ref metadata) = self.docker_metadata {
+                                    for tag in &metadata.tags {
+                                        ui.selectable_value(&mut self.docker_tag, tag.clone(), tag);
+                                    }
+                                } else {
+                                    ui.selectable_value(&mut self.docker_tag, "latest".to_string(), "latest");
+                                }
+                            });
+                    });
+                    ui.add_space(8.0);
+
+                    // Container name
+                    ui.horizontal(|ui| {
+                        ui.label("Container Name:");
+                        ui.text_edit_singleline(&mut self.docker_container_name);
+                    });
+                    ui.add_space(8.0);
+
+                    // Port mappings
+                    ui.label("Port Mappings:");
+                    ui.add_space(4.0);
+
+                    let mut to_remove = None;
+                    for (idx, (host_port, container_port)) in self.docker_port_mappings.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label("Host:");
+                            ui.add(egui::TextEdit::singleline(host_port).desired_width(80.0));
+                            ui.label("→ Container:");
+                            ui.add(egui::TextEdit::singleline(container_port).desired_width(80.0));
+                            if ui.button("−").clicked() {
+                                to_remove = Some(idx);
+                            }
+                        });
+                    }
+                    if let Some(idx) = to_remove {
+                        self.docker_port_mappings.remove(idx);
+                    }
+
+                    if ui.add(MaterialButton::text("+ Add Port Mapping")).clicked() {
+                        self.docker_port_mappings.push(("".to_string(), "".to_string()));
+                    }
+                    ui.add_space(8.0);
+
+                    // Environment variables
+                    ui.label("Environment Variables:");
+                    ui.add_space(4.0);
+
+                    let mut to_remove_env = None;
+                    for (idx, (key, value)) in self.docker_env_vars.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(key).desired_width(150.0).hint_text("KEY"));
+                            ui.label("=");
+                            ui.add(egui::TextEdit::singleline(value).desired_width(200.0).hint_text("value"));
+                            if ui.button("−").clicked() {
+                                to_remove_env = Some(idx);
+                            }
+                        });
+                    }
+                    if let Some(idx) = to_remove_env {
+                        self.docker_env_vars.remove(idx);
+                    }
+
+                    if ui.add(MaterialButton::text("+ Add Environment Variable")).clicked() {
+                        self.docker_env_vars.push(("".to_string(), "".to_string()));
+                    }
+                    ui.add_space(16.0);
+
+                    // Action buttons
+                    ui.horizontal(|ui| {
+                        let can_install = !self.docker_image_input.is_empty()
+                            && !self.docker_container_name.is_empty()
+                            && self.docker_metadata.is_some()
+                            && !self.docker_validating;
+
+                        if ui
+                            .add_enabled(can_install, MaterialButton::filled("Install"))
+                            .clicked()
+                        {
+                            if let Some(ref mut vm) = vm {
+                                if let Some(host_idx) = self.docker_install_host_idx {
+                                    if let Some(row) = self.rows.get(host_idx) {
+                                        // Parse port mappings
+                                        let ports: Vec<(u16, u16)> = self
+                                            .docker_port_mappings
+                                            .iter()
+                                            .filter_map(|(h, c)| {
+                                                let host = h.parse::<u16>().ok()?;
+                                                let container = c.parse::<u16>().ok()?;
+                                                Some((host, container))
+                                            })
+                                            .collect();
+
+                                        // Filter out empty env vars
+                                        let env: Vec<(String, String)> = self
+                                            .docker_env_vars
+                                            .iter()
+                                            .filter(|(k, _)| !k.is_empty())
+                                            .cloned()
+                                            .collect();
+
+                                        vm.install_docker_image(
+                                            row.host.clone(),
+                                            self.docker_container_name.clone(),
+                                            self.docker_image_input.clone(),
+                                            self.docker_tag.clone(),
+                                            ports,
+                                            env,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        if ui.add(MaterialButton::text("Cancel")).clicked() {
+                            self.show_docker_install_dialog = false;
+                        }
+                    });
+                });
+            });
+
+        self.show_docker_install_dialog = dialog_open;
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         use egui_material3::MaterialButton;
@@ -528,6 +787,9 @@ impl SshTab {
         // 9. Dialogs
         if self.show_add_dialog {
             self.render_add_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+        if self.show_docker_install_dialog {
+            self.render_docker_install_dialog(ui.ctx(), vm.as_deref_mut());
         }
     }
 
@@ -1128,6 +1390,18 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                         ui.data_mut(|d| {
                             d.insert_temp(
                                 egui::Id::new(format!("ssh_docker_status_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
+                    }
+                    if ui
+                        .add(MaterialButton::outlined("Install Image").small())
+                        .on_hover_text("Install Docker image")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_install_docker_image_{}", idx)),
                                 row.host.clone(),
                             )
                         });
