@@ -1466,6 +1466,18 @@ impl SshTab {
         if !self.loaded {
             self.load_rows();
             self.loaded = true;
+
+            // Auto-refresh all rows on first load
+            if let Some(ref mut vm) = vm {
+                for row in &mut self.rows {
+                    row.refreshing = true;
+                    row.refresh_pending_count = 4;
+                    let _ = vm.get_linux_status(row.host.clone());
+                    let _ = vm.get_docker_status(row.host.clone());
+                    let _ = vm.get_ansible_status(row.host.clone());
+                    let _ = vm.get_dure_wss_status(row.host.clone());
+                }
+            }
         }
 
         // 7. Error display
