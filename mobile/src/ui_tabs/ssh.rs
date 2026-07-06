@@ -863,7 +863,8 @@ impl SshTab {
                             if let Some(ref mut vm) = vm {
                                 self.docker_validating = true;
                                 self.docker_validation_error = None;
-                                vm.validate_docker_image(self.docker_image_input.clone());
+                                // vm.validate_docker_image(self.docker_image_input.clone()); // Removed - will be replaced in Task 7
+                                let _ = vm; // Suppress unused warning
                             }
                         }
                     });
