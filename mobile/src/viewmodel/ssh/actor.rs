@@ -260,6 +260,7 @@ impl SshActor {
 
                 // Step 2: Get image history
                 let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
+                eprintln!("🔍 SSH Actor: Running command: {}", history_cmd);
                 let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd)).await {
                     Ok(output) => output,
                     Err(e) => {
@@ -271,6 +272,14 @@ impl SshActor {
                         return Ok(());
                     }
                 };
+
+                eprintln!("📋 History output ({} bytes, {} lines):", history_output.len(), history_output.lines().count());
+                for (i, line) in history_output.lines().take(10).enumerate() {
+                    eprintln!("  Line {}: {}", i + 1, line);
+                }
+                if history_output.lines().count() > 10 {
+                    eprintln!("  ... ({} more lines)", history_output.lines().count() - 10);
+                }
 
                 // Step 3: Parse history output
                 let (exposed_ports, env_vars) = parse_docker_history(&history_output);
