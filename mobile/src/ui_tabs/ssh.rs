@@ -128,6 +128,20 @@ pub struct SshTab {
     ansible_validating: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_validation_error: Option<String>,
+
+    // Dure-WSS Install Dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_dure_wss_install_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_install_host_idx: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_domain: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_email: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_channel: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_variant: String,
 }
 
 impl Default for SshTab {
@@ -162,6 +176,12 @@ impl Default for SshTab {
             ansible_variables: Vec::new(),
             ansible_validating: false,
             ansible_validation_error: None,
+            show_dure_wss_install_dialog: false,
+            dure_wss_install_host_idx: None,
+            dure_wss_domain: String::new(),
+            dure_wss_email: String::new(),
+            dure_wss_channel: "stable".to_string(),
+            dure_wss_variant: "default".to_string(),
         }
     }
 }
@@ -447,6 +467,20 @@ impl SshTab {
                 eprintln!("✓ Ansible daemon installed on {}", host_name);
             }
 
+            ViewModelEvent::Ssh(SshEvent::DureWssServiceInstalled { host_name, domain }) => {
+                eprintln!("✓ Dure-WSS service installed on {} with domain {}", host_name, domain);
+                self.show_dure_wss_install_dialog = false;
+                self.loaded = false; // Trigger reload
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureWssStarted { host_name }) => {
+                eprintln!("✓ Dure-WSS started on {}", host_name);
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureWssStopped { host_name }) => {
+                eprintln!("✓ Dure-WSS stopped on {}", host_name);
+            }
+
             // Keep existing event handlers (ConnectionTested, HostInitialized, etc.)
             _ => {}
         }
@@ -534,11 +568,15 @@ impl SshTab {
             }
 
             // Dure-WSS operations
-            if let Some(host) = ui.data(|d| {
+            if let Some(_host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))
             }) {
-                // TODO: Update to use proper UI dialog in Tasks 5-7
-                vm.install_dure_wss(host, "example.com".to_string(), "admin@example.com".to_string(), "stable".to_string(), "default".to_string());
+                self.show_dure_wss_install_dialog = true;
+                self.dure_wss_install_host_idx = Some(idx);
+                self.dure_wss_domain.clear();
+                self.dure_wss_email.clear();
+                self.dure_wss_channel = "stable".to_string();
+                self.dure_wss_variant = "default".to_string();
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))
@@ -939,6 +977,102 @@ impl SshTab {
         self.show_ansible_install_dialog = dialog_open;
     }
 
+    /// Render Dure-WSS service installation dialog
+    fn render_dure_wss_install_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use egui_material3::MaterialButton;
+
+        let mut dialog_open = self.show_dure_wss_install_dialog;
+
+        egui::Window::new("Install Dure-WSS Service")
+            .collapsible(false)
+            .resizable(true)
+            .default_width(600.0)
+            .open(&mut dialog_open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(8.0);
+
+                    // Domain input
+                    ui.horizontal(|ui| {
+                        ui.label("Domain:");
+                        ui.text_edit_singleline(&mut self.dure_wss_domain);
+                    });
+                    ui.label("Full domain name (e.g., shop.example.com)");
+                    ui.add_space(8.0);
+
+                    // Email input (for ACME)
+                    ui.horizontal(|ui| {
+                        ui.label("Email:");
+                        ui.text_edit_singleline(&mut self.dure_wss_email);
+                    });
+                    ui.label("Email for ACME certificate notifications");
+                    ui.add_space(8.0);
+
+                    // Channel selection
+                    ui.horizontal(|ui| {
+                        ui.label("Channel:");
+                        egui::ComboBox::from_id_salt("dure_wss_channel")
+                            .selected_text(&self.dure_wss_channel)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.dure_wss_channel, "stable".to_string(), "stable");
+                                ui.selectable_value(&mut self.dure_wss_channel, "beta".to_string(), "beta");
+                                ui.selectable_value(&mut self.dure_wss_channel, "nightly".to_string(), "nightly");
+                            });
+                    });
+                    ui.label("Release channel");
+                    ui.add_space(8.0);
+
+                    // Variant selection
+                    ui.horizontal(|ui| {
+                        ui.label("Variant:");
+                        egui::ComboBox::from_id_salt("dure_wss_variant")
+                            .selected_text(&self.dure_wss_variant)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.dure_wss_variant, "default".to_string(), "default");
+                                ui.selectable_value(&mut self.dure_wss_variant, "minimal".to_string(), "minimal");
+                            });
+                    });
+                    ui.label("Installation variant");
+                    ui.add_space(16.0);
+
+                    // Action buttons
+                    ui.horizontal(|ui| {
+                        let can_install = !self.dure_wss_domain.is_empty()
+                            && !self.dure_wss_email.is_empty();
+
+                        if ui
+                            .add_enabled(can_install, MaterialButton::filled("Install"))
+                            .clicked()
+                        {
+                            if let Some(ref mut vm) = vm {
+                                if let Some(host_idx) = self.dure_wss_install_host_idx {
+                                    if let Some(row) = self.rows.get(host_idx) {
+                                        vm.install_dure_wss(
+                                            row.host.clone(),
+                                            self.dure_wss_domain.clone(),
+                                            self.dure_wss_email.clone(),
+                                            self.dure_wss_channel.clone(),
+                                            self.dure_wss_variant.clone(),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        if ui.add(MaterialButton::text("Cancel")).clicked() {
+                            self.show_dure_wss_install_dialog = false;
+                        }
+                    });
+                });
+            });
+
+        self.show_dure_wss_install_dialog = dialog_open;
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         use egui_material3::MaterialButton;
@@ -1023,6 +1157,9 @@ impl SshTab {
         }
         if self.show_ansible_install_dialog {
             self.render_ansible_install_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+        if self.show_dure_wss_install_dialog {
+            self.render_dure_wss_install_dialog(ui.ctx(), vm.as_deref_mut());
         }
     }
 
