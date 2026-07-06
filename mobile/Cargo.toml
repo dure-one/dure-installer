@@ -7,7 +7,9 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["gui", "spreadsheet"]
+default = ["gui", "spreadsheet", "serde"]
+# Serialization support (enabled by default for state persistence)
+serde = []
 # GUI support (egui/eframe) - disable for headless server builds
 gui = [
     "dep:egui",

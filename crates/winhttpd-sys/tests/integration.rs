@@ -1,9 +1,10 @@
+#![cfg(target_os = "windows")]
+
 mod helpers;
 
 use winhttpd_sys::WinHttpd;
 
 #[test]
-#[cfg(target_os = "windows")]
 fn test_server_lifecycle() {
     let mut server = WinHttpd::new();
     let port = helpers::find_free_port();
@@ -16,7 +17,6 @@ fn test_server_lifecycle() {
 }
 
 #[test]
-#[cfg(target_os = "windows")]
 fn test_serve_invalid_path() {
     let mut server = WinHttpd::new();
     let result = server.serve("/nonexistent/path/12345", 8080);
@@ -27,7 +27,6 @@ fn test_serve_invalid_path() {
 }
 
 #[test]
-#[cfg(target_os = "windows")]
 fn test_multiple_servers_different_ports() {
     let port1 = helpers::find_free_port();
     let port2 = helpers::find_free_port();
