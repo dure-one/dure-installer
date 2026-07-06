@@ -2089,17 +2089,21 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                 ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
                 // Refresh - always available
-                if ui
-                    .add(MaterialButton::outlined("Refresh").small())
-                    .on_hover_text("Refresh host status")
-                    .clicked()
-                {
-                    ui.data_mut(|d| {
-                        d.insert_temp(
-                            egui::Id::new(format!("ssh_refresh_{}", idx)),
-                            row.host.clone(),
-                        )
-                    });
+                if row.refreshing {
+                    ui.add_enabled(false, MaterialButton::outlined("Refreshing...").small());
+                } else {
+                    if ui
+                        .add(MaterialButton::outlined("Refresh").small())
+                        .on_hover_text("Refresh host status")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_refresh_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
+                    }
                 }
 
                 // Docker operations - dynamic based on state
