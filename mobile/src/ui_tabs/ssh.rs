@@ -769,6 +769,17 @@ impl SshTab {
                 // self.docker_validating = false;
                 // self.docker_validation_error = None;
             }
+
+            // Docker remove containers trigger
+            let remove_id = egui::Id::new(format!("ssh_remove_containers_{}", idx));
+            if let Some(_host) = ui.data(|d| d.get_temp::<String>(remove_id)) {
+                ui.data_mut(|d| d.remove::<String>(remove_id));
+
+                self.show_docker_remove_dialog = true;
+                self.docker_remove_host_idx = Some(idx);
+                self.load_containers_for_removal(Some(vm));
+            }
+
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))
             }) {
@@ -1167,6 +1178,260 @@ impl SshTab {
                 }
             }
         }
+    }
+
+    fn render_docker_remove_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use egui_material3::MaterialButton;
+
+        let mut dialog_open = self.show_docker_remove_dialog;
+
+        egui::Window::new("Remove Docker Containers")
+            .collapsible(false)
+            .resizable(true)
+            .default_width(600.0)
+            .open(&mut dialog_open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(8.0);
+
+                    // Loading state
+                    if self.docker_fetching_containers {
+                        ui.spinner();
+                        ui.label("Loading containers...");
+                        return;
+                    }
+
+                    // Error state
+                    if let Some(error) = &self.docker_fetch_error {
+                        ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+                        ui.add_space(8.0);
+                        if ui.add(MaterialButton::filled("Retry")).clicked() {
+                            self.load_containers_for_removal(vm.as_deref_mut());
+                        }
+                        if ui.add(MaterialButton::text("Close")).clicked() {
+                            self.show_docker_remove_dialog = false;
+                            self.reset_remove_dialog_state();
+                        }
+                        return;
+                    }
+
+                    // Results display
+                    if let Some(ref results) = self.docker_remove_results {
+                        self.render_removal_results(ui, results);
+                        ui.add_space(8.0);
+                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                            self.show_docker_remove_dialog = false;
+                            self.reset_remove_dialog_state();
+                        }
+                        return;
+                    }
+
+                    // Container selection
+                    if self.docker_available_containers.is_empty() {
+                        ui.label("No containers found on this host.");
+                        ui.add_space(8.0);
+                        if ui.add(MaterialButton::text("Close")).clicked() {
+                            self.show_docker_remove_dialog = false;
+                            self.reset_remove_dialog_state();
+                        }
+                        return;
+                    }
+
+                    self.render_container_selection(ui);
+
+                    ui.add_space(16.0);
+
+                    // Action buttons
+                    self.render_removal_actions(ui, vm.as_deref_mut());
+                });
+            });
+
+        self.show_docker_remove_dialog = dialog_open;
+    }
+
+    fn render_container_selection(&mut self, ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new("Select containers to remove:").strong());
+        ui.add_space(8.0);
+
+        for container in &self.docker_available_containers {
+            let is_selected = self.docker_selected_containers.contains(&container.name);
+
+            ui.horizontal(|ui| {
+                let mut selected = is_selected;
+                if ui.checkbox(&mut selected, "").changed() {
+                    if selected {
+                        self.docker_selected_containers.push(container.name.clone());
+                    } else {
+                        self.docker_selected_containers.retain(|n| n != &container.name);
+                    }
+                }
+
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(&container.name).strong());
+                    ui.label(format!("Image: {}:{}", container.image, container.tag));
+                    ui.label(format!("Status: {}", container.status));
+                    if !container.ports.is_empty() {
+                        let ports: Vec<String> = container.ports.iter()
+                            .map(|(h, c)| format!("{}→{}", h, c))
+                            .collect();
+                        ui.label(format!("Ports: {}", ports.join(", ")));
+                    }
+                });
+            });
+
+            ui.add_space(4.0);
+        }
+
+        ui.add_space(8.0);
+        ui.label(format!(
+            "{} of {} containers selected",
+            self.docker_selected_containers.len(),
+            self.docker_available_containers.len()
+        ));
+    }
+
+    fn render_removal_actions(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        use egui_material3::MaterialButton;
+
+        ui.horizontal(|ui| {
+            // Select/Deselect All buttons
+            if ui.add(MaterialButton::text("Select All")).clicked() {
+                self.docker_selected_containers = self.docker_available_containers
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect();
+            }
+
+            if ui.add(MaterialButton::text("Deselect All")).clicked() {
+                self.docker_selected_containers.clear();
+            }
+        });
+
+        ui.add_space(8.0);
+
+        // Deletion section
+        if self.docker_removing {
+            ui.spinner();
+            ui.label(format!(
+                "Removing {} containers...",
+                self.docker_selected_containers.len()
+            ));
+        } else {
+            ui.horizontal(|ui| {
+                let can_delete = !self.docker_selected_containers.is_empty();
+
+                if ui.add_enabled(can_delete, MaterialButton::filled("Delete Selected"))
+                    .on_hover_text(if !can_delete {
+                        "Select containers to remove"
+                    } else {
+                        "Remove selected containers (cannot be undone)"
+                    })
+                    .clicked()
+                {
+                    self.confirm_removal(ui);
+                }
+
+                if ui.add(MaterialButton::text("Cancel")).clicked() {
+                    self.show_docker_remove_dialog = false;
+                    self.reset_remove_dialog_state();
+                }
+            });
+
+            // Inline confirmation
+            if ui.data(|d| d.get_temp::<bool>(egui::Id::new("docker_removal_confirm"))).unwrap_or(false) {
+                ui.add_space(8.0);
+                ui.colored_label(
+                    egui::Color32::from_rgb(200, 100, 0),
+                    format!("Remove {} containers? This cannot be undone.", self.docker_selected_containers.len())
+                );
+                ui.horizontal(|ui| {
+                    if ui.add(MaterialButton::filled("Confirm")).clicked() {
+                        ui.data_mut(|d| d.remove::<bool>(egui::Id::new("docker_removal_confirm")));
+                        self.start_container_removal(vm.as_deref_mut());
+                    }
+                    if ui.add(MaterialButton::text("Cancel")).clicked() {
+                        ui.data_mut(|d| d.remove::<bool>(egui::Id::new("docker_removal_confirm")));
+                    }
+                });
+            }
+        }
+    }
+
+    fn render_removal_results(&self, ui: &mut egui::Ui, results: &RemoveResults) {
+        ui.label(egui::RichText::new("Removal Results:").strong());
+        ui.add_space(8.0);
+
+        if !results.removed.is_empty() {
+            ui.colored_label(
+                egui::Color32::GREEN,
+                format!("✓ Removed: {}", results.removed.join(", "))
+            );
+        }
+
+        if !results.failed.is_empty() {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("Failed:").color(egui::Color32::RED));
+            for (name, error) in &results.failed {
+                ui.colored_label(
+                    egui::Color32::RED,
+                    format!("  ⚠ {}: {}", name, error)
+                );
+            }
+        }
+
+        if results.removed.is_empty() && results.failed.is_empty() {
+            ui.label("No containers were processed.");
+        }
+    }
+
+    fn load_containers_for_removal(&mut self, _vm: Option<&mut crate::viewmodel::ViewModel>) {
+        if let Some(host_idx) = self.docker_remove_host_idx {
+            if let Some(row) = self.rows.get(host_idx) {
+                self.docker_fetching_containers = true;
+                self.docker_fetch_error = None;
+
+                // Load from config (already available)
+                self.docker_available_containers = row.docker_containers.clone();
+                self.docker_fetching_containers = false;
+
+                eprintln!("🔍 UI: Loaded {} containers for removal", self.docker_available_containers.len());
+            }
+        }
+    }
+
+    fn confirm_removal(&self, ui: &mut egui::Ui) {
+        ui.data_mut(|d| d.insert_temp(egui::Id::new("docker_removal_confirm"), true));
+    }
+
+    fn start_container_removal(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        if let Some(host_idx) = self.docker_remove_host_idx {
+            if let Some(row) = self.rows.get(host_idx) {
+                if let Some(vm) = vm.as_deref_mut() {
+                    self.docker_removing = true;
+
+                    eprintln!("🔍 UI: Starting container removal");
+                    eprintln!("  Containers: {:?}", self.docker_selected_containers);
+
+                    let _ = vm.remove_docker_containers(
+                        row.host.clone(),
+                        self.docker_selected_containers.clone(),
+                    );
+                }
+            }
+        }
+    }
+
+    fn reset_remove_dialog_state(&mut self) {
+        self.docker_available_containers.clear();
+        self.docker_selected_containers.clear();
+        self.docker_fetching_containers = false;
+        self.docker_fetch_error = None;
+        self.docker_removing = false;
+        self.docker_remove_results = None;
     }
 
     /// Render Ansible role installation dialog
@@ -1665,6 +1930,9 @@ impl SshTab {
         }
         if self.show_docker_install_dialog {
             self.render_docker_install_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+        if self.show_docker_remove_dialog {
+            self.render_docker_remove_dialog(ui.ctx(), vm.as_deref_mut());
         }
         if self.show_ansible_install_dialog {
             self.render_ansible_install_dialog(ui.ctx(), vm.as_deref_mut());
