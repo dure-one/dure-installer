@@ -53,6 +53,9 @@ struct SshRowData {
 
     // Drawer content
     linux_status: Option<LinuxStatus>,
+    docker_containers: Vec<crate::config::DockerContainerConfig>,
+    ansible_roles: Vec<crate::config::AnsibleRoleConfig>,
+    dure_wss_config: Option<crate::config::DureWssConfig>,
 
     // Connection state
     connection_status: ConnectionStatus,
@@ -226,6 +229,11 @@ impl SshTab {
                                 (None, None)
                             };
 
+                        // Find installed services for this host
+                        let docker_containers = host_config.docker_containers.clone();
+                        let ansible_roles = host_config.ansible_roles.clone();
+                        let dure_wss_config = host_config.dure_wss.clone();
+
                         self.rows.push(SshRowData {
                             host: host_config.host.clone(),
                             port: host_config.port,
@@ -237,6 +245,9 @@ impl SshTab {
                             docker_enabled: false,
                             dure_wss_enabled: false,
                             linux_status: None,
+                            docker_containers,
+                            ansible_roles,
+                            dure_wss_config,
                             connection_status: ConnectionStatus::Unknown,
                         });
                     }
@@ -1692,21 +1703,57 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
 
     ui.add_space(4.0);
 
-    // Ansible placeholder
-    ui.label(egui::RichText::new("ansible:").strong());
-    ui.colored_label(ui.visuals().weak_text_color(), "  —");
-
-    ui.add_space(4.0);
-
-    // Docker placeholder
+    // Docker containers
     ui.label(egui::RichText::new("docker:").strong());
-    ui.colored_label(ui.visuals().weak_text_color(), "  —");
+    if row.docker_containers.is_empty() {
+        ui.colored_label(ui.visuals().weak_text_color(), "  (no containers installed)");
+    } else {
+        for container in &row.docker_containers {
+            ui.label(format!("  • {} ({}:{})",
+                container.container_name,
+                container.image,
+                container.tag
+            ));
+            if !container.ports.is_empty() {
+                let ports: Vec<String> = container.ports.iter()
+                    .map(|(h, c)| format!("{}→{}", h, c))
+                    .collect();
+                ui.label(format!("    ports: {}", ports.join(", ")));
+            }
+        }
+    }
 
     ui.add_space(4.0);
 
-    // Dure-WSS placeholder
+    // Ansible roles
+    ui.label(egui::RichText::new("ansible:").strong());
+    if row.ansible_roles.is_empty() {
+        ui.colored_label(ui.visuals().weak_text_color(), "  (no roles installed)");
+    } else {
+        for role in &row.ansible_roles {
+            ui.label(format!("  • {} ({})",
+                role.instance_name,
+                role.galaxy_name
+            ));
+            if !role.ports.is_empty() {
+                let ports: Vec<String> = role.ports.iter()
+                    .map(|p| p.to_string())
+                    .collect();
+                ui.label(format!("    ports: {}", ports.join(", ")));
+            }
+        }
+    }
+
+    ui.add_space(4.0);
+
+    // Dure-WSS service
     ui.label(egui::RichText::new("dure-wss:").strong());
-    ui.colored_label(ui.visuals().weak_text_color(), "  —");
+    if let Some(config) = &row.dure_wss_config {
+        ui.label(format!("  • domain: {}", config.domain));
+        ui.label(format!("    channel: {}, variant: {}", config.channel, config.variant));
+    } else {
+        ui.colored_label(ui.visuals().weak_text_color(), "  (not installed)");
+    }
 
     ui.add_space(4.0);
 }
