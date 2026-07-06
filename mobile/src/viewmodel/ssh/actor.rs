@@ -1265,11 +1265,7 @@ impl SshActor {
             return Ok(());
         }
 
-        let host_config_clone = host_config.clone();
-        match runtime::unblock(move || {
-            smol::block_on(docker::is_docker_installed(&host_config_clone))
-        })
-        .await
+        match async_compat::Compat::new(docker::is_docker_installed(&host_config)).await
         {
             Ok(true) => {
                 // Docker installed, proceed
@@ -1285,11 +1281,7 @@ impl SshActor {
                     status: "Installing Docker daemon...".to_string(),
                 }).await;
 
-                let host_config_clone2 = host_config.clone();
-                match runtime::unblock(move || {
-                    smol::block_on(docker::install_docker_daemon(&host_config_clone2))
-                })
-                .await
+                match async_compat::Compat::new(docker::install_docker_daemon(&host_config)).await
                 {
                     Ok(_) => {
                         self.send_event(SshEvent::DockerDaemonInstalled {
@@ -1329,14 +1321,10 @@ impl SshActor {
             status: "running".to_string(),
         };
 
-        let host_config_clone3 = host_config.clone();
-        let container_config_clone = container_config.clone();
-        match runtime::unblock(move || {
-            smol::block_on(docker::run_docker_container(
-                &host_config_clone3,
-                &container_config_clone,
-            ))
-        })
+        match async_compat::Compat::new(docker::run_docker_container(
+            &host_config,
+            &container_config,
+        ))
         .await
         {
             Ok(_) => {
@@ -1378,13 +1366,10 @@ impl SshActor {
             }
         };
 
-        let container_name_clone = container_name.clone();
-        match runtime::unblock(move || {
-            smol::block_on(docker::remove_docker_container(
-                &host_config,
-                &container_name_clone,
-            ))
-        })
+        match async_compat::Compat::new(docker::remove_docker_container(
+            &host_config,
+            &container_name,
+        ))
         .await
         {
             Ok(_) => {
