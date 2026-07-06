@@ -59,6 +59,10 @@ struct SshRowData {
 
     // Connection state
     connection_status: ConnectionStatus,
+
+    // Refresh state
+    refreshing: bool,
+    refresh_pending_count: u8,
 }
 
 /// SSH tab state
@@ -155,6 +159,8 @@ pub struct SshTab {
     docker_progress_messages: Vec<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     docker_progress_error: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_progress_complete: bool,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     show_ansible_progress: bool,
@@ -164,6 +170,8 @@ pub struct SshTab {
     ansible_progress_messages: Vec<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_progress_error: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_progress_complete: bool,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     show_dure_wss_progress: bool,
@@ -173,6 +181,8 @@ pub struct SshTab {
     dure_wss_progress_messages: Vec<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     dure_wss_progress_error: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dure_wss_progress_complete: bool,
 }
 
 impl Default for SshTab {
@@ -217,14 +227,17 @@ impl Default for SshTab {
             docker_progress_host: String::new(),
             docker_progress_messages: Vec::new(),
             docker_progress_error: None,
+            docker_progress_complete: false,
             show_ansible_progress: false,
             ansible_progress_host: String::new(),
             ansible_progress_messages: Vec::new(),
             ansible_progress_error: None,
+            ansible_progress_complete: false,
             show_dure_wss_progress: false,
             dure_wss_progress_host: String::new(),
             dure_wss_progress_messages: Vec::new(),
             dure_wss_progress_error: None,
+            dure_wss_progress_complete: false,
         }
     }
 }
@@ -289,6 +302,8 @@ impl SshTab {
                             ansible_roles,
                             dure_wss_config,
                             connection_status: ConnectionStatus::Unknown,
+                            refreshing: false,
+                            refresh_pending_count: 0,
                         });
                     }
                 }
@@ -363,6 +378,7 @@ impl SshTab {
                 // Update progress dialog
                 if self.show_docker_progress && self.docker_progress_host == name {
                     self.docker_progress_messages.push("✓ Docker installed successfully".to_string());
+                    self.docker_progress_complete = true;
                 }
             }
 
@@ -396,6 +412,7 @@ impl SshTab {
                 // Update progress dialog
                 if self.show_ansible_progress && self.ansible_progress_host == name {
                     self.ansible_progress_messages.push("✓ Ansible installed successfully".to_string());
+                    self.ansible_progress_complete = true;
                 }
             }
 
@@ -458,12 +475,15 @@ impl SshTab {
                 // Update progress dialogs
                 if service == "docker" && self.show_docker_progress && self.docker_progress_host == name {
                     self.docker_progress_error = Some(error.clone());
+                    self.docker_progress_complete = true;
                 }
                 if service == "ansible" && self.show_ansible_progress && self.ansible_progress_host == name {
                     self.ansible_progress_error = Some(error.clone());
+                    self.ansible_progress_complete = true;
                 }
                 if service == "dure-wss" && self.show_dure_wss_progress && self.dure_wss_progress_host == name {
                     self.dure_wss_progress_error = Some(error.clone());
+                    self.dure_wss_progress_complete = true;
                 }
             }
 
@@ -548,6 +568,12 @@ impl SshTab {
                 eprintln!("✓ Dure-WSS service installed on {} with domain {}", host_name, domain);
                 self.show_dure_wss_install_dialog = false;
                 self.loaded = false; // Trigger reload
+
+                // Update progress dialog
+                if self.show_dure_wss_progress && self.dure_wss_progress_host == host_name {
+                    self.dure_wss_progress_messages.push(format!("✓ Dure-WSS installed successfully with domain {}", domain));
+                    self.dure_wss_progress_complete = true;
+                }
             }
 
             ViewModelEvent::Ssh(SshEvent::DureWssStarted { host_name }) => {
@@ -597,17 +623,27 @@ impl SshTab {
             }
 
             // Docker operations
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_{}", idx)))
-            }) {
-                // Show progress dialog immediately
-                self.show_docker_progress = true;
-                self.docker_progress_host = host.clone();
-                self.docker_progress_messages.clear();
-                self.docker_progress_error = None;
-                self.docker_progress_messages.push("Starting Docker installation...".to_string());
+            let docker_install_id = egui::Id::new(format!("ssh_install_docker_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(docker_install_id)) {
+                // Clear the temp data immediately to prevent continuous triggering
+                ui.data_mut(|d| d.remove::<String>(docker_install_id));
 
-                let _ = vm.install_docker(host);
+                eprintln!("🔴 UI: Install Docker button clicked for host: {}", host);
+
+                // Check if already in progress
+                if self.show_docker_progress && !self.docker_progress_complete {
+                    eprintln!("⚠️  Docker installation already in progress, ignoring click");
+                } else {
+                    // Show progress dialog immediately
+                    self.show_docker_progress = true;
+                    self.docker_progress_host = host.clone();
+                    self.docker_progress_messages.clear();
+                    self.docker_progress_error = None;
+                    self.docker_progress_complete = false;
+                    self.docker_progress_messages.push("Starting Docker installation...".to_string());
+
+                    let _ = vm.install_docker(host);
+                }
             }
             if let Some(host) = ui
                 .data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx))))
@@ -635,17 +671,27 @@ impl SshTab {
             }
 
             // Ansible operations
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_{}", idx)))
-            }) {
-                // Show progress dialog immediately
-                self.show_ansible_progress = true;
-                self.ansible_progress_host = host.clone();
-                self.ansible_progress_messages.clear();
-                self.ansible_progress_error = None;
-                self.ansible_progress_messages.push("Starting Ansible installation...".to_string());
+            let ansible_install_id = egui::Id::new(format!("ssh_install_ansible_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(ansible_install_id)) {
+                // Clear the temp data immediately to prevent continuous triggering
+                ui.data_mut(|d| d.remove::<String>(ansible_install_id));
 
-                let _ = vm.install_ansible(host);
+                eprintln!("🔵 UI: Install Ansible button clicked for host: {}", host);
+
+                // Check if already in progress
+                if self.show_ansible_progress && !self.ansible_progress_complete {
+                    eprintln!("⚠️  Ansible installation already in progress, ignoring click");
+                } else {
+                    // Show progress dialog immediately
+                    self.show_ansible_progress = true;
+                    self.ansible_progress_host = host.clone();
+                    self.ansible_progress_messages.clear();
+                    self.ansible_progress_error = None;
+                    self.ansible_progress_complete = false;
+                    self.ansible_progress_messages.push("Starting Ansible installation...".to_string());
+
+                    let _ = vm.install_ansible(host);
+                }
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))
@@ -1189,13 +1235,12 @@ impl SshTab {
     fn render_docker_progress(&mut self, ctx: &egui::Context) {
         use egui_material3::MaterialButton;
 
-        let mut dialog_open = self.show_docker_progress;
-
+        let mut close_clicked = false;
         egui::Window::new("Installing Docker")
             .collapsible(false)
             .resizable(false)
             .default_width(500.0)
-            .open(&mut dialog_open)
+            .open(&mut self.show_docker_progress)
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 ui.label(format!("Host: {}", self.docker_progress_host));
@@ -1216,25 +1261,32 @@ impl SshTab {
                     ui.add_space(8.0);
                 }
 
-                if ui.add(MaterialButton::text("Close")).clicked() {
-                    self.show_docker_progress = false;
+                // Only allow closing when installation is complete or has error
+                if self.docker_progress_complete {
+                    if ui.add(MaterialButton::text("Close")).clicked() {
+                        close_clicked = true;
+                    }
+                } else {
+                    ui.add_enabled(false, MaterialButton::text("Installing..."));
+                    ui.label("Please wait while Docker is being installed.");
                 }
             });
 
-        self.show_docker_progress = dialog_open;
+        if close_clicked {
+            self.show_docker_progress = false;
+        }
     }
 
     /// Render Ansible installation progress dialog
     fn render_ansible_progress(&mut self, ctx: &egui::Context) {
         use egui_material3::MaterialButton;
 
-        let mut dialog_open = self.show_ansible_progress;
-
+        let mut close_clicked = false;
         egui::Window::new("Installing Ansible")
             .collapsible(false)
             .resizable(false)
             .default_width(500.0)
-            .open(&mut dialog_open)
+            .open(&mut self.show_ansible_progress)
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 ui.label(format!("Host: {}", self.ansible_progress_host));
@@ -1255,25 +1307,32 @@ impl SshTab {
                     ui.add_space(8.0);
                 }
 
-                if ui.add(MaterialButton::text("Close")).clicked() {
-                    self.show_ansible_progress = false;
+                // Only allow closing when installation is complete or has error
+                if self.ansible_progress_complete {
+                    if ui.add(MaterialButton::text("Close")).clicked() {
+                        close_clicked = true;
+                    }
+                } else {
+                    ui.add_enabled(false, MaterialButton::text("Installing..."));
+                    ui.label("Please wait while Ansible is being installed.");
                 }
             });
 
-        self.show_ansible_progress = dialog_open;
+        if close_clicked {
+            self.show_ansible_progress = false;
+        }
     }
 
     /// Render Dure-WSS installation progress dialog
     fn render_dure_wss_progress(&mut self, ctx: &egui::Context) {
         use egui_material3::MaterialButton;
 
-        let mut dialog_open = self.show_dure_wss_progress;
-
+        let mut close_clicked = false;
         egui::Window::new("Installing Dure-WSS")
             .collapsible(false)
             .resizable(false)
             .default_width(500.0)
-            .open(&mut dialog_open)
+            .open(&mut self.show_dure_wss_progress)
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 ui.label(format!("Host: {}", self.dure_wss_progress_host));
@@ -1294,12 +1353,20 @@ impl SshTab {
                     ui.add_space(8.0);
                 }
 
-                if ui.add(MaterialButton::text("Close")).clicked() {
-                    self.show_dure_wss_progress = false;
+                // Only allow closing when installation is complete or has error
+                if self.dure_wss_progress_complete {
+                    if ui.add(MaterialButton::text("Close")).clicked() {
+                        close_clicked = true;
+                    }
+                } else {
+                    ui.add_enabled(false, MaterialButton::text("Installing..."));
+                    ui.label("Please wait while Dure-WSS is being installed.");
                 }
             });
 
-        self.show_dure_wss_progress = dialog_open;
+        if close_clicked {
+            self.show_dure_wss_progress = false;
+        }
     }
 
     /// Render the SSH tab UI
