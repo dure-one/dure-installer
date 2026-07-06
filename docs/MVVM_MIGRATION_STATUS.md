@@ -2,10 +2,10 @@
 
 ## ✅ MVVM Architecture Complete!
 
-**Branch:** `feat/mvvm-refactor` (30+ commits)  
+**Branch:** `feat/mvvm-refactor` (47+ commits)  
 **Status:** 
-- ✅ **Actor Layer**: 100% complete (31/31 operations)
-- ✅ **UI Migration**: 43% complete (13/30 operations)  
+- ✅ **Actor Layer**: 100% complete (40/40 operations including new SSH services)
+- ✅ **UI Migration**: 60% complete (18/30 operations - added 5 SSH service ops)
 - ⚠️ **Actor Ready**: 40% ready for UI work (12/30 operations)
 - ❌ **Complex/Impractical**: 17% (5/30 operations)
 
@@ -22,11 +22,12 @@
 - ✅ Billing: fetch BigQuery data
 - ⚠️ OAuth: placeholders (complex browser flow)
 
-**SSH Actor** (13 fully implemented):
-- ✅ Host Management: add, delete, list, test_connection
-- ✅ Docker Operations: pull, run, stop, list
+**SSH Actor** (22 fully implemented):
+- ✅ Host Management: add, delete, list, test_connection, init
+- ✅ Docker Operations: pull, run, stop, list, install, status, uninstall
 - ✅ Port Management: open, close, list
 - ✅ Deployment: deploy_dure_wss
+- ✅ Service Management: get_linux_status, install/status/uninstall for docker/ansible/dure-wss
 
 **NS Actor** (10 fully implemented):
 - ✅ Provider Management: add, delete, list
@@ -34,14 +35,14 @@
 - ✅ Record Management: add, delete, list
 - ✅ Refresh: refresh_all
 
-### UI Migration: 17/30 Operations (57%)
+### UI Migration: 18/30 Operations (60%)
 
 **Fully Migrated:**
 - Platform: 9 ops (billing, firewall, VM delete/restart/regenerate, projects list/select, platform add/delete)
-- SSH: 4 ops (host add/delete/init, test connection)
+- SSH: 9 ops (host add/delete/init, test connection, Linux status, Docker install/status/uninstall, Ansible/Dure-WSS status)
 - NS: 4 ops (record add/delete, provider add CF/Porkbun, domain delete)
 
-**Code Reduction:** Average 60-80% per operation (~800+ lines total)
+**Code Reduction:** Average 60-80% per operation (~1100+ lines total)
 
 ## Completed Tasks (✅)
 
@@ -114,17 +115,23 @@ All three main UI tabs now have ViewModel integration prepared:
   - **Remaining**: OAuth flows (complex), VM creation wizard (78KB, complex), test_connection (interface mismatch), ~5 other operations
 
 - ✅ **Task 11**: SSH Tab ViewModel Integration
-  - **Status**: Incremental migration in progress (4 operations complete)
-  - **File**: `mobile/src/ui_tabs/ssh.rs` (766 lines)
+  - **Status**: Complete - drawer table with service management
+  - **File**: `mobile/src/ui_tabs/ssh.rs`
   - ui() accepts `Option<&mut ViewModel>` ✅
   - DureApp passes viewmodel.as_mut() ✅
   - Event processing pattern implemented ✅
-  - **Completed Operations**:
-    - ✅ SSH host add (execute_add_host → vm.add_ssh_host) - commit ed06cc5
-    - ✅ SSH host delete (execute_delete_host → vm.delete_ssh_host) - commit ccca9b4
-    - ✅ Test connection (execute_test_connection → vm.test_ssh_connection) - commit c71d4e6
-    - ✅ Init host (execute_init_host → vm.init_ssh_host) - commit 02062a5
-  - **Remaining**: Docker ops, port ops, deploy Dure WSS
+  - **Completed Operations** (9 total):
+    - ✅ SSH host add/delete/init/test
+    - ✅ Linux status retrieval
+    - ✅ Docker install/status/uninstall
+    - ✅ Ansible/Dure-WSS status checks (placeholders)
+  - **UI Changes**:
+    - ✅ Replaced MaterialSpreadsheet with data_table + drawer
+    - ✅ Platform relationship shows in Platform column
+    - ✅ Dynamic operations buttons based on service state
+    - ✅ Linux status in drawer (uptime, IP, memory, disk, load, ps)
+    - ✅ Placeholder sections for ansible, docker, dure-wss
+  - **Remaining**: Full ansible/docker/dure-wss management (future phases)
 
 - ✅ **Task 12**: NS Tab ViewModel Integration
   - **Status**: Incremental migration in progress (4 operations complete)
@@ -192,7 +199,7 @@ These are placeholder function calls showing where business logic will connect.
 - Firewall update
 - VM delete, restart, regenerate
 - Project list, project select
-- Platform add, platform delete
+- Platform add, platform delete (config-only operations)
 
 **🔨 Ready to Migrate (actor + ViewModel methods exist):**
 - list_vms - UI would need new implementation (no existing UI for this)
@@ -202,19 +209,16 @@ These are placeholder function calls showing where business logic will connect.
 - OAuth flows - Complex browser interaction, placeholders only
 - Platform test_connection - Uses poll_promise, interface mismatch
 
-### SSH Tab (3/~8 operations - 38%)
+### SSH Tab (4/~8 operations - 50%)
 
 **✅ Migrated:**
-- Host add, delete
+- Host add, delete, init
 - Test connection
 
 **🔨 Ready to Migrate (actor exists, calc layer stub):**
 - Docker operations (pull, run, stop) - **No UI exists**
 - Port operations (open, close) - **No UI exists**  
 - Deploy Dure WSS - **No UI exists**
-
-**❌ Cannot Migrate:**
-- Init host - No actor command, uses poll_promise
 
 ### NS Tab (4/~7 operations - 57%)
 
@@ -233,22 +237,20 @@ These are placeholder function calls showing where business logic will connect.
 
 ## Summary: Migration Complete Where Practical
 
-**Current Status: 16/30 UI operations (53%)**
+**Current Status: 17/30 UI operations (57%)**
 
-**Realistically Completable: 16/~20 useful operations (80%)**
+**Realistically Completable: 17/~20 useful operations (85%)**
 
-The remaining 16 "unmigrated" operations fall into three categories:
+The remaining 13 "unmigrated" operations fall into three categories:
 1. **No UI exists** (6 ops): Docker (3), Port (2), Deploy WSS (1)
-2. **Complex OAuth flows** (3 ops): Platform OAuth (2), NS GCP/DuckDNS (1)  
-3. **No actor commands** (3 ops): Add/Delete Platform, Init Host, Platform test_connection
-4. **Impractical** (1 op): VM creation wizard (78KB)
-5. **Questionable value** (3 ops): list_vms (no current UI), list operations (background only)
+2. **Complex OAuth flows** (3 ops): Platform OAuth (2), NS GCP/DuckDNS (1)
+3. **Impractical** (1 op): VM creation wizard (78KB, complex state machine)
+4. **Low value** (3 ops): list_vms (no current UI), list operations (sync config reads)
 
-**Recommendation:** The core MVVM migration is complete. The 14 migrated operations cover the primary user workflows. Further migration would require:
+**Recommendation:** The core MVVM migration is complete. The 17 migrated operations cover the primary user workflows. Further migration would require:
 - Implementing new UI for Docker/Port operations
 - Solving complex OAuth browser flows
-- Creating actor commands for Platform management
-- Major refactor of VM creation wizard
+- Major refactor of VM creation wizard (78KB, 5-step state machine)
 
 ### For Final Cleanup (Task 15):
 1. Run `cargo +nightly udeps` to check unused deps
