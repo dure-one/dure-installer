@@ -414,8 +414,88 @@ impl SshTab {
     }
 
     /// Render the SSH tab UI
+    /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
-        /* OLD ui() - being rewritten in Tasks 8-14
+        use egui_material3::MaterialButton;
+
+        // 1. Process ViewModel events
+        if let Some(ref mut vm) = vm {
+            let events = vm.poll_events(ui.ctx());
+            for event in events {
+                self.handle_event(event);
+            }
+
+            // 2. Show active operations with progress bars
+            for (_op_id, progress) in vm.active_operations() {
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::ProgressBar::new(progress.progress)
+                            .text(format!("{}: {}", progress.operation, progress.status))
+                            .desired_width(400.0)
+                    );
+                });
+            }
+
+            // 3. Show recent errors
+            if let Some(error) = vm.recent_errors()
+                .iter()
+                .filter(|e| e.actor == "ssh")
+                .rev()
+                .next()
+            {
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 100, 100),
+                    format!("⚠ Error in {}: {}", error.operation, error.error)
+                );
+                ui.add_space(4.0);
+            }
+        }
+
+        // 4. Header
+        ui.heading("SSH Hosts");
+        ui.add_space(4.0);
+        ui.label("Manage SSH hosts for remote server deployment and management.");
+        ui.add_space(8.0);
+
+        // 5. Add Host button
+        if ui.add(MaterialButton::filled("Add Host")).clicked() {
+            self.show_add_dialog = true;
+            self.add_host.clear();
+            self.add_password.clear();
+            self.add_private_key_path.clear();
+            self.add_port = "22".to_string();
+            self.add_use_password = false;
+            self.add_use_private_key = false;
+        }
+        ui.add_space(8.0);
+
+        // 6. Load rows on demand
+        if !self.loaded {
+            self.load_rows();
+            self.loaded = true;
+        }
+
+        // 7. Error display
+        if let Some(error) = &self.load_error {
+            ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+            ui.add_space(4.0);
+        }
+
+        // 8. Render table or empty state
+        if self.rows.is_empty() {
+            ui.label("No SSH hosts configured. Click 'Add Host' to get started.");
+        } else {
+            self.render_table(ui, vm.as_deref_mut());
+        }
+
+        // 9. Dialogs
+        if self.show_add_dialog {
+            self.render_add_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+    }
+
+    /* OLD ui() implementation - removed in Task 14
+    fn old_ui_commented_out() {
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
@@ -628,16 +708,8 @@ impl SshTab {
         if let Some(result) = self.test_result.clone() {
             self.render_test_result(ui.ctx(), &result);
         }
-        */
-
-        // Temporary placeholder during refactoring
-        ui.heading("SSH Hosts");
-        ui.add_space(8.0);
-        ui.label("SSH tab UI is being refactored to use data_table with drawer pattern.");
-        ui.label("This will be complete after Tasks 8-14.");
-
-        let _ = vm; // Suppress unused warning
     }
+    */
 
     /* OLD load_rows - will be rewritten in Task 9
     fn load_rows(&mut self) {
