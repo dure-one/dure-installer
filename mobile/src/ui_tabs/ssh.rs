@@ -309,6 +309,60 @@ impl SshTab {
         }
     }
 
+    /// Process action triggers from operation buttons
+    fn process_action_triggers(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        let Some(vm) = vm else { return };
+
+        // Check all possible action IDs
+        for (idx, _row) in self.rows.iter().enumerate() {
+            // Refresh
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_refresh_{}", idx)))) {
+                let _ = vm.get_linux_status(host.clone());
+                let _ = vm.get_docker_status(host.clone());
+                let _ = vm.get_ansible_status(host.clone());
+                let _ = vm.get_dure_wss_status(host);
+            }
+
+            // Docker operations
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_docker_{}", idx)))) {
+                let _ = vm.install_docker(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx)))) {
+                let _ = vm.get_docker_status(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))) {
+                let _ = vm.uninstall_docker(host);
+            }
+
+            // Ansible operations
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_{}", idx)))) {
+                let _ = vm.install_ansible(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))) {
+                let _ = vm.get_ansible_status(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))) {
+                let _ = vm.uninstall_ansible(host);
+            }
+
+            // Dure-WSS operations
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))) {
+                let _ = vm.install_dure_wss(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))) {
+                let _ = vm.get_dure_wss_status(host);
+            }
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)))) {
+                let _ = vm.uninstall_dure_wss(host);
+            }
+
+            // Delete
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_delete_{}", idx)))) {
+                let _ = vm.delete_ssh_host(host);
+            }
+        }
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         /* OLD ui() - being rewritten in Tasks 8-14
