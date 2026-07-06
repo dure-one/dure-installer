@@ -227,8 +227,70 @@ impl SshActor {
                 return self.handle_list_docker_containers(host_name).await;
             }
             SshCommand::InspectDockerImage { host_name, image, tag } => {
-                eprintln!("🔍 SSH Actor: InspectDockerImage stub for '{}' with {}:{}", host_name, image, tag);
-                // TODO: Implement in Task 3
+                eprintln!("🔍 SSH Actor: inspect_docker_image called for '{}' with {}:{}", host_name, image, tag);
+
+                // Load host config
+                let host_config = match self.load_host_config(&host_name) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "InspectDockerImage".to_string(),
+                            error: format!("Host not found: {}", e),
+                        }).await;
+                        return Ok(());
+                    }
+                };
+
+                let full_image = format!("{}:{}", image, tag);
+
+                // Step 1: Pull the image
+                let pull_cmd = format!("docker pull {}", full_image);
+                let host_config_clone = host_config.clone();
+                match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd)).await {
+                    Ok(output) => {
+                        eprintln!("🔍 SSH Actor: Image pulled successfully");
+                        eprintln!("📋 Pull output: {}", output);
+                    }
+                    Err(e) => {
+                        eprintln!("❌ SSH Actor: Failed to pull image: {}", e);
+                        self.send_event(SshEvent::Error {
+                            operation: format!("inspect_docker_image({})", full_image),
+                            error: format!("Failed to pull image: {}", e),
+                        }).await;
+                        return Ok(());
+                    }
+                }
+
+                // Step 2: Get image history
+                let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
+                let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd)).await {
+                    Ok(output) => output,
+                    Err(e) => {
+                        eprintln!("❌ SSH Actor: Failed to get image history: {}", e);
+                        self.send_event(SshEvent::Error {
+                            operation: format!("inspect_docker_image({})", full_image),
+                            error: format!("Failed to inspect image history: {}", e),
+                        }).await;
+                        return Ok(());
+                    }
+                };
+
+                // Step 3: Parse history output
+                let (exposed_ports, env_vars) = parse_docker_history(&history_output);
+
+                eprintln!("🔍 SSH Actor: Sending DockerImageInspected event");
+                eprintln!("  Image: {}:{}", image, tag);
+                eprintln!("  Ports: {:?}", exposed_ports);
+                eprintln!("  Env vars: {} variables", env_vars.len());
+
+                self.send_event(SshEvent::DockerImageInspected {
+                    image: image.clone(),
+                    tag: tag.clone(),
+                    exposed_ports,
+                    env_vars,
+                }).await;
+                eprintln!("✓ SSH Actor: DockerImageInspected event sent");
+
                 return Ok(());
             }
             SshCommand::RemoveDockerContainers { host_name, container_names } => {
