@@ -38,4 +38,19 @@ pub enum SshCommand {
         domain: String,
         acme_email: String,
     },
+
+    // Service Management
+    GetLinuxStatus { name: String },
+
+    InstallDocker { name: String },
+    GetDockerStatus { name: String },
+    UninstallDocker { name: String },
+
+    InstallAnsible { name: String },
+    GetAnsibleStatus { name: String },
+    UninstallAnsible { name: String },
+
+    InstallDureWss { name: String },
+    GetDureWssStatus { name: String },
+    UninstallDureWss { name: String },
 }

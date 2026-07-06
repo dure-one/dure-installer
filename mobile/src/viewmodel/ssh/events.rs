@@ -38,6 +38,46 @@ pub enum SshEvent {
     // Deployment Events
     DureWssDeployed { host_name: String, domain: String, service_status: String },
 
+    // Service Management Events
+    LinuxStatusRetrieved {
+        name: String,
+        uptime: String,
+        external_ip: String,
+        load_average: String,
+        memory_usage: String,
+        disk_usage: String,
+        top_processes: Vec<String>,
+    },
+
+    DockerInstalled { name: String },
+    DockerStatusRetrieved {
+        name: String,
+        installed: bool,
+        running: bool,
+    },
+    DockerUninstalled { name: String },
+
+    AnsibleInstalled { name: String },
+    AnsibleStatusRetrieved {
+        name: String,
+        installed: bool,
+    },
+    AnsibleUninstalled { name: String },
+
+    DureWssInstalled { name: String },
+    DureWssStatusRetrieved {
+        name: String,
+        installed: bool,
+    },
+    DureWssUninstalled { name: String },
+
+    ServiceError {
+        name: String,
+        service: String,
+        operation: String,
+        error: String,
+    },
+
     // Progress & Errors
     Progress { operation: String, progress: f32, status: String },
     Error { operation: String, error: String },

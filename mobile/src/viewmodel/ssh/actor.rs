@@ -77,6 +77,36 @@ impl SshActor {
             SshCommand::DeployDureWss { host_name, domain, acme_email } => {
                 self.deploy_dure_wss(host_name, domain, acme_email).await
             }
+            SshCommand::GetLinuxStatus { name } => {
+                self.get_linux_status(name).await
+            }
+            SshCommand::InstallDocker { name } => {
+                self.install_docker(name).await
+            }
+            SshCommand::GetDockerStatus { name } => {
+                self.get_docker_status(name).await
+            }
+            SshCommand::UninstallDocker { name } => {
+                self.uninstall_docker(name).await
+            }
+            SshCommand::InstallAnsible { name } => {
+                self.install_ansible(name).await
+            }
+            SshCommand::GetAnsibleStatus { name } => {
+                self.get_ansible_status(name).await
+            }
+            SshCommand::UninstallAnsible { name } => {
+                self.uninstall_ansible(name).await
+            }
+            SshCommand::InstallDureWss { name } => {
+                self.install_dure_wss(name).await
+            }
+            SshCommand::GetDureWssStatus { name } => {
+                self.get_dure_wss_status(name).await
+            }
+            SshCommand::UninstallDureWss { name } => {
+                self.uninstall_dure_wss(name).await
+            }
         };
 
         if let Err(e) = result {
@@ -440,6 +470,46 @@ impl SshActor {
 
     async fn deploy_dure_wss(&mut self, _host_name: String, _domain: String, _acme_email: String) -> anyhow::Result<()> {
         Err(anyhow::anyhow!("Dure WSS deployment not yet implemented in ViewModel"))
+    }
+
+    async fn get_linux_status(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Linux status not yet implemented in ViewModel"))
+    }
+
+    async fn install_docker(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker installation not yet implemented in ViewModel"))
+    }
+
+    async fn get_docker_status(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker status not yet implemented in ViewModel"))
+    }
+
+    async fn uninstall_docker(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Docker uninstallation not yet implemented in ViewModel"))
+    }
+
+    async fn install_ansible(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Ansible installation not yet implemented in ViewModel"))
+    }
+
+    async fn get_ansible_status(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Ansible status not yet implemented in ViewModel"))
+    }
+
+    async fn uninstall_ansible(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Ansible uninstallation not yet implemented in ViewModel"))
+    }
+
+    async fn install_dure_wss(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Dure WSS installation not yet implemented in ViewModel"))
+    }
+
+    async fn get_dure_wss_status(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Dure WSS status not yet implemented in ViewModel"))
+    }
+
+    async fn uninstall_dure_wss(&mut self, _name: String) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!("Dure WSS uninstallation not yet implemented in ViewModel"))
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
