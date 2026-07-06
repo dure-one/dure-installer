@@ -378,6 +378,9 @@ impl SshTab {
                     });
                     row.linux_detected = true;
                 }
+
+                // Decrement refresh counter
+                self.decrement_refresh_counter(&name);
             }
 
             ViewModelEvent::Ssh(SshEvent::DockerInstalled { name }) => {
@@ -404,6 +407,9 @@ impl SshTab {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
                     row.docker_enabled = installed;
                 }
+
+                // Decrement refresh counter
+                self.decrement_refresh_counter(&name);
             }
 
             ViewModelEvent::Ssh(SshEvent::DockerUninstalled { name }) => {
@@ -434,6 +440,9 @@ impl SshTab {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
                     row.ansible_enabled = installed;
                 }
+
+                // Decrement refresh counter
+                self.decrement_refresh_counter(&name);
             }
 
             ViewModelEvent::Ssh(SshEvent::AnsibleUninstalled { name }) => {
@@ -463,6 +472,9 @@ impl SshTab {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
                     row.dure_wss_enabled = installed;
                 }
+
+                // Decrement refresh counter
+                self.decrement_refresh_counter(&name);
             }
 
             ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { host_name }) => {
@@ -497,6 +509,9 @@ impl SshTab {
                     self.dure_wss_progress_error = Some(error.clone());
                     self.dure_wss_progress_complete = true;
                 }
+
+                // Decrement refresh counter to prevent stuck state
+                self.decrement_refresh_counter(&name);
             }
 
             ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
