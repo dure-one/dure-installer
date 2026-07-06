@@ -65,6 +65,13 @@ struct SshRowData {
     refresh_pending_count: u8,
 }
 
+/// Results from batch container removal
+#[derive(Clone, Debug)]
+struct RemoveResults {
+    removed: Vec<String>,              // successfully removed
+    failed: Vec<(String, String)>,     // (container_name, error_message)
+}
+
 /// SSH tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SshTab {
@@ -94,27 +101,71 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     add_use_private_key: bool,
 
-    // Docker Install Dialog
+    // Docker Install Dialog (Two-Step Wizard)
     #[cfg_attr(feature = "serde", serde(skip))]
     show_docker_install_dialog: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     docker_install_host_idx: Option<usize>,
+
+    // Step tracking
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_install_step: u8,  // 1 or 2
+
+    // Step 1: Image input
     #[cfg_attr(feature = "serde", serde(skip))]
     docker_image_input: String,
     #[cfg_attr(feature = "serde", serde(skip))]
+    docker_inspecting: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_inspect_error: Option<String>,
+
+    // Step 2: Configuration (from inspection)
+    #[cfg_attr(feature = "serde", serde(skip))]
     docker_container_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    docker_tag: String,
+    docker_parsed_image: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    docker_metadata: Option<crate::calc::docker::DockerImageMetadata>,
+    docker_parsed_tag: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    docker_port_mappings: Vec<(String, String)>,
+    docker_exposed_ports: Vec<u16>,
     #[cfg_attr(feature = "serde", serde(skip))]
     docker_env_vars: Vec<(String, String)>,
+
+    // Step 2: User-editable mappings
     #[cfg_attr(feature = "serde", serde(skip))]
-    docker_validating: bool,
+    docker_port_mappings: Vec<(String, String)>,  // (host, container)
     #[cfg_attr(feature = "serde", serde(skip))]
-    docker_validation_error: Option<String>,
+    docker_env_overrides: Vec<(String, String)>,  // editable copy
+
+    // Installation progress
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_installing: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_install_success: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_install_error: Option<String>,
+
+    // Docker Remove Containers Dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_docker_remove_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_remove_host_idx: Option<usize>,
+
+    // Container list
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_available_containers: Vec<crate::config::DockerContainerConfig>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_selected_containers: Vec<String>,  // container names
+
+    // Operation state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_fetching_containers: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_fetch_error: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_removing: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    docker_remove_results: Option<RemoveResults>,
 
     // Ansible Install Dialog
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -202,12 +253,26 @@ impl Default for SshTab {
             docker_install_host_idx: None,
             docker_image_input: String::new(),
             docker_container_name: String::new(),
-            docker_tag: "latest".to_string(),
-            docker_metadata: None,
+            docker_install_step: 1,
+            docker_inspecting: false,
+            docker_inspect_error: None,
+            docker_parsed_image: String::new(),
+            docker_parsed_tag: String::new(),
+            docker_exposed_ports: Vec::new(),
             docker_port_mappings: Vec::new(),
             docker_env_vars: Vec::new(),
-            docker_validating: false,
-            docker_validation_error: None,
+            docker_env_overrides: Vec::new(),
+            docker_installing: false,
+            docker_install_success: false,
+            docker_install_error: None,
+            show_docker_remove_dialog: false,
+            docker_remove_host_idx: None,
+            docker_available_containers: Vec::new(),
+            docker_selected_containers: Vec::new(),
+            docker_fetching_containers: false,
+            docker_fetch_error: None,
+            docker_removing: false,
+            docker_remove_results: None,
             show_ansible_install_dialog: false,
             ansible_install_host_idx: None,
             ansible_role_input: String::new(),
@@ -515,11 +580,11 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
-                // Docker validation errors
-                if operation.contains("Docker") && self.show_docker_install_dialog {
-                    self.docker_validation_error = Some(error.clone());
-                    self.docker_validating = false;
-                }
+                // Docker validation errors - COMMENTED OUT: Will be replaced in Task 12
+                // if operation.contains("Docker") && self.show_docker_install_dialog {
+                //     self.docker_validation_error = Some(error.clone());
+                //     self.docker_validating = false;
+                // }
                 // Ansible validation errors
                 if operation.contains("Ansible") && self.show_ansible_install_dialog {
                     self.ansible_validation_error = Some(error.clone());
@@ -528,28 +593,29 @@ impl SshTab {
                 self.load_error = Some(format!("SSH operation '{}' failed: {}", operation, error));
             }
 
-            ViewModelEvent::Ssh(SshEvent::DockerImageValidated { image, metadata }) => {
-                eprintln!("✓ Docker image {} validated", image);
-                self.docker_metadata = Some(metadata.clone());
-
-                // Populate port mappings from metadata
-                self.docker_port_mappings.clear();
-                for port in &metadata.exposed_ports {
-                    self.docker_port_mappings.push((port.to_string(), port.to_string()));
-                }
-
-                // Populate env vars from metadata
-                self.docker_env_vars.clear();
-                for env in &metadata.env_vars {
-                    if let Some(idx) = env.find('=') {
-                        let (key, value) = env.split_at(idx);
-                        self.docker_env_vars.push((key.to_string(), value[1..].to_string()));
-                    }
-                }
-
-                self.docker_validating = false;
-                self.docker_validation_error = None;
-            }
+            // COMMENTED OUT: Old DockerImageValidated event - will be replaced in Task 12
+            // ViewModelEvent::Ssh(SshEvent::DockerImageValidated { image, metadata }) => {
+            //     eprintln!("✓ Docker image {} validated", image);
+            //     self.docker_metadata = Some(metadata.clone());
+            //
+            //     // Populate port mappings from metadata
+            //     self.docker_port_mappings.clear();
+            //     for port in &metadata.exposed_ports {
+            //         self.docker_port_mappings.push((port.to_string(), port.to_string()));
+            //     }
+            //
+            //     // Populate env vars from metadata
+            //     self.docker_env_vars.clear();
+            //     for env in &metadata.env_vars {
+            //         if let Some(idx) = env.find('=') {
+            //             let (key, value) = env.split_at(idx);
+            //             self.docker_env_vars.push((key.to_string(), value[1..].to_string()));
+            //         }
+            //     }
+            //
+            //     self.docker_validating = false;
+            //     self.docker_validation_error = None;
+            // }
 
             ViewModelEvent::Ssh(SshEvent::DockerImageInstalled { host_name, container_name }) => {
                 eprintln!("✓ Docker container {} installed on {}", container_name, host_name);
@@ -695,12 +761,13 @@ impl SshTab {
                 self.docker_install_host_idx = Some(idx);
                 self.docker_image_input.clear();
                 self.docker_container_name.clear();
-                self.docker_tag = "latest".to_string();
-                self.docker_metadata = None;
+                // COMMENTED OUT: Old dialog initialization - will be replaced in Task 7
+                // self.docker_tag = "latest".to_string();
+                // self.docker_metadata = None;
                 self.docker_port_mappings.clear();
                 self.docker_env_vars.clear();
-                self.docker_validating = false;
-                self.docker_validation_error = None;
+                // self.docker_validating = false;
+                // self.docker_validation_error = None;
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))
@@ -855,50 +922,53 @@ impl SshTab {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add_space(8.0);
 
-                    // Image input with validation
-                    ui.horizontal(|ui| {
-                        ui.label("Image:");
-                        let response = ui.text_edit_singleline(&mut self.docker_image_input);
-                        if response.lost_focus() && !self.docker_image_input.is_empty() {
-                            if let Some(ref mut vm) = vm {
-                                self.docker_validating = true;
-                                self.docker_validation_error = None;
-                                // vm.validate_docker_image(self.docker_image_input.clone()); // Removed - will be replaced in Task 7
-                                let _ = vm; // Suppress unused warning
-                            }
-                        }
-                    });
-                    ui.label("Format: owner/repository or library/image");
-                    ui.add_space(4.0);
+                    // COMMENTED OUT: Old single-step dialog UI - will be replaced in Task 7/8 with two-step wizard
+                    // // Image input with validation
+                    // ui.horizontal(|ui| {
+                    //     ui.label("Image:");
+                    //     let response = ui.text_edit_singleline(&mut self.docker_image_input);
+                    //     if response.lost_focus() && !self.docker_image_input.is_empty() {
+                    //         if let Some(ref mut vm) = vm {
+                    //             self.docker_validating = true;
+                    //             self.docker_validation_error = None;
+                    //             // vm.validate_docker_image(self.docker_image_input.clone()); // Removed - will be replaced in Task 7
+                    //             let _ = vm; // Suppress unused warning
+                    //         }
+                    //     }
+                    // });
+                    // ui.label("Format: owner/repository or library/image");
+                    // ui.add_space(4.0);
+                    //
+                    // // Validation status
+                    // if self.docker_validating {
+                    //     ui.spinner();
+                    //     ui.label("Validating image...");
+                    // } else if let Some(error) = &self.docker_validation_error {
+                    //     ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+                    // } else if let Some(ref metadata) = self.docker_metadata {
+                    //     ui.colored_label(egui::Color32::GREEN, "✓ Image validated");
+                    //     ui.label(format!("Description: {}", metadata.description));
+                    // }
+                    // ui.add_space(8.0);
+                    //
+                    // // Tag selection
+                    // ui.horizontal(|ui| {
+                    //     ui.label("Tag:");
+                    //     egui::ComboBox::from_id_salt("docker_tag")
+                    //         .selected_text(&self.docker_tag)
+                    //         .show_ui(ui, |ui| {
+                    //             if let Some(ref metadata) = self.docker_metadata {
+                    //                 for tag in &metadata.tags {
+                    //                     ui.selectable_value(&mut self.docker_tag, tag.clone(), tag);
+                    //                 }
+                    //             } else {
+                    //                 ui.selectable_value(&mut self.docker_tag, "latest".to_string(), "latest");
+                    //             }
+                    //         });
+                    // });
+                    // ui.add_space(8.0);
 
-                    // Validation status
-                    if self.docker_validating {
-                        ui.spinner();
-                        ui.label("Validating image...");
-                    } else if let Some(error) = &self.docker_validation_error {
-                        ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
-                    } else if let Some(ref metadata) = self.docker_metadata {
-                        ui.colored_label(egui::Color32::GREEN, "✓ Image validated");
-                        ui.label(format!("Description: {}", metadata.description));
-                    }
-                    ui.add_space(8.0);
-
-                    // Tag selection
-                    ui.horizontal(|ui| {
-                        ui.label("Tag:");
-                        egui::ComboBox::from_id_salt("docker_tag")
-                            .selected_text(&self.docker_tag)
-                            .show_ui(ui, |ui| {
-                                if let Some(ref metadata) = self.docker_metadata {
-                                    for tag in &metadata.tags {
-                                        ui.selectable_value(&mut self.docker_tag, tag.clone(), tag);
-                                    }
-                                } else {
-                                    ui.selectable_value(&mut self.docker_tag, "latest".to_string(), "latest");
-                                }
-                            });
-                    });
-                    ui.add_space(8.0);
+                    ui.label("TODO: Two-step wizard will be implemented in Tasks 7-8");
 
                     // Container name
                     ui.horizontal(|ui| {
@@ -956,50 +1026,52 @@ impl SshTab {
                     }
                     ui.add_space(16.0);
 
-                    // Action buttons
+                    // Action buttons - TEMPORARILY DISABLED: Will be replaced in Task 8
                     ui.horizontal(|ui| {
-                        let can_install = !self.docker_image_input.is_empty()
-                            && !self.docker_container_name.is_empty()
-                            && self.docker_metadata.is_some()
-                            && !self.docker_validating;
+                        // let can_install = !self.docker_image_input.is_empty()
+                        //     && !self.docker_container_name.is_empty()
+                        //     && self.docker_metadata.is_some()
+                        //     && !self.docker_validating;
+                        let can_install = false; // Temporarily disabled
 
                         if ui
                             .add_enabled(can_install, MaterialButton::filled("Install"))
                             .clicked()
                         {
-                            if let Some(ref mut vm) = vm {
-                                if let Some(host_idx) = self.docker_install_host_idx {
-                                    if let Some(row) = self.rows.get(host_idx) {
-                                        // Parse port mappings
-                                        let ports: Vec<(u16, u16)> = self
-                                            .docker_port_mappings
-                                            .iter()
-                                            .filter_map(|(h, c)| {
-                                                let host = h.parse::<u16>().ok()?;
-                                                let container = c.parse::<u16>().ok()?;
-                                                Some((host, container))
-                                            })
-                                            .collect();
-
-                                        // Filter out empty env vars
-                                        let env: Vec<(String, String)> = self
-                                            .docker_env_vars
-                                            .iter()
-                                            .filter(|(k, _)| !k.is_empty())
-                                            .cloned()
-                                            .collect();
-
-                                        vm.install_docker_image(
-                                            row.host.clone(),
-                                            self.docker_container_name.clone(),
-                                            self.docker_image_input.clone(),
-                                            self.docker_tag.clone(),
-                                            ports,
-                                            env,
-                                        );
-                                    }
-                                }
-                            }
+                            // COMMENTED OUT: Will be replaced in Task 8
+                            // if let Some(ref mut vm) = vm {
+                            //     if let Some(host_idx) = self.docker_install_host_idx {
+                            //         if let Some(row) = self.rows.get(host_idx) {
+                            //             // Parse port mappings
+                            //             let ports: Vec<(u16, u16)> = self
+                            //                 .docker_port_mappings
+                            //                 .iter()
+                            //                 .filter_map(|(h, c)| {
+                            //                     let host = h.parse::<u16>().ok()?;
+                            //                     let container = c.parse::<u16>().ok()?;
+                            //                     Some((host, container))
+                            //                 })
+                            //                 .collect();
+                            //
+                            //             // Filter out empty env vars
+                            //             let env: Vec<(String, String)> = self
+                            //                 .docker_env_vars
+                            //                 .iter()
+                            //                 .filter(|(k, _)| !k.is_empty())
+                            //                 .cloned()
+                            //                 .collect();
+                            //
+                            //             vm.install_docker_image(
+                            //                 row.host.clone(),
+                            //                 self.docker_container_name.clone(),
+                            //                 self.docker_image_input.clone(),
+                            //                 self.docker_tag.clone(),
+                            //                 ports,
+                            //                 env,
+                            //             );
+                            //         }
+                            //     }
+                            // }
                         }
 
                         if ui.add(MaterialButton::text("Cancel")).clicked() {
