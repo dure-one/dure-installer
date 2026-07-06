@@ -1417,7 +1417,14 @@ impl SshTab {
             for event in events {
                 self.handle_event(event);
             }
+        }
 
+        // Request continuous repainting while any row is refreshing
+        if self.rows.iter().any(|row| row.refreshing) {
+            ui.ctx().request_repaint();
+        }
+
+        if let Some(ref vm) = vm {
             // 2. Show active operations with progress bars
             for (_op_id, progress) in vm.active_operations() {
                 ui.horizontal(|ui| {
