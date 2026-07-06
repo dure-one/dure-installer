@@ -363,6 +363,56 @@ impl SshTab {
         }
     }
 
+    /// Render the SSH hosts table with drawers
+    fn render_table(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
+        use egui_material3::data_table;
+
+        let table_id = egui::Id::new("ssh_table");
+
+        // Initialize drawer state (all closed by default)
+        use egui_material3::datatable::DataTableState;
+        let state: DataTableState = ui.data_mut(|d| {
+            d.get_persisted::<DataTableState>(table_id)
+                .unwrap_or_default()
+        });
+        ui.data_mut(|d| d.insert_persisted(table_id, state));
+
+        // Build table
+        let mut table = data_table()
+            .id(table_id)
+            .allow_selection(false)
+            .allow_drawer(true)
+            .column("Host (Port)", 200.0, false)
+            .column("Platform", 150.0, false)
+            .column("Status", 300.0, false)
+            .column("Operations", 350.0, false);
+
+        for (idx, row) in self.rows.iter().enumerate() {
+            let row_for_cells = row.clone();
+            let row_for_drawer = row.clone();
+            let row_for_ops = row.clone();
+
+            table = table.row(move |r| {
+                r.cell(&format!("{}:{}", row_for_cells.host, row_for_cells.port))
+                 .cell(&format_platform(&row_for_cells))
+                 .cell(&format_status(&row_for_cells))
+                 .widget_cell(move |ui| {
+                     render_operations(ui, &row_for_ops, idx);
+                 })
+                 .drawer(move |ui| {
+                     render_drawer_content(ui, &row_for_drawer);
+                 })
+            });
+        }
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            table.show(ui);
+        });
+
+        // Process action triggers from operations buttons
+        self.process_action_triggers(ui, vm);
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         /* OLD ui() - being rewritten in Tasks 8-14
