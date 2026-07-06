@@ -376,7 +376,8 @@ impl SshTab {
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))
             }) {
-                let _ = vm.install_dure_wss(host);
+                // TODO: Update to use proper UI dialog in Tasks 5-7
+                vm.install_dure_wss(host, "example.com".to_string(), "admin@example.com".to_string(), "stable".to_string(), "default".to_string());
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))

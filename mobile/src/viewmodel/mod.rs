@@ -552,22 +552,132 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    // Legacy Dure-WSS methods (temporary stubs - to be replaced in Task 4)
-    #[deprecated(note = "Use new lifecycle API in Task 4")]
-    pub fn install_dure_wss(&self, _host: String) -> anyhow::Result<()> {
-        // Stub: will be properly implemented in Task 4
+    // Docker Lifecycle Management
+
+    /// Validate Docker image and fetch metadata from Docker Hub
+    pub fn validate_docker_image(&self, image: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::ValidateDockerImage { image });
+    }
+
+    /// Install Docker image on host (auto-installs Docker if needed)
+    pub fn install_docker_image(
+        &self,
+        host: String,
+        container_name: String,
+        image: String,
+        tag: String,
+        ports: Vec<(u16, u16)>,
+        env: Vec<(String, String)>,
+    ) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::InstallDockerImage {
+            host_name: host,
+            container_name,
+            image,
+            tag,
+            ports,
+            env,
+        });
+    }
+
+    /// Remove Docker container from host
+    pub fn remove_docker_container(&self, host: String, container_name: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::RemoveDockerContainer {
+            host_name: host,
+            container_name,
+        });
+    }
+
+    /// List Docker containers on host
+    pub fn list_docker_containers(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::ListDockerContainers { host_name: host });
+    }
+
+    // Ansible Lifecycle Management
+
+    /// Validate Ansible role and fetch metadata from Galaxy
+    pub fn validate_ansible_role(&self, role: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::ValidateAnsibleRole { role });
+    }
+
+    /// Install Ansible role on host (auto-installs Ansible if needed)
+    pub fn install_ansible_role(
+        &self,
+        host: String,
+        instance_name: String,
+        galaxy_name: String,
+        variables: Vec<(String, String)>,
+        ports: Vec<u16>,
+    ) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::InstallAnsibleRole {
+            host_name: host,
+            instance_name,
+            galaxy_name,
+            variables,
+            ports,
+        });
+    }
+
+    /// Remove Ansible role from host
+    pub fn remove_ansible_role(&self, host: String, instance_name: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::RemoveAnsibleRole {
+            host_name: host,
+            instance_name,
+        });
+    }
+
+    /// List Ansible roles installed on host
+    pub fn list_ansible_roles(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::ListAnsibleRoles { host_name: host });
+    }
+
+    // Dure-WSS Lifecycle Management
+
+    /// Install Dure-WSS service on host
+    pub fn install_dure_wss(
+        &self,
+        host: String,
+        domain: String,
+        email: String,
+        channel: String,
+        variant: String,
+    ) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::InstallDureWssService {
+            host_name: host,
+            domain,
+            email,
+            channel,
+            variant,
+        });
+    }
+
+    /// Start Dure-WSS service
+    pub fn start_dure_wss(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::StartDureWss { host_name: host });
+    }
+
+    /// Stop Dure-WSS service
+    pub fn stop_dure_wss(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::StopDureWss { host_name: host });
+    }
+
+    /// Restart Dure-WSS service
+    pub fn restart_dure_wss(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::RestartDureWss { host_name: host });
+    }
+
+    /// Uninstall Dure-WSS service
+    pub fn uninstall_dure_wss(&self, host: String) {
+        let _ = self.ssh_tx.send_blocking(ssh::SshCommand::UninstallDureWss { host_name: host });
+    }
+
+    // Legacy compatibility stubs for old UI code (will be removed in Tasks 5-7)
+    #[deprecated(note = "Use install_dure_wss with full parameters")]
+    pub fn install_dure_wss_legacy(&self, _host: String) -> anyhow::Result<()> {
         Ok(())
     }
 
-    #[deprecated(note = "Use new lifecycle API in Task 4")]
+    #[deprecated(note = "Use start_dure_wss/stop_dure_wss methods instead")]
     pub fn get_dure_wss_status(&self, _host: String) -> anyhow::Result<()> {
-        // Stub: will be properly implemented in Task 4
-        Ok(())
-    }
-
-    #[deprecated(note = "Use new lifecycle API in Task 4")]
-    pub fn uninstall_dure_wss(&self, _host: String) -> anyhow::Result<()> {
-        // Stub: will be properly implemented in Task 4
         Ok(())
     }
 
