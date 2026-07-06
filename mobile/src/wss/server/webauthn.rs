@@ -187,10 +187,7 @@ impl WebAuthnState {
     /// Start multi-factor authentication
     ///
     /// Returns (session_id, challenge_json) to send to the client
-    pub async fn start_mfa_login(
-        &self,
-        username: String,
-    ) -> Result<(String, String), AuthError> {
+    pub async fn start_mfa_login(&self, username: String) -> Result<(String, String), AuthError> {
         let params = WebAuthnMfaLoginBeginParams {
             rp_display_name: self.rp_name.clone(),
             rp_id: self.rp_id.clone(),
