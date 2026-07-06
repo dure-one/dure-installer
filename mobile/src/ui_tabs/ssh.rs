@@ -649,7 +649,7 @@ impl SshTab {
                 if let Some(row) = self.rows.get_mut(idx) {
                     if !row.refreshing {
                         row.refreshing = true;
-                        row.refresh_pending_count = 4;
+                        row.refresh_pending_count = 3;
 
                         let _ = vm.get_linux_status(host.clone());
                         let _ = vm.get_docker_status(host.clone());
@@ -1472,7 +1472,7 @@ impl SshTab {
             if let Some(ref mut vm) = vm {
                 for row in &mut self.rows {
                     row.refreshing = true;
-                    row.refresh_pending_count = 4;
+                    row.refresh_pending_count = 3;
                     let _ = vm.get_linux_status(row.host.clone());
                     let _ = vm.get_docker_status(row.host.clone());
                     let _ = vm.get_ansible_status(row.host.clone());
