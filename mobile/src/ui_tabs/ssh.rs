@@ -232,7 +232,7 @@ impl SshTab {
                         // Find installed services for this host
                         let docker_containers = host_config.docker_containers.clone();
                         let ansible_roles = host_config.ansible_roles.clone();
-                        let dure_wss_config = host_config.dure_wss.clone();
+                        let dure_wss_config = host_config.dure_wss_config.clone();
 
                         self.rows.push(SshRowData {
                             host: host_config.host.clone(),
@@ -454,13 +454,13 @@ impl SshTab {
 
                 // Populate ports from metadata
                 self.ansible_ports.clear();
-                for port in &metadata.exposed_ports {
+                for port in &metadata.suggested_ports {
                     self.ansible_ports.push(port.to_string());
                 }
 
                 // Populate variables from metadata
                 self.ansible_variables.clear();
-                for (key, value) in &metadata.default_vars {
+                for (key, value) in &metadata.variables {
                     self.ansible_variables.push((key.clone(), value.clone()));
                 }
 
@@ -663,7 +663,7 @@ impl SshTab {
     fn render_docker_install_dialog(
         &mut self,
         ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use egui_material3::MaterialButton;
 
@@ -702,7 +702,6 @@ impl SshTab {
                     } else if let Some(ref metadata) = self.docker_metadata {
                         ui.colored_label(egui::Color32::GREEN, "✓ Image validated");
                         ui.label(format!("Description: {}", metadata.description));
-                        ui.label(format!("Stars: {}", metadata.star_count));
                     }
                     ui.add_space(8.0);
 
@@ -839,7 +838,7 @@ impl SshTab {
     fn render_ansible_install_dialog(
         &mut self,
         ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use egui_material3::MaterialButton;
 
@@ -878,7 +877,6 @@ impl SshTab {
                     } else if let Some(ref metadata) = self.ansible_metadata {
                         ui.colored_label(egui::Color32::GREEN, "✓ Role validated");
                         ui.label(format!("Description: {}", metadata.description));
-                        ui.label(format!("Downloads: {}", metadata.download_count));
                     }
                     ui.add_space(8.0);
 
@@ -992,7 +990,7 @@ impl SshTab {
     fn render_dure_wss_install_dialog(
         &mut self,
         ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use egui_material3::MaterialButton;
 
@@ -1710,7 +1708,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
     } else {
         for container in &row.docker_containers {
             ui.label(format!("  • {} ({}:{})",
-                container.container_name,
+                container.name,
                 container.image,
                 container.tag
             ));
@@ -1732,7 +1730,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
     } else {
         for role in &row.ansible_roles {
             ui.label(format!("  • {} ({})",
-                role.instance_name,
+                role.name,
                 role.galaxy_name
             ));
             if !role.ports.is_empty() {
