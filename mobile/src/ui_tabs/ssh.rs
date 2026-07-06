@@ -108,6 +108,26 @@ pub struct SshTab {
     docker_validating: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     docker_validation_error: Option<String>,
+
+    // Ansible Install Dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_ansible_install_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_install_host_idx: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_role_input: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_instance_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_metadata: Option<crate::calc::ansible::AnsibleRoleMetadata>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_ports: Vec<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_variables: Vec<(String, String)>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_validating: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ansible_validation_error: Option<String>,
 }
 
 impl Default for SshTab {
@@ -133,6 +153,15 @@ impl Default for SshTab {
             docker_env_vars: Vec::new(),
             docker_validating: false,
             docker_validation_error: None,
+            show_ansible_install_dialog: false,
+            ansible_install_host_idx: None,
+            ansible_role_input: String::new(),
+            ansible_instance_name: String::new(),
+            ansible_metadata: None,
+            ansible_ports: Vec::new(),
+            ansible_variables: Vec::new(),
+            ansible_validating: false,
+            ansible_validation_error: None,
         }
     }
 }
@@ -347,6 +376,11 @@ impl SshTab {
                     self.docker_validation_error = Some(error.clone());
                     self.docker_validating = false;
                 }
+                // Ansible validation errors
+                if operation.contains("Ansible") && self.show_ansible_install_dialog {
+                    self.ansible_validation_error = Some(error.clone());
+                    self.ansible_validating = false;
+                }
                 self.load_error = Some(format!("SSH operation '{}' failed: {}", operation, error));
             }
 
@@ -381,6 +415,36 @@ impl SshTab {
 
             ViewModelEvent::Ssh(SshEvent::DockerDaemonInstalled { host_name }) => {
                 eprintln!("✓ Docker daemon installed on {}", host_name);
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleRoleValidated { role, metadata }) => {
+                eprintln!("✓ Ansible role {} validated", role);
+                self.ansible_metadata = Some(metadata.clone());
+
+                // Populate ports from metadata
+                self.ansible_ports.clear();
+                for port in &metadata.exposed_ports {
+                    self.ansible_ports.push(port.to_string());
+                }
+
+                // Populate variables from metadata
+                self.ansible_variables.clear();
+                for (key, value) in &metadata.default_vars {
+                    self.ansible_variables.push((key.clone(), value.clone()));
+                }
+
+                self.ansible_validating = false;
+                self.ansible_validation_error = None;
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleRoleInstalled { host_name, instance_name }) => {
+                eprintln!("✓ Ansible role {} installed on {}", instance_name, host_name);
+                self.show_ansible_install_dialog = false;
+                self.loaded = false; // Trigger reload
+            }
+
+            ViewModelEvent::Ssh(SshEvent::AnsibleDaemonInstalled { host_name }) => {
+                eprintln!("✓ Ansible daemon installed on {}", host_name);
             }
 
             // Keep existing event handlers (ConnectionTested, HostInitialized, etc.)
@@ -449,6 +513,19 @@ impl SshTab {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))
             }) {
                 let _ = vm.get_ansible_status(host);
+            }
+            if let Some(_host) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_role_{}", idx)))
+            }) {
+                self.show_ansible_install_dialog = true;
+                self.ansible_install_host_idx = Some(idx);
+                self.ansible_role_input.clear();
+                self.ansible_instance_name.clear();
+                self.ansible_metadata = None;
+                self.ansible_ports.clear();
+                self.ansible_variables.clear();
+                self.ansible_validating = false;
+                self.ansible_validation_error = None;
             }
             if let Some(host) = ui.data(|d| {
                 d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))
@@ -709,6 +786,159 @@ impl SshTab {
         self.show_docker_install_dialog = dialog_open;
     }
 
+    /// Render Ansible role installation dialog
+    fn render_ansible_install_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use egui_material3::MaterialButton;
+
+        let mut dialog_open = self.show_ansible_install_dialog;
+
+        egui::Window::new("Install Ansible Role")
+            .collapsible(false)
+            .resizable(true)
+            .default_width(600.0)
+            .open(&mut dialog_open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(8.0);
+
+                    // Role input with validation
+                    ui.horizontal(|ui| {
+                        ui.label("Galaxy Role:");
+                        let response = ui.text_edit_singleline(&mut self.ansible_role_input);
+                        if response.lost_focus() && !self.ansible_role_input.is_empty() {
+                            if let Some(ref mut vm) = vm {
+                                self.ansible_validating = true;
+                                self.ansible_validation_error = None;
+                                vm.validate_ansible_role(self.ansible_role_input.clone());
+                            }
+                        }
+                    });
+                    ui.label("Format: namespace.role_name");
+                    ui.add_space(4.0);
+
+                    // Validation status
+                    if self.ansible_validating {
+                        ui.spinner();
+                        ui.label("Validating role...");
+                    } else if let Some(error) = &self.ansible_validation_error {
+                        ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+                    } else if let Some(ref metadata) = self.ansible_metadata {
+                        ui.colored_label(egui::Color32::GREEN, "✓ Role validated");
+                        ui.label(format!("Description: {}", metadata.description));
+                        ui.label(format!("Downloads: {}", metadata.download_count));
+                    }
+                    ui.add_space(8.0);
+
+                    // Instance name
+                    ui.horizontal(|ui| {
+                        ui.label("Instance Name:");
+                        ui.text_edit_singleline(&mut self.ansible_instance_name);
+                    });
+                    ui.label("Unique name for this instance");
+                    ui.add_space(8.0);
+
+                    // Ports
+                    ui.label("Exposed Ports:");
+                    ui.add_space(4.0);
+
+                    let mut to_remove = None;
+                    for (idx, port) in self.ansible_ports.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.label("Port:");
+                            ui.add(egui::TextEdit::singleline(port).desired_width(80.0));
+                            if ui.button("−").clicked() {
+                                to_remove = Some(idx);
+                            }
+                        });
+                    }
+                    if let Some(idx) = to_remove {
+                        self.ansible_ports.remove(idx);
+                    }
+
+                    if ui.add(MaterialButton::text("+ Add Port")).clicked() {
+                        self.ansible_ports.push("".to_string());
+                    }
+                    ui.add_space(8.0);
+
+                    // Variables
+                    ui.label("Variables:");
+                    ui.add_space(4.0);
+
+                    let mut to_remove_var = None;
+                    for (idx, (key, value)) in self.ansible_variables.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::TextEdit::singleline(key).desired_width(150.0).hint_text("variable"));
+                            ui.label("=");
+                            ui.add(egui::TextEdit::singleline(value).desired_width(200.0).hint_text("value"));
+                            if ui.button("−").clicked() {
+                                to_remove_var = Some(idx);
+                            }
+                        });
+                    }
+                    if let Some(idx) = to_remove_var {
+                        self.ansible_variables.remove(idx);
+                    }
+
+                    if ui.add(MaterialButton::text("+ Add Variable")).clicked() {
+                        self.ansible_variables.push(("".to_string(), "".to_string()));
+                    }
+                    ui.add_space(16.0);
+
+                    // Action buttons
+                    ui.horizontal(|ui| {
+                        let can_install = !self.ansible_role_input.is_empty()
+                            && !self.ansible_instance_name.is_empty()
+                            && self.ansible_metadata.is_some()
+                            && !self.ansible_validating;
+
+                        if ui
+                            .add_enabled(can_install, MaterialButton::filled("Install"))
+                            .clicked()
+                        {
+                            if let Some(ref mut vm) = vm {
+                                if let Some(host_idx) = self.ansible_install_host_idx {
+                                    if let Some(row) = self.rows.get(host_idx) {
+                                        // Parse ports
+                                        let ports: Vec<u16> = self
+                                            .ansible_ports
+                                            .iter()
+                                            .filter_map(|p| p.parse::<u16>().ok())
+                                            .collect();
+
+                                        // Filter out empty variables
+                                        let variables: Vec<(String, String)> = self
+                                            .ansible_variables
+                                            .iter()
+                                            .filter(|(k, _)| !k.is_empty())
+                                            .cloned()
+                                            .collect();
+
+                                        vm.install_ansible_role(
+                                            row.host.clone(),
+                                            self.ansible_instance_name.clone(),
+                                            self.ansible_role_input.clone(),
+                                            variables,
+                                            ports,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        if ui.add(MaterialButton::text("Cancel")).clicked() {
+                            self.show_ansible_install_dialog = false;
+                        }
+                    });
+                });
+            });
+
+        self.show_ansible_install_dialog = dialog_open;
+    }
+
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         use egui_material3::MaterialButton;
@@ -790,6 +1020,9 @@ impl SshTab {
         }
         if self.show_docker_install_dialog {
             self.render_docker_install_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+        if self.show_ansible_install_dialog {
+            self.render_ansible_install_dialog(ui.ctx(), vm.as_deref_mut());
         }
     }
 
@@ -1442,6 +1675,18 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                         ui.data_mut(|d| {
                             d.insert_temp(
                                 egui::Id::new(format!("ssh_ansible_status_{}", idx)),
+                                row.host.clone(),
+                            )
+                        });
+                    }
+                    if ui
+                        .add(MaterialButton::outlined("Install Role").small())
+                        .on_hover_text("Install Ansible role")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new(format!("ssh_install_ansible_role_{}", idx)),
                                 row.host.clone(),
                             )
                         });
