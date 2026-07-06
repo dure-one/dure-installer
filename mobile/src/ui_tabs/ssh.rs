@@ -62,21 +62,17 @@ struct SshRowData {
 /// SSH tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SshTab {
-    selected_row: Option<usize>,
-    /// Cached SSH host rows (host, port, auth type, status)
+    /// Display data
     #[cfg_attr(feature = "serde", serde(skip))]
-    rows: Vec<[String; 4]>,
+    rows: Vec<SshRowData>,
+
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
 
-    // Spreadsheet
-    #[cfg_attr(feature = "serde", serde(skip))]
-    spreadsheet: Option<MaterialSpreadsheet>,
-    row_selection_enabled: bool,
-
-    // Add dialog state
+    // Add host dialog
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_dialog: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -91,57 +87,14 @@ pub struct SshTab {
     add_use_password: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_use_private_key: bool,
-
-    // Init progress state
-    #[cfg_attr(feature = "serde", serde(skip))]
-    init_in_progress: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    init_host: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    init_progress_log: Vec<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    init_promise: Option<poll_promise::Promise<Result<Vec<String>, String>>>,
-
-    // Connection test state
-    #[cfg_attr(feature = "serde", serde(skip))]
-    test_in_progress: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    test_promise: Option<poll_promise::Promise<Result<ssh::SshConnectionResult, String>>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    test_result: Option<Result<String, String>>,
 }
 
 impl Default for SshTab {
     fn default() -> Self {
-        let spreadsheet = {
-            let columns = vec![
-                text_column("Host", 250.0),
-                text_column("Port", 80.0),
-                text_column("Auth", 150.0),
-                text_column("Status", 150.0),
-            ];
-
-            // Create spreadsheet with theme-aware settings
-            MaterialSpreadsheet::new("ssh_spreadsheet", columns)
-                .ok()
-                .map(|mut s| {
-                    // Enable striped rows for Material Design theme colors
-                    s.set_striped(true);
-                    // Enable row selection
-                    s.set_row_selection_enabled(true);
-                    // Enable selection for better visual feedback
-                    s.set_allow_selection(true);
-                    s
-                })
-        };
-
         Self {
-            selected_row: None,
             rows: Vec::new(),
             loaded: false,
             load_error: None,
-            spreadsheet,
-            row_selection_enabled: true,
             show_add_dialog: false,
             add_host: String::new(),
             add_password: String::new(),
@@ -149,13 +102,6 @@ impl Default for SshTab {
             add_port: "22".to_string(),
             add_use_password: false,
             add_use_private_key: false,
-            init_in_progress: false,
-            init_host: None,
-            init_progress_log: Vec::new(),
-            init_promise: None,
-            test_in_progress: false,
-            test_promise: None,
-            test_result: None,
         }
     }
 }
@@ -179,6 +125,7 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 impl SshTab {
     /// Render the SSH tab UI
     pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        /* OLD ui() - being rewritten in Tasks 8-14
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
@@ -391,8 +338,18 @@ impl SshTab {
         if let Some(result) = self.test_result.clone() {
             self.render_test_result(ui.ctx(), &result);
         }
+        */
+
+        // Temporary placeholder during refactoring
+        ui.heading("SSH Hosts");
+        ui.add_space(8.0);
+        ui.label("SSH tab UI is being refactored to use data_table with drawer pattern.");
+        ui.label("This will be complete after Tasks 8-14.");
+
+        let _ = vm; // Suppress unused warning
     }
 
+    /* OLD load_rows - will be rewritten in Task 9
     fn load_rows(&mut self) {
         self.rows.clear();
         self.load_error = None;
@@ -469,6 +426,7 @@ impl SshTab {
             self.load_error = Some("SSH management not available on WASM".to_string());
         }
     }
+    */
 
     fn render_add_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = true;
@@ -624,6 +582,7 @@ impl SshTab {
         }
     }
 
+    /* OLD - will be replaced in later tasks
     fn execute_init_host(&mut self, host: String, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -647,6 +606,9 @@ impl SshTab {
         }
     }
 
+    */
+
+    /* OLD methods using removed fields - commented out during Task 8
     fn execute_test_connection(&mut self, host: String, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         eprintln!("🔍 execute_test_connection called for host: {}", host);
         #[cfg(not(target_arch = "wasm32"))]
@@ -833,6 +795,7 @@ impl SshTab {
             );
         }
     }
+    */
 }
 
 /// Format platform relationship for display
