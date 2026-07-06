@@ -922,166 +922,102 @@ impl SshTab {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add_space(8.0);
 
-                    // COMMENTED OUT: Old single-step dialog UI - will be replaced in Task 7/8 with two-step wizard
-                    // // Image input with validation
-                    // ui.horizontal(|ui| {
-                    //     ui.label("Image:");
-                    //     let response = ui.text_edit_singleline(&mut self.docker_image_input);
-                    //     if response.lost_focus() && !self.docker_image_input.is_empty() {
-                    //         if let Some(ref mut vm) = vm {
-                    //             self.docker_validating = true;
-                    //             self.docker_validation_error = None;
-                    //             // vm.validate_docker_image(self.docker_image_input.clone()); // Removed - will be replaced in Task 7
-                    //             let _ = vm; // Suppress unused warning
-                    //         }
-                    //     }
-                    // });
-                    // ui.label("Format: owner/repository or library/image");
-                    // ui.add_space(4.0);
-                    //
-                    // // Validation status
-                    // if self.docker_validating {
-                    //     ui.spinner();
-                    //     ui.label("Validating image...");
-                    // } else if let Some(error) = &self.docker_validation_error {
-                    //     ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
-                    // } else if let Some(ref metadata) = self.docker_metadata {
-                    //     ui.colored_label(egui::Color32::GREEN, "✓ Image validated");
-                    //     ui.label(format!("Description: {}", metadata.description));
-                    // }
-                    // ui.add_space(8.0);
-                    //
-                    // // Tag selection
-                    // ui.horizontal(|ui| {
-                    //     ui.label("Tag:");
-                    //     egui::ComboBox::from_id_salt("docker_tag")
-                    //         .selected_text(&self.docker_tag)
-                    //         .show_ui(ui, |ui| {
-                    //             if let Some(ref metadata) = self.docker_metadata {
-                    //                 for tag in &metadata.tags {
-                    //                     ui.selectable_value(&mut self.docker_tag, tag.clone(), tag);
-                    //                 }
-                    //             } else {
-                    //                 ui.selectable_value(&mut self.docker_tag, "latest".to_string(), "latest");
-                    //             }
-                    //         });
-                    // });
-                    // ui.add_space(8.0);
-
-                    ui.label("TODO: Two-step wizard will be implemented in Tasks 7-8");
-
-                    // Container name
-                    ui.horizontal(|ui| {
-                        ui.label("Container Name:");
-                        ui.text_edit_singleline(&mut self.docker_container_name);
-                    });
-                    ui.add_space(8.0);
-
-                    // Port mappings
-                    ui.label("Port Mappings:");
-                    ui.add_space(4.0);
-
-                    let mut to_remove = None;
-                    for (idx, (host_port, container_port)) in self.docker_port_mappings.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            ui.label("Host:");
-                            ui.add(egui::TextEdit::singleline(host_port).desired_width(80.0));
-                            ui.label("→ Container:");
-                            ui.add(egui::TextEdit::singleline(container_port).desired_width(80.0));
-                            if ui.button("−").clicked() {
-                                to_remove = Some(idx);
-                            }
-                        });
-                    }
-                    if let Some(idx) = to_remove {
-                        self.docker_port_mappings.remove(idx);
-                    }
-
-                    if ui.add(MaterialButton::text("+ Add Port Mapping")).clicked() {
-                        self.docker_port_mappings.push(("".to_string(), "".to_string()));
-                    }
-                    ui.add_space(8.0);
-
-                    // Environment variables
-                    ui.label("Environment Variables:");
-                    ui.add_space(4.0);
-
-                    let mut to_remove_env = None;
-                    for (idx, (key, value)) in self.docker_env_vars.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            ui.add(egui::TextEdit::singleline(key).desired_width(150.0).hint_text("KEY"));
-                            ui.label("=");
-                            ui.add(egui::TextEdit::singleline(value).desired_width(200.0).hint_text("value"));
-                            if ui.button("−").clicked() {
-                                to_remove_env = Some(idx);
-                            }
-                        });
-                    }
-                    if let Some(idx) = to_remove_env {
-                        self.docker_env_vars.remove(idx);
-                    }
-
-                    if ui.add(MaterialButton::text("+ Add Environment Variable")).clicked() {
-                        self.docker_env_vars.push(("".to_string(), "".to_string()));
-                    }
-                    ui.add_space(16.0);
-
-                    // Action buttons - TEMPORARILY DISABLED: Will be replaced in Task 8
-                    ui.horizontal(|ui| {
-                        // let can_install = !self.docker_image_input.is_empty()
-                        //     && !self.docker_container_name.is_empty()
-                        //     && self.docker_metadata.is_some()
-                        //     && !self.docker_validating;
-                        let can_install = false; // Temporarily disabled
-
-                        if ui
-                            .add_enabled(can_install, MaterialButton::filled("Install"))
-                            .clicked()
-                        {
-                            // COMMENTED OUT: Will be replaced in Task 8
-                            // if let Some(ref mut vm) = vm {
-                            //     if let Some(host_idx) = self.docker_install_host_idx {
-                            //         if let Some(row) = self.rows.get(host_idx) {
-                            //             // Parse port mappings
-                            //             let ports: Vec<(u16, u16)> = self
-                            //                 .docker_port_mappings
-                            //                 .iter()
-                            //                 .filter_map(|(h, c)| {
-                            //                     let host = h.parse::<u16>().ok()?;
-                            //                     let container = c.parse::<u16>().ok()?;
-                            //                     Some((host, container))
-                            //                 })
-                            //                 .collect();
-                            //
-                            //             // Filter out empty env vars
-                            //             let env: Vec<(String, String)> = self
-                            //                 .docker_env_vars
-                            //                 .iter()
-                            //                 .filter(|(k, _)| !k.is_empty())
-                            //                 .cloned()
-                            //                 .collect();
-                            //
-                            //             vm.install_docker_image(
-                            //                 row.host.clone(),
-                            //                 self.docker_container_name.clone(),
-                            //                 self.docker_image_input.clone(),
-                            //                 self.docker_tag.clone(),
-                            //                 ports,
-                            //                 env,
-                            //             );
-                            //         }
-                            //     }
-                            // }
+                    // Render different steps
+                    match self.docker_install_step {
+                        1 => self.render_install_step1(ui, vm.as_deref_mut()),
+                        2 => self.render_install_step2(ui, vm.as_deref_mut()),
+                        _ => {
+                            ui.label("Invalid step");
                         }
-
-                        if ui.add(MaterialButton::text("Cancel")).clicked() {
-                            self.show_docker_install_dialog = false;
-                        }
-                    });
+                    }
                 });
             });
 
         self.show_docker_install_dialog = dialog_open;
+    }
+
+    fn render_install_step1(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        use egui_material3::MaterialButton;
+
+        ui.label(egui::RichText::new("Step 1: Image Inspection").strong());
+        ui.add_space(8.0);
+
+        // Image input
+        ui.horizontal(|ui| {
+            ui.label("Image:");
+            ui.text_edit_singleline(&mut self.docker_image_input);
+        });
+        ui.label("Format: owner/image or owner/image:tag (default: latest)");
+        ui.add_space(8.0);
+
+        // Inspection status
+        if self.docker_inspecting {
+            ui.spinner();
+            ui.label("Pulling and inspecting image...");
+            ui.label("This may take 10-60 seconds depending on image size.");
+        } else if let Some(error) = &self.docker_inspect_error {
+            ui.colored_label(egui::Color32::RED, format!("⚠ {}", error));
+        }
+        ui.add_space(16.0);
+
+        // Action buttons
+        ui.horizontal(|ui| {
+            let can_inspect = !self.docker_image_input.is_empty() && !self.docker_inspecting;
+
+            if ui.add_enabled(can_inspect, MaterialButton::filled("Inspect Image")).clicked() {
+                self.start_image_inspection(vm.as_deref_mut());
+            }
+
+            if ui.add(MaterialButton::text("Cancel")).clicked() {
+                self.show_docker_install_dialog = false;
+                self.reset_install_dialog_state();
+            }
+        });
+    }
+
+    fn start_image_inspection(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // Parse image:tag
+        let full_input = self.docker_image_input.trim();
+        let (image, tag) = if let Some((img, tg)) = full_input.rsplit_once(':') {
+            (img.to_string(), tg.to_string())
+        } else {
+            (full_input.to_string(), "latest".to_string())
+        };
+
+        if let Some(host_idx) = self.docker_install_host_idx {
+            if let Some(row) = self.rows.get(host_idx) {
+                if let Some(vm) = vm.as_deref_mut() {
+                    self.docker_inspecting = true;
+                    self.docker_inspect_error = None;
+                    self.docker_parsed_image = image.clone();
+                    self.docker_parsed_tag = tag.clone();
+
+                    eprintln!("🔍 UI: Starting image inspection for {}:{}", image, tag);
+                    let _ = vm.inspect_docker_image(row.host.clone(), image, tag);
+                }
+            }
+        }
+    }
+
+    fn reset_install_dialog_state(&mut self) {
+        self.docker_install_step = 1;
+        self.docker_image_input.clear();
+        self.docker_inspecting = false;
+        self.docker_inspect_error = None;
+        self.docker_container_name.clear();
+        self.docker_parsed_image.clear();
+        self.docker_parsed_tag.clear();
+        self.docker_exposed_ports.clear();
+        self.docker_env_vars.clear();
+        self.docker_port_mappings.clear();
+        self.docker_env_overrides.clear();
+        self.docker_installing = false;
+        self.docker_install_success = false;
+        self.docker_install_error = None;
+    }
+
+    fn render_install_step2(&mut self, ui: &mut egui::Ui, _vm: Option<&mut crate::viewmodel::ViewModel>) {
+        ui.label("Step 2 placeholder - will be implemented in next task");
     }
 
     /// Render Ansible role installation dialog
