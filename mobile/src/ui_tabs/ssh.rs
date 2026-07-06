@@ -834,3 +834,91 @@ impl SshTab {
         }
     }
 }
+
+/// Format platform relationship for display
+fn format_platform(row: &SshRowData) -> String {
+    match (&row.platform_name, &row.platform_type) {
+        (Some(name), Some(ptype)) => format!("{}({})", name, ptype),
+        _ => "manual".to_string(),
+    }
+}
+
+/// Format status column showing only enabled services
+fn format_status(row: &SshRowData) -> String {
+    let mut parts = Vec::new();
+
+    // Show Linux with OS if available
+    if row.linux_detected {
+        if let Some(os) = &row.linux_os {
+            parts.push(format!("✓ linux({})", os));
+        } else {
+            parts.push("✓ linux".to_string());
+        }
+    }
+
+    // Show enabled services
+    if row.ansible_enabled {
+        parts.push("✓ ansible".to_string());
+    }
+
+    if row.docker_enabled {
+        parts.push("✓ docker".to_string());
+    }
+
+    if row.dure_wss_enabled {
+        parts.push("✓ dure-wss".to_string());
+    }
+
+    if parts.is_empty() {
+        "—".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+/// Render drawer content with Linux status and service placeholders
+fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
+    ui.add_space(8.0);
+
+    // Linux status (detailed)
+    ui.label(egui::RichText::new("linux:").strong());
+    if let Some(status) = &row.linux_status {
+        ui.label(format!("  uptime: {}", status.uptime));
+        ui.label(format!("  ip: {}", status.external_ip));
+        ui.label(format!("  load: {}", status.load_average));
+        ui.label(format!("  memory: {}", status.memory_usage));
+        ui.label(format!("  disk: {}", status.disk_usage));
+
+        let processes = if status.top_processes.is_empty() {
+            "none".to_string()
+        } else {
+            status.top_processes.join(", ")
+        };
+        ui.label(format!("  ps: {}", processes));
+    } else {
+        ui.colored_label(
+            ui.visuals().weak_text_color(),
+            "  (status not loaded - click Refresh to load)"
+        );
+    }
+
+    ui.add_space(4.0);
+
+    // Ansible placeholder
+    ui.label(egui::RichText::new("ansible:").strong());
+    ui.colored_label(ui.visuals().weak_text_color(), "  —");
+
+    ui.add_space(4.0);
+
+    // Docker placeholder
+    ui.label(egui::RichText::new("docker:").strong());
+    ui.colored_label(ui.visuals().weak_text_color(), "  —");
+
+    ui.add_space(4.0);
+
+    // Dure-WSS placeholder
+    ui.label(egui::RichText::new("dure-wss:").strong());
+    ui.colored_label(ui.visuals().weak_text_color(), "  —");
+
+    ui.add_space(4.0);
+}
