@@ -8,6 +8,7 @@
 
 use std::os::raw::{c_char, c_int};
 
+#[cfg(target_os = "windows")]
 extern "C" {
     /// Initialize winhttpd with given command-line arguments
     ///
@@ -50,3 +51,26 @@ extern "C" {
     /// - No other winhttpd functions should be called after this
     pub fn winhttpd_cleanup();
 }
+
+// Stub implementations for non-Windows platforms (tests won't run but will compile)
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_init(_argc: c_int, _argv: *mut *mut c_char) -> c_int {
+    -1 // Always fail on non-Windows
+}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_poll_once() {}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_start() {}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_stop() {}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_is_running() -> c_int {
+    0
+}
+
+#[cfg(not(target_os = "windows"))]
+pub unsafe fn winhttpd_cleanup() {}

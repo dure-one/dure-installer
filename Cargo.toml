@@ -18,7 +18,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/nikescar/dure"
 rust-version = "1.85"
 version = "0.0.1"
-versioncode = "1"
 readme = "README.md"
 
 [workspace.lints.rust]

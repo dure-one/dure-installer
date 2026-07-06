@@ -12,7 +12,7 @@ pub fn mock_platform_connected() -> CloudPlatformConfig {
         platform_type: "gcp".to_string(),
         gcp_oauth_access_token: Some("mock_token".to_string()),
         gcp_oauth_refresh_token: Some("mock_refresh".to_string()),
-        gcp_oauth_token_expiry: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
+        gcp_oauth_token_expiry: Some((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp()),
         gcp_connected_email: Some("test@example.com".to_string()),
         gcp_selected_project_id: Some("test-project-123".to_string()),
         vms: vec![crate::config::VmInstance {
@@ -67,9 +67,16 @@ impl MockPlatformRunner {
     }
 
     pub async fn execute_command(&mut self, _cmd: PlatformCommand) -> Result<PlatformEvent> {
-        self.responses
+        let event = self.responses
             .pop_front()
-            .ok_or_else(|| anyhow!("No more mock responses"))
+            .ok_or_else(|| anyhow!("No more mock responses"))?;
+
+        // Convert Error events to Err results
+        if let PlatformEvent::Error { operation, error } = &event {
+            return Err(anyhow!("{}: {}", operation, error));
+        }
+
+        Ok(event)
     }
 }
 
@@ -183,51 +190,55 @@ mod runner_tests {
         drop(runner);
     }
 
-    #[smol::test]
-    async fn test_execute_command_success() {
-        let mut runner = MockPlatformRunner::new();
-        runner.expect_response(PlatformEvent::FirewallUpdated {
-            platform_name: "test-gcp".to_string(),
-            whitelisted_ip: "203.0.113.42".to_string(),
-        });
-
-        let result = runner
-            .execute_command(PlatformCommand::UpdateFirewall {
+    #[test]
+    fn test_execute_command_success() {
+        smol::block_on(async {
+            let mut runner = MockPlatformRunner::new();
+            runner.expect_response(PlatformEvent::FirewallUpdated {
                 platform_name: "test-gcp".to_string(),
-                allow_ip: "203.0.113.42".to_string(),
-            })
-            .await;
+                whitelisted_ip: "203.0.113.42".to_string(),
+            });
 
-        assert!(result.is_ok());
-        if let Ok(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) = result {
-            assert_eq!(whitelisted_ip, "203.0.113.42");
-        } else {
-            panic!("Expected FirewallUpdated event");
-        }
+            let result = runner
+                .execute_command(PlatformCommand::UpdateFirewall {
+                    platform_name: "test-gcp".to_string(),
+                    allow_ip: "203.0.113.42".to_string(),
+                })
+                .await;
+
+            assert!(result.is_ok());
+            if let Ok(PlatformEvent::FirewallUpdated { whitelisted_ip, .. }) = result {
+                assert_eq!(whitelisted_ip, "203.0.113.42");
+            } else {
+                panic!("Expected FirewallUpdated event");
+            }
+        })
     }
 
-    #[smol::test]
-    async fn test_execute_command_error() {
-        let mut runner = MockPlatformRunner::new();
-        runner.expect_response(PlatformEvent::Error {
-            operation: "update_firewall".to_string(),
-            error: "Permission denied".to_string(),
-        });
+    #[test]
+    fn test_execute_command_error() {
+        smol::block_on(async {
+            let mut runner = MockPlatformRunner::new();
+            runner.expect_response(PlatformEvent::Error {
+                operation: "update_firewall".to_string(),
+                error: "Permission denied".to_string(),
+            });
 
-        let result = runner
-            .execute_command(PlatformCommand::UpdateFirewall {
-                platform_name: "test-gcp".to_string(),
-                allow_ip: "203.0.113.42".to_string(),
-            })
-            .await;
+            let result = runner
+                .execute_command(PlatformCommand::UpdateFirewall {
+                    platform_name: "test-gcp".to_string(),
+                    allow_ip: "203.0.113.42".to_string(),
+                })
+                .await;
 
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Permission denied")
-        );
+            assert!(result.is_err());
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Permission denied")
+            );
+        })
     }
 }
 
@@ -293,23 +304,25 @@ mod list_tests {
 mod firewall_tests {
     use super::*;
 
-    #[smol::test]
-    async fn test_firewall_with_explicit_ip() {
-        let mut runner = MockPlatformRunner::new();
-        runner.expect_response(PlatformEvent::FirewallUpdated {
-            platform_name: "test-gcp".to_string(),
-            whitelisted_ip: "203.0.113.42".to_string(),
-        });
+    #[test]
+    fn test_firewall_with_explicit_ip() {
+        smol::block_on(async {
+            let mut runner = MockPlatformRunner::new();
+            runner.expect_response(PlatformEvent::FirewallUpdated {
+                platform_name: "test-gcp".to_string(),
+                whitelisted_ip: "203.0.113.42".to_string(),
+            });
 
-        let platform = mock_platform_connected();
-        let result = crate::cli::commands::platform::firewall::execute_firewall_inner(
-            &mut runner,
-            &platform,
-            Some("203.0.113.42".to_string()),
-        )
-        .await;
+            let platform = mock_platform_connected();
+            let result = crate::cli::commands::platform::firewall::execute_firewall_inner(
+                &mut runner,
+                &platform,
+                Some("203.0.113.42".to_string()),
+            )
+            .await;
 
-        assert!(result.is_ok());
+            assert!(result.is_ok());
+        })
     }
 
     #[test]
@@ -326,26 +339,28 @@ mod firewall_tests {
 mod vm_tests {
     use super::*;
 
-    #[smol::test]
-    async fn test_addvm_success() {
-        let mut runner = MockPlatformRunner::new();
-        runner.expect_response(PlatformEvent::VMCreated {
-            platform_name: "test-gcp".to_string(),
-            vm_name: "test-vm".to_string(),
-            external_ip: "203.0.113.50".to_string(),
-        });
+    #[test]
+    fn test_addvm_success() {
+        smol::block_on(async {
+            let mut runner = MockPlatformRunner::new();
+            runner.expect_response(PlatformEvent::VMCreated {
+                platform_name: "test-gcp".to_string(),
+                vm_name: "test-vm".to_string(),
+                external_ip: "203.0.113.50".to_string(),
+            });
 
-        let platform = mock_platform_no_vm();
-        let result = crate::cli::commands::platform::vm::execute_addvm_inner(
-            &mut runner,
-            &platform,
-            "test-vm".to_string(),
-            "us-central1-a".to_string(),
-            "e2-micro".to_string(),
-        )
-        .await;
+            let platform = mock_platform_no_vm();
+            let result = crate::cli::commands::platform::vm::execute_addvm_inner(
+                &mut runner,
+                &platform,
+                "test-vm".to_string(),
+                "us-central1-a".to_string(),
+                "e2-micro".to_string(),
+            )
+            .await;
 
-        assert!(result.is_ok());
+            assert!(result.is_ok());
+        })
     }
 
     #[test]
@@ -374,35 +389,37 @@ mod billing_tests {
     use super::*;
     use crate::calc::gcp_rest::BillingRecord;
 
-    #[smol::test]
-    async fn test_billing_success() {
-        let mut runner = MockPlatformRunner::new();
-        runner.expect_response(PlatformEvent::BillingFetched {
-            platform_name: "test-gcp".to_string(),
-            records: vec![
-                BillingRecord {
-                    month: "2026-07".to_string(),
-                    currency: "USD".to_string(),
-                    total_net_cost: 12.45,
-                },
-                BillingRecord {
-                    month: "2026-06".to_string(),
-                    currency: "USD".to_string(),
-                    total_net_cost: 11.89,
-                },
-                BillingRecord {
-                    month: "2026-05".to_string(),
-                    currency: "USD".to_string(),
-                    total_net_cost: 13.20,
-                },
-            ],
-        });
+    #[test]
+    fn test_billing_success() {
+        smol::block_on(async {
+            let mut runner = MockPlatformRunner::new();
+            runner.expect_response(PlatformEvent::BillingFetched {
+                platform_name: "test-gcp".to_string(),
+                records: vec![
+                    BillingRecord {
+                        month: "2026-07".to_string(),
+                        currency: "USD".to_string(),
+                        total_net_cost: 12.45,
+                    },
+                    BillingRecord {
+                        month: "2026-06".to_string(),
+                        currency: "USD".to_string(),
+                        total_net_cost: 11.89,
+                    },
+                    BillingRecord {
+                        month: "2026-05".to_string(),
+                        currency: "USD".to_string(),
+                        total_net_cost: 13.20,
+                    },
+                ],
+            });
 
-        let platform = mock_platform_connected();
-        let result =
-            crate::cli::commands::platform::billing::execute_billing_inner(&mut runner, &platform)
-                .await;
+            let platform = mock_platform_connected();
+            let result =
+                crate::cli::commands::platform::billing::execute_billing_inner(&mut runner, &platform)
+                    .await;
 
-        assert!(result.is_ok());
+            assert!(result.is_ok());
+        })
     }
 }
