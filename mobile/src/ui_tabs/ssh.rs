@@ -992,6 +992,9 @@ impl SshTab {
                     self.docker_parsed_image = image.clone();
                     self.docker_parsed_tag = tag.clone();
 
+                    // Generate container name
+                    self.docker_container_name = generate_container_name(&image, &row.docker_containers);
+
                     eprintln!("🔍 UI: Starting image inspection for {}:{}", image, tag);
                     let _ = vm.inspect_docker_image(row.host.clone(), image, tag);
                 }
@@ -2142,6 +2145,29 @@ impl SshTab {
     }
 }
 
+/// Generate unique container name from image
+/// Example: "linuxserver/wireguard:latest" → "wireguard-1"
+fn generate_container_name(
+    image: &str,
+    existing_containers: &[crate::config::DockerContainerConfig]
+) -> String {
+    // Extract base name: "linuxserver/wireguard" → "wireguard"
+    let base_name = image.split('/').last().unwrap_or(image);
+
+    // Remove tag if present: "wireguard:latest" → "wireguard"
+    let base_name = base_name.split(':').next().unwrap_or(base_name);
+
+    // Find next available number
+    let mut counter = 1;
+    let mut name = format!("{}-{}", base_name, counter);
+    while existing_containers.iter().any(|c| c.name == name) {
+        counter += 1;
+        name = format!("{}-{}", base_name, counter);
+    }
+
+    name
+}
+
 /// Format platform relationship for display
 fn format_platform(row: &SshRowData) -> String {
     match (&row.platform_name, &row.platform_type) {
@@ -2460,4 +2486,59 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
                 }
             });
         });
+
+#[cfg(test)]
+mod docker_name_tests {
+    use super::*;
+    use crate::config::DockerContainerConfig;
+
+    fn make_container(name: &str) -> DockerContainerConfig {
+        DockerContainerConfig {
+            name: name.to_string(),
+            image: "test".to_string(),
+            tag: "latest".to_string(),
+            ports: vec![],
+            env: vec![],
+            status: "running".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_generate_container_name_simple() {
+        let containers = vec![];
+        let name = generate_container_name("nginx", &containers);
+        assert_eq!(name, "nginx-1");
+    }
+
+    #[test]
+    fn test_generate_container_name_with_owner() {
+        let containers = vec![];
+        let name = generate_container_name("linuxserver/wireguard", &containers);
+        assert_eq!(name, "wireguard-1");
+    }
+
+    #[test]
+    fn test_generate_container_name_with_tag() {
+        let containers = vec![];
+        let name = generate_container_name("redis:7", &containers);
+        assert_eq!(name, "redis-1");
+    }
+
+    #[test]
+    fn test_generate_container_name_increments() {
+        let containers = vec![
+            make_container("nginx-1"),
+            make_container("nginx-2"),
+        ];
+        let name = generate_container_name("nginx", &containers);
+        assert_eq!(name, "nginx-3");
+    }
+
+    #[test]
+    fn test_generate_container_name_full_format() {
+        let containers = vec![make_container("wireguard-1")];
+        let name = generate_container_name("linuxserver/wireguard:latest", &containers);
+        assert_eq!(name, "wireguard-2");
+    }
+}
 }
