@@ -165,6 +165,9 @@ pub struct SshHostConfig {
     /// Last connection status
     #[serde(skip)]
     pub last_status: Option<String>,
+    /// Platform relationship - links to CloudPlatformConfig.name
+    #[serde(default)]
+    pub platform_name: Option<String>,
 }
 
 fn default_ssh_port() -> u16 {
@@ -181,6 +184,7 @@ impl Default for SshHostConfig {
             port: default_ssh_port(),
             initialized: false,
             last_status: None,
+            platform_name: None,
         }
     }
 }

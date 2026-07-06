@@ -108,6 +108,7 @@ impl SshActor {
                     port,
                     initialized: false,
                     last_status: None,
+                    platform_name: None,
                 };
 
                 app_config.ssh_hosts.push(ssh_host);
@@ -375,6 +376,7 @@ impl SshActor {
         // Execute port open via SSH (nftables)
         runtime::unblock({
             let host_name = host_name.clone();
+            let protocol = protocol.clone();
             move || -> anyhow::Result<()> {
                 let config_path = Self::get_config_path()?;
                 let app_config = crate::config::AppConfig::load_or_default(&config_path);
@@ -406,6 +408,7 @@ impl SshActor {
         // Execute port close via SSH (nftables)
         runtime::unblock({
             let host_name = host_name.clone();
+            let protocol = protocol.clone();
             move || -> anyhow::Result<()> {
                 let config_path = Self::get_config_path()?;
                 let app_config = crate::config::AppConfig::load_or_default(&config_path);

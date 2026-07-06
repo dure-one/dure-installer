@@ -1056,6 +1056,7 @@ impl GcpWizard {
                                 port: 22,
                                 initialized: true,
                                 last_status: None,
+                                platform_name: Some(self.platform_name.clone()),
                             };
 
                             // Check if SSH host already exists

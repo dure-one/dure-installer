@@ -1378,7 +1378,7 @@ impl PlatformTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_add_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_add_dialog;
 
         egui::Window::new("Add Platform")
@@ -2011,6 +2011,7 @@ impl PlatformTab {
             port: 22,
             initialized: false,
             last_status: None,
+            platform_name: None,
         };
 
         // Spawn connection test in background thread
@@ -2048,7 +2049,7 @@ impl PlatformTab {
         self.show_delete_platform_dialog = true;
     }
 
-    fn render_delete_platform_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_delete_platform_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = self.show_delete_platform_dialog;
 
         egui::Window::new("Delete Platform")

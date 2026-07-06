@@ -139,6 +139,7 @@ pub fn execute_ssh_add(
         port,
         initialized: false,
         last_status: None,
+        platform_name: None,
     };
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
