@@ -8,6 +8,57 @@ use crate::calc::audit;
 use crate::calc::ssh;
 use crate::config::{AppConfig, SshHostConfig};
 
+/// Linux system status information
+#[derive(Clone, Debug, Default)]
+struct LinuxStatus {
+    uptime: String,
+    external_ip: String,
+    load_average: String,
+    memory_usage: String,
+    disk_usage: String,
+    top_processes: Vec<String>,
+}
+
+/// SSH connection state
+#[derive(Clone, Debug, PartialEq)]
+enum ConnectionStatus {
+    Connected,
+    Offline,
+    Testing,
+    Unknown,
+}
+
+impl Default for ConnectionStatus {
+    fn default() -> Self {
+        ConnectionStatus::Unknown
+    }
+}
+
+/// Display data for SSH table row + drawer
+#[derive(Clone, Debug, Default)]
+struct SshRowData {
+    // Identity
+    host: String,
+    port: u16,
+
+    // Platform relationship
+    platform_name: Option<String>,
+    platform_type: Option<String>,
+
+    // Service status flags
+    linux_detected: bool,
+    linux_os: Option<String>,
+    ansible_enabled: bool,
+    docker_enabled: bool,
+    dure_wss_enabled: bool,
+
+    // Drawer content
+    linux_status: Option<LinuxStatus>,
+
+    // Connection state
+    connection_status: ConnectionStatus,
+}
+
 /// SSH tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct SshTab {
@@ -419,7 +470,7 @@ impl SshTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn render_add_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         let mut open = true;
 
         egui::Window::new("Add SSH Host")
