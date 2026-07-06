@@ -682,9 +682,10 @@ impl SshTab {
                     let _ = vm.install_docker(host);
                 }
             }
-            if let Some(host) = ui
-                .data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_docker_status_{}", idx))))
-            {
+            let docker_status_id = egui::Id::new(format!("ssh_docker_status_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(docker_status_id)) {
+                // Clear temp data immediately to prevent continuous firing
+                ui.data_mut(|d| d.remove::<String>(docker_status_id));
                 let _ = vm.get_docker_status(host);
             }
             if let Some(_host) = ui.data(|d| {
