@@ -258,22 +258,24 @@ impl SshActor {
                     }
                 }
 
-                // Step 2: Get image history
-                let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
-                let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd)).await {
+                // Step 2: Inspect image metadata
+                let inspect_cmd = format!("docker inspect {}", full_image);
+                let inspect_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &inspect_cmd)).await {
                     Ok(output) => output,
                     Err(e) => {
-                        eprintln!("❌ SSH Actor: Failed to get image history: {}", e);
+                        eprintln!("❌ SSH Actor: Failed to inspect image: {}", e);
                         self.send_event(SshEvent::Error {
                             operation: format!("inspect_docker_image({})", full_image),
-                            error: format!("Failed to inspect image history: {}", e),
+                            error: format!("Failed to inspect image: {}", e),
                         }).await;
                         return Ok(());
                     }
                 };
 
-                // Step 3: Parse history output
-                let (exposed_ports, env_vars) = parse_docker_history(&history_output);
+                eprintln!("📋 Inspect output (first 500 chars): {}", &inspect_output.chars().take(500).collect::<String>());
+
+                // Step 3: Parse JSON output
+                let (exposed_ports, env_vars) = parse_docker_inspect(&inspect_output);
 
                 eprintln!("🔍 SSH Actor: Sending DockerImageInspected event");
                 eprintln!("  Image: {}:{}", image, tag);
@@ -1907,44 +1909,59 @@ impl SshActor {
     }
 }
 
-/// Parse docker history output to extract EXPOSE and ENV directives
-fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
+/// Parse docker inspect JSON output to extract exposed ports and environment variables
+fn parse_docker_inspect(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
     let mut ports = Vec::new();
     let mut env_vars = Vec::new();
 
-    for line in output.lines() {
-        let line = line.trim();
+    // Parse JSON - docker inspect returns an array with one object
+    match serde_json::from_str::<serde_json::Value>(output) {
+        Ok(json) => {
+            if let Some(array) = json.as_array() {
+                if let Some(image_data) = array.first() {
+                    // Extract ExposedPorts from Config.ExposedPorts
+                    if let Some(config) = image_data.get("Config") {
+                        // Parse exposed ports (format: "8080/tcp": {}, "51820/udp": {})
+                        if let Some(exposed_ports) = config.get("ExposedPorts") {
+                            if let Some(port_map) = exposed_ports.as_object() {
+                                for port_key in port_map.keys() {
+                                    // Extract port number from "8080/tcp" format
+                                    if let Some(port_str) = port_key.split('/').next() {
+                                        if let Ok(port) = port_str.parse::<u16>() {
+                                            ports.push(port);
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
-        // Parse EXPOSE directives
-        // Format: "/bin/sh -c #(nop)  EXPOSE 8080/tcp" or "EXPOSE 51820/udp" or "EXPOSE 80"
-        if let Some(expose_part) = line.strip_prefix("/bin/sh -c #(nop)  EXPOSE ") {
-            if let Some(port_str) = expose_part.split('/').next() {
-                if let Ok(port) = port_str.parse::<u16>() {
-                    ports.push(port);
+                        // Parse environment variables from Config.Env
+                        if let Some(env_array) = config.get("Env") {
+                            if let Some(env_list) = env_array.as_array() {
+                                for env_item in env_list {
+                                    if let Some(env_str) = env_item.as_str() {
+                                        // Parse "KEY=value" format
+                                        if let Some((key, value)) = env_str.split_once('=') {
+                                            env_vars.push((key.to_string(), value.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        // Parse ENV directives
-        // Format: "/bin/sh -c #(nop)  ENV KEY=value"
-        if let Some(env_part) = line.strip_prefix("/bin/sh -c #(nop)  ENV ") {
-            if let Some((key, value)) = env_part.split_once('=') {
-                env_vars.push((key.trim().to_string(), value.trim().to_string()));
-            }
+        Err(e) => {
+            eprintln!("❌ Failed to parse docker inspect JSON: {}", e);
         }
     }
 
-    // Remove duplicate ports
+    // Sort and deduplicate ports
     ports.sort_unstable();
     ports.dedup();
 
-    // For env vars, keep last occurrence (layers stack, last wins)
-    use std::collections::HashMap;
-    let mut env_map: HashMap<String, String> = HashMap::new();
-    for (k, v) in env_vars.iter().rev() {
-        env_map.entry(k.clone()).or_insert_with(|| v.clone());
-    }
-    env_vars = env_map.into_iter().collect();
+    // Sort env vars by key
     env_vars.sort_by(|a, b| a.0.cmp(&b.0));
 
     (ports, env_vars)
@@ -1955,53 +1972,72 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_docker_history_empty() {
-        let output = "";
-        let (ports, env_vars) = parse_docker_history(output);
+    fn test_parse_docker_inspect_empty() {
+        let output = "[]";
+        let (ports, env_vars) = parse_docker_inspect(output);
         assert!(ports.is_empty());
         assert!(env_vars.is_empty());
     }
 
     #[test]
-    fn test_parse_docker_history_ports() {
-        let output = r#"/bin/sh -c #(nop)  CMD ["/init"]
-/bin/sh -c #(nop)  EXPOSE 51820/udp
-/bin/sh -c #(nop)  EXPOSE 8080/tcp
-/bin/sh -c #(nop)  EXPOSE 80"#;
+    fn test_parse_docker_inspect_ports() {
+        let output = r#"[{
+            "Config": {
+                "ExposedPorts": {
+                    "51820/udp": {},
+                    "8080/tcp": {},
+                    "80/tcp": {}
+                }
+            }
+        }]"#;
 
-        let (ports, env_vars) = parse_docker_history(output);
+        let (ports, env_vars) = parse_docker_inspect(output);
         assert_eq!(ports, vec![80, 8080, 51820]);
         assert!(env_vars.is_empty());
     }
 
     #[test]
-    fn test_parse_docker_history_env_vars() {
-        let output = r#"/bin/sh -c #(nop)  ENV PUID=1000
-/bin/sh -c #(nop)  ENV PGID=1000
-/bin/sh -c #(nop)  ENV TZ=Etc/UTC"#;
+    fn test_parse_docker_inspect_env_vars() {
+        let output = r#"[{
+            "Config": {
+                "Env": [
+                    "PATH=/usr/local/sbin:/usr/local/bin",
+                    "PGID=1000",
+                    "PUID=1000",
+                    "TZ=Etc/UTC"
+                ]
+            }
+        }]"#;
 
-        let (ports, env_vars) = parse_docker_history(output);
+        let (ports, env_vars) = parse_docker_inspect(output);
         assert!(ports.is_empty());
-        assert_eq!(env_vars.len(), 3);
+        assert_eq!(env_vars.len(), 4);
 
-        // Check that PGID exists (order may vary due to HashMap)
+        // Check sorted order and specific values
         assert!(env_vars.iter().any(|(k, v)| k == "PGID" && v == "1000"));
         assert!(env_vars.iter().any(|(k, v)| k == "PUID" && v == "1000"));
         assert!(env_vars.iter().any(|(k, v)| k == "TZ" && v == "Etc/UTC"));
     }
 
     #[test]
-    fn test_parse_docker_history_deduplication() {
-        let output = r#"/bin/sh -c #(nop)  EXPOSE 8080/tcp
-/bin/sh -c #(nop)  EXPOSE 8080/tcp
-/bin/sh -c #(nop)  ENV PATH=/usr/bin
-/bin/sh -c #(nop)  ENV PATH=/usr/local/bin"#;
+    fn test_parse_docker_inspect_full() {
+        let output = r#"[{
+            "Config": {
+                "ExposedPorts": {
+                    "8080/tcp": {},
+                    "443/tcp": {}
+                },
+                "Env": [
+                    "PATH=/usr/local/bin",
+                    "PORT=8080"
+                ]
+            }
+        }]"#;
 
-        let (ports, env_vars) = parse_docker_history(output);
-        assert_eq!(ports, vec![8080]); // deduplicated
-        assert_eq!(env_vars.len(), 1);
-        assert_eq!(env_vars[0].0, "PATH");
-        // Last occurrence wins
-        assert_eq!(env_vars[0].1, "/usr/local/bin");
+        let (ports, env_vars) = parse_docker_inspect(output);
+        assert_eq!(ports, vec![443, 8080]);
+        assert_eq!(env_vars.len(), 2);
+        assert!(env_vars.iter().any(|(k, v)| k == "PATH" && v == "/usr/local/bin"));
+        assert!(env_vars.iter().any(|(k, v)| k == "PORT" && v == "8080"));
     }
 }
