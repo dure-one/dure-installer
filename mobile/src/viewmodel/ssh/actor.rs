@@ -1835,3 +1835,102 @@ impl SshActor {
             .await;
     }
 }
+
+/// Parse docker history output to extract EXPOSE and ENV directives
+fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
+    let mut ports = Vec::new();
+    let mut env_vars = Vec::new();
+
+    for line in output.lines() {
+        let line = line.trim();
+
+        // Parse EXPOSE directives
+        // Format: "/bin/sh -c #(nop)  EXPOSE 8080/tcp" or "EXPOSE 51820/udp" or "EXPOSE 80"
+        if let Some(expose_part) = line.strip_prefix("/bin/sh -c #(nop)  EXPOSE ") {
+            if let Some(port_str) = expose_part.split('/').next() {
+                if let Ok(port) = port_str.parse::<u16>() {
+                    ports.push(port);
+                }
+            }
+        }
+
+        // Parse ENV directives
+        // Format: "/bin/sh -c #(nop)  ENV KEY=value"
+        if let Some(env_part) = line.strip_prefix("/bin/sh -c #(nop)  ENV ") {
+            if let Some((key, value)) = env_part.split_once('=') {
+                env_vars.push((key.trim().to_string(), value.trim().to_string()));
+            }
+        }
+    }
+
+    // Remove duplicate ports
+    ports.sort_unstable();
+    ports.dedup();
+
+    // For env vars, keep last occurrence (layers stack, last wins)
+    use std::collections::HashMap;
+    let mut env_map: HashMap<String, String> = HashMap::new();
+    for (k, v) in env_vars.iter().rev() {
+        env_map.entry(k.clone()).or_insert_with(|| v.clone());
+    }
+    env_vars = env_map.into_iter().collect();
+    env_vars.sort_by(|a, b| a.0.cmp(&b.0));
+
+    (ports, env_vars)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_docker_history_empty() {
+        let output = "";
+        let (ports, env_vars) = parse_docker_history(output);
+        assert!(ports.is_empty());
+        assert!(env_vars.is_empty());
+    }
+
+    #[test]
+    fn test_parse_docker_history_ports() {
+        let output = r#"/bin/sh -c #(nop)  CMD ["/init"]
+/bin/sh -c #(nop)  EXPOSE 51820/udp
+/bin/sh -c #(nop)  EXPOSE 8080/tcp
+/bin/sh -c #(nop)  EXPOSE 80"#;
+
+        let (ports, env_vars) = parse_docker_history(output);
+        assert_eq!(ports, vec![80, 8080, 51820]);
+        assert!(env_vars.is_empty());
+    }
+
+    #[test]
+    fn test_parse_docker_history_env_vars() {
+        let output = r#"/bin/sh -c #(nop)  ENV PUID=1000
+/bin/sh -c #(nop)  ENV PGID=1000
+/bin/sh -c #(nop)  ENV TZ=Etc/UTC"#;
+
+        let (ports, env_vars) = parse_docker_history(output);
+        assert!(ports.is_empty());
+        assert_eq!(env_vars.len(), 3);
+
+        // Check that PGID exists (order may vary due to HashMap)
+        assert!(env_vars.iter().any(|(k, v)| k == "PGID" && v == "1000"));
+        assert!(env_vars.iter().any(|(k, v)| k == "PUID" && v == "1000"));
+        assert!(env_vars.iter().any(|(k, v)| k == "TZ" && v == "Etc/UTC"));
+    }
+
+    #[test]
+    fn test_parse_docker_history_deduplication() {
+        let output = r#"/bin/sh -c #(nop)  EXPOSE 8080/tcp
+/bin/sh -c #(nop)  EXPOSE 8080/tcp
+/bin/sh -c #(nop)  ENV PATH=/usr/bin
+/bin/sh -c #(nop)  ENV PATH=/usr/local/bin"#;
+
+        let (ports, env_vars) = parse_docker_history(output);
+        assert_eq!(ports, vec![8080]); // deduplicated
+        assert_eq!(env_vars.len(), 1);
+        assert_eq!(env_vars[0].0, "PATH");
+        // Last occurrence wins
+        assert_eq!(env_vars[0].1, "/usr/local/bin");
+    }
+}
