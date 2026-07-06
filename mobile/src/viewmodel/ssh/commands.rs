@@ -41,6 +41,66 @@ pub enum SshCommand {
         host_name: String,
     },
 
+    // Docker Lifecycle
+    ValidateDockerImage {
+        image: String,
+    },
+    InstallDockerImage {
+        host_name: String,
+        container_name: String,
+        image: String,
+        tag: String,
+        ports: Vec<(u16, u16)>,
+        env: Vec<(String, String)>,
+    },
+    RemoveDockerContainer {
+        host_name: String,
+        container_name: String,
+    },
+    ListDockerContainers {
+        host_name: String,
+    },
+
+    // Ansible Lifecycle
+    ValidateAnsibleRole {
+        role: String,
+    },
+    InstallAnsibleRole {
+        host_name: String,
+        instance_name: String,
+        galaxy_name: String,
+        variables: Vec<(String, String)>,
+        ports: Vec<u16>,
+    },
+    RemoveAnsibleRole {
+        host_name: String,
+        instance_name: String,
+    },
+    ListAnsibleRoles {
+        host_name: String,
+    },
+
+    // Dure-WSS Lifecycle
+    InstallDureWssService {
+        host_name: String,
+        domain: String,
+        email: String,
+        channel: String,
+        variant: String,
+    },
+    StartDureWss {
+        host_name: String,
+    },
+    StopDureWss {
+        host_name: String,
+    },
+    RestartDureWss {
+        host_name: String,
+    },
+    UninstallDureWss {
+        host_name: String,
+    },
+
     // Port Management
     PortOpen {
         host_name: String,
@@ -85,16 +145,6 @@ pub enum SshCommand {
         name: String,
     },
     UninstallAnsible {
-        name: String,
-    },
-
-    InstallDureWss {
-        name: String,
-    },
-    GetDureWssStatus {
-        name: String,
-    },
-    UninstallDureWss {
         name: String,
     },
 }

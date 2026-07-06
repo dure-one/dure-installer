@@ -1,5 +1,9 @@
 //! SSH actor events
 
+use crate::calc::docker::DockerImageMetadata;
+use crate::calc::ansible::AnsibleRoleMetadata;
+use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
+
 #[derive(Debug, Clone)]
 pub struct SshHostInfo {
     pub name: String,
@@ -71,6 +75,69 @@ pub enum SshEvent {
         open_ports: Vec<(u16, String)>,
     },
 
+    // Docker Lifecycle Events
+    DockerImageValidated {
+        image: String,
+        metadata: DockerImageMetadata,
+    },
+    DockerDaemonInstallRequired {
+        host_name: String,
+    },
+    DockerDaemonInstalled {
+        host_name: String,
+    },
+    DockerImageInstalled {
+        host_name: String,
+        container_name: String,
+    },
+    DockerContainerRemoved {
+        host_name: String,
+        container_name: String,
+    },
+    DockerContainersListedNew {
+        host_name: String,
+        containers: Vec<DockerContainerConfig>,
+    },
+
+    // Ansible Lifecycle Events
+    AnsibleRoleValidated {
+        role: String,
+        metadata: AnsibleRoleMetadata,
+    },
+    AnsibleDaemonInstallRequired {
+        host_name: String,
+    },
+    AnsibleDaemonInstalled {
+        host_name: String,
+    },
+    AnsibleRoleInstalled {
+        host_name: String,
+        instance_name: String,
+    },
+    AnsibleRoleRemoved {
+        host_name: String,
+        instance_name: String,
+    },
+    AnsibleRolesListed {
+        host_name: String,
+        roles: Vec<String>,
+    },
+
+    // Dure-WSS Lifecycle Events
+    DureWssServiceInstalled {
+        host_name: String,
+        domain: String,
+    },
+    DureWssStarted {
+        host_name: String,
+    },
+    DureWssStopped {
+        host_name: String,
+    },
+    DureWssUninstalled {
+        host_name: String,
+    },
+
     // Deployment Events
     DureWssDeployed {
         host_name: String,
@@ -112,15 +179,13 @@ pub enum SshEvent {
         name: String,
     },
 
+    // Legacy Dure-WSS events (temporary - kept for backward compatibility)
     DureWssInstalled {
         name: String,
     },
     DureWssStatusRetrieved {
         name: String,
         installed: bool,
-    },
-    DureWssUninstalled {
-        name: String,
     },
 
     ServiceError {

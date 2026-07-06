@@ -552,22 +552,23 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn install_dure_wss(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::InstallDureWss { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    // Legacy Dure-WSS methods (temporary stubs - to be replaced in Task 4)
+    #[deprecated(note = "Use new lifecycle API in Task 4")]
+    pub fn install_dure_wss(&self, _host: String) -> anyhow::Result<()> {
+        // Stub: will be properly implemented in Task 4
+        Ok(())
     }
 
-    pub fn get_dure_wss_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::GetDureWssStatus { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    #[deprecated(note = "Use new lifecycle API in Task 4")]
+    pub fn get_dure_wss_status(&self, _host: String) -> anyhow::Result<()> {
+        // Stub: will be properly implemented in Task 4
+        Ok(())
     }
 
-    pub fn uninstall_dure_wss(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::UninstallDureWss { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    #[deprecated(note = "Use new lifecycle API in Task 4")]
+    pub fn uninstall_dure_wss(&self, _host: String) -> anyhow::Result<()> {
+        // Stub: will be properly implemented in Task 4
+        Ok(())
     }
 
     // NS commands

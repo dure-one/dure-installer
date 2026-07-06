@@ -289,10 +289,10 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { name }) => {
-                eprintln!("✓ Dure-WSS uninstalled from {}", name);
+            ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { host_name }) => {
+                eprintln!("✓ Dure-WSS uninstalled from {}", host_name);
 
-                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host_name) {
                     row.dure_wss_enabled = false;
                 }
             }

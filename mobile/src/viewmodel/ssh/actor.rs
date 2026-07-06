@@ -2,6 +2,8 @@
 
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
 use crate::viewmodel::{ViewModelEvent, runtime};
+use crate::calc::{docker, ansible, dure_wss};
+use crate::config::{DockerContainerConfig, AnsibleRoleConfig, DureWssConfig, SshHostConfig};
 use smol::channel::{Receiver, Sender};
 
 pub struct SshActor {
@@ -15,6 +17,113 @@ impl SshActor {
             command_rx,
             event_tx,
         }
+    }
+
+    fn get_config_and_path(&self) -> anyhow::Result<(crate::config::AppConfig, std::path::PathBuf)> {
+        let config_path = Self::get_config_path()?;
+        let config = crate::config::AppConfig::load_or_default(&config_path);
+        Ok((config, config_path))
+    }
+
+    fn load_host_config(&self, host_name: &str) -> anyhow::Result<SshHostConfig> {
+        let config_path = Self::get_config_path()?;
+        let config = crate::config::AppConfig::load_or_default(&config_path);
+        config
+            .ssh_hosts
+            .iter()
+            .find(|h| h.host == *host_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Host '{}' not found", host_name))
+    }
+
+    fn check_port_conflicts(
+        &self,
+        host_name: &str,
+        new_ports: &[(u16, u16)],
+    ) -> Result<(), String> {
+        let config_path = Self::get_config_path().map_err(|e| e.to_string())?;
+        let config = crate::config::AppConfig::load_or_default(&config_path);
+        let host_config = config
+            .ssh_hosts
+            .iter()
+            .find(|h| h.host == *host_name)
+            .ok_or_else(|| format!("Host '{}' not found", host_name))?;
+
+        let mut allocated_ports = std::collections::HashSet::new();
+
+        // Collect ports from Docker containers
+        for container in &host_config.docker_containers {
+            for (host_port, _) in &container.ports {
+                allocated_ports.insert(*host_port);
+            }
+        }
+
+        // Collect ports from Ansible roles
+        for role in &host_config.ansible_roles {
+            for port in &role.ports {
+                allocated_ports.insert(*port);
+            }
+        }
+
+        // Check new ports against allocated ports
+        for (host_port, _) in new_ports {
+            if allocated_ports.contains(host_port) {
+                return Err(format!(
+                    "Port {} already in use on host '{}'",
+                    host_port, host_name
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn save_docker_container(
+        &self,
+        host_name: &str,
+        container: DockerContainerConfig,
+    ) -> anyhow::Result<()> {
+        let config_path = Self::get_config_path()?;
+        let mut config = crate::config::AppConfig::load_or_default(&config_path);
+
+        if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == *host_name) {
+            host.docker_containers.push(container);
+            config.save(&config_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn save_ansible_role(
+        &self,
+        host_name: &str,
+        role: AnsibleRoleConfig,
+    ) -> anyhow::Result<()> {
+        let config_path = Self::get_config_path()?;
+        let mut config = crate::config::AppConfig::load_or_default(&config_path);
+
+        if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == *host_name) {
+            host.ansible_roles.push(role);
+            config.save(&config_path)?;
+        }
+
+        Ok(())
+    }
+
+    fn save_dure_wss_config(
+        &self,
+        host_name: &str,
+        dure_config: DureWssConfig,
+    ) -> anyhow::Result<()> {
+        let config_path = Self::get_config_path()?;
+        let mut config = crate::config::AppConfig::load_or_default(&config_path);
+
+        if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == *host_name) {
+            host.dure_wss_config = Some(dure_config);
+            config.save(&config_path)?;
+        }
+
+        Ok(())
     }
 
     pub async fn run(mut self) {
@@ -93,9 +202,76 @@ impl SshActor {
             SshCommand::InstallAnsible { name } => self.install_ansible(name).await,
             SshCommand::GetAnsibleStatus { name } => self.get_ansible_status(name).await,
             SshCommand::UninstallAnsible { name } => self.uninstall_ansible(name).await,
-            SshCommand::InstallDureWss { name } => self.install_dure_wss(name).await,
-            SshCommand::GetDureWssStatus { name } => self.get_dure_wss_status(name).await,
-            SshCommand::UninstallDureWss { name } => self.uninstall_dure_wss(name).await,
+
+            // Docker Lifecycle Commands
+            SshCommand::ValidateDockerImage { image } => {
+                return self.handle_validate_docker_image(image).await;
+            }
+            SshCommand::InstallDockerImage {
+                host_name,
+                container_name,
+                image,
+                tag,
+                ports,
+                env,
+            } => {
+                return self.handle_install_docker_image(host_name, container_name, image, tag, ports, env).await;
+            }
+            SshCommand::RemoveDockerContainer {
+                host_name,
+                container_name,
+            } => {
+                return self.handle_remove_docker_container(host_name, container_name).await;
+            }
+            SshCommand::ListDockerContainers { host_name } => {
+                return self.handle_list_docker_containers(host_name).await;
+            }
+
+            // Ansible Lifecycle Commands
+            SshCommand::ValidateAnsibleRole { role } => {
+                return self.handle_validate_ansible_role(role).await;
+            }
+            SshCommand::InstallAnsibleRole {
+                host_name,
+                instance_name,
+                galaxy_name,
+                variables,
+                ports,
+            } => {
+                return self.handle_install_ansible_role(host_name, instance_name, galaxy_name, variables, ports).await;
+            }
+            SshCommand::RemoveAnsibleRole {
+                host_name,
+                instance_name,
+            } => {
+                return self.handle_remove_ansible_role(host_name, instance_name).await;
+            }
+            SshCommand::ListAnsibleRoles { host_name } => {
+                return self.handle_list_ansible_roles(host_name).await;
+            }
+
+            // Dure-WSS Lifecycle Commands
+            SshCommand::InstallDureWssService {
+                host_name,
+                domain,
+                email,
+                channel,
+                variant,
+            } => {
+                return self.handle_install_dure_wss_service(host_name, domain, email, channel, variant).await;
+            }
+            SshCommand::StartDureWss { host_name } => {
+                return self.handle_start_dure_wss(host_name).await;
+            }
+            SshCommand::StopDureWss { host_name } => {
+                return self.handle_stop_dure_wss(host_name).await;
+            }
+            SshCommand::RestartDureWss { host_name } => {
+                return self.handle_restart_dure_wss(host_name).await;
+            }
+            SshCommand::UninstallDureWss { host_name } => {
+                return self.handle_uninstall_dure_wss(host_name).await;
+            }
         };
 
         if let Err(e) = result {
@@ -927,145 +1103,6 @@ impl SshActor {
         }
     }
 
-    async fn install_dure_wss(&mut self, name: String) -> anyhow::Result<()> {
-        eprintln!("🔍 SSH Actor: install_dure_wss called for '{}'", name);
-        self.send_progress("install_dure_wss", 0.1, "Loading host configuration...")
-            .await;
-
-        // Load host config
-        let host_config = runtime::unblock({
-            let name = name.clone();
-            move || -> anyhow::Result<crate::config::SshHostConfig> {
-                let config_path = Self::get_config_path()?;
-                let app_config = crate::config::AppConfig::load_or_default(&config_path);
-
-                let host_config = app_config
-                    .ssh_hosts
-                    .into_iter()
-                    .find(|h| h.host == name)
-                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
-
-                Ok(host_config)
-            }
-        })
-        .await?;
-
-        self.send_progress("install_dure_wss", 0.3, "Installing Dure-WSS...")
-            .await;
-
-        // Install Dure-WSS (async operation)
-        let result =
-            async_compat::Compat::new(crate::calc::ssh::install_dure_wss(&host_config)).await;
-
-        match result {
-            Ok(_) => {
-                self.send_progress("install_dure_wss", 1.0, "Dure-WSS installed")
-                    .await;
-                self.send_event(SshEvent::DureWssInstalled { name }).await;
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("✗ SSH Actor: Dure-WSS installation failed: {}", e);
-                self.send_event(SshEvent::ServiceError {
-                    name,
-                    service: "dure-wss".to_string(),
-                    operation: "install".to_string(),
-                    error: format!("{:#}", e),
-                })
-                .await;
-                Err(e)
-            }
-        }
-    }
-
-    async fn get_dure_wss_status(&mut self, name: String) -> anyhow::Result<()> {
-        eprintln!("🔍 SSH Actor: get_dure_wss_status called for '{}'", name);
-        self.send_progress("get_dure_wss_status", 0.1, "Loading host configuration...")
-            .await;
-
-        // Load host config
-        let host_config = runtime::unblock({
-            let name = name.clone();
-            move || -> anyhow::Result<crate::config::SshHostConfig> {
-                let config_path = Self::get_config_path()?;
-                let app_config = crate::config::AppConfig::load_or_default(&config_path);
-
-                let host_config = app_config
-                    .ssh_hosts
-                    .into_iter()
-                    .find(|h| h.host == name)
-                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
-
-                Ok(host_config)
-            }
-        })
-        .await?;
-
-        self.send_progress("get_dure_wss_status", 0.3, "Checking Dure-WSS status...")
-            .await;
-
-        // Check Dure-WSS status (async operation)
-        let installed =
-            async_compat::Compat::new(crate::calc::ssh::check_dure_wss_installed(&host_config))
-                .await?;
-
-        self.send_progress("get_dure_wss_status", 1.0, "Status retrieved")
-            .await;
-        self.send_event(SshEvent::DureWssStatusRetrieved { name, installed })
-            .await;
-        Ok(())
-    }
-
-    async fn uninstall_dure_wss(&mut self, name: String) -> anyhow::Result<()> {
-        eprintln!("🔍 SSH Actor: uninstall_dure_wss called for '{}'", name);
-        self.send_progress("uninstall_dure_wss", 0.1, "Loading host configuration...")
-            .await;
-
-        // Load host config
-        let host_config = runtime::unblock({
-            let name = name.clone();
-            move || -> anyhow::Result<crate::config::SshHostConfig> {
-                let config_path = Self::get_config_path()?;
-                let app_config = crate::config::AppConfig::load_or_default(&config_path);
-
-                let host_config = app_config
-                    .ssh_hosts
-                    .into_iter()
-                    .find(|h| h.host == name)
-                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
-
-                Ok(host_config)
-            }
-        })
-        .await?;
-
-        self.send_progress("uninstall_dure_wss", 0.3, "Uninstalling Dure-WSS...")
-            .await;
-
-        // Uninstall Dure-WSS (async operation)
-        let result =
-            async_compat::Compat::new(crate::calc::ssh::uninstall_dure_wss(&host_config)).await;
-
-        match result {
-            Ok(_) => {
-                self.send_progress("uninstall_dure_wss", 1.0, "Dure-WSS uninstalled")
-                    .await;
-                self.send_event(SshEvent::DureWssUninstalled { name }).await;
-                Ok(())
-            }
-            Err(e) => {
-                eprintln!("✗ SSH Actor: Dure-WSS uninstallation failed: {}", e);
-                self.send_event(SshEvent::ServiceError {
-                    name,
-                    service: "dure-wss".to_string(),
-                    operation: "uninstall".to_string(),
-                    error: format!("{:#}", e),
-                })
-                .await;
-                Err(e)
-            }
-        }
-    }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
         let _ = self
@@ -1076,6 +1113,697 @@ impl SshActor {
                 status: status.to_string(),
             }))
             .await;
+    }
+
+    // Docker Lifecycle Handlers
+
+    async fn handle_validate_docker_image(&self, image: String) -> anyhow::Result<()> {
+        self.send_event(SshEvent::Progress {
+            operation: "ValidateDockerImage".to_string(),
+            progress: 0.5,
+            status: format!("Fetching metadata for {}", image),
+        }).await;
+
+        let image_clone = image.clone();
+        match runtime::unblock(move || {
+            smol::block_on(docker::fetch_docker_image_metadata(&image_clone))
+        })
+        .await
+        {
+            Ok(metadata) => {
+                self.send_event(SshEvent::DockerImageValidated {
+                    image,
+                    metadata,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ValidateDockerImage".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_install_docker_image(
+        &self,
+        host_name: String,
+        container_name: String,
+        image: String,
+        tag: String,
+        ports: Vec<(u16, u16)>,
+        env: Vec<(String, String)>,
+    ) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallDockerImage".to_string(),
+                    error: format!("Host not found: {}", e),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        if let Err(conflict) = self.check_port_conflicts(&host_name, &ports) {
+            self.send_event(SshEvent::Error {
+                operation: "InstallDockerImage".to_string(),
+                error: conflict,
+            }).await;
+            return Ok(());
+        }
+
+        let host_config_clone = host_config.clone();
+        match runtime::unblock(move || {
+            smol::block_on(docker::is_docker_installed(&host_config_clone))
+        })
+        .await
+        {
+            Ok(true) => {
+                // Docker installed, proceed
+            }
+            Ok(false) => {
+                self.send_event(SshEvent::DockerDaemonInstallRequired {
+                    host_name: host_name.clone(),
+                }).await;
+
+                self.send_event(SshEvent::Progress {
+                    operation: "InstallDocker".to_string(),
+                    progress: 0.2,
+                    status: "Installing Docker daemon...".to_string(),
+                }).await;
+
+                let host_config_clone2 = host_config.clone();
+                match runtime::unblock(move || {
+                    smol::block_on(docker::install_docker_daemon(&host_config_clone2))
+                })
+                .await
+                {
+                    Ok(_) => {
+                        self.send_event(SshEvent::DockerDaemonInstalled {
+                            host_name: host_name.clone(),
+                        }).await;
+                    }
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "InstallDocker".to_string(),
+                            error: e.to_string(),
+                        }).await;
+                        return Ok(());
+                    }
+                }
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "CheckDocker".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        }
+
+        self.send_event(SshEvent::Progress {
+            operation: "InstallDockerImage".to_string(),
+            progress: 0.5,
+            status: format!("Pulling image {}:{}", image, tag),
+        }).await;
+
+        let container_config = DockerContainerConfig {
+            name: container_name.clone(),
+            image: image.clone(),
+            tag: tag.clone(),
+            ports: ports.clone(),
+            env: env.clone(),
+            status: "running".to_string(),
+        };
+
+        let host_config_clone3 = host_config.clone();
+        let container_config_clone = container_config.clone();
+        match runtime::unblock(move || {
+            smol::block_on(docker::run_docker_container(
+                &host_config_clone3,
+                &container_config_clone,
+            ))
+        })
+        .await
+        {
+            Ok(_) => {
+                if let Err(e) = self.save_docker_container(&host_name, container_config) {
+                    self.send_event(SshEvent::Error {
+                        operation: "SaveConfig".to_string(),
+                        error: e.to_string(),
+                    }).await;
+                }
+
+                self.send_event(SshEvent::DockerImageInstalled {
+                    host_name,
+                    container_name,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallDockerImage".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_remove_docker_container(
+        &self,
+        host_name: String,
+        container_name: String,
+    ) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "RemoveDockerContainer".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let container_name_clone = container_name.clone();
+        match runtime::unblock(move || {
+            smol::block_on(docker::remove_docker_container(
+                &host_config,
+                &container_name_clone,
+            ))
+        })
+        .await
+        {
+            Ok(_) => {
+                let (mut config, config_path) = match self.get_config_and_path() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "LoadConfig".to_string(),
+                            error: e.to_string(),
+                        }).await;
+                        return Ok(());
+                    }
+                };
+
+                if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == host_name) {
+                    host.docker_containers.retain(|c| c.name != container_name);
+                    let _ = config.save(&config_path);
+                }
+
+                self.send_event(SshEvent::DockerContainerRemoved {
+                    host_name,
+                    container_name,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "RemoveDockerContainer".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_list_docker_containers(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ListDockerContainers".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(docker::list_docker_containers(&host_config))
+        })
+        .await
+        {
+            Ok(containers) => {
+                self.send_event(SshEvent::DockerContainersListedNew {
+                    host_name,
+                    containers,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ListDockerContainers".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    // Ansible Lifecycle Handlers
+
+    async fn handle_validate_ansible_role(&self, role: String) -> anyhow::Result<()> {
+        self.send_event(SshEvent::Progress {
+            operation: "ValidateAnsibleRole".to_string(),
+            progress: 0.5,
+            status: format!("Fetching metadata for {}", role),
+        }).await;
+
+        let role_clone = role.clone();
+        match runtime::unblock(move || {
+            smol::block_on(ansible::fetch_ansible_role_metadata(&role_clone))
+        })
+        .await
+        {
+            Ok(metadata) => {
+                self.send_event(SshEvent::AnsibleRoleValidated {
+                    role,
+                    metadata,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ValidateAnsibleRole".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_install_ansible_role(
+        &self,
+        host_name: String,
+        instance_name: String,
+        galaxy_name: String,
+        variables: Vec<(String, String)>,
+        ports: Vec<u16>,
+    ) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallAnsibleRole".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let ports_for_check: Vec<(u16, u16)> = ports.iter().map(|p| (*p, *p)).collect();
+        if let Err(conflict) = self.check_port_conflicts(&host_name, &ports_for_check) {
+            self.send_event(SshEvent::Error {
+                operation: "InstallAnsibleRole".to_string(),
+                error: conflict,
+            }).await;
+            return Ok(());
+        }
+
+        let host_config_clone = host_config.clone();
+        match runtime::unblock(move || {
+            smol::block_on(ansible::is_ansible_installed(&host_config_clone))
+        })
+        .await
+        {
+            Ok(true) => {
+                // Ansible installed, proceed
+            }
+            Ok(false) => {
+                self.send_event(SshEvent::AnsibleDaemonInstallRequired {
+                    host_name: host_name.clone(),
+                }).await;
+
+                let host_config_clone2 = host_config.clone();
+                match runtime::unblock(move || {
+                    smol::block_on(ansible::install_ansible(&host_config_clone2))
+                })
+                .await
+                {
+                    Ok(_) => {
+                        self.send_event(SshEvent::AnsibleDaemonInstalled {
+                            host_name: host_name.clone(),
+                        }).await;
+                    }
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "InstallAnsible".to_string(),
+                            error: e.to_string(),
+                        }).await;
+                        return Ok(());
+                    }
+                }
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "CheckAnsible".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        }
+
+        let role_config = AnsibleRoleConfig {
+            name: instance_name.clone(),
+            galaxy_name: galaxy_name.clone(),
+            variables: variables.clone(),
+            ports: ports.clone(),
+            installed: true,
+        };
+
+        let host_config_clone3 = host_config.clone();
+        let role_config_clone = role_config.clone();
+        match runtime::unblock(move || {
+            smol::block_on(ansible::install_ansible_role(
+                &host_config_clone3,
+                &role_config_clone,
+            ))
+        })
+        .await
+        {
+            Ok(_) => {
+                if let Err(e) = self.save_ansible_role(&host_name, role_config) {
+                    self.send_event(SshEvent::Error {
+                        operation: "SaveConfig".to_string(),
+                        error: e.to_string(),
+                    }).await;
+                }
+
+                self.send_event(SshEvent::AnsibleRoleInstalled {
+                    host_name,
+                    instance_name,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallAnsibleRole".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_remove_ansible_role(
+        &self,
+        host_name: String,
+        instance_name: String,
+    ) -> anyhow::Result<()> {
+        let (config, _) = match self.get_config_and_path() {
+            Ok(c) => c,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "RemoveAnsibleRole".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let host_config = match config.ssh_hosts.iter().find(|h| h.host == host_name) {
+            Some(h) => h.clone(),
+            None => {
+                self.send_event(SshEvent::Error {
+                    operation: "RemoveAnsibleRole".to_string(),
+                    error: format!("Host '{}' not found", host_name),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let galaxy_name = host_config
+            .ansible_roles
+            .iter()
+            .find(|r| r.name == instance_name)
+            .map(|r| r.galaxy_name.clone());
+
+        if let Some(gname) = galaxy_name {
+            match runtime::unblock(move || {
+                smol::block_on(ansible::remove_ansible_role(&host_config, &gname))
+            })
+            .await
+            {
+                Ok(_) => {
+                    let (mut config, config_path) = match self.get_config_and_path() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            self.send_event(SshEvent::Error {
+                                operation: "LoadConfig".to_string(),
+                                error: e.to_string(),
+                            }).await;
+                            return Ok(());
+                        }
+                    };
+
+                    if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == host_name) {
+                        host.ansible_roles.retain(|r| r.name != instance_name);
+                        let _ = config.save(&config_path);
+                    }
+
+                    self.send_event(SshEvent::AnsibleRoleRemoved {
+                        host_name,
+                        instance_name,
+                    }).await;
+                }
+                Err(e) => {
+                    self.send_event(SshEvent::Error {
+                        operation: "RemoveAnsibleRole".to_string(),
+                        error: e.to_string(),
+                    }).await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_list_ansible_roles(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ListAnsibleRoles".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(ansible::list_ansible_roles(&host_config))
+        })
+        .await
+        {
+            Ok(roles) => {
+                self.send_event(SshEvent::AnsibleRolesListed {
+                    host_name,
+                    roles,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "ListAnsibleRoles".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    // Dure-WSS Lifecycle Handlers
+
+    async fn handle_install_dure_wss_service(
+        &self,
+        host_name: String,
+        domain: String,
+        email: String,
+        channel: String,
+        variant: String,
+    ) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallDureWssService".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let dure_config = DureWssConfig {
+            domain: domain.clone(),
+            email: email.clone(),
+            channel: channel.clone(),
+            variant: variant.clone(),
+            status: "running".to_string(),
+        };
+
+        let dure_config_clone = dure_config.clone();
+        match runtime::unblock(move || {
+            smol::block_on(dure_wss::install_dure_wss(&host_config, &dure_config_clone))
+        })
+        .await
+        {
+            Ok(_) => {
+                if let Err(e) = self.save_dure_wss_config(&host_name, dure_config) {
+                    self.send_event(SshEvent::Error {
+                        operation: "SaveConfig".to_string(),
+                        error: e.to_string(),
+                    }).await;
+                }
+
+                self.send_event(SshEvent::DureWssServiceInstalled {
+                    host_name,
+                    domain,
+                }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "InstallDureWssService".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_start_dure_wss(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "StartDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(dure_wss::start_dure_wss(&host_config))
+        })
+        .await
+        {
+            Ok(_) => {
+                self.send_event(SshEvent::DureWssStarted { host_name }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "StartDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_stop_dure_wss(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "StopDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(dure_wss::stop_dure_wss(&host_config))
+        })
+        .await
+        {
+            Ok(_) => {
+                self.send_event(SshEvent::DureWssStopped { host_name }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "StopDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_restart_dure_wss(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "RestartDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(dure_wss::restart_dure_wss(&host_config))
+        })
+        .await
+        {
+            Ok(_) => {
+                self.send_event(SshEvent::DureWssStopped {
+                    host_name: host_name.clone(),
+                }).await;
+                self.send_event(SshEvent::DureWssStarted { host_name }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "RestartDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_uninstall_dure_wss(&self, host_name: String) -> anyhow::Result<()> {
+        let host_config = match self.load_host_config(&host_name) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "UninstallDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match runtime::unblock(move || {
+            smol::block_on(dure_wss::uninstall_dure_wss(&host_config))
+        })
+        .await
+        {
+            Ok(_) => {
+                let (mut config, config_path) = match self.get_config_and_path() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        self.send_event(SshEvent::Error {
+                            operation: "LoadConfig".to_string(),
+                            error: e.to_string(),
+                        }).await;
+                        return Ok(());
+                    }
+                };
+
+                if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == host_name) {
+                    host.dure_wss_config = None;
+                    let _ = config.save(&config_path);
+                }
+
+                self.send_event(SshEvent::DureWssUninstalled { host_name }).await;
+            }
+            Err(e) => {
+                self.send_event(SshEvent::Error {
+                    operation: "UninstallDureWss".to_string(),
+                    error: e.to_string(),
+                }).await;
+            }
+        }
+        Ok(())
     }
 
     async fn send_event(&self, event: SshEvent) {
