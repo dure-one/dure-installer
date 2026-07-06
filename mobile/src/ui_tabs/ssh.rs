@@ -477,6 +477,66 @@ impl SshTab {
                 self.decrement_refresh_counter(&name);
             }
 
+            ViewModelEvent::Ssh(SshEvent::DockerImageInspected {
+                image,
+                tag,
+                exposed_ports,
+                env_vars,
+            }) => {
+                eprintln!("✓ Docker image inspected: {}:{}", image, tag);
+                eprintln!("  Ports: {:?}", exposed_ports);
+                eprintln!("  Env vars: {} variables", env_vars.len());
+
+                // Update dialog state
+                self.docker_inspecting = false;
+                self.docker_inspect_error = None;
+                self.docker_exposed_ports = exposed_ports.clone();
+                self.docker_env_vars = env_vars.clone();
+
+                // Pre-fill port mappings (host=container)
+                self.docker_port_mappings = exposed_ports
+                    .iter()
+                    .map(|&port| (port.to_string(), port.to_string()))
+                    .collect();
+
+                // Pre-fill env vars (editable copy)
+                self.docker_env_overrides = env_vars;
+
+                // Advance to step 2
+                self.docker_install_step = 2;
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerContainersRemoved {
+                host_name,
+                removed,
+                failed,
+            }) => {
+                eprintln!("✓ Docker containers removal complete for {}", host_name);
+                eprintln!("  Removed: {} containers", removed.len());
+                eprintln!("  Failed: {} containers", failed.len());
+
+                // Update dialog state
+                self.docker_removing = false;
+                self.docker_remove_results = Some(RemoveResults {
+                    removed: removed.clone(),
+                    failed: failed.clone(),
+                });
+
+                // Update config - remove successfully removed containers
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Ok((mut app_config, config_path)) = load_config() {
+                    if let Some(host_config) = app_config.ssh_hosts.iter_mut().find(|h| h.host == host_name) {
+                        host_config.docker_containers.retain(|c| !removed.contains(&c.name));
+                        let _ = app_config.save(&config_path);
+                    }
+                }
+
+                // Update row data
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host_name) {
+                    row.docker_containers.retain(|c| !removed.contains(&c.name));
+                }
+            }
+
             ViewModelEvent::Ssh(SshEvent::DockerUninstalled { name }) => {
                 eprintln!("✓ Docker uninstalled from {}", name);
 
@@ -580,11 +640,11 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::Error { operation, error }) => {
-                // Docker validation errors - COMMENTED OUT: Will be replaced in Task 12
-                // if operation.contains("Docker") && self.show_docker_install_dialog {
-                //     self.docker_validation_error = Some(error.clone());
-                //     self.docker_validating = false;
-                // }
+                // Docker inspection errors
+                if operation.contains("inspect_docker_image") {
+                    self.docker_inspecting = false;
+                    self.docker_inspect_error = Some(error.clone());
+                }
                 // Ansible validation errors
                 if operation.contains("Ansible") && self.show_ansible_install_dialog {
                     self.ansible_validation_error = Some(error.clone());
