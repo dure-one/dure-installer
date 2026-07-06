@@ -319,9 +319,7 @@ impl SshActor {
                 let mut failed = Vec::new();
 
                 for container_name in container_names {
-                    let rm_cmd = format!("docker rm {}", container_name);
-                    let host_config_clone = host_config.clone();
-                    match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &rm_cmd)).await {
+                    match async_compat::Compat::new(docker::remove_docker_container(&host_config, &container_name)).await {
                         Ok(_) => {
                             eprintln!("✓ SSH Actor: Removed container '{}'", container_name);
                             removed.push(container_name.clone());
