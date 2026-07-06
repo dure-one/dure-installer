@@ -822,7 +822,7 @@ impl NsTab {
                                 if let Ok(mut config) = load_ns_config() {
                                     if let Some(domain_entry) = config.get_domain_mut(&provider_name, &domain) {
                                         domain_entry.records.retain(|r| {
-                                            !(r.name == name && r.record_type.to_string().to_lowercase() == record_type.to_lowercase())
+                                            !(r.name == name && r.record_type.as_str().to_lowercase() == record_type.to_lowercase())
                                         });
 
                                         if let Err(e) = save_ns_config(&config) {
@@ -1227,7 +1227,7 @@ impl NsTab {
     }
 
     /// Show add nameserver provider dialog
-    fn show_add_provider_dialog(&mut self, ctx: &egui::Context, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn show_add_provider_dialog(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         if !self.show_add_provider_dialog {
             return;
         }

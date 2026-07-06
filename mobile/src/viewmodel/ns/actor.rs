@@ -222,30 +222,11 @@ impl NsActor {
 
                 let mut providers = Vec::new();
 
-                // Collect Cloudflare providers
-                for (domain, token) in &ns_config.cloudflare_domains {
-                    if !providers.iter().any(|p: &DnsProvider| p.name == "cloudflare") {
-                        providers.push(DnsProvider {
-                            name: "cloudflare".to_string(),
-                            provider_type: "cloudflare".to_string(),
-                        });
-                        break;
-                    }
-                }
-
-                // Collect Porkbun providers
-                if !ns_config.porkbun_domains.is_empty() {
+                // Collect providers from HashMap
+                for (name, _config) in &ns_config.providers {
                     providers.push(DnsProvider {
-                        name: "porkbun".to_string(),
-                        provider_type: "porkbun".to_string(),
-                    });
-                }
-
-                // Collect DuckDNS providers
-                if !ns_config.duckdns_domains.is_empty() {
-                    providers.push(DnsProvider {
-                        name: "duckdns".to_string(),
-                        provider_type: "duckdns".to_string(),
+                        name: name.clone(),
+                        provider_type: name.clone(), // Use name as provider type
                     });
                 }
 
@@ -329,8 +310,44 @@ impl NsActor {
             let name = name.clone();
             let value = value.clone();
             move || -> anyhow::Result<String> {
-                use crate::calc::ns::apply_record;
-                apply_record(&provider_name, &domain, &record_type, &name, &value, ttl)
+                use crate::calc::ns::{apply_record, RecordType, DnsRecord, NsConfig};
+
+                // Load config to get api_token
+                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
+                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
+                    .config_dir()
+                    .join("config.yml");
+
+                let yaml = std::fs::read_to_string(&config_path)?;
+                let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
+                let ns_config: NsConfig = if let Some(ns) = full_config.get("ns") {
+                    serde_yaml::from_value(ns.clone())?
+                } else {
+                    NsConfig::default()
+                };
+
+                // Get api_token from provider
+                let api_token = ns_config.providers.get(&provider_name)
+                    .ok_or_else(|| anyhow::anyhow!("Provider '{}' not found", provider_name))?
+                    .api_token.clone();
+
+                // Parse record type
+                let record_type_enum = RecordType::from_str(&record_type)
+                    .ok_or_else(|| anyhow::anyhow!("Invalid record type: {}", record_type))?;
+
+                // Create DnsRecord struct
+                let record = DnsRecord {
+                    record_type: record_type_enum,
+                    name: name.clone(),
+                    value: value.clone(),
+                    ttl: Some(ttl),
+                };
+
+                // Call apply_record
+                apply_record(&provider_name, &api_token, &domain, &record)?;
+
+                // Return record ID (format: name:type)
+                Ok(format!("{}:{}", name, record_type))
             }
         }).await?;
 
@@ -435,7 +452,7 @@ impl NsActor {
                 let records = if let Some(domain_entry) = ns_config.get_domain(&provider_name, &domain) {
                     domain_entry.records.iter().map(|r| DnsRecord {
                         id: r.name.clone(),
-                        record_type: r.record_type.to_string(),
+                        record_type: r.record_type.as_str().to_string(),
                         name: r.name.clone(),
                         value: r.value.clone(),
                         ttl: r.ttl.unwrap_or(300),
