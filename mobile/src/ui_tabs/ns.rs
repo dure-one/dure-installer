@@ -743,8 +743,193 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
 impl NsTab {
     /// Render the NS tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
-        // Poll background task for adding provider
+    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // ViewModel event processing (MVVM pattern)
+        if let Some(ref mut vm) = vm {
+            let events = vm.poll_events(ui.ctx());
+            for event in events {
+                use crate::viewmodel::ViewModelEvent;
+                use crate::viewmodel::ns::NsEvent;
+
+                match event {
+                    ViewModelEvent::Ns(NsEvent::RecordAdded {
+                        provider_name,
+                        domain,
+                        record_id,
+                    }) => {
+                        self.add_progress(format!("✓ Record added (ID: {})", record_id));
+
+                        // Update config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        if let Ok(mut config) = load_ns_config() {
+                            // Note: Record details already in config from UI,
+                            // this event confirms API succeeded
+                            if let Err(e) = save_ns_config(&config) {
+                                self.add_progress(format!("Error saving config: {}", e));
+                            } else {
+                                self.load_records();
+                                self.load_data();
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::ProviderAdded { name, domains }) => {
+                        self.add_progress(format!(
+                            "✓ Added {} provider with {} domain(s)",
+                            name,
+                            domains.len()
+                        ));
+
+                        // Save domains to config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            if let Ok(mut config) = load_ns_config() {
+                                let api_token = if name == "porkbun" {
+                                    format!("{}::{}", self.add_token, self.add_secret_key)
+                                } else {
+                                    self.add_token.clone()
+                                };
+
+                                let mut added_count = 0;
+                                for (domain, records) in domains {
+                                    if let Ok(_) = config.add_domain(
+                                        name.clone(),
+                                        domain.clone(),
+                                        api_token.clone(),
+                                    ) {
+                                        added_count += 1;
+                                        // Add records to domain
+                                        if let Some(domain_entry) =
+                                            config.get_domain_mut(&name, &domain)
+                                        {
+                                            domain_entry.records.extend(records);
+                                        }
+                                        self.add_progress(format!("  ✓ Added domain: {}", domain));
+                                    }
+                                }
+
+                                if let Err(e) = save_ns_config(&config) {
+                                    self.add_progress(format!("Error saving config: {}", e));
+                                } else {
+                                    self.add_progress(format!(
+                                        "✓ Configuration saved ({} domains)",
+                                        added_count
+                                    ));
+                                    self.load_data();
+                                }
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::Progress {
+                        operation,
+                        progress,
+                        status,
+                    }) => {
+                        if operation == "add_provider" {
+                            self.add_progress(format!("[{:>3.0}%] {}", progress * 100.0, status));
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::RecordDeleted {
+                        provider_name,
+                        domain,
+                        record_id,
+                    }) => {
+                        self.add_progress(format!("✓ Deleted record: {}", record_id));
+
+                        // Remove record from config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            // Parse record_id as "name:type"
+                            let parts: Vec<&str> = record_id.split(':').collect();
+                            if parts.len() == 2 {
+                                let name = parts[0];
+                                let record_type = parts[1];
+
+                                if let Ok(mut config) = load_ns_config() {
+                                    if let Some(domain_entry) =
+                                        config.get_domain_mut(&provider_name, &domain)
+                                    {
+                                        domain_entry.records.retain(|r| {
+                                            !(r.name == name
+                                                && r.record_type.as_str().to_lowercase()
+                                                    == record_type.to_lowercase())
+                                        });
+
+                                        if let Err(e) = save_ns_config(&config) {
+                                            self.add_progress(format!(
+                                                "Error saving config: {}",
+                                                e
+                                            ));
+                                        } else {
+                                            self.load_records();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::DomainDeleted {
+                        provider_name,
+                        domain,
+                    }) => {
+                        self.add_progress(format!("✓ Deleted domain: {}", domain));
+
+                        // Remove domain from config
+                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        {
+                            if let Ok(mut config) = load_ns_config() {
+                                let _ = config.remove_domain(&provider_name, &domain);
+
+                                // Handle GCP placeholder logic
+                                if provider_name.starts_with("gcloud:") {
+                                    let email = &provider_name[7..];
+                                    if let Some(account) = config.get_gcp_account(email) {
+                                        if account.domains.is_empty() {
+                                            let stub_domain =
+                                                format!("gcloud ({})", account.project_id);
+                                            let token = account.access_token.clone();
+                                            let _ = config.add_domain(
+                                                provider_name.clone(),
+                                                stub_domain,
+                                                token,
+                                            );
+                                        }
+                                    }
+                                }
+
+                                if let Err(e) = save_ns_config(&config) {
+                                    self.add_progress(format!("Error saving config: {}", e));
+                                } else {
+                                    if let Some((sel_prov, sel_dom)) = &self.selected_domain {
+                                        if sel_prov == &provider_name && sel_dom == &domain {
+                                            self.selected_domain = None;
+                                            self.record_rows.clear();
+                                        }
+                                    }
+                                    self.load_data();
+                                }
+                            }
+                        }
+                    }
+                    ViewModelEvent::Ns(NsEvent::Error { operation, error }) => {
+                        if operation == "add_record" {
+                            self.error_message = format!("Failed to add DNS record:\n\n{}", error);
+                            self.show_error_dialog = true;
+                        } else if operation == "add_provider" {
+                            self.add_progress(format!("❌ Failed to add provider: {}", error));
+                        } else if operation == "delete_record" {
+                            self.error_message =
+                                format!("Failed to delete DNS record:\n\n{}", error);
+                            self.show_error_dialog = true;
+                        } else if operation == "delete_domain" {
+                            self.add_progress(format!("❌ Failed to delete domain: {}", error));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Poll background task for adding provider (TODO: Replace with ViewModel)
         let promise_result = if let Some(promise) = &self.add_provider_promise {
             promise.ready().cloned()
         } else {
@@ -824,7 +1009,7 @@ impl NsTab {
                 {
                     if idx < self.domain_rows.len() {
                         let domain = self.domain_rows[idx][0].clone();
-                        self.execute_delete_domain(&domain);
+                        self.execute_delete_domain(&domain, vm.as_deref_mut());
                     }
                 }
             }
@@ -920,7 +1105,12 @@ impl NsTab {
                             let name = self.record_rows[idx][0].clone();
                             let record_type = self.record_rows[idx][1].clone();
                             let value = self.record_rows[idx][2].clone();
-                            self.execute_delete_record(&name, &record_type, &value);
+                            self.execute_delete_record(
+                                &name,
+                                &record_type,
+                                &value,
+                                vm.as_deref_mut(),
+                            );
                         }
                     }
                 }
@@ -953,9 +1143,9 @@ impl NsTab {
         }
 
         // Dialogs
-        self.show_add_provider_dialog(ui.ctx());
+        self.show_add_provider_dialog(ui.ctx(), vm.as_deref_mut());
         self.show_add_domain_dialog(ui.ctx());
-        self.show_add_record_dialog(ui.ctx());
+        self.show_add_record_dialog(ui.ctx(), vm);
         self.show_error_dialog(ui.ctx());
         self.show_nameservers_dialog(ui.ctx());
     }
@@ -1083,7 +1273,11 @@ impl NsTab {
     }
 
     /// Show add nameserver provider dialog
-    fn show_add_provider_dialog(&mut self, ctx: &egui::Context) {
+    fn show_add_provider_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if !self.show_add_provider_dialog {
             return;
         }
@@ -1320,7 +1514,7 @@ impl NsTab {
                     };
 
                     if ui.add(add_button).clicked() {
-                        self.start_add_provider_background();
+                        self.start_add_provider_background(vm.as_deref_mut());
                         self.show_add_provider_dialog = false;
                     }
 
@@ -1504,7 +1698,11 @@ impl NsTab {
     }
 
     /// Show add record dialog
-    fn show_add_record_dialog(&mut self, ctx: &egui::Context) {
+    fn show_add_record_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if !self.show_add_record_dialog {
             return;
         }
@@ -1549,7 +1747,7 @@ impl NsTab {
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.execute_add_record();
+                        self.execute_add_record(vm);
                         self.show_add_record_dialog = false;
                     }
 
@@ -1592,12 +1790,43 @@ impl NsTab {
     }
 
     /// Start add nameserver provider in background (non-blocking)
-    fn start_add_provider_background(&mut self) {
+    fn start_add_provider_background(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let provider = self.add_provider_type.clone();
 
-            // For GCP, create account first and use "gcloud:email" as provider
+            // Use ViewModel for Cloudflare and Porkbun (simpler providers)
+            if (provider == "cloudflare" || provider == "porkbun") && vm.is_some() {
+                let api_token = if provider == "porkbun" {
+                    if self.add_token.is_empty() || self.add_secret_key.is_empty() {
+                        self.add_progress(
+                            "Error: Both API Key and Secret Key are required for Porkbun"
+                                .to_string(),
+                        );
+                        return;
+                    }
+                    format!("{}::{}", self.add_token, self.add_secret_key)
+                } else {
+                    if self.add_token.is_empty() {
+                        self.add_progress("Error: API Key is required".to_string());
+                        return;
+                    }
+                    self.add_token.clone()
+                };
+
+                self.add_progress(format!("Fetching domains from {}...", provider));
+
+                if let Some(ref mut vm) = vm {
+                    if let Err(e) =
+                        vm.add_dns_provider(provider.clone(), provider.clone(), api_token)
+                    {
+                        self.add_progress(format!("Failed to start provider addition: {}", e));
+                    }
+                }
+                return;
+            }
+
+            // Fallback to poll_promise for DuckDNS and GCP
             let (provider_id, token) = if provider == "gcloud" {
                 if let (Some(oauth), Some(email)) =
                     (&self.add_gcp_oauth_result, &self.add_gcp_connected_email)
@@ -2929,74 +3158,50 @@ impl NsTab {
     }
 
     /// Execute delete domain
-    fn execute_delete_domain(&mut self, domain: &str) {
+    fn execute_delete_domain(
+        &mut self,
+        domain: &str,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
-            match load_ns_config() {
-                Ok(mut config) => {
-                    // Find which provider has this domain
-                    let provider = if let Some((prov, _)) = config.get_domain_any_provider(domain) {
-                        prov.to_string()
-                    } else {
-                        return; // Domain not found
-                    };
-
-                    match config.remove_domain(&provider, domain) {
-                        Ok(_) => {
-                            // Check if this was the last domain for a GCP account
-                            // If so, add back the stub placeholder row
-                            if provider.starts_with("gcloud:") {
-                                let email = &provider[7..];
-                                if let Some(account) = config.get_gcp_account(email) {
-                                    if account.domains.is_empty() {
-                                        let stub_domain =
-                                            format!("gcloud ({})", account.project_id);
-                                        let token = account.access_token.clone();
-                                        let _ = config.add_domain(
-                                            provider.clone(),
-                                            stub_domain.clone(),
-                                            token,
-                                        );
-                                        self.add_progress(format!(
-                                            "Added placeholder for GCP account"
-                                        ));
-                                    }
-                                }
-                            }
-
-                            match save_ns_config(&config) {
-                                Ok(_) => {
-                                    // Record audit event
-                                    let _ = audit::push_gui("system", "desktop", "ns del", domain);
-
-                                    self.add_progress(format!("✓ Deleted domain: {}", domain));
-                                    if let Some((sel_prov, sel_dom)) = &self.selected_domain {
-                                        if sel_prov == &provider && sel_dom == domain {
-                                            self.selected_domain = None;
-                                            self.record_rows.clear();
-                                        }
-                                    }
-                                    self.load_data();
-                                }
-                                Err(e) => {
-                                    self.add_progress(format!("Error saving config: {}", e));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            self.add_progress(format!("Error: {}", e));
+            // Find which provider has this domain
+            let provider = if let Some((ref p, _)) = self.selected_domain {
+                p.clone()
+            } else {
+                // If no selection, try to find it in loaded data
+                match load_ns_config() {
+                    Ok(config) => {
+                        if let Some((prov, _)) = config.get_domain_any_provider(domain) {
+                            prov.to_string()
+                        } else {
+                            self.add_progress(format!("Error: Domain '{}' not found", domain));
+                            return;
                         }
                     }
+                    Err(e) => {
+                        self.add_progress(format!("Error loading config: {}", e));
+                        return;
+                    }
                 }
-                Err(e) => {
-                    self.add_progress(format!("Error loading config: {}", e));
+            };
+
+            if let Some(vm) = vm {
+                self.add_progress(format!("Deleting domain: {}...", domain));
+                match vm.delete_dns_domain(provider, domain.to_string()) {
+                    Ok(_) => {
+                        let _ = audit::push_gui("system", "desktop", "ns del", domain);
+                    }
+                    Err(e) => {
+                        self.add_progress(format!("Failed to start domain deletion: {}", e));
+                    }
                 }
             }
         }
     }
 
     /// Execute add record
-    fn execute_add_record(&mut self) {
+    fn execute_add_record(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let name = self.add_record_name.trim().to_string();
@@ -3012,58 +3217,87 @@ impl NsTab {
                     self.add_progress("Error: Invalid record type".to_string());
                     return;
                 }
-                let record_type = record_type.unwrap();
+                let record_type_enum = record_type.unwrap();
 
-                match load_ns_config() {
-                    Ok(mut config) => {
-                        // Normalize name based on provider
-                        let normalized_name = if provider == "cloudflare" || provider == "cf" {
-                            if name.is_empty() || name == "@" {
-                                domain.clone()
-                            } else {
-                                format!("{}.{}", name, domain)
-                            }
-                        } else {
-                            name.clone()
-                        };
+                // Normalize name based on provider
+                let normalized_name = if provider == "cloudflare" || provider == "cf" {
+                    if name.is_empty() || name == "@" {
+                        domain.clone()
+                    } else {
+                        format!("{}.{}", name, domain)
+                    }
+                } else {
+                    name.clone()
+                };
 
-                        // If applying to DNS provider, try API call first
-                        if self.add_record_apply {
-                            // Create a temporary record for the API call
-                            let temp_record = crate::calc::ns::DnsRecord {
-                                record_type: record_type.clone(),
-                                name: normalized_name.clone(),
-                                value: value.clone(),
-                                ttl: None,
-                            };
-
-                            let api_token = config.get_api_token(&provider).unwrap_or_default();
-                            match apply_record(&provider, &api_token, &domain, &temp_record) {
-                                Ok(_) => {
-                                    self.add_progress("✓ Applied to DNS provider".to_string());
-                                }
-                                Err(e) => {
-                                    // API call failed - show error dialog and don't save
-                                    self.error_message =
-                                        format!("Failed to apply DNS record to provider:\n\n{}", e);
-                                    self.show_error_dialog = true;
-                                    return;
-                                }
-                            }
-                        }
-
-                        // API succeeded (or not applying), now save to config
-                        match config.add_record(
-                            &provider,
-                            &domain,
-                            record_type.clone(),
+                // If applying to DNS provider, use ViewModel
+                if self.add_record_apply {
+                    if let Some(ref mut vm) = vm {
+                        // Send command to ViewModel
+                        let record_type_str = self.add_record_type.to_uppercase();
+                        match vm.add_dns_record(
+                            provider.clone(),
+                            domain.clone(),
+                            record_type_str.clone(),
                             normalized_name.clone(),
                             value.clone(),
+                            300, // Default TTL
                         ) {
                             Ok(_) => {
-                                match save_ns_config(&config) {
+                                // Add to config optimistically
+                                match load_ns_config() {
+                                    Ok(mut config) => {
+                                        if let Ok(_) = config.add_record(
+                                            &provider,
+                                            &domain,
+                                            record_type_enum.clone(),
+                                            normalized_name.clone(),
+                                            value.clone(),
+                                        ) {
+                                            // Record audit event
+                                            let record_desc = format!(
+                                                "{} {} {} {}",
+                                                domain, name, record_type_str, value
+                                            );
+                                            let _ = audit::push_gui(
+                                                "system",
+                                                "desktop",
+                                                "ns insert",
+                                                &record_desc,
+                                            );
+                                        }
+                                        // Note: Config will be saved when RecordAdded event arrives
+                                    }
+                                    Err(e) => {
+                                        self.error_message =
+                                            format!("Failed to load config:\n\n{}", e);
+                                        self.show_error_dialog = true;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                self.error_message =
+                                    format!("Failed to start record addition:\n\n{}", e);
+                                self.show_error_dialog = true;
+                            }
+                        }
+                    } else {
+                        self.error_message = "ViewModel not available".to_string();
+                        self.show_error_dialog = true;
+                    }
+                } else {
+                    // Not applying - just save to config (no API call)
+                    match load_ns_config() {
+                        Ok(mut config) => {
+                            match config.add_record(
+                                &provider,
+                                &domain,
+                                record_type_enum.clone(),
+                                normalized_name.clone(),
+                                value.clone(),
+                            ) {
+                                Ok(_) => match save_ns_config(&config) {
                                     Ok(_) => {
-                                        // Record audit event
                                         let record_desc = format!(
                                             "{} {} {} {}",
                                             domain, name, self.add_record_type, value
@@ -3084,24 +3318,24 @@ impl NsTab {
                                         ));
 
                                         self.load_records();
-                                        self.load_data(); // Refresh record count
+                                        self.load_data();
                                     }
                                     Err(e) => {
                                         self.error_message =
                                             format!("Failed to save config:\n\n{}", e);
                                         self.show_error_dialog = true;
                                     }
+                                },
+                                Err(e) => {
+                                    self.error_message = format!("Failed to add record:\n\n{}", e);
+                                    self.show_error_dialog = true;
                                 }
                             }
-                            Err(e) => {
-                                self.error_message = format!("Failed to add record:\n\n{}", e);
-                                self.show_error_dialog = true;
-                            }
                         }
-                    }
-                    Err(e) => {
-                        self.error_message = format!("Failed to load config:\n\n{}", e);
-                        self.show_error_dialog = true;
+                        Err(e) => {
+                            self.error_message = format!("Failed to load config:\n\n{}", e);
+                            self.show_error_dialog = true;
+                        }
                     }
                 }
             }
@@ -3109,7 +3343,13 @@ impl NsTab {
     }
 
     /// Execute delete record
-    fn execute_delete_record(&mut self, name: &str, record_type: &str, value: &str) {
+    fn execute_delete_record(
+        &mut self,
+        name: &str,
+        record_type: &str,
+        _value: &str,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             let (provider, domain) = if let Some((ref p, ref d)) = self.selected_domain {
@@ -3117,115 +3357,25 @@ impl NsTab {
             } else {
                 return;
             };
-            {
-                let rec_type = RecordType::from_str(&record_type.to_lowercase());
-                if rec_type.is_none() {
-                    self.add_progress("Error: Invalid record type".to_string());
-                    return;
-                }
 
-                match load_ns_config() {
-                    Ok(mut config) => {
-                        let rec_type_unwrapped = rec_type.unwrap();
+            // ViewModel-based implementation
+            if let Some(vm) = vm {
+                self.add_progress(format!("Deleting record: {} {}...", name, record_type));
 
-                        // Verify record exists
-                        let record_exists =
-                            if let Some(domain_entry) = config.get_domain(&provider, &domain) {
-                                domain_entry.records.iter().any(|r| {
-                                    r.name == name
-                                        && r.record_type == rec_type_unwrapped
-                                        && r.value == value
-                                })
-                            } else {
-                                self.error_message = "Domain not found".to_string();
-                                self.show_error_dialog = true;
-                                return;
-                            };
-
-                        if !record_exists {
-                            self.error_message = "Record not found".to_string();
-                            self.show_error_dialog = true;
-                            return;
-                        }
-
-                        // Try to delete from DNS provider first
-                        use crate::calc::acme::{DnsProvider, DnsProviderType, delete_dns_record};
-
-                        let provider_type = if provider.starts_with("gcloud:") {
-                            // GCP provider with email format: "gcloud:email"
-                            DnsProviderType::GoogleCloud
-                        } else {
-                            match provider.to_lowercase().as_str() {
-                                "cloudflare" | "cf" => DnsProviderType::Cloudflare,
-                                "gcloud" | "googlecloud" | "gcp" => DnsProviderType::GoogleCloud,
-                                "duckdns" => DnsProviderType::DuckDNS,
-                                "porkbun" => DnsProviderType::Porkbun,
-                                _ => {
-                                    self.error_message = format!("Unknown provider: {}", provider);
-                                    self.show_error_dialog = true;
-                                    return;
-                                }
-                            }
-                        };
-
-                        let api_token = config.get_api_token(&provider).unwrap_or_default();
-                        let dns_provider = DnsProvider {
-                            provider_type,
-                            api_token,
-                        };
-
-                        self.add_progress(format!("Deleting from DNS provider..."));
-                        match delete_dns_record(&dns_provider, &domain, name, record_type) {
-                            Ok(_) => {
-                                self.add_progress(format!("✓ Deleted from DNS provider"));
-                            }
-                            Err(e) => {
-                                // API call failed - show error dialog and don't delete from config
-                                self.error_message =
-                                    format!("Failed to delete DNS record from provider:\n\n{}", e);
-                                self.show_error_dialog = true;
-                                return;
-                            }
-                        }
-
-                        // API succeeded, now delete from config
-                        if let Some(domain_entry) = config.get_domain_mut(&provider, &domain) {
-                            let index = domain_entry.records.iter().position(|r| {
-                                r.name == name
-                                    && r.record_type == rec_type_unwrapped
-                                    && r.value == value
-                            });
-
-                            if let Some(idx) = index {
-                                domain_entry.records.remove(idx);
-                            }
-                        }
-
-                        // Save config
-                        match save_ns_config(&config) {
-                            Ok(_) => {
-                                // Record audit event
-                                let record_desc =
-                                    format!("{} {} {} {}", domain, name, record_type, value);
-                                let _ =
-                                    audit::push_gui("system", "desktop", "ns remove", &record_desc);
-
-                                self.add_progress(format!(
-                                    "✓ Deleted record: {} {} {} {}",
-                                    domain, name, record_type, value
-                                ));
-
-                                self.load_records();
-                                self.load_data(); // Refresh record count
-                            }
-                            Err(e) => {
-                                self.error_message = format!("Failed to save config:\n\n{}", e);
-                                self.show_error_dialog = true;
-                            }
-                        }
+                match vm.delete_dns_record(
+                    provider.clone(),
+                    domain.clone(),
+                    name.to_string(),
+                    record_type.to_string(),
+                ) {
+                    Ok(_) => {
+                        // Record audit event
+                        let record_desc = format!("{} {} {}", domain, name, record_type);
+                        let _ = audit::push_gui("system", "desktop", "ns remove", &record_desc);
+                        // Config will be updated when RecordDeleted event arrives
                     }
                     Err(e) => {
-                        self.error_message = format!("Failed to load config:\n\n{}", e);
+                        self.error_message = format!("Failed to start record deletion:\n\n{}", e);
                         self.show_error_dialog = true;
                     }
                 }

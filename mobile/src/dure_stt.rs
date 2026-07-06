@@ -4,6 +4,10 @@ use crate::{Config, Settings};
 use eframe::egui::{Align2, Pos2, Vec2};
 use std::sync::Arc;
 
+// ViewModel (MVVM architecture)
+#[cfg(feature = "gui")]
+use crate::viewmodel::ViewModel;
+
 #[doc(hidden)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -69,6 +73,11 @@ pub struct DureApp {
     // HTTP cache
     #[cfg_attr(feature = "serde", serde(skip))]
     pub ehttp_cache: Option<Arc<crate::api::ehttp_cache::EhttpCache>>,
+
+    // ViewModel (MVVM architecture)
+    #[cfg(feature = "gui")]
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub viewmodel: Option<ViewModel>,
 }
 
 impl Default for DureApp {
@@ -109,6 +118,8 @@ impl Default for DureApp {
             square_center: Pos2::ZERO,
             square_corners: [Pos2::ZERO; 4],
             ehttp_cache: None,
+            #[cfg(feature = "gui")]
+            viewmodel: None,
         }
     }
 }

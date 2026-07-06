@@ -47,6 +47,63 @@ cargo fmt                           # Format
 cargo doc --open                    # Generate docs
 ```
 
+## Platform CLI Commands
+
+### List Platforms
+```bash
+dure platform
+```
+
+### Show Platform Details
+```bash
+dure platform my-gcp
+```
+
+### Refresh Platform Data
+```bash
+dure platform my-gcp refresh
+```
+
+### Update Firewall (Auto-detect IP)
+```bash
+dure platform my-gcp firewall
+```
+
+### Update Firewall (Explicit IP)
+```bash
+dure platform my-gcp firewall --ip 203.0.113.42
+```
+
+### Add VM (Interactive)
+```bash
+dure platform my-gcp addvm --vm-name my-vm
+```
+
+### Add VM (Full Explicit)
+```bash
+dure platform my-gcp addvm --vm-name my-vm --zone us-west1-a --machine-type e2-small
+```
+
+### Restart VM
+```bash
+dure platform my-gcp restart
+```
+
+### Delete VM
+```bash
+dure platform my-gcp delvm
+```
+
+### Show Billing
+```bash
+dure platform my-gcp billing
+```
+
+### Delete Platform
+```bash
+dure platform my-gcp delete
+```
+
 ## Platform-Specific Features
 
 ```rust

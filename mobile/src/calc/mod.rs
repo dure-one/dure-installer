@@ -7,6 +7,12 @@ pub mod crypt;
 pub mod db;
 pub mod dns;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod docker;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod ansible;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod dure_wss;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod gcp;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod gcp_rest;

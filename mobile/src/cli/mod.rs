@@ -26,7 +26,7 @@ pub enum Commands {
     /// Platform management (GCP, Firebase, Supabase)
     Platform {
         #[command(subcommand)]
-        command: PlatformCommands,
+        command: Option<PlatformCommands>,
     },
     /// Hosting management (domain, DNS, VM, service)
     Hosting {
@@ -458,25 +458,18 @@ pub enum HostingCommands {
 
 #[derive(Subcommand)]
 pub enum PlatformCommands {
-    /// List all configured platforms and their status
-    Status,
-    /// Add a new platform configuration
+    /// Add a new platform
     Add {
-        /// Platform name (e.g., "my-gcp")
+        /// Platform name
         name: String,
         /// Platform type (gcp, firebase, supabase)
+        #[arg(long, short = 't', default_value = "gcp")]
         platform_type: String,
     },
-    /// Delete a platform configuration
-    Del {
-        /// Platform name
-        name: String,
-    },
-    /// Initialize a platform (OAuth, project setup, resources)
-    Init {
-        /// Platform name
-        name: String,
-    },
+
+    // Platform-specific actions using external subcommand for dynamic routing
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }
 
 #[derive(Subcommand)]
@@ -744,20 +737,18 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             }
         },
         Commands::Platform { command } => match command {
-            PlatformCommands::Status => {
-                commands::platform::execute_platform_status()?;
+            None => {
+                // Default: show combined list + show for all platforms
+                commands::platform::list::execute_platform_combined()?;
             }
-            PlatformCommands::Add {
+            Some(PlatformCommands::Add {
                 name,
                 platform_type,
-            } => {
+            }) => {
                 commands::platform::execute_platform_add(name, platform_type)?;
             }
-            PlatformCommands::Del { name } => {
-                commands::platform::execute_platform_del(name)?;
-            }
-            PlatformCommands::Init { name } => {
-                commands::platform::execute_platform_init(name)?;
+            Some(PlatformCommands::External(args)) => {
+                commands::platform::execute_platform_external(args)?;
             }
         },
         Commands::Site { command } => match command {
@@ -800,10 +791,19 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
 
             // Define command categories
             let categories = vec![
-                ("Hosting Control Commands", vec!["ns", "platform", "hosting"]),
-                ("Server Control Commands", vec!["acme", "nft", "wss", "webhook"]),
+                (
+                    "Hosting Control Commands",
+                    vec!["ns", "platform", "hosting"],
+                ),
+                (
+                    "Server Control Commands",
+                    vec!["acme", "nft", "wss", "webhook"],
+                ),
                 ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
-                ("Common/Utility Commands", vec!["crypt", "site", "info", "init"]),
+                (
+                    "Common/Utility Commands",
+                    vec!["crypt", "site", "info", "init"],
+                ),
             ];
 
             let mut cmd = Cli::command();
@@ -812,7 +812,10 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 println!("{}:", category);
                 for name in command_names {
                     if let Some(subcmd) = cmd.find_subcommand_mut(name) {
-                        let about = subcmd.get_about().map(|s| s.to_string()).unwrap_or_default();
+                        let about = subcmd
+                            .get_about()
+                            .map(|s| s.to_string())
+                            .unwrap_or_default();
                         println!("  {:<8} - {}", name, about);
 
                         // Print subcommands if any
@@ -820,7 +823,8 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                             if sub.get_name() == "help" {
                                 continue;
                             }
-                            let sub_about = sub.get_about().map(|s| s.to_string()).unwrap_or_default();
+                            let sub_about =
+                                sub.get_about().map(|s| s.to_string()).unwrap_or_default();
                             println!("    {:<10} - {}", sub.get_name(), sub_about);
                         }
                     }
