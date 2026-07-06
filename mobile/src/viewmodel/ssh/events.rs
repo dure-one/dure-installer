@@ -1,6 +1,5 @@
 //! SSH actor events
 
-use crate::calc::docker::DockerImageMetadata;
 use crate::calc::ansible::AnsibleRoleMetadata;
 use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
 
@@ -76,10 +75,6 @@ pub enum SshEvent {
     },
 
     // Docker Lifecycle Events
-    DockerImageValidated {
-        image: String,
-        metadata: DockerImageMetadata,
-    },
     DockerDaemonInstallRequired {
         host_name: String,
     },

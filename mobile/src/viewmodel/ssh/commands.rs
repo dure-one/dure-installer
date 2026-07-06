@@ -42,9 +42,6 @@ pub enum SshCommand {
     },
 
     // Docker Lifecycle
-    ValidateDockerImage {
-        image: String,
-    },
     InstallDockerImage {
         host_name: String,
         container_name: String,

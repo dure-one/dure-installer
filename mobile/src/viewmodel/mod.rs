@@ -554,12 +554,6 @@ impl ViewModel {
 
     // Docker Lifecycle Management
 
-    // No longer used - inspection happens on remote host via docker pull/history
-    // /// Validate Docker image and fetch metadata from Docker Hub
-    // pub fn validate_docker_image(&self, image: String) {
-    //     let _ = self.ssh_tx.send_blocking(ssh::SshCommand::ValidateDockerImage { image });
-    // }
-
     /// Inspect Docker image by pulling and analyzing history
     pub fn inspect_docker_image(&self, host: String, image: String, tag: String) -> anyhow::Result<()> {
         self.ssh_tx.send_blocking(ssh::SshCommand::InspectDockerImage {

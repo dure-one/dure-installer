@@ -653,30 +653,6 @@ impl SshTab {
                 self.load_error = Some(format!("SSH operation '{}' failed: {}", operation, error));
             }
 
-            // COMMENTED OUT: Old DockerImageValidated event - will be replaced in Task 12
-            // ViewModelEvent::Ssh(SshEvent::DockerImageValidated { image, metadata }) => {
-            //     eprintln!("✓ Docker image {} validated", image);
-            //     self.docker_metadata = Some(metadata.clone());
-            //
-            //     // Populate port mappings from metadata
-            //     self.docker_port_mappings.clear();
-            //     for port in &metadata.exposed_ports {
-            //         self.docker_port_mappings.push((port.to_string(), port.to_string()));
-            //     }
-            //
-            //     // Populate env vars from metadata
-            //     self.docker_env_vars.clear();
-            //     for env in &metadata.env_vars {
-            //         if let Some(idx) = env.find('=') {
-            //             let (key, value) = env.split_at(idx);
-            //             self.docker_env_vars.push((key.to_string(), value[1..].to_string()));
-            //         }
-            //     }
-            //
-            //     self.docker_validating = false;
-            //     self.docker_validation_error = None;
-            // }
-
             ViewModelEvent::Ssh(SshEvent::DockerImageInstalled { host_name, container_name }) => {
                 eprintln!("✓ Docker container {} installed on {}", container_name, host_name);
                 self.show_docker_install_dialog = false;

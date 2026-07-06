@@ -204,9 +204,6 @@ impl SshActor {
             SshCommand::UninstallAnsible { name } => self.uninstall_ansible(name).await,
 
             // Docker Lifecycle Commands
-            SshCommand::ValidateDockerImage { image } => {
-                return self.handle_validate_docker_image(image).await;
-            }
             SshCommand::InstallDockerImage {
                 host_name,
                 container_name,
@@ -1230,35 +1227,6 @@ impl SshActor {
     }
 
     // Docker Lifecycle Handlers
-
-    async fn handle_validate_docker_image(&self, image: String) -> anyhow::Result<()> {
-        self.send_event(SshEvent::Progress {
-            operation: "ValidateDockerImage".to_string(),
-            progress: 0.5,
-            status: format!("Fetching metadata for {}", image),
-        }).await;
-
-        let image_clone = image.clone();
-        match runtime::unblock(move || {
-            smol::block_on(docker::fetch_docker_image_metadata(&image_clone))
-        })
-        .await
-        {
-            Ok(metadata) => {
-                self.send_event(SshEvent::DockerImageValidated {
-                    image,
-                    metadata,
-                }).await;
-            }
-            Err(e) => {
-                self.send_event(SshEvent::Error {
-                    operation: "ValidateDockerImage".to_string(),
-                    error: e.to_string(),
-                }).await;
-            }
-        }
-        Ok(())
-    }
 
     async fn handle_install_docker_image(
         &self,
