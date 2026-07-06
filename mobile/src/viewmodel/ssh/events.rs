@@ -188,6 +188,21 @@ pub enum SshEvent {
         installed: bool,
     },
 
+    /// Docker image inspection completed
+    DockerImageInspected {
+        image: String,
+        tag: String,
+        exposed_ports: Vec<u16>,
+        env_vars: Vec<(String, String)>,
+    },
+
+    /// Docker containers removed (batch operation)
+    DockerContainersRemoved {
+        host_name: String,
+        removed: Vec<String>,           // successfully removed
+        failed: Vec<(String, String)>,  // (container_name, error_message)
+    },
+
     ServiceError {
         name: String,
         service: String,

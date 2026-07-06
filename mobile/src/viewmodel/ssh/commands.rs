@@ -57,8 +57,19 @@ pub enum SshCommand {
         host_name: String,
         container_name: String,
     },
+    /// Remove multiple Docker containers (batch operation)
+    RemoveDockerContainers {
+        host_name: String,
+        container_names: Vec<String>,
+    },
     ListDockerContainers {
         host_name: String,
+    },
+    /// Inspect Docker image by pulling and analyzing history
+    InspectDockerImage {
+        host_name: String,
+        image: String,
+        tag: String,
     },
 
     // Ansible Lifecycle

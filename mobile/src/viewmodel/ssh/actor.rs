@@ -226,6 +226,17 @@ impl SshActor {
             SshCommand::ListDockerContainers { host_name } => {
                 return self.handle_list_docker_containers(host_name).await;
             }
+            SshCommand::InspectDockerImage { host_name, image, tag } => {
+                eprintln!("🔍 SSH Actor: InspectDockerImage stub for '{}' with {}:{}", host_name, image, tag);
+                // TODO: Implement in Task 3
+                return Ok(());
+            }
+            SshCommand::RemoveDockerContainers { host_name, container_names } => {
+                eprintln!("🔍 SSH Actor: RemoveDockerContainers stub for '{}'", host_name);
+                eprintln!("  Containers: {:?}", container_names);
+                // TODO: Implement in Task 4
+                return Ok(());
+            }
 
             // Ansible Lifecycle Commands
             SshCommand::ValidateAnsibleRole { role } => {
