@@ -140,6 +140,9 @@ impl SshActor {
                     initialized: false,
                     last_status: None,
                     platform_name: None,
+                    docker_containers: Vec::new(),
+                    ansible_roles: Vec::new(),
+                    dure_wss_config: None,
                 };
 
                 app_config.ssh_hosts.push(ssh_host);

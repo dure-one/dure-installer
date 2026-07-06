@@ -168,6 +168,18 @@ pub struct SshHostConfig {
     /// Platform relationship - links to CloudPlatformConfig.name
     #[serde(default)]
     pub platform_name: Option<String>,
+
+    /// Docker containers installed on this host
+    #[serde(default)]
+    pub docker_containers: Vec<DockerContainerConfig>,
+
+    /// Ansible roles installed on this host
+    #[serde(default)]
+    pub ansible_roles: Vec<AnsibleRoleConfig>,
+
+    /// Dure-WSS service configuration
+    #[serde(default)]
+    pub dure_wss_config: Option<DureWssConfig>,
 }
 
 fn default_ssh_port() -> u16 {
@@ -185,8 +197,58 @@ impl Default for SshHostConfig {
             initialized: false,
             last_status: None,
             platform_name: None,
+            docker_containers: Vec::new(),
+            ansible_roles: Vec::new(),
+            dure_wss_config: None,
         }
     }
+}
+
+/// Docker container configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerContainerConfig {
+    /// Unique instance name (e.g., "wireguard-us")
+    pub name: String,
+    /// Docker Hub image (e.g., "linuxserver/wireguard")
+    pub image: String,
+    /// Image tag (e.g., "latest", "v1.2.3")
+    pub tag: String,
+    /// Port mappings (host_port, container_port)
+    pub ports: Vec<(u16, u16)>,
+    /// Environment variables
+    pub env: Vec<(String, String)>,
+    /// Container status (running, stopped, error)
+    pub status: String,
+}
+
+/// Ansible role configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnsibleRoleConfig {
+    /// Unique instance name (e.g., "wireguard-main")
+    pub name: String,
+    /// Galaxy role namespace (e.g., "serhii9132.wireguard")
+    pub galaxy_name: String,
+    /// Role variables (key-value pairs)
+    pub variables: Vec<(String, String)>,
+    /// Port mappings for services this role manages
+    pub ports: Vec<u16>,
+    /// Installation status
+    pub installed: bool,
+}
+
+/// Dure-WSS service configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DureWssConfig {
+    /// Domain for TLS cert (e.g., "api.dure.one")
+    pub domain: String,
+    /// Email for ACME notifications
+    pub email: String,
+    /// Release channel (stable, dev, beta)
+    pub channel: String,
+    /// Binary variant (headless, gui)
+    pub variant: String,
+    /// Service status (running, stopped, not_installed)
+    pub status: String,
 }
 
 /// Server configuration
