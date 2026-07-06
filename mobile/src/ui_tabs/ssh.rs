@@ -2571,23 +2571,23 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
     ui.add_space(4.0);
 
     // Ansible roles
-    ui.label(egui::RichText::new("ansible:").strong());
-    if row.ansible_roles.is_empty() {
-        ui.colored_label(ui.visuals().weak_text_color(), "  (no roles installed)");
-    } else {
-        for role in &row.ansible_roles {
-            ui.label(format!("  • {} ({})",
-                role.name,
-                role.galaxy_name
-            ));
-            if !role.ports.is_empty() {
-                let ports: Vec<String> = role.ports.iter()
-                    .map(|p| p.to_string())
-                    .collect();
-                ui.label(format!("    ports: {}", ports.join(", ")));
-            }
-        }
-    }
+    // ui.label(egui::RichText::new("ansible:").strong());
+    // if row.ansible_roles.is_empty() {
+    //     ui.colored_label(ui.visuals().weak_text_color(), "  (no roles installed)");
+    // } else {
+    //     for role in &row.ansible_roles {
+    //         ui.label(format!("  • {} ({})",
+    //             role.name,
+    //             role.galaxy_name
+    //         ));
+    //         if !role.ports.is_empty() {
+    //             let ports: Vec<String> = role.ports.iter()
+    //                 .map(|p| p.to_string())
+    //                 .collect();
+    //             ui.label(format!("    ports: {}", ports.join(", ")));
+    //         }
+    //     }
+    // }
 
     ui.add_space(4.0);
 
