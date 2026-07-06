@@ -1056,6 +1056,10 @@ impl GcpWizard {
                                 port: 22,
                                 initialized: true,
                                 last_status: None,
+                                platform_name: Some(self.platform_name.clone()),
+                                docker_containers: Vec::new(),
+                                ansible_roles: Vec::new(),
+                                dure_wss_config: None,
                             };
 
                             // Check if SSH host already exists
