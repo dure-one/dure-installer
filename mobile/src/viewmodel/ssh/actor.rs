@@ -1924,8 +1924,9 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
     for line in output.lines() {
         let line = line.trim();
 
-        // Parse EXPOSE directives
-        // Format: "/bin/sh -c #(nop)  EXPOSE 8080/tcp" or "EXPOSE 51820/udp" or "EXPOSE 80"
+        // Parse EXPOSE directives - handle both old and new buildkit formats
+
+        // Old format: "/bin/sh -c #(nop)  EXPOSE 8080/tcp"
         if let Some(expose_part) = line.strip_prefix("/bin/sh -c #(nop)  EXPOSE ") {
             if let Some(port_str) = expose_part.split('/').next() {
                 if let Ok(port) = port_str.parse::<u16>() {
@@ -1933,15 +1934,37 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
                 }
             }
         }
+        // New buildkit format: "EXPOSE [51820/udp]" or "EXPOSE 8080/tcp"
+        else if line.starts_with("EXPOSE ") {
+            let expose_part = line.strip_prefix("EXPOSE ").unwrap();
+            // Remove brackets if present: "[51820/udp]" -> "51820/udp"
+            let expose_part = expose_part.trim_start_matches('[').trim_end_matches(']');
+            // Extract port number before '/'
+            if let Some(port_str) = expose_part.split('/').next() {
+                if let Ok(port) = port_str.parse::<u16>() {
+                    ports.push(port);
+                }
+            }
+        }
 
-        // Parse ENV directives
-        // Format: "/bin/sh -c #(nop)  ENV KEY=value"
+        // Parse ENV directives - handle both old and new formats
+
+        // Old format: "/bin/sh -c #(nop)  ENV KEY=value"
         if let Some(env_part) = line.strip_prefix("/bin/sh -c #(nop)  ENV ") {
             if let Some((key, value)) = env_part.split_once('=') {
                 env_vars.push((key.trim().to_string(), value.trim().to_string()));
             }
         }
+        // New buildkit format: "ENV KEY=value"
+        else if line.starts_with("ENV ") {
+            let env_part = line.strip_prefix("ENV ").unwrap();
+            if let Some((key, value)) = env_part.split_once('=') {
+                env_vars.push((key.trim().to_string(), value.trim().to_string()));
+            }
+        }
     }
+
+    eprintln!("🔍 Parsed {} ports and {} env vars from docker history", ports.len(), env_vars.len());
 
     // Remove duplicate ports
     ports.sort_unstable();
@@ -2012,5 +2035,37 @@ mod tests {
         assert_eq!(env_vars[0].0, "PATH");
         // Last occurrence wins
         assert_eq!(env_vars[0].1, "/usr/local/bin");
+    }
+
+    #[test]
+    fn test_parse_docker_history_buildkit_format() {
+        // New buildkit format uses simpler syntax
+        let output = r#"EXPOSE [51820/udp]
+COPY /root / # buildkit
+RUN |3 BUILD_DATE=2026-07-02 ...
+ENV LSIO_FIRST_PARTY=true
+ENV PUID=1000
+ENTRYPOINT ["/init"]"#;
+
+        let (ports, env_vars) = parse_docker_history(output);
+        assert_eq!(ports, vec![51820]);
+        assert_eq!(env_vars.len(), 2);
+        assert!(env_vars.iter().any(|(k, v)| k == "LSIO_FIRST_PARTY" && v == "true"));
+        assert!(env_vars.iter().any(|(k, v)| k == "PUID" && v == "1000"));
+    }
+
+    #[test]
+    fn test_parse_docker_history_mixed_format() {
+        // Mix of old and new formats
+        let output = r#"EXPOSE [8080/tcp]
+/bin/sh -c #(nop)  EXPOSE 443/tcp
+ENV PORT=8080
+/bin/sh -c #(nop)  ENV HOST=localhost"#;
+
+        let (ports, env_vars) = parse_docker_history(output);
+        assert_eq!(ports, vec![443, 8080]);
+        assert_eq!(env_vars.len(), 2);
+        assert!(env_vars.iter().any(|(k, v)| k == "PORT" && v == "8080"));
+        assert!(env_vars.iter().any(|(k, v)| k == "HOST" && v == "localhost"));
     }
 }
