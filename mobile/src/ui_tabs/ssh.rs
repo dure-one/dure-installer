@@ -1071,3 +1071,124 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &SshRowData) {
 
     ui.add_space(4.0);
 }
+
+/// Render dynamic operation buttons based on service state
+fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
+    use egui_material3::MaterialButton;
+
+    egui::ScrollArea::horizontal()
+        .id_salt(format!("operations_scroll_{}", idx))
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
+
+                // Refresh - always available
+                if ui.add(MaterialButton::outlined("Refresh").small())
+                    .on_hover_text("Refresh host status")
+                    .clicked()
+                {
+                    ui.data_mut(|d| d.insert_temp(
+                        egui::Id::new(format!("ssh_refresh_{}", idx)),
+                        row.host.clone()
+                    ));
+                }
+
+                // Docker operations - dynamic based on state
+                if !row.docker_enabled {
+                    if ui.add(MaterialButton::outlined("Install Docker").small())
+                        .on_hover_text("Install Docker")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_install_docker_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                } else {
+                    if ui.add(MaterialButton::outlined("Docker Status").small())
+                        .on_hover_text("Check Docker status")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_docker_status_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                    if ui.add(MaterialButton::outlined("Uninstall Docker").small())
+                        .on_hover_text("Uninstall Docker")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_uninstall_docker_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                }
+
+                // Ansible operations - similar pattern
+                if !row.ansible_enabled {
+                    if ui.add(MaterialButton::outlined("Install Ansible").small())
+                        .on_hover_text("Install Ansible (placeholder)")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_install_ansible_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                } else {
+                    if ui.add(MaterialButton::outlined("Ansible Status").small()).clicked() {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_ansible_status_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                    if ui.add(MaterialButton::outlined("Uninstall Ansible").small()).clicked() {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                }
+
+                // Dure-WSS operations - similar pattern
+                if !row.dure_wss_enabled {
+                    if ui.add(MaterialButton::outlined("Install Dure-WSS").small())
+                        .on_hover_text("Install Dure-WSS (placeholder)")
+                        .clicked()
+                    {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_install_dure_wss_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                } else {
+                    if ui.add(MaterialButton::outlined("Dure-WSS Status").small()).clicked() {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_dure_wss_status_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                    if ui.add(MaterialButton::outlined("Uninstall Dure-WSS").small()).clicked() {
+                        ui.data_mut(|d| d.insert_temp(
+                            egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)),
+                            row.host.clone()
+                        ));
+                    }
+                }
+
+                // Delete - always available
+                if ui.add(MaterialButton::outlined("Delete").small())
+                    .on_hover_text("Delete SSH host")
+                    .clicked()
+                {
+                    ui.data_mut(|d| d.insert_temp(
+                        egui::Id::new(format!("ssh_delete_{}", idx)),
+                        row.host.clone()
+                    ));
+                }
+            });
+        });
+}
