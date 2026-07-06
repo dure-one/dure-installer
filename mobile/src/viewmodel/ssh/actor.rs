@@ -472,44 +472,427 @@ impl SshActor {
         Err(anyhow::anyhow!("Dure WSS deployment not yet implemented in ViewModel"))
     }
 
-    async fn get_linux_status(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Linux status not yet implemented in ViewModel"))
+    async fn get_linux_status(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: get_linux_status called for '{}'", name);
+        self.send_progress("get_linux_status", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("get_linux_status", 0.3, "Retrieving Linux status...").await;
+
+        // Get status (async operation - russh uses tokio internally)
+        let result = async_compat::Compat::new(crate::calc::ssh::get_linux_status(&host_config))
+            .await;
+
+        match result {
+            Ok(status) => {
+                self.send_progress("get_linux_status", 1.0, "Status retrieved").await;
+                self.send_event(SshEvent::LinuxStatusRetrieved {
+                    name,
+                    uptime: status.uptime,
+                    external_ip: status.external_ip,
+                    load_average: status.load_average,
+                    memory_usage: status.memory_usage,
+                    disk_usage: status.disk_usage,
+                    top_processes: status.top_processes,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Linux status retrieval failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "linux".to_string(),
+                    operation: "get_status".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn install_docker(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker installation not yet implemented in ViewModel"))
+    async fn install_docker(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: install_docker called for '{}'", name);
+        self.send_progress("install_docker", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("install_docker", 0.3, "Installing Docker...").await;
+
+        // Install Docker (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::install_docker(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("install_docker", 1.0, "Docker installed").await;
+                self.send_event(SshEvent::DockerInstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Docker installation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "docker".to_string(),
+                    operation: "install".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn get_docker_status(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker status not yet implemented in ViewModel"))
+    async fn get_docker_status(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: get_docker_status called for '{}'", name);
+        self.send_progress("get_docker_status", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("get_docker_status", 0.3, "Checking Docker status...").await;
+
+        // Check Docker status (async operations)
+        let installed = async_compat::Compat::new(crate::calc::ssh::check_docker_installed(&host_config))
+            .await?;
+
+        let running = if installed {
+            async_compat::Compat::new(crate::calc::ssh::check_docker_running(&host_config))
+                .await?
+        } else {
+            false
+        };
+
+        self.send_progress("get_docker_status", 1.0, "Status retrieved").await;
+        self.send_event(SshEvent::DockerStatusRetrieved {
+            name,
+            installed,
+            running,
+        }).await;
+        Ok(())
     }
 
-    async fn uninstall_docker(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Docker uninstallation not yet implemented in ViewModel"))
+    async fn uninstall_docker(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: uninstall_docker called for '{}'", name);
+        self.send_progress("uninstall_docker", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("uninstall_docker", 0.3, "Uninstalling Docker...").await;
+
+        // Uninstall Docker (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::uninstall_docker(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("uninstall_docker", 1.0, "Docker uninstalled").await;
+                self.send_event(SshEvent::DockerUninstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Docker uninstallation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "docker".to_string(),
+                    operation: "uninstall".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn install_ansible(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Ansible installation not yet implemented in ViewModel"))
+    async fn install_ansible(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: install_ansible called for '{}'", name);
+        self.send_progress("install_ansible", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("install_ansible", 0.3, "Installing Ansible...").await;
+
+        // Install Ansible (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::install_ansible(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("install_ansible", 1.0, "Ansible installed").await;
+                self.send_event(SshEvent::AnsibleInstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Ansible installation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "ansible".to_string(),
+                    operation: "install".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn get_ansible_status(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Ansible status not yet implemented in ViewModel"))
+    async fn get_ansible_status(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: get_ansible_status called for '{}'", name);
+        self.send_progress("get_ansible_status", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("get_ansible_status", 0.3, "Checking Ansible status...").await;
+
+        // Check Ansible status (async operation)
+        let installed = async_compat::Compat::new(crate::calc::ssh::check_ansible_installed(&host_config))
+            .await?;
+
+        self.send_progress("get_ansible_status", 1.0, "Status retrieved").await;
+        self.send_event(SshEvent::AnsibleStatusRetrieved {
+            name,
+            installed,
+        }).await;
+        Ok(())
     }
 
-    async fn uninstall_ansible(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Ansible uninstallation not yet implemented in ViewModel"))
+    async fn uninstall_ansible(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: uninstall_ansible called for '{}'", name);
+        self.send_progress("uninstall_ansible", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("uninstall_ansible", 0.3, "Uninstalling Ansible...").await;
+
+        // Uninstall Ansible (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::uninstall_ansible(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("uninstall_ansible", 1.0, "Ansible uninstalled").await;
+                self.send_event(SshEvent::AnsibleUninstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Ansible uninstallation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "ansible".to_string(),
+                    operation: "uninstall".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn install_dure_wss(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Dure WSS installation not yet implemented in ViewModel"))
+    async fn install_dure_wss(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: install_dure_wss called for '{}'", name);
+        self.send_progress("install_dure_wss", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("install_dure_wss", 0.3, "Installing Dure-WSS...").await;
+
+        // Install Dure-WSS (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::install_dure_wss(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("install_dure_wss", 1.0, "Dure-WSS installed").await;
+                self.send_event(SshEvent::DureWssInstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Dure-WSS installation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "dure-wss".to_string(),
+                    operation: "install".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
-    async fn get_dure_wss_status(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Dure WSS status not yet implemented in ViewModel"))
+    async fn get_dure_wss_status(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: get_dure_wss_status called for '{}'", name);
+        self.send_progress("get_dure_wss_status", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("get_dure_wss_status", 0.3, "Checking Dure-WSS status...").await;
+
+        // Check Dure-WSS status (async operation)
+        let installed = async_compat::Compat::new(crate::calc::ssh::check_dure_wss_installed(&host_config))
+            .await?;
+
+        self.send_progress("get_dure_wss_status", 1.0, "Status retrieved").await;
+        self.send_event(SshEvent::DureWssStatusRetrieved {
+            name,
+            installed,
+        }).await;
+        Ok(())
     }
 
-    async fn uninstall_dure_wss(&mut self, _name: String) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!("Dure WSS uninstallation not yet implemented in ViewModel"))
+    async fn uninstall_dure_wss(&mut self, name: String) -> anyhow::Result<()> {
+        eprintln!("🔍 SSH Actor: uninstall_dure_wss called for '{}'", name);
+        self.send_progress("uninstall_dure_wss", 0.1, "Loading host configuration...").await;
+
+        // Load host config
+        let host_config = runtime::unblock({
+            let name = name.clone();
+            move || -> anyhow::Result<crate::config::SshHostConfig> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                let host_config = app_config.ssh_hosts.into_iter()
+                    .find(|h| h.host == name)
+                    .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
+
+                Ok(host_config)
+            }
+        }).await?;
+
+        self.send_progress("uninstall_dure_wss", 0.3, "Uninstalling Dure-WSS...").await;
+
+        // Uninstall Dure-WSS (async operation)
+        let result = async_compat::Compat::new(crate::calc::ssh::uninstall_dure_wss(&host_config))
+            .await;
+
+        match result {
+            Ok(_) => {
+                self.send_progress("uninstall_dure_wss", 1.0, "Dure-WSS uninstalled").await;
+                self.send_event(SshEvent::DureWssUninstalled { name }).await;
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("✗ SSH Actor: Dure-WSS uninstallation failed: {}", e);
+                self.send_event(SshEvent::ServiceError {
+                    name,
+                    service: "dure-wss".to_string(),
+                    operation: "uninstall".to_string(),
+                    error: format!("{:#}", e),
+                }).await;
+                Err(e)
+            }
+        }
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
