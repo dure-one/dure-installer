@@ -760,6 +760,20 @@ impl GcpRestClient {
 
         Ok(())
     }
+
+    /// List images from a public image project (debian-cloud, ubuntu-os-cloud, etc.)
+    ///
+    /// API: GET /projects/{project}/global/images
+    pub fn list_images(&self, image_project: &str) -> Result<ImageList> {
+        let url = format!(
+            "{}/projects/{}/global/images",
+            GCP_COMPUTE_API_BASE, image_project
+        );
+
+        let response = self.get(&url)?;
+        let list: ImageList = response.into_json()?;
+        Ok(list)
+    }
 }
 
 #[cfg(test)]
@@ -869,5 +883,50 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(no_date.display_name(), "Debian 13 ()");
+    }
+
+    #[test]
+    fn test_parse_image_list_response() {
+        let json = r#"{
+            "items": [
+                {
+                    "name": "debian-13-bookworm-v20260615",
+                    "selfLink": "projects/debian-cloud/global/images/debian-13-bookworm-v20260615",
+                    "creationTimestamp": "2026-06-15T10:00:00.000Z",
+                    "architecture": "X86_64",
+                    "family": "debian-13"
+                }
+            ]
+        }"#;
+
+        let list: ImageList = serde_json::from_str(json).unwrap();
+        assert_eq!(list.items.len(), 1);
+        assert_eq!(list.items[0].name, "debian-13-bookworm-v20260615");
+        assert_eq!(list.items[0].architecture.as_deref(), Some("X86_64"));
+    }
+
+    #[test]
+    fn test_parse_deprecated_image() {
+        let json = r#"{
+            "name": "old-image",
+            "selfLink": "projects/debian-cloud/global/images/old-image",
+            "creationTimestamp": "2020-01-01T00:00:00.000Z",
+            "architecture": "X86_64",
+            "deprecated": {
+                "state": "DEPRECATED"
+            }
+        }"#;
+
+        let img: Image = serde_json::from_str(json).unwrap();
+        assert!(img.is_deprecated());
+    }
+
+    #[test]
+    fn test_list_images_method_signature() {
+        // This test verifies the method signature exists
+        // We can't test actual API calls without mocking, so we just check compilation
+        fn _check_signature(client: &GcpRestClient) {
+            let _: Result<ImageList> = client.list_images("debian-cloud");
+        }
     }
 }
