@@ -3,8 +3,8 @@
 use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
 
-use crate::calc::audit;
 use crate::api::gcp::bigquery::BillingRecord;
+use crate::calc::audit;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -1817,12 +1817,43 @@ impl PlatformTab {
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn show_gcp_wizard(&mut self, platform_name: String) {
-        let mut wizard = GcpWizard::new(platform_name);
+        // Try to load config and find platform with OAuth + project
+        let mut wizard = if let Ok((app_config, _)) = load_config() {
+            // Find platform by name
+            if let Some(platform) = app_config.platforms.iter()
+                .find(|p| p.name == platform_name)
+            {
+                // Check if platform has OAuth tokens and project ID
+                if let (Some(access_token), Some(refresh_token), Some(token_expiry), Some(project_id)) = (
+                    &platform.gcp_oauth_access_token,
+                    &platform.gcp_oauth_refresh_token,
+                    platform.gcp_oauth_token_expiry,
+                    &platform.gcp_selected_project_id,
+                ) {
+                    // Construct OAuthResult and use with_platform_context
+                    let oauth_result = crate::api::gcp::oauth::OAuthResult {
+                        access_token: access_token.clone(),
+                        refresh_token: refresh_token.clone(),
+                        expires_at: token_expiry as u64,
+                    };
 
-        // Load OAuth from config if exists
-        if let Ok((app_config, _)) = load_config() {
-            wizard.load_oauth_from_config(&app_config);
-        }
+                    GcpWizard::with_platform_context(
+                        platform_name,
+                        project_id.clone(),
+                        oauth_result,
+                    )
+                } else {
+                    // Missing OAuth or project, use full wizard
+                    GcpWizard::new(platform_name)
+                }
+            } else {
+                // Platform not found in config, use full wizard
+                GcpWizard::new(platform_name)
+            }
+        } else {
+            // Config load failed, use full wizard
+            GcpWizard::new(platform_name)
+        };
 
         wizard.show();
         self.gcp_wizard = Some(wizard);
@@ -2524,14 +2555,16 @@ impl PlatformTab {
             };
 
             // Get valid (possibly refreshed) access token
-            let access_token = match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
-                Ok(token) => token,
-                Err(e) => {
-                    self.billing_error = Some(format!("Failed to get valid OAuth token: {}", e));
-                    self.billing_loading = false;
-                    return;
-                }
-            };
+            let access_token =
+                match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
+                    Ok(token) => token,
+                    Err(e) => {
+                        self.billing_error =
+                            Some(format!("Failed to get valid OAuth token: {}", e));
+                        self.billing_loading = false;
+                        return;
+                    }
+                };
 
             // Get platform reference after token refresh
             let platform = &app_config.platforms[platform_idx];
@@ -2635,12 +2668,13 @@ impl PlatformTab {
                     ui.label("Loading billing data...");
                 } else if let Some(error) = &self.billing_error {
                     // Check if this is a "table not found" error (billing export not configured)
-                    let is_table_not_found = error.contains("was not found") || error.contains("Not found");
+                    let is_table_not_found =
+                        error.contains("was not found") || error.contains("Not found");
 
                     if is_table_not_found {
                         ui.colored_label(
                             egui::Color32::from_rgb(255, 152, 0),
-                            "⚠ Billing Export Not Configured"
+                            "⚠ Billing Export Not Configured",
                         );
                         ui.add_space(4.0);
                         ui.label("BigQuery billing export table does not exist yet.");
