@@ -253,9 +253,13 @@ impl GcpWizard {
     }
 
     /// Show the wizard
+    /// Show the wizard
     pub fn show(&mut self) {
         self.show = true;
-        self.state = WizardState::ConnectAccount;
+        if !self.skip_account_project_steps {
+            self.state = WizardState::ConnectAccount;
+        }
+        // else: keep current state (ConfigureServer)
         self.progress_log.clear();
     }
 
@@ -2219,6 +2223,51 @@ mod tests {
         assert_eq!(
             std::mem::discriminant(&wizard.state),
             std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+    }
+
+    #[test]
+    fn test_show_preserves_state_when_skipping() {
+        use crate::api::gcp::oauth::OAuthResult;
+
+        let oauth = OAuthResult {
+            access_token: "test".to_string(),
+            refresh_token: "test".to_string(),
+            expires_at: 12345,
+        };
+
+        let mut wizard = GcpWizard::with_platform_context(
+            "Test".to_string(),
+            "project".to_string(),
+            oauth,
+        );
+
+        // State starts at ConfigureServer
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+
+        wizard.show();
+
+        // State should remain ConfigureServer (not reset to ConnectAccount)
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+    }
+
+    #[test]
+    fn test_show_resets_state_when_full_flow() {
+        let mut wizard = GcpWizard::new("Test".to_string());
+        wizard.state = WizardState::ConfigureServer;
+
+        wizard.show();
+
+        // State should reset to ConnectAccount for full flow
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConnectAccount)
         );
     }
 }
