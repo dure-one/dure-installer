@@ -12,10 +12,10 @@ use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
+use crate::api::gcp::GcpRestClient;
+use crate::api::gcp::compute::{Image, InstanceRequest, Metadata, MetadataItem};
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
 use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
-use crate::api::gcp::GcpRestClient;
-use crate::api::gcp::compute::{InstanceRequest, Metadata, MetadataItem, Image};
 use crate::calc::keyring;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
@@ -787,7 +787,7 @@ impl GcpWizard {
                         // Retry with exponential backoff
                         self.image_retry_count += 1;
                         std::thread::sleep(std::time::Duration::from_secs(
-                            2_u64.pow(self.image_retry_count)
+                            2_u64.pow(self.image_retry_count),
                         ));
                         self.start_image_loading();
                     }
@@ -830,7 +830,8 @@ impl GcpWizard {
                 } else {
                     "⏳ Loading images...".to_string()
                 }
-            } else if let Some(img) = self.available_images
+            } else if let Some(img) = self
+                .available_images
                 .iter()
                 .find(|img| img.self_link == self.selected_image)
             {
@@ -847,10 +848,7 @@ impl GcpWizard {
                     let mut by_family: std::collections::HashMap<String, Vec<&Image>> =
                         std::collections::HashMap::new();
                     for img in &self.available_images {
-                        by_family
-                            .entry(img.family_group())
-                            .or_default()
-                            .push(img);
+                        by_family.entry(img.family_group()).or_default().push(img);
                     }
 
                     for (family, images) in by_family {
@@ -1604,14 +1602,16 @@ impl GcpWizard {
 
     /// Start async image loading
     fn start_image_loading(&mut self) {
-        let access_token = self.oauth_result
+        let access_token = self
+            .oauth_result
             .as_ref()
             .map(|o| o.access_token.clone())
             .unwrap_or_default();
 
         self.image_promise = Some(Promise::spawn_thread("load_gcp_images", move || {
             let client = GcpRestClient::new(access_token);
-            client.list_debian_ubuntu_images()
+            client
+                .list_debian_ubuntu_images()
                 .map_err(|e| e.to_string())
         }));
     }
@@ -2083,7 +2083,8 @@ echo "Dure VM initialization completed at $(date)"
 
 /// Validate disk size (10 GB minimum, 65536 GB maximum)
 fn validate_disk_size(input: &str) -> Result<u32, String> {
-    let size = input.parse::<u32>()
+    let size = input
+        .parse::<u32>()
         .map_err(|_| "Must be a valid number".to_string())?;
 
     if size < 10 {
@@ -2389,11 +2390,8 @@ mod tests {
             expires_at: 12345,
         };
 
-        let mut wizard = GcpWizard::with_platform_context(
-            "Test".to_string(),
-            "project".to_string(),
-            oauth,
-        );
+        let mut wizard =
+            GcpWizard::with_platform_context("Test".to_string(), "project".to_string(), oauth);
 
         // State starts at ConfigureServer
         assert_eq!(

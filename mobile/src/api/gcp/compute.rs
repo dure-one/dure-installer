@@ -5,7 +5,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::{GcpRestClient, GCP_COMPUTE_API_BASE};
+use super::{GCP_COMPUTE_API_BASE, GcpRestClient};
 
 // ============================================================================
 // Instance Types
@@ -327,10 +327,7 @@ impl Image {
 
     /// Get display name with creation date for UI
     pub fn display_name(&self) -> String {
-        let date = self.creation_timestamp
-            .split('T')
-            .next()
-            .unwrap_or("");
+        let date = self.creation_timestamp.split('T').next().unwrap_or("");
         format!("{} ({})", self.family_group(), date)
     }
 }
@@ -861,7 +858,7 @@ mod tests {
 
     #[test]
     fn test_image_is_recent() {
-        use chrono::{Utc, Duration};
+        use chrono::{Duration, Utc};
 
         // Recent image (3 months old)
         let recent = Image {
@@ -988,17 +985,27 @@ mod tests {
         };
 
         // Test the filter logic inline
-        assert!(x86.architecture.as_ref()
-            .map(|a| a.to_uppercase() == "X86_64")
-            .unwrap_or(false));
+        assert!(
+            x86.architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
 
-        assert!(!arm.architecture.as_ref()
-            .map(|a| a.to_uppercase() == "X86_64")
-            .unwrap_or(false));
+        assert!(
+            !arm.architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
 
-        assert!(!none.architecture.as_ref()
-            .map(|a| a.to_uppercase() == "X86_64")
-            .unwrap_or(false));
+        assert!(
+            !none
+                .architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
     }
 
     #[test]
