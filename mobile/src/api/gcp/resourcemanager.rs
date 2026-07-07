@@ -5,7 +5,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::{GcpRestClient, GCP_RESOURCE_MANAGER_API_BASE};
+use super::{GCP_RESOURCE_MANAGER_API_BASE, GcpRestClient};
 use crate::api::gcp::compute::Operation;
 
 // ============================================================================
@@ -158,5 +158,21 @@ impl GcpRestClient {
 
         let operation: Operation = response.into_json()?;
         Ok(operation)
+    }
+
+    /// Delete a project
+    ///
+    /// API: DELETE /v1/projects/{projectId}
+    pub fn delete_project(&self, project_id: &str) -> Result<()> {
+        let url = format!("{}/projects/{}", GCP_RESOURCE_MANAGER_API_BASE, project_id);
+
+        let response = self.delete(&url)?;
+
+        if response.status() != 204 && response.status() != 200 {
+            let error_text = response.into_string().unwrap_or_default();
+            return Err(anyhow::anyhow!("Failed to delete project: {}", error_text));
+        }
+
+        Ok(())
     }
 }
