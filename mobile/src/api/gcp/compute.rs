@@ -774,6 +774,48 @@ impl GcpRestClient {
         let list: ImageList = response.into_json()?;
         Ok(list)
     }
+
+    /// Get filtered list of recent Debian and Ubuntu images
+    ///
+    /// Filters:
+    /// - OS: Debian or Ubuntu only
+    /// - Architecture: X86_64
+    /// - Age: Created within last 6 months
+    /// - Status: Not deprecated
+    pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
+        let mut all_images = Vec::new();
+
+        // Fetch Debian images
+        match self.list_images("debian-cloud") {
+            Ok(list) => all_images.extend(list.items),
+            Err(e) => log::warn!("Failed to fetch Debian images: {}", e),
+        }
+
+        // Fetch Ubuntu images
+        match self.list_images("ubuntu-os-cloud") {
+            Ok(list) => all_images.extend(list.items),
+            Err(e) => log::warn!("Failed to fetch Ubuntu images: {}", e),
+        }
+
+        // Apply filters
+        let filtered: Vec<Image> = all_images
+            .into_iter()
+            .filter(|img| {
+                let is_x86_64 = img
+                    .architecture
+                    .as_ref()
+                    .map(|arch| arch.to_uppercase() == "X86_64")
+                    .unwrap_or(false);
+
+                let is_recent = img.is_recent();
+                let not_deprecated = !img.is_deprecated();
+
+                is_x86_64 && is_recent && not_deprecated
+            })
+            .collect();
+
+        Ok(filtered)
+    }
 }
 
 #[cfg(test)]
@@ -927,6 +969,43 @@ mod tests {
         // We can't test actual API calls without mocking, so we just check compilation
         fn _check_signature(client: &GcpRestClient) {
             let _: Result<ImageList> = client.list_images("debian-cloud");
+        }
+    }
+
+    #[test]
+    fn test_image_architecture_filter() {
+        let x86 = Image {
+            architecture: Some("X86_64".to_string()),
+            ..Default::default()
+        };
+        let arm = Image {
+            architecture: Some("ARM64".to_string()),
+            ..Default::default()
+        };
+        let none = Image {
+            architecture: None,
+            ..Default::default()
+        };
+
+        // Test the filter logic inline
+        assert!(x86.architecture.as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
+
+        assert!(!arm.architecture.as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
+
+        assert!(!none.architecture.as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
+    }
+
+    #[test]
+    fn test_list_debian_ubuntu_images_signature() {
+        // Verify method signature exists
+        fn _check_signature(client: &GcpRestClient) {
+            let _: Result<Vec<Image>> = client.list_debian_ubuntu_images();
         }
     }
 }
