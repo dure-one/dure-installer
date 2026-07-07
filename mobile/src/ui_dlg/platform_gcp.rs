@@ -1643,6 +1643,7 @@ impl GcpWizard {
         let platform_name = self.platform_name.clone();
         let source_image = self.selected_image.clone();
         let disk_size_gb = self.disk_size_gb.clone();
+        let swap_size_gb = self.swap_size_gb.clone();
 
         let access_token = self
             .oauth_result
@@ -1680,7 +1681,12 @@ impl GcpWizard {
             instance_req.disks[0].initialize_params.disk_size_gb = disk_size_gb;
 
             // Generate and add startup script metadata
-            let startup_script = Self::generate_startup_script(&ssh_public_key);
+            let swap_size = if swap_size_gb.is_empty() {
+                None
+            } else {
+                Some(validate_swap_size(&swap_size_gb).unwrap()) // Already validated
+            };
+            let startup_script = Self::generate_startup_script(&ssh_public_key, swap_size);
             instance_req.metadata = Some(Metadata {
                 items: vec![MetadataItem {
                     key: "startup-script".to_string(),
@@ -1963,7 +1969,84 @@ impl GcpWizard {
     }
 
     /// Generate startup script for VM initialization
-    fn generate_startup_script(ssh_public_key: &str) -> String {
+    fn generate_startup_script(ssh_public_key: &str, swap_size_gb: Option<u32>) -> String {
+        // Generate swap section based on user input or automatic detection
+        let swap_section = if let Some(size) = swap_size_gb {
+            // User-specified swap size
+            if size == 0 {
+                "echo \"Swap disabled by user configuration\"".to_string()
+            } else {
+                format!(
+                    r#"# User-specified swap size: {}GB
+SWAP_SIZE_GB={}
+echo "Creating user-specified ${{SWAP_SIZE_GB}}GB swap..."
+
+# Try fallocate first, fall back to dd
+if fallocate -l "${{SWAP_SIZE_GB}}G" /swapfile 2>/dev/null; then
+    echo "Created ${{SWAP_SIZE_GB}}GB swap with fallocate"
+elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
+    echo "Created ${{SWAP_SIZE_GB}}GB swap with dd"
+else
+    echo "WARNING: Failed to create swap file, continuing without swap..."
+fi
+
+# Only configure swap if file was created successfully
+if [ -f /swapfile ] && [ -s /swapfile ]; then
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "Swap added successfully: ${{SWAP_SIZE_GB}}GB"
+fi"#,
+                    size, size
+                )
+            }
+        } else {
+            // Automatic swap detection (existing logic)
+            r#"# Add swap if memory is less than 8GB
+TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+TOTAL_MEM_GB=$((TOTAL_MEM_KB / 1024 / 1024))
+DISK_AVAIL_GB=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
+
+if [ $TOTAL_MEM_GB -lt 8 ]; then
+    # Determine swap size based on available disk space
+    # Reserve 2GB for system, use the rest for swap (up to 8GB max)
+    if [ $DISK_AVAIL_GB -gt 10 ]; then
+        SWAP_SIZE_GB=8
+    elif [ $DISK_AVAIL_GB -gt 4 ]; then
+        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 4))
+    else
+        echo "Insufficient disk space (${DISK_AVAIL_GB}GB available), skipping swap"
+        SWAP_SIZE_GB=0
+    fi
+
+    if [ $SWAP_SIZE_GB -gt 0 ]; then
+        echo "Total memory is ${TOTAL_MEM_GB}GB, disk available ${DISK_AVAIL_GB}GB"
+        echo "Creating ${SWAP_SIZE_GB}GB swap..."
+
+        # Try fallocate first, fall back to dd
+        if fallocate -l "${SWAP_SIZE_GB}G" /swapfile 2>/dev/null; then
+            echo "Created ${SWAP_SIZE_GB}GB swap with fallocate"
+        elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
+            echo "Created ${SWAP_SIZE_GB}GB swap with dd"
+        else
+            echo "WARNING: Failed to create swap file, continuing without swap..."
+        fi
+
+        # Only configure swap if file was created successfully
+        if [ -f /swapfile ] && [ -s /swapfile ]; then
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            echo "Swap added successfully: ${SWAP_SIZE_GB}GB"
+        fi
+    fi
+else
+    echo "Memory is ${TOTAL_MEM_GB}GB, no swap needed"
+fi"#.to_string()
+        };
+
         format!(
             r#"#!/bin/bash
 # Don't exit on errors - we want SSH config to run even if swap fails
@@ -1983,48 +2066,7 @@ net.ipv4.tcp_congestion_control=bbr
 EOF
 sysctl -p
 
-# Add swap if memory is less than 8GB
-TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{{print $2}}')
-TOTAL_MEM_GB=$((TOTAL_MEM_KB / 1024 / 1024))
-DISK_AVAIL_GB=$(df -BG / | awk 'NR==2 {{print $4}}' | sed 's/G//')
-
-if [ $TOTAL_MEM_GB -lt 8 ]; then
-    # Determine swap size based on available disk space
-    # Reserve 2GB for system, use the rest for swap (up to 8GB max)
-    if [ $DISK_AVAIL_GB -gt 10 ]; then
-        SWAP_SIZE_GB=8
-    elif [ $DISK_AVAIL_GB -gt 4 ]; then
-        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 4))
-    else
-        echo "Insufficient disk space (${{DISK_AVAIL_GB}}GB available), skipping swap"
-        SWAP_SIZE_GB=0
-    fi
-
-    if [ $SWAP_SIZE_GB -gt 0 ]; then
-        echo "Total memory is ${{TOTAL_MEM_GB}}GB, disk available ${{DISK_AVAIL_GB}}GB"
-        echo "Creating ${{SWAP_SIZE_GB}}GB swap..."
-
-        # Try fallocate first, fall back to dd
-        if fallocate -l "${{SWAP_SIZE_GB}}G" /swapfile 2>/dev/null; then
-            echo "Created ${{SWAP_SIZE_GB}}GB swap with fallocate"
-        elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
-            echo "Created ${{SWAP_SIZE_GB}}GB swap with dd"
-        else
-            echo "WARNING: Failed to create swap file, continuing without swap..."
-        fi
-
-        # Only configure swap if file was created successfully
-        if [ -f /swapfile ] && [ -s /swapfile ]; then
-            chmod 600 /swapfile
-            mkswap /swapfile
-            swapon /swapfile
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
-            echo "Swap added successfully: ${{SWAP_SIZE_GB}}GB"
-        fi
-    fi
-else
-    echo "Memory is ${{TOTAL_MEM_GB}}GB, no swap needed"
-fi
+{swap_section}
 
 # Configure SSH for root access with key authentication
 echo "Configuring SSH..."
@@ -2344,7 +2386,7 @@ mod tests {
     #[test]
     fn test_generate_startup_script() {
         let ssh_key = "ssh-ed25519 AAAAC3... test@example.com";
-        let script = GcpWizard::generate_startup_script(ssh_key);
+        let script = GcpWizard::generate_startup_script(ssh_key, None); // None = automatic swap
 
         // Should be a bash script
         assert!(script.starts_with("#!/bin/bash"));
