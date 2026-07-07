@@ -869,6 +869,20 @@ impl GcpWizard {
 
         ui.add_space(8.0);
 
+        // Disk Size input
+        ui.horizontal(|ui| {
+            ui.label("Disk Size (GB):");
+            ui.add(egui::TextEdit::singleline(&mut self.disk_size_gb).desired_width(80.0));
+            ui.colored_label(egui::Color32::GRAY, "Minimum: 10 GB");
+        });
+
+        // Validation
+        if let Err(e) = validate_disk_size(&self.disk_size_gb) {
+            ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
+        }
+
+        ui.add_space(8.0);
+
         // Region selection
         ui.horizontal(|ui| {
             ui.label("Region:");
@@ -932,15 +946,20 @@ impl GcpWizard {
         ui.add_space(16.0);
 
         ui.horizontal(|ui| {
-            if ui.button("← Back").clicked() {
-                self.state = WizardState::SelectProject;
+            // Only show Back if came from full wizard
+            if !self.skip_account_project_steps {
+                if ui.button("← Back").clicked() {
+                    self.state = WizardState::SelectProject;
+                }
             }
 
             let can_create = !self.instance_name.is_empty()
                 && self.validate_instance_name(&self.instance_name)
                 && !self.selected_region.is_empty()
                 && !self.selected_zone.is_empty()
-                && !self.selected_machine_type.is_empty();
+                && !self.selected_machine_type.is_empty()
+                && validate_disk_size(&self.disk_size_gb).is_ok()
+                && self.image_promise.is_none();
 
             let create_button = MaterialButton::filled("Create Server");
             ui.add_enabled_ui(can_create, |ui| {
