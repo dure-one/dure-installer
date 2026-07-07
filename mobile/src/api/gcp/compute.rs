@@ -303,11 +303,11 @@ impl Image {
             .unwrap_or(false)
     }
 
-    /// Check if image was created within last 12 months
+    /// Check if image was created within last 6 months
     pub fn is_recent(&self) -> bool {
         if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&self.creation_timestamp) {
-            let twelve_months_ago = chrono::Utc::now() - chrono::Duration::days(365);
-            created.with_timezone(&chrono::Utc) > twelve_months_ago
+            let six_months_ago = chrono::Utc::now() - chrono::Duration::days(180);
+            created.with_timezone(&chrono::Utc) > six_months_ago
         } else {
             false
         }
@@ -777,22 +777,44 @@ impl GcpRestClient {
     /// Filters:
     /// - OS: Debian or Ubuntu only
     /// - Architecture: X86_64
-    /// - Age: Created within last 12 months
+    /// - Age: Created within last 6 months
     /// - Status: Not deprecated
     pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
         let mut all_images = Vec::new();
+        let mut errors = Vec::new();
 
         // Fetch Debian images
         match self.list_images("debian-cloud") {
-            Ok(list) => all_images.extend(list.items),
-            Err(e) => log::warn!("Failed to fetch Debian images: {}", e),
+            Ok(list) => {
+                log::info!("Fetched {} Debian images", list.items.len());
+                all_images.extend(list.items);
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to fetch Debian images: {}", e);
+                log::warn!("{}", err_msg);
+                errors.push(err_msg);
+            }
         }
 
         // Fetch Ubuntu images
         match self.list_images("ubuntu-os-cloud") {
-            Ok(list) => all_images.extend(list.items),
-            Err(e) => log::warn!("Failed to fetch Ubuntu images: {}", e),
+            Ok(list) => {
+                log::info!("Fetched {} Ubuntu images", list.items.len());
+                all_images.extend(list.items);
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to fetch Ubuntu images: {}", e);
+                log::warn!("{}", err_msg);
+                errors.push(err_msg);
+            }
         }
+
+        // If both failed, return error
+        if all_images.is_empty() && !errors.is_empty() {
+            return Err(anyhow::anyhow!("Failed to fetch images: {}", errors.join("; ")));
+        }
+
+        log::info!("Total images before filtering: {}", all_images.len());
 
         // Apply filters
         let filtered: Vec<Image> = all_images
@@ -810,6 +832,8 @@ impl GcpRestClient {
                 is_x86_64 && is_recent && not_deprecated
             })
             .collect();
+
+        log::info!("Images after filtering: {}", filtered.len());
 
         Ok(filtered)
     }
@@ -867,9 +891,9 @@ mod tests {
         };
         assert!(recent.is_recent());
 
-        // Old image (13 months old)
+        // Old image (7 months old)
         let old = Image {
-            creation_timestamp: (Utc::now() - Duration::days(395)).to_rfc3339(),
+            creation_timestamp: (Utc::now() - Duration::days(210)).to_rfc3339(),
             ..Default::default()
         };
         assert!(!old.is_recent());
