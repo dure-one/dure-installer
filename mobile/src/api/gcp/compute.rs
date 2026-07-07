@@ -816,24 +816,54 @@ impl GcpRestClient {
 
         log::info!("Total images before filtering: {}", all_images.len());
 
-        // Apply filters
-        let filtered: Vec<Image> = all_images
-            .into_iter()
-            .filter(|img| {
-                let is_x86_64 = img
-                    .architecture
-                    .as_ref()
-                    .map(|arch| arch.to_uppercase() == "X86_64")
-                    .unwrap_or(false);
+        // Sample first few images to debug architecture values
+        if !all_images.is_empty() {
+            let sample = &all_images[0];
+            log::info!(
+                "Sample image: name={}, arch={:?}, deprecated={:?}, created={}",
+                sample.name,
+                sample.architecture,
+                sample.deprecated,
+                sample.creation_timestamp
+            );
+        }
 
-                let is_recent = img.is_recent();
-                let not_deprecated = !img.is_deprecated();
+        // Apply filters with detailed logging
+        let mut filtered = Vec::new();
+        let mut stats = (0, 0, 0); // (arch_rejected, old_rejected, deprecated_rejected)
 
-                is_x86_64 && is_recent && not_deprecated
-            })
-            .collect();
+        for img in all_images {
+            let is_x86_64 = img
+                .architecture
+                .as_ref()
+                .map(|arch| arch.to_uppercase() == "X86_64" || arch.to_uppercase() == "X86")
+                .unwrap_or(false);
+
+            let is_recent = img.is_recent();
+            let not_deprecated = !img.is_deprecated();
+
+            if !is_x86_64 {
+                stats.0 += 1;
+            }
+            if !is_recent {
+                stats.1 += 1;
+            }
+            if !not_deprecated {
+                stats.2 += 1;
+            }
+
+            if is_x86_64 && is_recent && not_deprecated {
+                filtered.push(img);
+            }
+        }
 
         log::info!("Images after filtering: {}", filtered.len());
+        log::info!(
+            "Filter stats - Arch rejected: {}, Old rejected: {}, Deprecated rejected: {}",
+            stats.0,
+            stats.1,
+            stats.2
+        );
 
         Ok(filtered)
     }
