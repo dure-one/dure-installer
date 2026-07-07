@@ -766,6 +766,40 @@ impl GcpWizard {
         ui.heading("Configure Server");
         ui.add_space(8.0);
 
+        // Start image loading if not started
+        if self.image_promise.is_none() && self.available_images.is_empty() {
+            self.start_image_loading();
+        }
+
+        // Check promise result
+        if let Some(promise) = &self.image_promise {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(images) => {
+                        self.available_images = images.clone();
+                        self.image_promise = None;
+                        // Auto-select latest image
+                        if let Some(latest) = self.available_images.first() {
+                            self.selected_image = latest.self_link.clone();
+                        }
+                    }
+                    Err(_) if self.image_retry_count < 3 => {
+                        // Retry with exponential backoff
+                        self.image_retry_count += 1;
+                        std::thread::sleep(std::time::Duration::from_secs(
+                            2_u64.pow(self.image_retry_count)
+                        ));
+                        self.start_image_loading();
+                    }
+                    Err(_) => {
+                        // Use fallback
+                        self.available_images = get_fallback_images();
+                        self.image_promise = None;
+                    }
+                }
+            }
+        }
+
         // Instance name with validation
         ui.horizontal(|ui| {
             ui.label("Instance Name:");
@@ -784,6 +818,54 @@ impl GcpWizard {
                 );
             }
         }
+
+        ui.add_space(8.0);
+
+        // Source Image selection
+        ui.horizontal(|ui| {
+            ui.label("Source Image:");
+            let selected_display = if self.image_promise.is_some() {
+                if self.image_retry_count > 0 {
+                    format!("⏳ Retrying... ({}/3)", self.image_retry_count)
+                } else {
+                    "⏳ Loading images...".to_string()
+                }
+            } else if let Some(img) = self.available_images
+                .iter()
+                .find(|img| img.self_link == self.selected_image)
+            {
+                img.display_name()
+            } else {
+                "Debian 13 (default)".to_string()
+            };
+
+            egui::ComboBox::from_id_salt("image_combo")
+                .selected_text(&selected_display)
+                .width(350.0)
+                .show_ui(ui, |ui| {
+                    // Group by family
+                    let mut by_family: std::collections::HashMap<String, Vec<&Image>> =
+                        std::collections::HashMap::new();
+                    for img in &self.available_images {
+                        by_family
+                            .entry(img.family_group())
+                            .or_default()
+                            .push(img);
+                    }
+
+                    for (family, images) in by_family {
+                        ui.label(egui::RichText::new(&family).strong());
+                        for img in images {
+                            ui.selectable_value(
+                                &mut self.selected_image,
+                                img.self_link.clone(),
+                                format!("  {}", img.display_name()),
+                            );
+                        }
+                        ui.add_space(4.0);
+                    }
+                });
+        });
 
         ui.add_space(8.0);
 
