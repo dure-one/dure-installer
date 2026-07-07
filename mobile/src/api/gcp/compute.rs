@@ -293,6 +293,17 @@ impl Default for Image {
     }
 }
 
+impl Image {
+    /// Check if image is deprecated
+    pub fn is_deprecated(&self) -> bool {
+        self.deprecated
+            .as_ref()
+            .and_then(|d| d.state.as_ref())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    }
+}
+
 /// Deprecation status
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeprecatedStatus {
@@ -731,5 +742,33 @@ mod tests {
         assert_eq!(img.self_link, "");
         assert!(img.architecture.is_none());
         assert!(img.deprecated.is_none());
+    }
+
+    #[test]
+    fn test_image_is_deprecated() {
+        // Active image (no deprecated field)
+        let active = Image {
+            deprecated: None,
+            ..Default::default()
+        };
+        assert!(!active.is_deprecated());
+
+        // Deprecated image
+        let deprecated = Image {
+            deprecated: Some(DeprecatedStatus {
+                state: Some("DEPRECATED".to_string()),
+            }),
+            ..Default::default()
+        };
+        assert!(deprecated.is_deprecated());
+
+        // Edge case: empty state string
+        let edge = Image {
+            deprecated: Some(DeprecatedStatus {
+                state: Some("".to_string()),
+            }),
+            ..Default::default()
+        };
+        assert!(!edge.is_deprecated());
     }
 }
