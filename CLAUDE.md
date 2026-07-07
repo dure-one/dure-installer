@@ -62,9 +62,18 @@ Business logic controller layer (API → calc → DB → UI):
 #### External Integrations (`mobile/src/api/`)
 - **`desktop.rs`** - Desktop-specific API utilities
 - **`ehttp_cache.rs`** - HTTP caching layer
-- **`gcp_oauth.rs`** - Google OAuth2 authentication
+- **`gcp/`** - Google Cloud Platform API modules (layered architecture):
+  - `mod.rs` - Common GCP client (GcpRestClient) and utilities
+  - `compute.rs` - Compute Engine API (VMs, firewalls, regions/zones)
+  - `resourcemanager.rs` - Resource Manager API (projects)
+  - `billing.rs` - Cloud Billing API (billing accounts, project billing)
+  - `bigquery.rs` - BigQuery API (datasets, tables, billing queries)
+  - `serviceusage.rs` - Service Usage API (enable/check services)
+  - `oauth.rs` - OAuth2 authentication and user info
+  - `dns.rs` - Cloud DNS API (managed zones, DNS records)
 - **`ns_cloudflare.rs`** - Cloudflare DNS API
-- Additional providers: DuckDNS, Porkbun, GCP Cloud DNS
+- **`ns_gcp.rs`** - GCP Cloud DNS API (re-export of `gcp/dns.rs`)
+- Additional DNS providers: DuckDNS (`ns_duckdns.rs`), Porkbun (`ns_porkbun.rs`)
 
 #### Real-Time Communication (`mobile/src/wss/`)
 - **`server/`** - WebSocket Secure server (HTTPS + WSS)
@@ -120,7 +129,10 @@ Business logic controller layer (API → calc → DB → UI):
 #### Design Principles
 1. **Platform Abstraction** - Conditional compilation (`#[cfg(...)]`) isolates platform-specific code
 2. **Feature Flags** - GUI optional (`--no-default-features` for headless builds)
-3. **Layered Architecture** - Clear separation: UI → calc → storage/api
+3. **Layered Architecture** - Clear separation: UI → ViewModel → Calc/Api
+   - UI layer only communicates with ViewModel
+   - ViewModel coordinates between Calc (business logic) and Api (external services)
+   - Api layer is modular (e.g., `gcp/compute.rs`, `gcp/billing.rs`)
 4. **Async Runtime** - smol for async operations (network, I/O)
 5. **Security First** - Attestation, encryption, secure key storage
 6. **Dual Interface** - All features accessible via CLI and GUI
