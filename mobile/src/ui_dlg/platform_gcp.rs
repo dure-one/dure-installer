@@ -1501,6 +1501,20 @@ impl GcpWizard {
         }
     }
 
+    /// Start async image loading
+    fn start_image_loading(&mut self) {
+        let access_token = self.oauth_result
+            .as_ref()
+            .map(|o| o.access_token.clone())
+            .unwrap_or_default();
+
+        self.image_promise = Some(Promise::spawn_thread("load_gcp_images", move || {
+            let client = GcpRestClient::new(access_token);
+            client.list_debian_ubuntu_images()
+                .map_err(|e| e.to_string())
+        }));
+    }
+
     fn start_server_creation(&mut self) {
         self.state = WizardState::CreatingServer;
         self.progress_log.push("Creating server...".to_string());
