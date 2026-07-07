@@ -256,6 +256,50 @@ pub struct Zone {
 }
 
 // ============================================================================
+// Image Types
+// ============================================================================
+
+/// Image list response from GCP API
+#[derive(Debug, Deserialize, Default)]
+pub struct ImageList {
+    #[serde(default)]
+    pub items: Vec<Image>,
+}
+
+/// GCP Compute Engine image metadata
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Image {
+    pub name: String,
+    pub description: Option<String>,
+    pub self_link: String,
+    pub creation_timestamp: String,
+    pub architecture: Option<String>,
+    pub family: Option<String>,
+    pub deprecated: Option<DeprecatedStatus>,
+}
+
+impl Default for Image {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: None,
+            self_link: String::new(),
+            creation_timestamp: String::new(),
+            architecture: None,
+            family: None,
+            deprecated: None,
+        }
+    }
+}
+
+/// Deprecation status
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeprecatedStatus {
+    pub state: Option<String>,
+}
+
+// ============================================================================
 // Helper Implementations
 // ============================================================================
 
@@ -673,5 +717,19 @@ impl GcpRestClient {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_image_default() {
+        let img = Image::default();
+        assert_eq!(img.name, "");
+        assert_eq!(img.self_link, "");
+        assert!(img.architecture.is_none());
+        assert!(img.deprecated.is_none());
     }
 }
