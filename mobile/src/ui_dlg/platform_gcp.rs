@@ -1970,8 +1970,8 @@ if [ $TOTAL_MEM_GB -lt 8 ]; then
     # Reserve 2GB for system, use the rest for swap (up to 8GB max)
     if [ $DISK_AVAIL_GB -gt 10 ]; then
         SWAP_SIZE_GB=8
-    elif [ $DISK_AVAIL_GB -gt 2 ]; then
-        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 2))
+    elif [ $DISK_AVAIL_GB -gt 4 ]; then
+        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 4))
     else
         echo "Insufficient disk space (${{DISK_AVAIL_GB}}GB available), skipping swap"
         SWAP_SIZE_GB=0
@@ -2086,6 +2086,25 @@ fn validate_disk_size(input: &str) -> Result<u32, String> {
 
     if size > 65536 {
         return Err("Maximum disk size is 65536 GB".to_string());
+    }
+
+    Ok(size)
+}
+
+/// Validate swap size input
+///
+/// Returns parsed value in GB, or error message.
+/// Empty string returns Ok(0) meaning automatic detection.
+fn validate_swap_size(input: &str) -> Result<u32, String> {
+    if input.is_empty() {
+        return Ok(0); // 0 means auto
+    }
+
+    let size = input.parse::<u32>()
+        .map_err(|_| "Must be a number".to_string())?;
+
+    if size > 32 {
+        return Err("Maximum 32 GB".to_string());
     }
 
     Ok(size)
@@ -2434,5 +2453,32 @@ mod tests {
             images[1].self_link,
             "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts"
         );
+    }
+
+    #[test]
+    fn test_validate_swap_size_empty() {
+        assert_eq!(validate_swap_size(""), Ok(0));
+    }
+
+    #[test]
+    fn test_validate_swap_size_valid_numbers() {
+        assert_eq!(validate_swap_size("0"), Ok(0));
+        assert_eq!(validate_swap_size("4"), Ok(4));
+        assert_eq!(validate_swap_size("8"), Ok(8));
+        assert_eq!(validate_swap_size("16"), Ok(16));
+        assert_eq!(validate_swap_size("32"), Ok(32));
+    }
+
+    #[test]
+    fn test_validate_swap_size_too_large() {
+        assert!(validate_swap_size("33").is_err());
+        assert!(validate_swap_size("100").is_err());
+    }
+
+    #[test]
+    fn test_validate_swap_size_non_numeric() {
+        assert!(validate_swap_size("abc").is_err());
+        assert!(validate_swap_size("4.5").is_err());
+        assert!(validate_swap_size("-1").is_err());
     }
 }
