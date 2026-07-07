@@ -1906,6 +1906,22 @@ echo "Dure VM initialization completed at $(date)"
     }
 }
 
+/// Validate disk size (10 GB minimum, 65536 GB maximum)
+fn validate_disk_size(input: &str) -> Result<u32, String> {
+    let size = input.parse::<u32>()
+        .map_err(|_| "Must be a valid number".to_string())?;
+
+    if size < 10 {
+        return Err("Minimum disk size is 10 GB".to_string());
+    }
+
+    if size > 65536 {
+        return Err("Maximum disk size is 65536 GB".to_string());
+    }
+
+    Ok(size)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2107,5 +2123,34 @@ mod tests {
 
         // Should create swap
         assert!(script.contains("swap"));
+    }
+
+    #[test]
+    fn test_validate_disk_size() {
+        // Valid sizes
+        assert!(validate_disk_size("10").is_ok());
+        assert_eq!(validate_disk_size("10").unwrap(), 10);
+        assert!(validate_disk_size("100").is_ok());
+        assert!(validate_disk_size("65536").is_ok());
+
+        // Invalid: too small
+        assert_eq!(
+            validate_disk_size("9").unwrap_err(),
+            "Minimum disk size is 10 GB"
+        );
+
+        // Invalid: too large
+        assert_eq!(
+            validate_disk_size("65537").unwrap_err(),
+            "Maximum disk size is 65536 GB"
+        );
+
+        // Invalid: not a number
+        assert_eq!(
+            validate_disk_size("abc").unwrap_err(),
+            "Must be a valid number"
+        );
+        assert!(validate_disk_size("").is_err());
+        assert!(validate_disk_size("-5").is_err());
     }
 }
