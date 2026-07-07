@@ -112,9 +112,10 @@ impl PlatformActor {
                 )
                 .await
             }
-            PlatformCommand::DeletePlatform { platform_name } => {
-                self.delete_platform(platform_name).await
-            }
+            PlatformCommand::DeletePlatform {
+                platform_name,
+                delete_options,
+            } => self.delete_platform(platform_name, delete_options).await,
             _ => {
                 // Unimplemented commands
                 Err(anyhow::anyhow!("Command not implemented: {:?}", cmd))
@@ -711,7 +712,11 @@ impl PlatformActor {
         Ok(())
     }
 
-    async fn delete_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
+    async fn delete_platform(
+        &mut self,
+        platform_name: String,
+        delete_options: crate::viewmodel::platform::DeleteOptions,
+    ) -> anyhow::Result<()> {
         self.send_progress("delete_platform", 0.5, "Deleting platform...")
             .await;
 

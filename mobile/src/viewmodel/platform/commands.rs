@@ -1,6 +1,12 @@
 //! Platform actor commands
 
 #[derive(Debug, Clone)]
+pub struct DeleteOptions {
+    pub delete_vms: bool,
+    pub delete_project: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum PlatformCommand {
     // OAuth & Platform Management
     StartOAuth {
@@ -21,6 +27,7 @@ pub enum PlatformCommand {
     },
     DeletePlatform {
         platform_name: String,
+        delete_options: DeleteOptions,
     },
 
     // Project Operations
@@ -74,4 +81,41 @@ pub enum PlatformCommand {
 
     // Refresh all platform data
     RefreshAll,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_delete_options_struct() {
+        let opts = DeleteOptions {
+            delete_vms: true,
+            delete_project: false,
+        };
+        assert!(opts.delete_vms);
+        assert!(!opts.delete_project);
+    }
+
+    #[test]
+    fn test_delete_platform_with_options() {
+        let cmd = PlatformCommand::DeletePlatform {
+            platform_name: "test-platform".to_string(),
+            delete_options: DeleteOptions {
+                delete_vms: true,
+                delete_project: true,
+            },
+        };
+        match cmd {
+            PlatformCommand::DeletePlatform {
+                platform_name,
+                delete_options,
+            } => {
+                assert_eq!(platform_name, "test-platform");
+                assert!(delete_options.delete_vms);
+                assert!(delete_options.delete_project);
+            }
+            _ => panic!("Expected DeletePlatform command"),
+        }
+    }
 }
