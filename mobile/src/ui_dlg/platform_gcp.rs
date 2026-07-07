@@ -312,13 +312,21 @@ impl GcpWizard {
     }
 
     fn render_progress_indicator(&self, ui: &mut egui::Ui) {
-        let steps = [
-            ("Connect", WizardState::ConnectAccount),
-            ("Project", WizardState::SelectProject),
-            ("Configure", WizardState::ConfigureServer),
-            ("Create", WizardState::CreatingServer),
-            ("Complete", WizardState::Complete),
-        ];
+        let steps = if self.skip_account_project_steps {
+            vec![
+                ("Configure", WizardState::ConfigureServer),
+                ("Create", WizardState::CreatingServer),
+                ("Complete", WizardState::Complete),
+            ]
+        } else {
+            vec![
+                ("Connect", WizardState::ConnectAccount),
+                ("Project", WizardState::SelectProject),
+                ("Configure", WizardState::ConfigureServer),
+                ("Create", WizardState::CreatingServer),
+                ("Complete", WizardState::Complete),
+            ]
+        };
 
         ui.horizontal(|ui| {
             for (i, (label, step_state)) in steps.iter().enumerate() {
