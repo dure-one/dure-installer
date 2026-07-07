@@ -8,6 +8,9 @@ pub mod desktop;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod gcp_oauth;
 
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod gcp;
+
 // Nameserver API modules
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ns_cloudflare;
