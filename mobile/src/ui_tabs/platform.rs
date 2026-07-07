@@ -2495,7 +2495,7 @@ impl PlatformTab {
             self.billing_data = None;
 
             // Load config to get GCP platform with OAuth
-            let (app_config, _) = match load_config() {
+            let (mut app_config, config_path) = match load_config() {
                 Ok(config) => config,
                 Err(e) => {
                     self.billing_error = Some(format!("Failed to load config: {}", e));
@@ -2504,13 +2504,15 @@ impl PlatformTab {
                 }
             };
 
-            // Find first GCP platform with OAuth token
-            let platform = match app_config
+            // Find first GCP platform with OAuth token (need index for token refresh)
+            let platform_idx = match app_config
                 .platforms
                 .iter()
-                .find(|p| p.platform_type == "gcp" && p.gcp_oauth_access_token.is_some())
+                .enumerate()
+                .find(|(_, p)| p.platform_type == "gcp" && p.gcp_oauth_access_token.is_some())
+                .map(|(idx, _)| idx)
             {
-                Some(p) => p,
+                Some(idx) => idx,
                 None => {
                     self.billing_error = Some(
                         "No connected GCP platform found. Please add a GCP platform first."
@@ -2520,6 +2522,19 @@ impl PlatformTab {
                     return;
                 }
             };
+
+            // Get valid (possibly refreshed) access token
+            let access_token = match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
+                Ok(token) => token,
+                Err(e) => {
+                    self.billing_error = Some(format!("Failed to get valid OAuth token: {}", e));
+                    self.billing_loading = false;
+                    return;
+                }
+            };
+
+            // Get platform reference after token refresh
+            let platform = &app_config.platforms[platform_idx];
 
             // Get project ID from VMs
             let project_id = if !platform.vms.is_empty() {
@@ -2532,14 +2547,32 @@ impl PlatformTab {
                 return;
             };
 
-            // Use default dataset/table if not configured
-            if self.billing_dataset.is_empty() {
-                self.billing_dataset = "billing_export".to_string();
+            // Auto-discover billing table if not configured
+            if self.billing_dataset.is_empty() || self.billing_table.is_empty() {
+                let client = crate::api::gcp::GcpRestClient::new(access_token.clone());
+
+                match client.discover_billing_table(&project_id) {
+                    Ok((dataset, table)) => {
+                        self.billing_dataset = dataset;
+                        self.billing_table = table;
+                        self.billing_project_id = project_id.clone();
+                    }
+                    Err(e) => {
+                        // Fall back to default names
+                        self.billing_dataset = "billing_export".to_string();
+                        self.billing_table =
+                            format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
+                        self.billing_project_id = project_id.clone();
+                        self.billing_error = Some(format!(
+                            "Auto-discovery failed: {}\n\nUsing default names. Please configure below if different.",
+                            e
+                        ));
+                        self.billing_loading = false;
+                        return;
+                    }
+                }
             }
-            if self.billing_table.is_empty() {
-                self.billing_table =
-                    format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-            }
+
             if self.billing_project_id.is_empty() {
                 self.billing_project_id = project_id.clone();
             }
