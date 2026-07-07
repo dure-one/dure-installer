@@ -4,7 +4,7 @@ use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
 
 use crate::calc::audit;
-use crate::calc::gcp_rest::BillingRecord;
+use crate::api::gcp::bigquery::BillingRecord;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -77,10 +77,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_type: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_oauth_result: Option<crate::api::gcp_oauth::OAuthResult>,
+    add_platform_oauth_result: Option<crate::api::gcp::oauth::OAuthResult>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_oauth_promise:
-        Option<poll_promise::Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
+        Option<poll_promise::Promise<Result<crate::api::gcp::oauth::OAuthResult, String>>>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_connected_email: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -616,7 +616,7 @@ fn load_ssh_key_from_keyring(_keyring_domain: &Option<String>) -> (Option<String
 /// * `access_token` - Valid (non-expired) OAuth access token. Caller should use get_valid_access_token() to ensure token is fresh.
 fn fetch_project_count(access_token: Option<&str>) -> usize {
     if let Some(token) = access_token {
-        use crate::calc::gcp_rest::GcpRestClient;
+        use crate::api::gcp::GcpRestClient;
         let client = GcpRestClient::new(token.to_string());
 
         match client.list_projects(None) {
@@ -1333,8 +1333,14 @@ impl PlatformTab {
                         // Borrow platform after get_valid_access_token
                         let platform = &app_config.platforms[idx];
 
-                        // Initialize with placeholder values - will be updated in background
-                        let firewall_status_str = "Checking...".to_string();
+                        // Compute firewall status (synchronous check)
+                        let firewall_status_str = compute_firewall_status(
+                            access_token.as_deref(),
+                            platform.gcp_selected_project_id.as_deref(),
+                        );
+
+                        // firewall_updated is true if IP is whitelisted (status starts with ✓)
+                        let firewall_updated = firewall_status_str.starts_with("✓");
 
                         // Compute SSH status from cached results only (no blocking)
                         let ssh_status_str =
@@ -1367,7 +1373,7 @@ impl PlatformTab {
                             gcp_connected: platform.gcp_oauth_access_token.is_some(),
                             project_selected: platform.gcp_selected_project_id.is_some(),
                             vm_created: !platform.vms.is_empty(),
-                            firewall_updated: false, // Will be updated by background check
+                            firewall_updated,
                             ssh_ready,
 
                             // Extract drawer data
@@ -1482,7 +1488,7 @@ impl PlatformTab {
     /// Fetch GCP account summary (billing accounts, projects, VMs)
     #[cfg(not(target_arch = "wasm32"))]
     fn fetch_gcp_summary(&mut self, platform: &CloudPlatformConfig) -> Option<String> {
-        use crate::calc::gcp_rest::GcpRestClient;
+        use crate::api::gcp::GcpRestClient;
 
         // Check if we have a cached summary
         if let Some(cached) = self.platform_summaries.get(&platform.name) {
@@ -1623,7 +1629,7 @@ impl PlatformTab {
                         // Fetch projects if not already fetched
                         if self.add_platform_project_list.is_empty() {
                             if let Some(oauth_result) = &self.add_platform_oauth_result {
-                                use crate::calc::gcp_rest::GcpRestClient;
+                                use crate::api::gcp::GcpRestClient;
                                 let client = GcpRestClient::new(oauth_result.access_token.clone());
                                 match client.list_projects(None) {
                                     Ok(project_list) => {
@@ -1891,7 +1897,7 @@ impl PlatformTab {
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        use crate::calc::gcp_rest::get_current_ip;
+        use crate::api::gcp::get_current_ip;
 
         // ViewModel-based implementation
         if let Some(vm) = vm {
@@ -2148,11 +2154,11 @@ impl PlatformTab {
         // Token expired, refresh it
         eprintln!("Access token expired, refreshing...");
 
-        use crate::api::gcp_oauth::{self, OAuthHandler};
+        use crate::api::gcp::oauth::{self, OAuthHandler};
 
         // Use embedded OAuth credentials
         let handler = OAuthHandler::default();
-        let oauth_result = gcp_oauth::refresh_access_token(
+        let oauth_result = oauth::refresh_access_token(
             handler.client_id(),
             handler.client_secret(),
             refresh_token,
@@ -2441,7 +2447,7 @@ impl PlatformTab {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn start_add_platform_oauth(&mut self) {
-        use crate::api::gcp_oauth::OAuthHandler;
+        use crate::api::gcp::oauth::OAuthHandler;
         use poll_promise::Promise;
 
         // Use embedded OAuth credentials (compiled into binary)
@@ -2456,7 +2462,7 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn fetch_connected_email(&mut self) {
         if let Some(oauth) = &self.add_platform_oauth_result {
-            use crate::calc::gcp_rest::GcpRestClient;
+            use crate::api::gcp::GcpRestClient;
 
             let client = GcpRestClient::new(oauth.access_token.clone());
 
@@ -2595,9 +2601,21 @@ impl PlatformTab {
                     ui.spinner();
                     ui.label("Loading billing data...");
                 } else if let Some(error) = &self.billing_error {
-                    ui.colored_label(egui::Color32::from_rgb(255, 82, 82), "Error:");
-                    ui.add_space(4.0);
-                    ui.label(error);
+                    // Check if this is a "table not found" error (billing export not configured)
+                    let is_table_not_found = error.contains("was not found") || error.contains("Not found");
+
+                    if is_table_not_found {
+                        ui.colored_label(
+                            egui::Color32::from_rgb(255, 152, 0),
+                            "⚠ Billing Export Not Configured"
+                        );
+                        ui.add_space(4.0);
+                        ui.label("BigQuery billing export table does not exist yet.");
+                    } else {
+                        ui.colored_label(egui::Color32::from_rgb(255, 82, 82), "Error:");
+                        ui.add_space(4.0);
+                        ui.label(error);
+                    }
                     ui.add_space(16.0);
 
                     ui.label("To enable BigQuery billing export:");

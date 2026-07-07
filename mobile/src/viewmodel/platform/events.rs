@@ -1,6 +1,6 @@
 //! Platform actor events
 
-use crate::calc::gcp_rest::BillingRecord;
+use crate::api::gcp::bigquery::BillingRecord;
 
 #[derive(Debug, Clone)]
 pub struct VmInfo {

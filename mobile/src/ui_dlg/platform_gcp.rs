@@ -12,7 +12,7 @@ use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
-use crate::api::gcp_oauth::{OAuthHandler, OAuthResult};
+use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
 use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
 use crate::calc::gcp_rest::{GcpRestClient, InstanceRequest, Metadata, MetadataItem};
 use crate::calc::keyring;
@@ -989,7 +989,7 @@ impl GcpWizard {
 
                         // Fetch billing account name
                         let billing_account_name = if let Some(oauth) = &self.oauth_result {
-                            use crate::calc::gcp_rest::GcpRestClient;
+                            use crate::api::gcp::GcpRestClient;
                             let client = GcpRestClient::new(oauth.access_token.clone());
 
                             match client.list_billing_accounts() {
@@ -1236,11 +1236,11 @@ impl GcpWizard {
     }
 
     fn refresh_token_sync(&self, refresh_token: &str) -> Result<OAuthResult, String> {
-        use crate::api::gcp_oauth::{self, OAuthHandler};
+        use crate::api::gcp::oauth::{self, OAuthHandler};
 
         // Use embedded OAuth credentials
         let handler = OAuthHandler::default();
-        let oauth_result = gcp_oauth::refresh_access_token(
+        let oauth_result = oauth::refresh_access_token(
             handler.client_id(),
             handler.client_secret(),
             refresh_token,
@@ -1552,7 +1552,7 @@ impl GcpWizard {
         }
 
         // Create firewall rule
-        use crate::calc::gcp_rest::{FirewallAllowed, FirewallRequest};
+        use crate::api::gcp::compute::{FirewallAllowed, FirewallRequest};
 
         let firewall_req = FirewallRequest {
             name: FIREWALL_NAME.to_string(),

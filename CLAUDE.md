@@ -207,6 +207,11 @@ Dure implements a **federated e-commerce model** where independent shop servers 
 6. Shop A never stores the order (only optional tracking reference)
 ```
 
+### Claude Usage Habits
+* Use Inline Execution in claude pro plan, Use Subagent Driven Execution in claude max plan
+* Create feature branch only with superpower plans
+
+
 ### Security Model
 
 - **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
@@ -236,25 +241,27 @@ All function exists for both EGUI and CLI.
 - Platform(GCP), SSH Host management
 - Attestation for WASM/EGUI apps with GitHub Sigstore
 
-### 2. Platform Management 
+### 2. Platform Management (platform)
 - GCP management (Add/Del VM,View Billing)
 
-### 3. DNS Management(Cloudflare, Google Cloud DNS, DuckDNS, Porkbun)
+### 3. DNS Management (ns)
 - DNS management (Add/Del domain, Add/Del Txt Record)
+- Supports Cloudflare, Google Cloud DNS, DuckDNS, Porkbun
 
-### 4. SSH Host Management
+### 4. SSH Host Management (ssh)
 - Automatically added host from Platform Management
 - Docker Management (Add/Del docker host from dockerhub)
 - Port Management (Port open/close management with nft)
 - Ansible Management (Add/Del ansible roles from ansiblegalaxy)
 - System Hardener (using Jangbi project)
 - Dure WSS Service Management (Add/Del dure install)
+- Automatic key Management
 
-### 5. Hosting Management
+### 5. Hosting Management (hosting)
 - DNS management (octodns)
 - ACME License Management (lego)
 - Dure Chat Server WSS Server(including webhook for PG) Hosting (dure)
-- Webhook Service for PG (Portone, KakaoPay)
+- Dure Webserver Webhook Service for PG (Portone, KakaoPay)
 
 ### 6. Store Management (EGUI/CLI, WSS Client)
 - Promotions

@@ -133,6 +133,11 @@ impl GcpRestClient {
             }
         }
     }
+
+    /// Get user info from OAuth2 userinfo endpoint
+    pub fn get_user_info(&self) -> Result<oauth::UserInfo> {
+        oauth::get_user_info(&self.access_token)
+    }
 }
 
 // ============================================================================
