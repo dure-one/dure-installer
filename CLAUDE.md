@@ -62,9 +62,18 @@ Business logic controller layer (API → calc → DB → UI):
 #### External Integrations (`mobile/src/api/`)
 - **`desktop.rs`** - Desktop-specific API utilities
 - **`ehttp_cache.rs`** - HTTP caching layer
-- **`gcp_oauth.rs`** - Google OAuth2 authentication
+- **`gcp/`** - Google Cloud Platform API modules (layered architecture):
+  - `mod.rs` - Common GCP client (GcpRestClient) and utilities
+  - `compute.rs` - Compute Engine API (VMs, firewalls, regions/zones)
+  - `resourcemanager.rs` - Resource Manager API (projects)
+  - `billing.rs` - Cloud Billing API (billing accounts, project billing)
+  - `bigquery.rs` - BigQuery API (datasets, tables, billing queries)
+  - `serviceusage.rs` - Service Usage API (enable/check services)
+  - `oauth.rs` - OAuth2 authentication and user info
+  - `dns.rs` - Cloud DNS API (managed zones, DNS records)
 - **`ns_cloudflare.rs`** - Cloudflare DNS API
-- Additional providers: DuckDNS, Porkbun, GCP Cloud DNS
+- **`ns_gcp.rs`** - GCP Cloud DNS API (re-export of `gcp/dns.rs`)
+- Additional DNS providers: DuckDNS (`ns_duckdns.rs`), Porkbun (`ns_porkbun.rs`)
 
 #### Real-Time Communication (`mobile/src/wss/`)
 - **`server/`** - WebSocket Secure server (HTTPS + WSS)
@@ -120,7 +129,10 @@ Business logic controller layer (API → calc → DB → UI):
 #### Design Principles
 1. **Platform Abstraction** - Conditional compilation (`#[cfg(...)]`) isolates platform-specific code
 2. **Feature Flags** - GUI optional (`--no-default-features` for headless builds)
-3. **Layered Architecture** - Clear separation: UI → calc → storage/api
+3. **Layered Architecture** - Clear separation: UI → ViewModel → Calc/Api
+   - UI layer only communicates with ViewModel
+   - ViewModel coordinates between Calc (business logic) and Api (external services)
+   - Api layer is modular (e.g., `gcp/compute.rs`, `gcp/billing.rs`)
 4. **Async Runtime** - smol for async operations (network, I/O)
 5. **Security First** - Attestation, encryption, secure key storage
 6. **Dual Interface** - All features accessible via CLI and GUI
@@ -207,6 +219,11 @@ Dure implements a **federated e-commerce model** where independent shop servers 
 6. Shop A never stores the order (only optional tracking reference)
 ```
 
+### Claude Usage Habits
+* Use Inline Execution in claude pro plan, Use Subagent Driven Execution in claude max plan
+* Create feature branch only with superpower plans
+
+
 ### Security Model
 
 - **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
@@ -236,25 +253,27 @@ All function exists for both EGUI and CLI.
 - Platform(GCP), SSH Host management
 - Attestation for WASM/EGUI apps with GitHub Sigstore
 
-### 2. Platform Management 
+### 2. Platform Management (platform)
 - GCP management (Add/Del VM,View Billing)
 
-### 3. DNS Management(Cloudflare, Google Cloud DNS, DuckDNS, Porkbun)
+### 3. DNS Management (ns)
 - DNS management (Add/Del domain, Add/Del Txt Record)
+- Supports Cloudflare, Google Cloud DNS, DuckDNS, Porkbun
 
-### 4. SSH Host Management
+### 4. SSH Host Management (ssh)
 - Automatically added host from Platform Management
 - Docker Management (Add/Del docker host from dockerhub)
 - Port Management (Port open/close management with nft)
 - Ansible Management (Add/Del ansible roles from ansiblegalaxy)
 - System Hardener (using Jangbi project)
 - Dure WSS Service Management (Add/Del dure install)
+- Automatic key Management
 
-### 5. Hosting Management
+### 5. Hosting Management (hosting)
 - DNS management (octodns)
 - ACME License Management (lego)
 - Dure Chat Server WSS Server(including webhook for PG) Hosting (dure)
-- Webhook Service for PG (Portone, KakaoPay)
+- Dure Webserver Webhook Service for PG (Portone, KakaoPay)
 
 ### 6. Store Management (EGUI/CLI, WSS Client)
 - Promotions
