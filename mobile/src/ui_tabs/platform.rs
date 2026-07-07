@@ -765,6 +765,16 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::VMCreated {
+                        vm_name,
+                        external_ip,
+                        ..
+                    }) => {
+                        eprintln!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        // Refresh to show updated VM details
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::VMDeleted {
                         platform_name,
                         vm_name,
