@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
 use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
 use crate::api::gcp::GcpRestClient;
-use crate::api::gcp::compute::{InstanceRequest, Metadata, MetadataItem};
+use crate::api::gcp::compute::{InstanceRequest, Metadata, MetadataItem, Image};
 use crate::calc::keyring;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
@@ -113,6 +113,26 @@ pub struct GcpWizard {
 
     /// Selected platform email for VM creation
     selected_platform_email: String,
+
+    /// Selected source image (self_link URL)
+    selected_image: String,
+
+    /// Disk size in GB (user input as string)
+    disk_size_gb: String,
+
+    /// Available images (cached after successful load)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    available_images: Vec<Image>,
+
+    /// Image loading promise
+    #[cfg_attr(feature = "serde", serde(skip))]
+    image_promise: Option<Promise<Result<Vec<Image>, String>>>,
+
+    /// Retry count for image loading (max 3)
+    image_retry_count: u32,
+
+    /// Whether to skip account/project steps
+    skip_account_project_steps: bool,
 }
 
 impl Default for GcpWizard {
@@ -143,6 +163,12 @@ impl Default for GcpWizard {
             show: false,
             available_platforms: Vec::new(),
             selected_platform_email: String::new(),
+            selected_image: "projects/debian-cloud/global/images/family/debian-13".to_string(),
+            disk_size_gb: "10".to_string(),
+            available_images: Vec::new(),
+            image_promise: None,
+            image_retry_count: 0,
+            skip_account_project_steps: false,
         }
     }
 }
