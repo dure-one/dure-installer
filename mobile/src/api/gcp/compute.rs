@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use urlencoding;
 
 use super::{GCP_COMPUTE_API_BASE, GcpRestClient};
 
@@ -762,9 +763,14 @@ impl GcpRestClient {
     ///
     /// API: GET /projects/{project}/global/images
     pub fn list_images(&self, image_project: &str) -> Result<ImageList> {
+        // Use server-side filtering to get only non-deprecated x86_64 images
+        // Filter syntax: https://cloud.google.com/compute/docs/reference/rest/v1/images/list
+        let filter = "deprecated.state != DEPRECATED AND architecture = \"X86_64\"";
         let url = format!(
-            "{}/projects/{}/global/images",
-            GCP_COMPUTE_API_BASE, image_project
+            "{}/projects/{}/global/images?filter={}",
+            GCP_COMPUTE_API_BASE,
+            image_project,
+            urlencoding::encode(filter)
         );
 
         let response = self.get(&url)?;
@@ -774,11 +780,12 @@ impl GcpRestClient {
 
     /// Get filtered list of recent Debian and Ubuntu images
     ///
-    /// Filters:
-    /// - OS: Debian or Ubuntu only
-    /// - Architecture: X86_64
-    /// - Age: Created within last 6 months
+    /// Server-side filters (via API query parameters):
+    /// - Architecture: X86_64 only
     /// - Status: Not deprecated
+    ///
+    /// Client-side filters:
+    /// - Age: Created within last 6 months (180 days)
     pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
         let mut all_images = Vec::new();
         let mut errors = Vec::new();
@@ -828,42 +835,21 @@ impl GcpRestClient {
             );
         }
 
-        // Apply filters with detailed logging
-        let mut filtered = Vec::new();
-        let mut stats = (0, 0, 0); // (arch_rejected, old_rejected, deprecated_rejected)
-
-        for img in all_images {
-            let is_x86_64 = img
-                .architecture
-                .as_ref()
-                .map(|arch| arch.to_uppercase() == "X86_64" || arch.to_uppercase() == "X86")
-                .unwrap_or(false);
-
-            let is_recent = img.is_recent();
-            let not_deprecated = !img.is_deprecated();
-
-            if !is_x86_64 {
-                stats.0 += 1;
-            }
-            if !is_recent {
-                stats.1 += 1;
-            }
-            if !not_deprecated {
-                stats.2 += 1;
-            }
-
-            if is_x86_64 && is_recent && not_deprecated {
-                filtered.push(img);
-            }
-        }
+        // Apply client-side recency filter (server-side handles arch and deprecated)
+        let mut old_count = 0;
+        let filtered: Vec<Image> = all_images
+            .into_iter()
+            .filter(|img| {
+                let is_recent = img.is_recent();
+                if !is_recent {
+                    old_count += 1;
+                }
+                is_recent
+            })
+            .collect();
 
         log::info!("Images after filtering: {}", filtered.len());
-        log::info!(
-            "Filter stats - Arch rejected: {}, Old rejected: {}, Deprecated rejected: {}",
-            stats.0,
-            stats.1,
-            stats.2
-        );
+        log::info!("Filter stats - Old rejected: {}", old_count);
 
         Ok(filtered)
     }
