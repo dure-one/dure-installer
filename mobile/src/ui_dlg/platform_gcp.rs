@@ -1968,6 +1968,30 @@ fn validate_disk_size(input: &str) -> Result<u32, String> {
     Ok(size)
 }
 
+/// Get fallback images when API call fails
+fn get_fallback_images() -> Vec<Image> {
+    vec![
+        Image {
+            name: "debian-13-latest".to_string(),
+            description: Some("Debian 13 (Bookworm) - latest".to_string()),
+            self_link: "projects/debian-cloud/global/images/family/debian-13".to_string(),
+            creation_timestamp: chrono::Utc::now().to_rfc3339(),
+            architecture: Some("X86_64".to_string()),
+            family: Some("debian-13".to_string()),
+            deprecated: None,
+        },
+        Image {
+            name: "ubuntu-2404-lts-latest".to_string(),
+            description: Some("Ubuntu 24.04 LTS - latest".to_string()),
+            self_link: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts".to_string(),
+            creation_timestamp: chrono::Utc::now().to_rfc3339(),
+            architecture: Some("X86_64".to_string()),
+            family: Some("ubuntu-2404-lts".to_string()),
+            deprecated: None,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2268,6 +2292,27 @@ mod tests {
         assert_eq!(
             std::mem::discriminant(&wizard.state),
             std::mem::discriminant(&WizardState::ConnectAccount)
+        );
+    }
+
+    #[test]
+    fn test_get_fallback_images() {
+        let images = get_fallback_images();
+
+        assert_eq!(images.len(), 2);
+
+        // Check Debian image
+        assert_eq!(images[0].family.as_deref(), Some("debian-13"));
+        assert_eq!(
+            images[0].self_link,
+            "projects/debian-cloud/global/images/family/debian-13"
+        );
+
+        // Check Ubuntu image
+        assert_eq!(images[1].family.as_deref(), Some("ubuntu-2404-lts"));
+        assert_eq!(
+            images[1].self_link,
+            "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts"
         );
     }
 }
