@@ -129,6 +129,10 @@ pub struct PlatformTab {
     delete_platform_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_platform_vm_count: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_platform_delete_vms: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_platform_delete_project: bool,
 
     // Billing dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -199,6 +203,8 @@ impl Default for PlatformTab {
             show_delete_platform_dialog: false,
             delete_platform_name: String::new(),
             delete_platform_vm_count: 0,
+            delete_platform_delete_vms: false,
+            delete_platform_delete_project: false,
             show_billing_dialog: false,
             billing_data: None,
             billing_loading: false,
@@ -2374,9 +2380,20 @@ impl PlatformTab {
 
                 ui.add_space(12.0);
 
+                // Delete options
+                ui.checkbox(&mut self.delete_platform_delete_vms, "Delete VMs from GCP");
+                ui.checkbox(
+                    &mut self.delete_platform_delete_project,
+                    "Delete GCP project",
+                );
+
+                ui.add_space(12.0);
+
                 ui.horizontal(|ui| {
                     if ui.button("No, Cancel").clicked() {
                         self.show_delete_platform_dialog = false;
+                        self.delete_platform_delete_vms = false;
+                        self.delete_platform_delete_project = false;
                     }
 
                     if ui
@@ -2385,12 +2402,16 @@ impl PlatformTab {
                     {
                         self.execute_delete_platform(vm.as_deref_mut());
                         self.show_delete_platform_dialog = false;
+                        self.delete_platform_delete_vms = false;
+                        self.delete_platform_delete_project = false;
                     }
                 });
             });
 
         if !open {
             self.show_delete_platform_dialog = false;
+            self.delete_platform_delete_vms = false;
+            self.delete_platform_delete_project = false;
         }
     }
 
@@ -2854,5 +2875,17 @@ impl PlatformTab {
                     }
                 });
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_delete_options_default() {
+        let state = PlatformTab::default();
+        assert!(!state.delete_platform_delete_vms);
+        assert!(!state.delete_platform_delete_project);
     }
 }
