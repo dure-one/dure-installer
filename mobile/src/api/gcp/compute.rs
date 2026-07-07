@@ -312,6 +312,27 @@ impl Image {
             false
         }
     }
+
+    /// Get human-readable family name for UI grouping
+    pub fn family_group(&self) -> String {
+        match self.family.as_deref() {
+            Some("debian-13") => "Debian 13".to_string(),
+            Some("debian-12") => "Debian 12".to_string(),
+            Some("ubuntu-2404-lts") => "Ubuntu 24.04 LTS".to_string(),
+            Some("ubuntu-2204-lts") => "Ubuntu 22.04 LTS".to_string(),
+            Some(other) => other.replace('-', " ").to_uppercase(),
+            None => self.name.clone(),
+        }
+    }
+
+    /// Get display name with creation date for UI
+    pub fn display_name(&self) -> String {
+        let date = self.creation_timestamp
+            .split('T')
+            .next()
+            .unwrap_or("");
+        format!("{} ({})", self.family_group(), date)
+    }
 }
 
 /// Deprecation status
@@ -806,5 +827,47 @@ mod tests {
             ..Default::default()
         };
         assert!(!invalid.is_recent());
+    }
+
+    #[test]
+    fn test_image_family_group() {
+        let debian = Image {
+            family: Some("debian-13".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(debian.family_group(), "Debian 13");
+
+        let ubuntu = Image {
+            family: Some("ubuntu-2404-lts".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(ubuntu.family_group(), "Ubuntu 24.04 LTS");
+
+        let unknown = Image {
+            family: Some("custom-os-v1".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(unknown.family_group(), "CUSTOM OS V1");
+
+        let no_family = Image::default();
+        assert_eq!(no_family.family_group(), "");
+    }
+
+    #[test]
+    fn test_image_display_name() {
+        let img = Image {
+            name: "debian-13-bookworm-v20260615".to_string(),
+            family: Some("debian-13".to_string()),
+            creation_timestamp: "2026-06-15T10:00:00.000Z".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(img.display_name(), "Debian 13 (2026-06-15)");
+
+        let no_date = Image {
+            family: Some("debian-13".to_string()),
+            creation_timestamp: "".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(no_date.display_name(), "Debian 13 ()");
     }
 }
