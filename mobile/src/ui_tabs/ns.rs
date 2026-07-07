@@ -60,11 +60,11 @@ pub struct NsTab {
 
     // GCP OAuth fields
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_gcp_oauth_result: Option<crate::api::gcp_oauth::OAuthResult>,
+    add_gcp_oauth_result: Option<crate::api::gcp::oauth::OAuthResult>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_gcp_oauth_promise:
-        Option<poll_promise::Promise<Result<crate::api::gcp_oauth::OAuthResult, String>>>,
+        Option<poll_promise::Promise<Result<crate::api::gcp::oauth::OAuthResult, String>>>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_gcp_connected_email: Option<String>,
@@ -74,7 +74,7 @@ pub struct NsTab {
 
     // GCP project list
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_gcp_projects: Vec<crate::calc::gcp_rest::Project>,
+    add_gcp_projects: Vec<crate::api::gcp::resourcemanager::Project>,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_gcp_projects_loaded: bool,
@@ -301,7 +301,7 @@ fn save_ns_config(ns_config: &NsConfig) -> Result<(), String> {
 /// Add GCP account to config
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 fn add_gcp_account_to_config(
-    oauth: &crate::api::gcp_oauth::OAuthResult,
+    oauth: &crate::api::gcp::oauth::OAuthResult,
     email: &str,
     project_id: &str,
 ) -> Result<(), String> {
@@ -3619,7 +3619,7 @@ impl NsTab {
     /// Start GCP OAuth flow
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn start_gcp_oauth(&mut self) {
-        use crate::api::gcp_oauth::OAuthHandler;
+        use crate::api::gcp::oauth::OAuthHandler;
         use poll_promise::Promise;
 
         self.add_progress("Starting GCP OAuth flow...".to_string());
@@ -3636,7 +3636,7 @@ impl NsTab {
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn fetch_gcp_connected_email(&mut self) {
         if let Some(oauth) = self.add_gcp_oauth_result.clone() {
-            use crate::calc::gcp_rest::GcpRestClient;
+            use crate::api::gcp::GcpRestClient;
 
             let client = GcpRestClient::new(oauth.access_token.clone());
 
@@ -3671,7 +3671,7 @@ impl NsTab {
         }
 
         if let Some(oauth) = &self.add_gcp_oauth_result {
-            use crate::calc::gcp_rest::GcpRestClient;
+            use crate::api::gcp::GcpRestClient;
 
             let client = GcpRestClient::new(oauth.access_token.clone());
 
