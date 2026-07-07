@@ -120,6 +120,9 @@ pub struct GcpWizard {
     /// Disk size in GB (user input as string)
     disk_size_gb: String,
 
+    /// Optional swap size in GB (empty = automatic)
+    swap_size_gb: String,
+
     /// Available images (cached after successful load)
     #[cfg_attr(feature = "serde", serde(skip))]
     available_images: Vec<Image>,
@@ -165,6 +168,7 @@ impl Default for GcpWizard {
             selected_platform_email: String::new(),
             selected_image: "projects/debian-cloud/global/images/family/debian-13".to_string(),
             disk_size_gb: "10".to_string(),
+            swap_size_gb: String::new(), // Empty = auto
             available_images: Vec::new(),
             image_promise: None,
             image_retry_count: 0,
@@ -874,6 +878,24 @@ impl GcpWizard {
 
         ui.add_space(8.0);
 
+        // Swap size input (optional)
+        ui.horizontal(|ui| {
+            ui.label("Swap Size (GB):");
+            ui.add(egui::TextEdit::singleline(&mut self.swap_size_gb)
+                .desired_width(80.0)
+                .hint_text("Auto"));
+            ui.colored_label(egui::Color32::GRAY, "Leave empty for automatic (0-8GB)");
+        });
+
+        // Validation
+        if !self.swap_size_gb.is_empty() {
+            if let Err(e) = validate_swap_size(&self.swap_size_gb) {
+                ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
+            }
+        }
+
+        ui.add_space(8.0);
+
         // Region selection
         ui.horizontal(|ui| {
             ui.label("Region:");
@@ -950,6 +972,7 @@ impl GcpWizard {
                 && !self.selected_zone.is_empty()
                 && !self.selected_machine_type.is_empty()
                 && validate_disk_size(&self.disk_size_gb).is_ok()
+                && (self.swap_size_gb.is_empty() || validate_swap_size(&self.swap_size_gb).is_ok())
                 && self.image_promise.is_none();
 
             let create_button = MaterialButton::filled("Create Server");
