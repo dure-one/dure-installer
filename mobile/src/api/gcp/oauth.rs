@@ -439,6 +439,28 @@ pub fn refresh_access_token(
     })
 }
 
+/// OAuth2 user info response
+#[derive(Debug, Deserialize)]
+pub struct UserInfo {
+    pub email: Option<String>,
+    pub verified_email: Option<bool>,
+    pub name: Option<String>,
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub picture: Option<String>,
+}
+
+/// Get user info from OAuth2 userinfo endpoint
+pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
+    let url = "https://www.googleapis.com/oauth2/v2/userinfo";
+    let response = ureq::get(url)
+        .set("Authorization", &format!("Bearer {}", access_token))
+        .call()
+        .context("Failed to get user info")?;
+    let info: UserInfo = response.into_json()?;
+    Ok(info)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

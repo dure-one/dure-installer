@@ -3,7 +3,7 @@
 //! Handles VM lifecycle management including creation, deletion,
 //! restart, regeneration, and SSH key generation.
 
-use crate::calc::gcp_rest::GcpRestClient;
+use crate::api::gcp::GcpRestClient;
 use crate::config::{CloudPlatformConfig, VmInstance};
 use anyhow::{Context, Result};
 
@@ -69,7 +69,7 @@ pub fn regenerate_vm(
     platform: &mut CloudPlatformConfig,
     zone: &str,
 ) -> Result<String> {
-    use crate::calc::gcp_rest::{
+    use crate::api::gcp::compute::{
         AccessConfig, AttachedDisk, InitializeParams, InstanceRequest, Metadata, MetadataItem,
         NetworkInterface,
     };

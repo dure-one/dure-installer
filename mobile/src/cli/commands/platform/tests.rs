@@ -387,7 +387,7 @@ mod vm_tests {
 #[cfg(test)]
 mod billing_tests {
     use super::*;
-    use crate::calc::gcp_rest::BillingRecord;
+    use crate::api::gcp::bigquery::BillingRecord;
 
     #[test]
     fn test_billing_success() {

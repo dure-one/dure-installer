@@ -1,7 +1,7 @@
 //! Platform actor implementation
 
 use super::{PlatformCommand, PlatformEvent, VmInfo};
-use crate::calc::gcp_rest::GcpRestClient;
+use crate::api::gcp::GcpRestClient;
 use crate::config::AppConfig;
 use crate::viewmodel::{ViewModelEvent, runtime};
 use smol::channel::{Receiver, Sender};
@@ -199,7 +199,7 @@ impl PlatformActor {
         // List instances from all zones
         let all_instances = runtime::unblock({
             let project_id = project_id.clone();
-            move || -> anyhow::Result<Vec<crate::calc::gcp_rest::Instance>> {
+            move || -> anyhow::Result<Vec<crate::api::gcp::compute::Instance>> {
                 let client = GcpRestClient::new(access_token);
                 let mut all_vms = Vec::new();
                 for zone in zones {
@@ -268,7 +268,7 @@ impl PlatformActor {
                 let client = GcpRestClient::new(access_token);
 
                 // Create instance request (debian-11 micro instance)
-                let instance_req = crate::calc::gcp_rest::InstanceRequest::debian_micro(
+                let instance_req = crate::api::gcp::compute::InstanceRequest::debian_micro(
                     vm_name_clone.clone(),
                     zone.clone(),
                 );
@@ -492,7 +492,7 @@ impl PlatformActor {
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         let records = runtime::unblock(
-            move || -> anyhow::Result<Vec<crate::calc::gcp_rest::BillingRecord>> {
+            move || -> anyhow::Result<Vec<crate::api::gcp::bigquery::BillingRecord>> {
                 let client = GcpRestClient::new(access_token);
                 client.get_current_month_billing(&project_id, &dataset, &table)
             },
