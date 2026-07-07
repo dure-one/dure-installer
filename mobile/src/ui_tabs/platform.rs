@@ -1101,7 +1101,7 @@ impl PlatformTab {
                                         )))]
                                         if ui
                                             .add_enabled(
-                                                row_for_actions.project_selected,
+                                                row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
                                                 MaterialButton::outlined("Billing").small(),
                                             )
                                             .on_hover_text("Estimated Billing")
@@ -1109,9 +1109,15 @@ impl PlatformTab {
                                         {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
-                                                    egui::Id::new("platform_action_billing"),
+                                                    egui::Id::new("platform_action_billing_name"),
                                                     row_for_actions.platform_name.clone(),
-                                                )
+                                                );
+                                                if let Some(project_id) = &row_for_actions.selected_project_id {
+                                                    d.insert_temp(
+                                                        egui::Id::new("platform_action_billing_project"),
+                                                        project_id.clone(),
+                                                    );
+                                                }
                                             });
                                         }
 
@@ -1235,12 +1241,20 @@ impl PlatformTab {
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
-                if let Some(_platform_name) =
-                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing")))
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_name")))
                 {
-                    self.show_billing_dialog = true;
-                    self.fetch_billing_data(vm.as_deref_mut());
-                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_billing")));
+                    if let Some(project_id) =
+                        ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_project")))
+                    {
+                        self.show_billing_dialog = true;
+                        self.billing_project_id = project_id.clone();
+                        self.fetch_billing_data(vm.as_deref_mut(), Some(project_id));
+                        ui.data_mut(|d| {
+                            d.remove::<String>(egui::Id::new("platform_action_billing_name"));
+                            d.remove::<String>(egui::Id::new("platform_action_billing_project"));
+                        });
+                    }
                 }
             }
 
@@ -2528,7 +2542,7 @@ impl PlatformTab {
         }
     }
 
-    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>, project_id_param: Option<String>) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
             self.billing_loading = true;
@@ -2579,12 +2593,16 @@ impl PlatformTab {
             // Get platform reference after token refresh
             let platform = &app_config.platforms[platform_idx];
 
-            // Get project ID from VMs
-            let project_id = if !platform.vms.is_empty() {
+            // Get project ID: use provided parameter, or try platform config, or fall back to VMs
+            let project_id = if let Some(pid) = project_id_param {
+                pid
+            } else if let Some(pid) = &platform.gcp_selected_project_id {
+                pid.clone()
+            } else if !platform.vms.is_empty() {
                 platform.vms[0].gcp_project_id.clone()
             } else {
                 self.billing_error = Some(
-                    "No VMs found. Please create a VM to determine the project ID.".to_string(),
+                    "No project ID available. Please select a project first.".to_string(),
                 );
                 self.billing_loading = false;
                 return;
@@ -2828,7 +2846,7 @@ impl PlatformTab {
 
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data(vm);
+                        self.fetch_billing_data(vm, None);
                     }
 
                     if ui.add(MaterialButton::outlined("Close")).clicked() {
