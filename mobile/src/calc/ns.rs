@@ -564,8 +564,8 @@ impl NsConfig {
             if expires_soon {
                 // Refresh the token using embedded OAuth credentials
                 // Note: Using OAuthHandler constants which are compiled into binary
-                let handler = crate::api::gcp_oauth::OAuthHandler::default();
-                match crate::api::gcp_oauth::refresh_access_token(
+                let handler = crate::api::gcp::oauth::OAuthHandler::default();
+                match crate::api::gcp::oauth::refresh_access_token(
                     &handler.client_id(),
                     &handler.client_secret(),
                     &account.refresh_token,
