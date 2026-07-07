@@ -844,23 +844,12 @@ impl GcpWizard {
                 .selected_text(&selected_display)
                 .width(350.0)
                 .show_ui(ui, |ui| {
-                    // Group by family
-                    let mut by_family: std::collections::HashMap<String, Vec<&Image>> =
-                        std::collections::HashMap::new();
                     for img in &self.available_images {
-                        by_family.entry(img.family_group()).or_default().push(img);
-                    }
-
-                    for (family, images) in by_family {
-                        ui.label(egui::RichText::new(&family).strong());
-                        for img in images {
-                            ui.selectable_value(
-                                &mut self.selected_image,
-                                img.self_link.clone(),
-                                format!("  {}", img.display_name()),
-                            );
-                        }
-                        ui.add_space(4.0);
+                        ui.selectable_value(
+                            &mut self.selected_image,
+                            img.self_link.clone(),
+                            img.display_name(),
+                        );
                     }
                 });
         });
