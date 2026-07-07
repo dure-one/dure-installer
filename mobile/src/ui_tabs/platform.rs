@@ -2510,7 +2510,11 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn execute_delete_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(vm) = vm {
-            match vm.delete_platform(self.delete_platform_name.clone()) {
+            let delete_options = crate::viewmodel::platform::DeleteOptions {
+                delete_vms: self.delete_platform_delete_vms,
+                delete_project: self.delete_platform_delete_project,
+            };
+            match vm.delete_platform(self.delete_platform_name.clone(), delete_options) {
                 Ok(_) => {
                     eprintln!("✓ Platform delete command sent");
                 }
