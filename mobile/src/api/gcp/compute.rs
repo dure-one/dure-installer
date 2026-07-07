@@ -303,11 +303,11 @@ impl Image {
             .unwrap_or(false)
     }
 
-    /// Check if image was created within last 6 months
+    /// Check if image was created within last 12 months
     pub fn is_recent(&self) -> bool {
         if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&self.creation_timestamp) {
-            let six_months_ago = chrono::Utc::now() - chrono::Duration::days(180);
-            created.with_timezone(&chrono::Utc) > six_months_ago
+            let twelve_months_ago = chrono::Utc::now() - chrono::Duration::days(365);
+            created.with_timezone(&chrono::Utc) > twelve_months_ago
         } else {
             false
         }
@@ -777,7 +777,7 @@ impl GcpRestClient {
     /// Filters:
     /// - OS: Debian or Ubuntu only
     /// - Architecture: X86_64
-    /// - Age: Created within last 6 months
+    /// - Age: Created within last 12 months
     /// - Status: Not deprecated
     pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
         let mut all_images = Vec::new();
@@ -867,9 +867,9 @@ mod tests {
         };
         assert!(recent.is_recent());
 
-        // Old image (7 months old)
+        // Old image (13 months old)
         let old = Image {
-            creation_timestamp: (Utc::now() - Duration::days(210)).to_rfc3339(),
+            creation_timestamp: (Utc::now() - Duration::days(395)).to_rfc3339(),
             ..Default::default()
         };
         assert!(!old.is_recent());
