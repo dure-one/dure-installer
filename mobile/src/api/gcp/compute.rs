@@ -302,6 +302,16 @@ impl Image {
             .map(|s| !s.is_empty())
             .unwrap_or(false)
     }
+
+    /// Check if image was created within last 6 months
+    pub fn is_recent(&self) -> bool {
+        if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&self.creation_timestamp) {
+            let six_months_ago = chrono::Utc::now() - chrono::Duration::days(180);
+            created.with_timezone(&chrono::Utc) > six_months_ago
+        } else {
+            false
+        }
+    }
 }
 
 /// Deprecation status
@@ -770,5 +780,31 @@ mod tests {
             ..Default::default()
         };
         assert!(!edge.is_deprecated());
+    }
+
+    #[test]
+    fn test_image_is_recent() {
+        use chrono::{Utc, Duration};
+
+        // Recent image (3 months old)
+        let recent = Image {
+            creation_timestamp: (Utc::now() - Duration::days(90)).to_rfc3339(),
+            ..Default::default()
+        };
+        assert!(recent.is_recent());
+
+        // Old image (7 months old)
+        let old = Image {
+            creation_timestamp: (Utc::now() - Duration::days(210)).to_rfc3339(),
+            ..Default::default()
+        };
+        assert!(!old.is_recent());
+
+        // Invalid timestamp
+        let invalid = Image {
+            creation_timestamp: "not-a-date".to_string(),
+            ..Default::default()
+        };
+        assert!(!invalid.is_recent());
     }
 }
