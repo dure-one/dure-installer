@@ -1,0 +1,677 @@
+//! GCP Compute Engine API module
+//!
+//! Handles VM instances, firewall rules, and zone/region operations.
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+use super::{GcpRestClient, GCP_COMPUTE_API_BASE};
+
+// ============================================================================
+// Instance Types
+// ============================================================================
+
+/// Instance creation request
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceRequest {
+    pub name: String,
+    pub machine_type: String, // e.g., "zones/us-central1-a/machineTypes/e2-micro"
+    pub disks: Vec<AttachedDisk>,
+    pub network_interfaces: Vec<NetworkInterface>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Tags>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Metadata>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachedDisk {
+    pub boot: bool,
+    pub auto_delete: bool,
+    pub initialize_params: InitializeParams,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitializeParams {
+    pub source_image: String, // e.g., "projects/debian-cloud/global/images/debian-11-bullseye-v20240219"
+    pub disk_size_gb: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkInterface {
+    pub network: String, // e.g., "global/networks/default"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_configs: Option<Vec<AccessConfig>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessConfig {
+    #[serde(rename = "type")]
+    pub type_: String, // "ONE_TO_ONE_NAT"
+    pub name: String, // "External NAT"
+}
+
+#[derive(Debug, Serialize)]
+pub struct Tags {
+    pub items: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Metadata {
+    pub items: Vec<MetadataItem>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MetadataItem {
+    pub key: String,
+    pub value: String,
+}
+
+/// Instance response
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Instance {
+    pub id: String,
+    pub name: String,
+    pub machine_type: String,
+    pub zone: String,
+    pub status: String,
+    #[serde(default)]
+    pub network_interfaces: Vec<NetworkInterfaceResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkInterfaceResponse {
+    #[serde(rename = "networkIP", default)]
+    pub network_ip: Option<String>,
+    #[serde(default)]
+    pub access_configs: Vec<AccessConfigResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessConfigResponse {
+    #[serde(rename = "natIP")]
+    pub nat_ip: Option<String>,
+}
+
+/// Instance list response
+#[derive(Debug, Deserialize)]
+pub struct InstanceList {
+    #[serde(default)]
+    pub items: Vec<Instance>,
+}
+
+// ============================================================================
+// Firewall Types
+// ============================================================================
+
+/// Firewall rule request
+#[derive(Debug, Serialize)]
+pub struct FirewallRequest {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "direction")]
+    pub direction: String, // "INGRESS" or "EGRESS"
+    pub priority: u32,
+    #[serde(rename = "targetTags")]
+    pub target_tags: Vec<String>,
+    pub allowed: Vec<FirewallAllowed>,
+    #[serde(rename = "sourceRanges")]
+    pub source_ranges: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallAllowed {
+    #[serde(rename = "IPProtocol")]
+    pub ip_protocol: String, // "tcp", "udp", "icmp", "all"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<String>>,
+}
+
+/// GCP Firewall Rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallRule {
+    pub name: String,
+    pub allowed: Vec<FirewallAllowed>,
+    #[serde(rename = "sourceRanges")]
+    pub source_ranges: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FirewallListResponse {
+    items: Option<Vec<FirewallRule>>,
+}
+
+/// Firewall list response
+#[derive(Debug, Deserialize)]
+pub struct ListFirewallsResponse {
+    pub items: Option<Vec<Firewall>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Firewall {
+    pub name: String,
+    #[serde(rename = "targetTags")]
+    pub target_tags: Option<Vec<String>>,
+}
+
+// ============================================================================
+// Operation Types
+// ============================================================================
+
+/// Operation response (for async operations)
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Operation {
+    #[serde(default)]
+    pub id: Option<String>, // Only present in ComputeEngine operations
+    pub name: String,
+    #[serde(default)]
+    pub status: Option<String>, // "PENDING", "RUNNING", "DONE" (ComputeEngine)
+    #[serde(default)]
+    pub done: Option<bool>, // ResourceManager uses this instead of status
+    #[serde(default)]
+    pub error: Option<OperationError>,
+}
+
+impl Operation {
+    /// Returns true if the operation is complete
+    /// ResourceManager operations use `done`, ComputeEngine uses `status == "DONE"`
+    pub fn is_done(&self) -> bool {
+        self.done.unwrap_or(false) || self.status.as_deref() == Some("DONE")
+    }
+
+    /// Returns true if the operation has an error
+    pub fn has_error(&self) -> bool {
+        self.error.is_some()
+    }
+
+    /// Returns a status string for display
+    pub fn status_string(&self) -> String {
+        if let Some(status) = &self.status {
+            status.clone()
+        } else if let Some(done) = self.done {
+            if done {
+                "DONE".to_string()
+            } else {
+                "PENDING".to_string()
+            }
+        } else {
+            "UNKNOWN".to_string()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OperationError {
+    pub errors: Vec<ErrorDetail>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ErrorDetail {
+    #[serde(default)]
+    pub code: Option<String>,
+    pub message: String,
+}
+
+// ============================================================================
+// Region/Zone Types
+// ============================================================================
+
+/// Region list response
+#[derive(Debug, Deserialize)]
+pub struct RegionList {
+    #[serde(default)]
+    pub items: Vec<Region>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Region {
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub zones: Vec<String>,
+}
+
+/// Zone list response
+#[derive(Debug, Deserialize)]
+pub struct ZoneList {
+    #[serde(default)]
+    pub items: Vec<Zone>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Zone {
+    pub name: String,
+    pub description: String,
+    pub region: String,
+}
+
+// ============================================================================
+// Helper Implementations
+// ============================================================================
+
+impl InstanceRequest {
+    /// Create a basic Debian instance
+    pub fn debian_micro(name: String, zone: String) -> Self {
+        Self {
+            name,
+            machine_type: format!("zones/{}/machineTypes/e2-micro", zone),
+            disks: vec![AttachedDisk {
+                boot: true,
+                auto_delete: true,
+                initialize_params: InitializeParams {
+                    source_image: "projects/debian-cloud/global/images/family/debian-11"
+                        .to_string(),
+                    disk_size_gb: "10".to_string(),
+                },
+            }],
+            network_interfaces: vec![NetworkInterface {
+                network: "global/networks/default".to_string(),
+                access_configs: Some(vec![AccessConfig {
+                    type_: "ONE_TO_ONE_NAT".to_string(),
+                    name: "External NAT".to_string(),
+                }]),
+            }],
+            tags: Some(Tags {
+                items: vec![
+                    "dure".to_string(),         // Dure firewall rule
+                    "http-server".to_string(),  // Allow HTTP
+                    "https-server".to_string(), // Allow HTTPS
+                ],
+            }),
+            metadata: None,
+        }
+    }
+}
+
+impl Instance {
+    /// Get external IP address
+    pub fn external_ip(&self) -> Option<String> {
+        self.network_interfaces
+            .first()?
+            .access_configs
+            .first()?
+            .nat_ip
+            .clone()
+    }
+
+    /// Get internal IP address
+    pub fn internal_ip(&self) -> Option<String> {
+        self.network_interfaces
+            .first()
+            .and_then(|ni| ni.network_ip.clone())
+    }
+}
+
+// ============================================================================
+// API Methods on GcpRestClient
+// ============================================================================
+
+impl GcpRestClient {
+    /// Create VM instance
+    ///
+    /// API: POST /projects/{project}/zones/{zone}/instances
+    pub fn create_instance(
+        &self,
+        project_id: &str,
+        zone: &str,
+        instance: &InstanceRequest,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances",
+            GCP_COMPUTE_API_BASE, project_id, zone
+        );
+
+        let body = serde_json::to_string(instance)?;
+        let response = self.post(&url, &body)?;
+
+        if response.status() != 200 {
+            let error_text = response.into_string().unwrap_or_default();
+
+            // Detect Compute Engine API not enabled error
+            if error_text.contains("Compute Engine API")
+                && (error_text.contains("not been used") || error_text.contains("disabled"))
+            {
+                let activation_url = format!(
+                    "https://console.developers.google.com/apis/api/compute.googleapis.com/overview?project={}",
+                    project_id
+                );
+
+                return Err(anyhow::anyhow!(
+                    "Compute Engine API is not enabled in project '{}'.\n\n\
+                     To fix this (one-time setup):\n\
+                     1. Open: {}\n\
+                     2. Click 'Enable API'\n\
+                     3. Wait a few minutes for changes to propagate\n\
+                     4. Return here and click 'Create Server' again\n\n\
+                     Note: This needs to be done once per GCP project.",
+                    project_id,
+                    activation_url
+                ));
+            }
+
+            return Err(anyhow::anyhow!("Failed to create instance: {}", error_text));
+        }
+
+        let operation: Operation = response.into_json()?;
+        Ok(operation)
+    }
+
+    /// List VM instances
+    ///
+    /// API: GET /projects/{project}/zones/{zone}/instances
+    pub fn list_instances(&self, project_id: &str, zone: &str) -> Result<InstanceList> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances",
+            GCP_COMPUTE_API_BASE, project_id, zone
+        );
+
+        let response = self.get(&url)?;
+        let list: InstanceList = response.into_json()?;
+        Ok(list)
+    }
+
+    /// Get VM instance details
+    ///
+    /// API: GET /projects/{project}/zones/{zone}/instances/{instance}
+    pub fn get_instance(
+        &self,
+        project_id: &str,
+        zone: &str,
+        instance_name: &str,
+    ) -> Result<Instance> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances/{}",
+            GCP_COMPUTE_API_BASE, project_id, zone, instance_name
+        );
+
+        let response = self.get(&url)?;
+        let instance: Instance = response.into_json()?;
+        Ok(instance)
+    }
+
+    /// Delete VM instance
+    ///
+    /// API: DELETE /projects/{project}/zones/{zone}/instances/{instance}
+    pub fn delete_instance(
+        &self,
+        project_id: &str,
+        zone: &str,
+        instance_name: &str,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances/{}",
+            GCP_COMPUTE_API_BASE, project_id, zone, instance_name
+        );
+
+        let response = self.delete(&url)?;
+        let operation: Operation = response.into_json()?;
+        Ok(operation)
+    }
+
+    /// Reset (hard reboot) VM instance
+    ///
+    /// API: POST /projects/{project}/zones/{zone}/instances/{instance}/reset
+    pub fn reset_instance(
+        &self,
+        project_id: &str,
+        zone: &str,
+        instance_name: &str,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/instances/{}/reset",
+            GCP_COMPUTE_API_BASE, project_id, zone, instance_name
+        );
+
+        let response = self.post(&url, "")?;
+        let operation: Operation = response.into_json()?;
+        Ok(operation)
+    }
+
+    /// Wait for operation to complete
+    ///
+    /// API: GET /projects/{project}/zones/{zone}/operations/{operation}
+    pub fn wait_for_operation(
+        &self,
+        project_id: &str,
+        zone: &str,
+        operation_name: &str,
+        timeout_secs: u64,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/zones/{}/operations/{}",
+            GCP_COMPUTE_API_BASE, project_id, zone, operation_name
+        );
+
+        let start = std::time::Instant::now();
+
+        loop {
+            let response = self.get(&url)?;
+            let operation: Operation = response.into_json()?;
+
+            if operation.is_done() {
+                return Ok(operation);
+            }
+
+            if start.elapsed().as_secs() > timeout_secs {
+                return Err(anyhow::anyhow!("Operation timed out"));
+            }
+
+            // Poll every 2 seconds
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+    }
+
+    /// Wait for a global operation to complete (for firewall, network operations)
+    ///
+    /// API: GET /projects/{project}/global/operations/{operation}
+    pub fn wait_for_global_operation(
+        &self,
+        project_id: &str,
+        operation_name: &str,
+    ) -> Result<Operation> {
+        let timeout_secs = 120; // 2 minutes
+        let url = format!(
+            "{}/projects/{}/global/operations/{}",
+            GCP_COMPUTE_API_BASE, project_id, operation_name
+        );
+
+        let start = std::time::Instant::now();
+
+        loop {
+            let response = self.get(&url)?;
+            let operation: Operation = response.into_json()?;
+
+            if operation.is_done() {
+                return Ok(operation);
+            }
+
+            if start.elapsed().as_secs() > timeout_secs {
+                return Err(anyhow::anyhow!("Operation timed out"));
+            }
+
+            // Poll every 2 seconds
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+    }
+
+    /// List available regions
+    ///
+    /// API: GET /projects/{project}/regions
+    pub fn list_regions(&self, project_id: &str) -> Result<RegionList> {
+        let url = format!("{}/projects/{}/regions", GCP_COMPUTE_API_BASE, project_id);
+
+        let response = self.get(&url)?;
+        let list: RegionList = response.into_json()?;
+        Ok(list)
+    }
+
+    /// List available zones
+    ///
+    /// API: GET /projects/{project}/zones
+    pub fn list_zones(&self, project_id: &str) -> Result<ZoneList> {
+        let url = format!("{}/projects/{}/zones", GCP_COMPUTE_API_BASE, project_id);
+
+        let response = self.get(&url)?;
+        let list: ZoneList = response.into_json()?;
+        Ok(list)
+    }
+
+    /// List firewalls with optional filter
+    pub fn list_firewalls(
+        &self,
+        project_id: &str,
+        filter_name: Option<&str>,
+    ) -> Result<ListFirewallsResponse> {
+        let mut url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
+
+        if let Some(name) = filter_name {
+            url.push_str(&format!("?filter=name%3D{}", urlencoding::encode(name)));
+        }
+
+        let response = self.get(&url)?;
+        Ok(response.into_json()?)
+    }
+
+    /// Create a firewall rule
+    pub fn create_firewall(
+        &self,
+        project_id: &str,
+        firewall_data: &FirewallRequest,
+    ) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
+
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.access_token))
+            .set("Content-Type", "application/json")
+            .send_json(firewall_data)?;
+
+        let operation: Operation = response.into_json()?;
+
+        // Wait for global operation to complete
+        self.wait_for_global_operation(project_id, &operation.name)
+    }
+
+    /// List firewall rules for a project
+    pub fn list_firewall_rules(&self, project_id: &str) -> Result<Vec<FirewallRule>> {
+        let url = format!(
+            "{}/projects/{}/global/firewalls",
+            GCP_COMPUTE_API_BASE, project_id
+        );
+
+        let response = self.get(&url)?;
+        let list_response: FirewallListResponse = response.into_json()?;
+
+        Ok(list_response.items.unwrap_or_default())
+    }
+
+    /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
+    pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
+        let rules = self.list_firewall_rules(project_id)?;
+
+        for rule in rules {
+            // Check if rule allows SSH (port 22)
+            let allows_ssh = rule.allowed.iter().any(|a| {
+                a.ip_protocol.to_lowercase() == "tcp"
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
+            });
+
+            if allows_ssh {
+                if let Some(ranges) = &rule.source_ranges {
+                    if super::ip_in_ranges(ip, ranges) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Add an IP to the SSH firewall whitelist
+    pub fn add_ip_to_firewall(&self, project_id: &str, ip: &str) -> Result<()> {
+        let rules = self.list_firewall_rules(project_id)?;
+
+        // Find specifically the "allow-ssh-dure" rule
+        let ssh_rule = rules.iter().find(|rule| rule.name == "allow-ssh-dure");
+
+        if let Some(rule) = ssh_rule {
+            // Update existing rule
+            let mut updated_ranges = rule.source_ranges.clone().unwrap_or_default();
+            let ip_cidr = format!("{}/32", ip);
+
+            if !updated_ranges.contains(&ip_cidr) {
+                updated_ranges.push(ip_cidr);
+
+                let body = serde_json::json!({
+                    "sourceRanges": updated_ranges,
+                });
+
+                let url = format!(
+                    "{}/projects/{}/global/firewalls/{}",
+                    GCP_COMPUTE_API_BASE, project_id, rule.name
+                );
+
+                eprintln!(
+                    "DEBUG: Updating firewall rule '{}' with IP: {}",
+                    rule.name, ip
+                );
+                eprintln!("DEBUG: PATCH URL: {}", url);
+                eprintln!("DEBUG: Body: {}", body.to_string());
+
+                let response = self.patch(&url, &body.to_string())?;
+                let response_text = response.into_string().unwrap_or_default();
+                eprintln!("DEBUG: Response: {}", response_text);
+            } else {
+                eprintln!("DEBUG: IP {} already in firewall rule '{}'", ip, rule.name);
+            }
+        } else {
+            // Create new SSH rule
+            let body = serde_json::json!({
+                "name": "allow-ssh-dure",
+                "allowed": [{
+                    "IPProtocol": "tcp",
+                    "ports": ["22"]
+                }],
+                "sourceRanges": [format!("{}/32", ip)],
+                "direction": "INGRESS",
+                "network": "global/networks/default",
+            });
+
+            let url = format!(
+                "{}/projects/{}/global/firewalls",
+                GCP_COMPUTE_API_BASE, project_id
+            );
+
+            eprintln!(
+                "DEBUG: Creating new firewall rule 'allow-ssh-dure' with IP: {}",
+                ip
+            );
+            eprintln!("DEBUG: POST URL: {}", url);
+            eprintln!("DEBUG: Body: {}", body.to_string());
+
+            let response = self.post(&url, &body.to_string())?;
+            let response_text = response.into_string().unwrap_or_default();
+            eprintln!("DEBUG: Response: {}", response_text);
+        }
+
+        Ok(())
+    }
+}
