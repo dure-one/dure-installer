@@ -717,9 +717,76 @@ impl PlatformActor {
         platform_name: String,
         delete_options: crate::viewmodel::platform::DeleteOptions,
     ) -> anyhow::Result<()> {
-        self.send_progress("delete_platform", 0.5, "Deleting platform...")
+        self.send_progress("delete_platform", 0.25, "Preparing deletion...")
             .await;
 
+        // Get platform data before deletion
+        let (access_token, project_id, vms) = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<(String, String, Vec<crate::config::VmInstance>)> {
+                let config_path = Self::get_config_path()?;
+                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Find platform
+                let platform = app_config
+                    .platforms
+                    .iter()
+                    .find(|p| p.name == platform_name)
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+
+                let access_token = platform.gcp_oauth_access_token.clone()
+                    .ok_or_else(|| anyhow::anyhow!("No OAuth token for platform"))?;
+                let project_id = platform.gcp_selected_project_id.clone()
+                    .ok_or_else(|| anyhow::anyhow!("No project selected for platform"))?;
+                let vms = platform.vms.clone();
+
+                Ok((access_token, project_id, vms))
+            }
+        })
+        .await?;
+
+        // Delete VMs from GCP if requested
+        if delete_options.delete_vms && !vms.is_empty() {
+            self.send_progress("delete_platform", 0.5, "Deleting VMs from GCP...")
+                .await;
+
+            for vm in &vms {
+                let vm_name = vm.name.clone();
+                let vm_name_for_error = vm_name.clone();
+                let zone = vm.zone.clone();
+                let token = access_token.clone();
+                let proj_id = project_id.clone();
+
+                runtime::unblock(move || -> anyhow::Result<()> {
+                    let client = crate::api::gcp::GcpRestClient::new(token);
+                    client.delete_instance(&proj_id, &zone, &vm_name)?;
+                    Ok(())
+                })
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to delete VM '{}': {}", vm_name_for_error, e)
+                })?;
+            }
+        }
+
+        // Delete GCP project if requested
+        if delete_options.delete_project {
+            self.send_progress("delete_platform", 0.75, "Deleting GCP project...")
+                .await;
+
+            let token = access_token.clone();
+            let proj_id = project_id.clone();
+
+            runtime::unblock(move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(token);
+                client.delete_project(&proj_id)?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to delete project '{}': {}", project_id, e))?;
+        }
+
+        // Remove from local config
         let vm_count = runtime::unblock({
             let platform_name = platform_name.clone();
             move || -> anyhow::Result<usize> {
