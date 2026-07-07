@@ -183,6 +183,22 @@ impl GcpWizard {
         }
     }
 
+    /// Create wizard with platform context (skips account/project steps)
+    pub fn with_platform_context(
+        platform_name: String,
+        project_id: String,
+        oauth_result: OAuthResult,
+    ) -> Self {
+        Self {
+            platform_name,
+            selected_project_id: project_id,
+            oauth_result: Some(oauth_result),
+            skip_account_project_steps: true,
+            state: WizardState::ConfigureServer,
+            ..Default::default()
+        }
+    }
+
     /// Load OAuth from config if exists (deprecated - now uses platform selection UI)
     pub fn load_oauth_from_config(&mut self, _config: &AppConfig) {
         // No-op: Platform selection is now handled in the ConnectAccount UI step
@@ -2178,5 +2194,31 @@ mod tests {
         );
         assert!(validate_disk_size("").is_err());
         assert!(validate_disk_size("-5").is_err());
+    }
+
+    #[test]
+    fn test_with_platform_context() {
+        use crate::api::gcp::oauth::OAuthResult;
+
+        let oauth = OAuthResult {
+            access_token: "test-token".to_string(),
+            refresh_token: "test-refresh".to_string(),
+            expires_at: 12345,
+        };
+
+        let wizard = GcpWizard::with_platform_context(
+            "TestPlatform".to_string(),
+            "test-project".to_string(),
+            oauth.clone(),
+        );
+
+        assert_eq!(wizard.platform_name, "TestPlatform");
+        assert_eq!(wizard.selected_project_id, "test-project");
+        assert!(wizard.oauth_result.is_some());
+        assert!(wizard.skip_account_project_steps);
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
     }
 }
