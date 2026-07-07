@@ -763,9 +763,9 @@ impl GcpRestClient {
     ///
     /// API: GET /projects/{project}/global/images
     pub fn list_images(&self, image_project: &str) -> Result<ImageList> {
-        // Use server-side filtering to get only non-deprecated x86_64 images
-        // Filter syntax: https://cloud.google.com/compute/docs/reference/rest/v1/images/list
-        let filter = "deprecated.state != DEPRECATED AND architecture = \"X86_64\"";
+        // Use server-side filtering for architecture only
+        // Note: deprecated.state filtering doesn't work reliably, so we filter client-side
+        let filter = "architecture = \"X86_64\"";
         let url = format!(
             "{}/projects/{}/global/images?filter={}",
             GCP_COMPUTE_API_BASE,
@@ -782,10 +782,10 @@ impl GcpRestClient {
     ///
     /// Server-side filters (via API query parameters):
     /// - Architecture: X86_64 only
-    /// - Status: Not deprecated
     ///
     /// Client-side filters:
     /// - Age: Created within last 6 months (180 days)
+    /// - Status: Not deprecated or obsolete
     pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
         let mut all_images = Vec::new();
         let mut errors = Vec::new();
@@ -835,21 +835,31 @@ impl GcpRestClient {
             );
         }
 
-        // Apply client-side recency filter (server-side handles arch and deprecated)
-        let mut old_count = 0;
+        // Apply client-side filters (server-side only handles architecture)
+        let mut stats = (0, 0); // (old_rejected, deprecated_rejected)
         let filtered: Vec<Image> = all_images
             .into_iter()
             .filter(|img| {
                 let is_recent = img.is_recent();
+                let not_deprecated = !img.is_deprecated();
+
                 if !is_recent {
-                    old_count += 1;
+                    stats.0 += 1;
                 }
-                is_recent
+                if !not_deprecated {
+                    stats.1 += 1;
+                }
+
+                is_recent && not_deprecated
             })
             .collect();
 
         log::info!("Images after filtering: {}", filtered.len());
-        log::info!("Filter stats - Old rejected: {}", old_count);
+        log::info!(
+            "Filter stats - Old rejected: {}, Deprecated/Obsolete rejected: {}",
+            stats.0,
+            stats.1
+        );
 
         Ok(filtered)
     }
