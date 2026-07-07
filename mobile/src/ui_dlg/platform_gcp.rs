@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
 use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
-use crate::calc::gcp_rest::{GcpRestClient, InstanceRequest, Metadata, MetadataItem};
+use crate::api::gcp::GcpRestClient;
+use crate::api::gcp::compute::{InstanceRequest, Metadata, MetadataItem};
 use crate::calc::keyring;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
@@ -75,7 +76,7 @@ pub struct GcpWizard {
 
     /// Available projects (loaded from GCP API)
     #[cfg_attr(feature = "serde", serde(skip))]
-    available_projects: Vec<crate::calc::gcp_rest::Project>,
+    available_projects: Vec<crate::api::gcp::resourcemanager::Project>,
 
     /// Project loading state
     #[cfg_attr(feature = "serde", serde(skip))]

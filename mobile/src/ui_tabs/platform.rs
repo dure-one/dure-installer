@@ -255,7 +255,7 @@ fn format_steps(row: &PlatformRow) -> String {
 fn compute_firewall_status(access_token: Option<&str>, project_id: Option<&str>) -> String {
     if let Some(project) = project_id {
         if let Some(token) = access_token {
-            use crate::calc::gcp_rest::{GcpRestClient, get_current_ip};
+            use crate::api::gcp::{GcpRestClient, get_current_ip};
 
             let client = GcpRestClient::new(token.to_string());
 
