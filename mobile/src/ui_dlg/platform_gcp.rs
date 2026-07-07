@@ -258,8 +258,12 @@ impl GcpWizard {
         self.show = true;
         if !self.skip_account_project_steps {
             self.state = WizardState::ConnectAccount;
+        } else {
+            // Starting at ConfigureServer - load regions if not already loaded
+            if self.available_regions.is_empty() {
+                self.load_regions();
+            }
         }
-        // else: keep current state (ConfigureServer)
         self.progress_log.clear();
     }
 
