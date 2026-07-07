@@ -1625,6 +1625,8 @@ impl GcpWizard {
         let instance_name = self.instance_name.clone();
         let machine_type = self.selected_machine_type.clone();
         let platform_name = self.platform_name.clone();
+        let source_image = self.selected_image.clone();
+        let disk_size_gb = self.disk_size_gb.clone();
 
         let access_token = self
             .oauth_result
@@ -1656,6 +1658,10 @@ impl GcpWizard {
             if machine_type != "e2-micro" {
                 instance_req.machine_type = format!("zones/{}/machineTypes/{}", zone, machine_type);
             }
+
+            // Apply custom image and disk size
+            instance_req.disks[0].initialize_params.source_image = source_image;
+            instance_req.disks[0].initialize_params.disk_size_gb = disk_size_gb;
 
             // Generate and add startup script metadata
             let startup_script = Self::generate_startup_script(&ssh_public_key);
