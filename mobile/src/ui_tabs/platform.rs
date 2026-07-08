@@ -77,9 +77,9 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_dialog: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_name: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_type: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_oauth_url: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_oauth_result: Option<crate::api::gcp::oauth::OAuthResult>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -188,8 +188,8 @@ impl Default for PlatformTab {
             loaded: false,
             load_error: None,
             show_add_dialog: false,
-            add_platform_name: String::new(),
             add_platform_type: "gcp".to_string(),
+            add_platform_oauth_url: None,
             add_platform_oauth_result: None,
             add_platform_oauth_promise: None,
             add_platform_connected_email: None,
@@ -1011,7 +1011,6 @@ impl PlatformTab {
         // Action buttons
         if ui.add(MaterialButton::filled("Add Platform")).clicked() {
             self.show_add_dialog = true;
-            self.add_platform_name.clear();
             self.add_platform_type = "gcp".to_string();
         }
         ui.add_space(8.0);
@@ -1060,7 +1059,7 @@ impl PlatformTab {
                 .id(table_id)
                 .allow_selection(false)
                 .allow_drawer(true)
-                .column("Platform", 150.0 * width_ratio, false)
+                .column("Project", 150.0 * width_ratio, false)
                 .column("Type", 80.0 * width_ratio, false)
                 .column("Steps", 250.0 * width_ratio, false)
                 .column("Operations", 260.0 * width_ratio, false);
@@ -1718,11 +1717,6 @@ impl PlatformTab {
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
-                    ui.label("Name:");
-                    ui.text_edit_singleline(&mut self.add_platform_name);
-                });
-
-                ui.horizontal(|ui| {
                     ui.label("Type:");
                     egui::ComboBox::from_id_salt("platform_type_combo")
                         .selected_text(&self.add_platform_type)
@@ -1836,6 +1830,18 @@ impl PlatformTab {
                             egui::Color32::GRAY,
                             "⚠ Connection required for GCP platforms",
                         );
+
+                        // Show OAuth URL if available
+                        if let Some(ref oauth_url) = self.add_platform_oauth_url {
+                            ui.add_space(8.0);
+                            ui.label("OAuth URL (copy to browser if needed):");
+                            ui.add_space(4.0);
+                            egui::ScrollArea::vertical()
+                                .max_height(60.0)
+                                .show(ui, |ui| {
+                                    ui.text_edit_multiline(&mut oauth_url.as_str());
+                                });
+                        }
                     }
 
                     ui.add_space(8.0);
@@ -1846,6 +1852,7 @@ impl PlatformTab {
                 ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() {
                         self.show_add_dialog = false;
+                        self.add_platform_oauth_url = None;
                         self.add_platform_oauth_result = None;
                         self.add_platform_oauth_promise = None;
                         self.add_platform_connected_email = None;
@@ -1853,15 +1860,15 @@ impl PlatformTab {
                         self.add_platform_selected_project = None;
                     }
 
-                    let can_add = !self.add_platform_name.is_empty()
-                        && (self.add_platform_type != "gcp"
-                            || (self.add_platform_connected_email.is_some()
-                                && self.add_platform_selected_project.is_some()));
+                    let can_add = self.add_platform_type != "gcp"
+                        || (self.add_platform_connected_email.is_some()
+                            && self.add_platform_selected_project.is_some());
 
                     ui.add_enabled_ui(can_add, |ui| {
                         if ui.button("Add").clicked() {
                             self.execute_add_platform(vm.as_deref_mut());
                             self.show_add_dialog = false;
+                            self.add_platform_oauth_url = None;
                             self.add_platform_oauth_result = None;
                             self.add_platform_oauth_promise = None;
                             self.add_platform_connected_email = None;
@@ -1871,9 +1878,7 @@ impl PlatformTab {
                     });
 
                     if !can_add {
-                        if self.add_platform_name.is_empty() {
-                            ui.label("⚠ Name required");
-                        } else if self.add_platform_type == "gcp"
+                        if self.add_platform_type == "gcp"
                             && self.add_platform_connected_email.is_none()
                         {
                             ui.label("⚠ Connect to Google Cloud first");
