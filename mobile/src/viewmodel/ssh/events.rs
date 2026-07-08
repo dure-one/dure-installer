@@ -183,6 +183,13 @@ pub enum SshEvent {
         installed: bool,
     },
 
+    /// Host health check completed (TCP port check result)
+    HostHealthChecked {
+        name: String,
+        is_alive: bool,
+        latency_ms: Option<u64>,
+    },
+
     /// Docker image inspection completed
     DockerImageInspected {
         image: String,

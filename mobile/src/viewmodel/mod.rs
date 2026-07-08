@@ -559,6 +559,16 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    /// Check if SSH host is reachable (TCP port check with timeout)
+    pub fn check_host_health(&self, name: String, timeout_secs: u8) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckHostHealth {
+                name,
+                timeout_secs,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     // Docker Lifecycle Management
 
     /// Inspect Docker image by pulling and analyzing history

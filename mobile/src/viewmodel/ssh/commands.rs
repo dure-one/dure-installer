@@ -155,4 +155,10 @@ pub enum SshCommand {
     UninstallAnsible {
         name: String,
     },
+
+    /// Check if SSH host is reachable (TCP port check with timeout)
+    CheckHostHealth {
+        name: String,
+        timeout_secs: u8,
+    },
 }
