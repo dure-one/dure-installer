@@ -1949,8 +1949,8 @@ impl SshTab {
             }
         }
 
-        // Request continuous repainting while any row is refreshing
-        if self.rows.iter().any(|row| row.refreshing) {
+        // Request continuous repainting while any row is refreshing or checking health
+        if self.rows.iter().any(|row| row.refreshing || row.connection_status == ConnectionStatus::CheckingHealth) {
             ui.ctx().request_repaint();
         }
 
