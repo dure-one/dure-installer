@@ -24,6 +24,7 @@ enum ConnectionStatus {
     Connected,
     Offline,
     Testing,
+    CheckingHealth,  // NEW: During pre-refresh health check
     Unknown,
 }
 
@@ -63,6 +64,7 @@ struct SshRowData {
     // Refresh state
     refreshing: bool,
     refresh_pending_count: u8,
+    refresh_failed: bool,  // NEW: True when health check or refresh fails
 }
 
 /// Results from batch container removal
@@ -81,6 +83,12 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    auto_refresh_done: bool,  // NEW: Session flag - false on app start
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pending_refresh_hosts: Vec<String>,  // NEW: Deferred refresh queue
 
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
@@ -241,6 +249,8 @@ impl Default for SshTab {
         Self {
             rows: Vec::new(),
             loaded: false,
+            auto_refresh_done: false,  // NEW
+            pending_refresh_hosts: Vec::new(),  // NEW
             load_error: None,
             show_add_dialog: false,
             add_host: String::new(),
@@ -369,6 +379,7 @@ impl SshTab {
                             connection_status: ConnectionStatus::Unknown,
                             refreshing: false,
                             refresh_pending_count: 0,
+                            refresh_failed: false,  // NEW
                         });
                     }
                 }
