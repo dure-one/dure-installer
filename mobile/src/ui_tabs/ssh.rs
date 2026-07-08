@@ -613,6 +613,38 @@ impl SshTab {
                 self.decrement_refresh_counter(&name);
             }
 
+            ViewModelEvent::Ssh(SshEvent::HostHealthChecked { name, is_alive, latency_ms }) => {
+                eprintln!("Health check result for {}: alive={}, latency={:?}", name, is_alive, latency_ms);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    if is_alive {
+                        // Host is reachable - queue for refresh
+                        eprintln!("Host {} is alive, queueing refresh", name);
+                        row.connection_status = ConnectionStatus::Unknown;
+                        row.refresh_failed = false;
+
+                        // Add to pending refresh queue (will process in ui() method)
+                        if !self.pending_refresh_hosts.contains(&name) {
+                            self.pending_refresh_hosts.push(name.clone());
+                        }
+                    } else {
+                        // Host unreachable - mark as failed
+                        eprintln!("Host {} is unreachable", name);
+                        row.refresh_failed = true;
+                        row.connection_status = ConnectionStatus::Offline;
+                    }
+                }
+
+                // Mark auto-refresh as done when all health checks complete
+                let all_checked = self.rows.iter().all(|r|
+                    r.connection_status != ConnectionStatus::CheckingHealth
+                );
+                if all_checked && !self.auto_refresh_done {
+                    eprintln!("All health checks complete, marking auto_refresh_done");
+                    self.auto_refresh_done = true;
+                }
+            }
+
             ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { host_name }) => {
                 eprintln!("✓ Dure-WSS uninstalled from {}", host_name);
 
@@ -1883,6 +1915,22 @@ impl SshTab {
             let events = vm.poll_events(ui.ctx());
             for event in events {
                 self.handle_event(event);
+            }
+        }
+
+        // 1b. Process pending refresh queue (after health checks)
+        if let Some(ref mut vm) = vm {
+            for host in self.pending_refresh_hosts.drain(..) {
+                eprintln!("Processing pending refresh for {}", host);
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.refreshing = true;
+                    row.refresh_pending_count = 4;  // 4 operations
+
+                    let _ = vm.get_linux_status(host.clone());
+                    let _ = vm.get_docker_status(host.clone());
+                    let _ = vm.get_ansible_status(host.clone());
+                    let _ = vm.get_dure_wss_status(host);
+                }
             }
         }
 
