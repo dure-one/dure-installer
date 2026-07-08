@@ -8,5 +8,5 @@ mod events;
 mod tests;
 
 pub use actor::PlatformActor;
-pub use commands::PlatformCommand;
+pub use commands::{DeleteOptions, PlatformCommand};
 pub use events::{PlatformEvent, VmInfo};

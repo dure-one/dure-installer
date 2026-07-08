@@ -4,8 +4,9 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use urlencoding;
 
-use super::{GcpRestClient, GCP_COMPUTE_API_BASE};
+use super::{GCP_COMPUTE_API_BASE, GcpRestClient};
 
 // ============================================================================
 // Instance Types
@@ -253,6 +254,89 @@ pub struct Zone {
     pub name: String,
     pub description: String,
     pub region: String,
+}
+
+// ============================================================================
+// Image Types
+// ============================================================================
+
+/// Image list response from GCP API
+#[derive(Debug, Deserialize, Default)]
+pub struct ImageList {
+    #[serde(default)]
+    pub items: Vec<Image>,
+}
+
+/// GCP Compute Engine image metadata
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Image {
+    pub name: String,
+    pub description: Option<String>,
+    pub self_link: String,
+    pub creation_timestamp: String,
+    pub architecture: Option<String>,
+    pub family: Option<String>,
+    pub deprecated: Option<DeprecatedStatus>,
+}
+
+impl Default for Image {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: None,
+            self_link: String::new(),
+            creation_timestamp: String::new(),
+            architecture: None,
+            family: None,
+            deprecated: None,
+        }
+    }
+}
+
+impl Image {
+    /// Check if image is deprecated
+    pub fn is_deprecated(&self) -> bool {
+        self.deprecated
+            .as_ref()
+            .and_then(|d| d.state.as_ref())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Check if image was created within last 6 months
+    pub fn is_recent(&self) -> bool {
+        if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&self.creation_timestamp) {
+            let six_months_ago = chrono::Utc::now() - chrono::Duration::days(180);
+            created.with_timezone(&chrono::Utc) > six_months_ago
+        } else {
+            false
+        }
+    }
+
+    /// Get human-readable family name for UI grouping
+    pub fn family_group(&self) -> String {
+        match self.family.as_deref() {
+            Some("debian-13") => "Debian 13".to_string(),
+            Some("debian-12") => "Debian 12".to_string(),
+            Some("ubuntu-2404-lts") => "Ubuntu 24.04 LTS".to_string(),
+            Some("ubuntu-2204-lts") => "Ubuntu 22.04 LTS".to_string(),
+            Some(other) => other.replace('-', " ").to_uppercase(),
+            None => self.name.clone(),
+        }
+    }
+
+    /// Get display name with creation date for UI
+    pub fn display_name(&self) -> String {
+        let date = self.creation_timestamp.split('T').next().unwrap_or("");
+        format!("{} ({})", self.family_group(), date)
+    }
+}
+
+/// Deprecation status
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeprecatedStatus {
+    pub state: Option<String>,
 }
 
 // ============================================================================
@@ -673,5 +757,312 @@ impl GcpRestClient {
         }
 
         Ok(())
+    }
+
+    /// List images from a public image project (debian-cloud, ubuntu-os-cloud, etc.)
+    ///
+    /// API: GET /projects/{project}/global/images
+    pub fn list_images(&self, image_project: &str) -> Result<ImageList> {
+        // Use server-side filtering for architecture only
+        // Note: deprecated.state filtering doesn't work reliably, so we filter client-side
+        let filter = "architecture = \"X86_64\"";
+        let url = format!(
+            "{}/projects/{}/global/images?filter={}",
+            GCP_COMPUTE_API_BASE,
+            image_project,
+            urlencoding::encode(filter)
+        );
+
+        let response = self.get(&url)?;
+        let list: ImageList = response.into_json()?;
+        Ok(list)
+    }
+
+    /// Get filtered list of recent Debian and Ubuntu images
+    ///
+    /// Server-side filters (via API query parameters):
+    /// - Architecture: X86_64 only
+    ///
+    /// Client-side filters:
+    /// - Age: Created within last 6 months (180 days)
+    /// - Status: Not deprecated or obsolete
+    pub fn list_debian_ubuntu_images(&self) -> Result<Vec<Image>> {
+        let mut all_images = Vec::new();
+        let mut errors = Vec::new();
+
+        // Fetch Debian images
+        match self.list_images("debian-cloud") {
+            Ok(list) => {
+                log::info!("Fetched {} Debian images", list.items.len());
+                all_images.extend(list.items);
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to fetch Debian images: {}", e);
+                log::warn!("{}", err_msg);
+                errors.push(err_msg);
+            }
+        }
+
+        // Fetch Ubuntu images
+        match self.list_images("ubuntu-os-cloud") {
+            Ok(list) => {
+                log::info!("Fetched {} Ubuntu images", list.items.len());
+                all_images.extend(list.items);
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to fetch Ubuntu images: {}", e);
+                log::warn!("{}", err_msg);
+                errors.push(err_msg);
+            }
+        }
+
+        // If both failed, return error
+        if all_images.is_empty() && !errors.is_empty() {
+            return Err(anyhow::anyhow!("Failed to fetch images: {}", errors.join("; ")));
+        }
+
+        log::info!("Total images before filtering: {}", all_images.len());
+
+        // Sample first few images to debug architecture values
+        if !all_images.is_empty() {
+            let sample = &all_images[0];
+            log::info!(
+                "Sample image: name={}, arch={:?}, deprecated={:?}, created={}",
+                sample.name,
+                sample.architecture,
+                sample.deprecated,
+                sample.creation_timestamp
+            );
+        }
+
+        // Apply client-side filters (server-side only handles architecture)
+        let mut stats = (0, 0); // (old_rejected, deprecated_rejected)
+        let filtered: Vec<Image> = all_images
+            .into_iter()
+            .filter(|img| {
+                let is_recent = img.is_recent();
+                let not_deprecated = !img.is_deprecated();
+
+                if !is_recent {
+                    stats.0 += 1;
+                }
+                if !not_deprecated {
+                    stats.1 += 1;
+                }
+
+                is_recent && not_deprecated
+            })
+            .collect();
+
+        log::info!("Images after filtering: {}", filtered.len());
+        log::info!(
+            "Filter stats - Old rejected: {}, Deprecated/Obsolete rejected: {}",
+            stats.0,
+            stats.1
+        );
+
+        Ok(filtered)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_image_default() {
+        let img = Image::default();
+        assert_eq!(img.name, "");
+        assert_eq!(img.self_link, "");
+        assert!(img.architecture.is_none());
+        assert!(img.deprecated.is_none());
+    }
+
+    #[test]
+    fn test_image_is_deprecated() {
+        // Active image (no deprecated field)
+        let active = Image {
+            deprecated: None,
+            ..Default::default()
+        };
+        assert!(!active.is_deprecated());
+
+        // Deprecated image
+        let deprecated = Image {
+            deprecated: Some(DeprecatedStatus {
+                state: Some("DEPRECATED".to_string()),
+            }),
+            ..Default::default()
+        };
+        assert!(deprecated.is_deprecated());
+
+        // Edge case: empty state string
+        let edge = Image {
+            deprecated: Some(DeprecatedStatus {
+                state: Some("".to_string()),
+            }),
+            ..Default::default()
+        };
+        assert!(!edge.is_deprecated());
+    }
+
+    #[test]
+    fn test_image_is_recent() {
+        use chrono::{Duration, Utc};
+
+        // Recent image (3 months old)
+        let recent = Image {
+            creation_timestamp: (Utc::now() - Duration::days(90)).to_rfc3339(),
+            ..Default::default()
+        };
+        assert!(recent.is_recent());
+
+        // Old image (7 months old)
+        let old = Image {
+            creation_timestamp: (Utc::now() - Duration::days(210)).to_rfc3339(),
+            ..Default::default()
+        };
+        assert!(!old.is_recent());
+
+        // Invalid timestamp
+        let invalid = Image {
+            creation_timestamp: "not-a-date".to_string(),
+            ..Default::default()
+        };
+        assert!(!invalid.is_recent());
+    }
+
+    #[test]
+    fn test_image_family_group() {
+        let debian = Image {
+            family: Some("debian-13".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(debian.family_group(), "Debian 13");
+
+        let ubuntu = Image {
+            family: Some("ubuntu-2404-lts".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(ubuntu.family_group(), "Ubuntu 24.04 LTS");
+
+        let unknown = Image {
+            family: Some("custom-os-v1".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(unknown.family_group(), "CUSTOM OS V1");
+
+        let no_family = Image::default();
+        assert_eq!(no_family.family_group(), "");
+    }
+
+    #[test]
+    fn test_image_display_name() {
+        let img = Image {
+            name: "debian-13-bookworm-v20260615".to_string(),
+            family: Some("debian-13".to_string()),
+            creation_timestamp: "2026-06-15T10:00:00.000Z".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(img.display_name(), "Debian 13 (2026-06-15)");
+
+        let no_date = Image {
+            family: Some("debian-13".to_string()),
+            creation_timestamp: "".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(no_date.display_name(), "Debian 13 ()");
+    }
+
+    #[test]
+    fn test_parse_image_list_response() {
+        let json = r#"{
+            "items": [
+                {
+                    "name": "debian-13-bookworm-v20260615",
+                    "selfLink": "projects/debian-cloud/global/images/debian-13-bookworm-v20260615",
+                    "creationTimestamp": "2026-06-15T10:00:00.000Z",
+                    "architecture": "X86_64",
+                    "family": "debian-13"
+                }
+            ]
+        }"#;
+
+        let list: ImageList = serde_json::from_str(json).unwrap();
+        assert_eq!(list.items.len(), 1);
+        assert_eq!(list.items[0].name, "debian-13-bookworm-v20260615");
+        assert_eq!(list.items[0].architecture.as_deref(), Some("X86_64"));
+    }
+
+    #[test]
+    fn test_parse_deprecated_image() {
+        let json = r#"{
+            "name": "old-image",
+            "selfLink": "projects/debian-cloud/global/images/old-image",
+            "creationTimestamp": "2020-01-01T00:00:00.000Z",
+            "architecture": "X86_64",
+            "deprecated": {
+                "state": "DEPRECATED"
+            }
+        }"#;
+
+        let img: Image = serde_json::from_str(json).unwrap();
+        assert!(img.is_deprecated());
+    }
+
+    #[test]
+    fn test_list_images_method_signature() {
+        // This test verifies the method signature exists
+        // We can't test actual API calls without mocking, so we just check compilation
+        fn _check_signature(client: &GcpRestClient) {
+            let _: Result<ImageList> = client.list_images("debian-cloud");
+        }
+    }
+
+    #[test]
+    fn test_image_architecture_filter() {
+        let x86 = Image {
+            architecture: Some("X86_64".to_string()),
+            ..Default::default()
+        };
+        let arm = Image {
+            architecture: Some("ARM64".to_string()),
+            ..Default::default()
+        };
+        let none = Image {
+            architecture: None,
+            ..Default::default()
+        };
+
+        // Test the filter logic inline
+        assert!(
+            x86.architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
+
+        assert!(
+            !arm.architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
+
+        assert!(
+            !none
+                .architecture
+                .as_ref()
+                .map(|a| a.to_uppercase() == "X86_64")
+                .unwrap_or(false)
+        );
+    }
+
+    #[test]
+    fn test_list_debian_ubuntu_images_signature() {
+        // Verify method signature exists
+        fn _check_signature(client: &GcpRestClient) {
+            let _: Result<Vec<Image>> = client.list_debian_ubuntu_images();
+        }
     }
 }

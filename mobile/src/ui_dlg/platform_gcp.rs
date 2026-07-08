@@ -12,10 +12,10 @@ use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
+use crate::api::gcp::GcpRestClient;
+use crate::api::gcp::compute::{Image, InstanceRequest, Metadata, MetadataItem};
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
 use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
-use crate::api::gcp::GcpRestClient;
-use crate::api::gcp::compute::{InstanceRequest, Metadata, MetadataItem};
 use crate::calc::keyring;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
@@ -113,6 +113,29 @@ pub struct GcpWizard {
 
     /// Selected platform email for VM creation
     selected_platform_email: String,
+
+    /// Selected source image (self_link URL)
+    selected_image: String,
+
+    /// Disk size in GB (user input as string)
+    disk_size_gb: String,
+
+    /// Optional swap size in GB (empty = automatic)
+    swap_size_gb: String,
+
+    /// Available images (cached after successful load)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    available_images: Vec<Image>,
+
+    /// Image loading promise
+    #[cfg_attr(feature = "serde", serde(skip))]
+    image_promise: Option<Promise<Result<Vec<Image>, String>>>,
+
+    /// Retry count for image loading (max 3)
+    image_retry_count: u32,
+
+    /// Whether to skip account/project steps
+    skip_account_project_steps: bool,
 }
 
 impl Default for GcpWizard {
@@ -143,6 +166,13 @@ impl Default for GcpWizard {
             show: false,
             available_platforms: Vec::new(),
             selected_platform_email: String::new(),
+            selected_image: "projects/debian-cloud/global/images/family/debian-13".to_string(),
+            disk_size_gb: "10".to_string(),
+            swap_size_gb: String::new(), // Empty = auto
+            available_images: Vec::new(),
+            image_promise: None,
+            image_retry_count: 0,
+            skip_account_project_steps: false,
         }
     }
 }
@@ -153,6 +183,22 @@ impl GcpWizard {
         Self {
             platform_name: platform_name.clone(),
             instance_name: format!("{}-server", platform_name.to_lowercase().replace(' ', "-")),
+            ..Default::default()
+        }
+    }
+
+    /// Create wizard with platform context (skips account/project steps)
+    pub fn with_platform_context(
+        platform_name: String,
+        project_id: String,
+        oauth_result: OAuthResult,
+    ) -> Self {
+        Self {
+            platform_name,
+            selected_project_id: project_id,
+            oauth_result: Some(oauth_result),
+            skip_account_project_steps: true,
+            state: WizardState::ConfigureServer,
             ..Default::default()
         }
     }
@@ -211,9 +257,17 @@ impl GcpWizard {
     }
 
     /// Show the wizard
+    /// Show the wizard
     pub fn show(&mut self) {
         self.show = true;
-        self.state = WizardState::ConnectAccount;
+        if !self.skip_account_project_steps {
+            self.state = WizardState::ConnectAccount;
+        } else {
+            // Starting at ConfigureServer - load regions if not already loaded
+            if self.available_regions.is_empty() {
+                self.load_regions();
+            }
+        }
         self.progress_log.clear();
     }
 
@@ -266,13 +320,21 @@ impl GcpWizard {
     }
 
     fn render_progress_indicator(&self, ui: &mut egui::Ui) {
-        let steps = [
-            ("Connect", WizardState::ConnectAccount),
-            ("Project", WizardState::SelectProject),
-            ("Configure", WizardState::ConfigureServer),
-            ("Create", WizardState::CreatingServer),
-            ("Complete", WizardState::Complete),
-        ];
+        let steps = if self.skip_account_project_steps {
+            vec![
+                ("Configure", WizardState::ConfigureServer),
+                ("Create", WizardState::CreatingServer),
+                ("Complete", WizardState::Complete),
+            ]
+        } else {
+            vec![
+                ("Connect", WizardState::ConnectAccount),
+                ("Project", WizardState::SelectProject),
+                ("Configure", WizardState::ConfigureServer),
+                ("Create", WizardState::CreatingServer),
+                ("Complete", WizardState::Complete),
+            ]
+        };
 
         ui.horizontal(|ui| {
             for (i, (label, step_state)) in steps.iter().enumerate() {
@@ -712,6 +774,40 @@ impl GcpWizard {
         ui.heading("Configure Server");
         ui.add_space(8.0);
 
+        // Start image loading if not started
+        if self.image_promise.is_none() && self.available_images.is_empty() {
+            self.start_image_loading();
+        }
+
+        // Check promise result
+        if let Some(promise) = &self.image_promise {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(images) => {
+                        self.available_images = images.clone();
+                        self.image_promise = None;
+                        // Auto-select latest image
+                        if let Some(latest) = self.available_images.first() {
+                            self.selected_image = latest.self_link.clone();
+                        }
+                    }
+                    Err(_) if self.image_retry_count < 3 => {
+                        // Retry with exponential backoff
+                        self.image_retry_count += 1;
+                        std::thread::sleep(std::time::Duration::from_secs(
+                            2_u64.pow(self.image_retry_count),
+                        ));
+                        self.start_image_loading();
+                    }
+                    Err(_) => {
+                        // Use fallback
+                        self.available_images = get_fallback_images();
+                        self.image_promise = None;
+                    }
+                }
+            }
+        }
+
         // Instance name with validation
         ui.horizontal(|ui| {
             ui.label("Instance Name:");
@@ -728,6 +824,73 @@ impl GcpWizard {
                     egui::Color32::from_rgb(245, 101, 101),
                     "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
                 );
+            }
+        }
+
+        ui.add_space(8.0);
+
+        // Source Image selection
+        ui.horizontal(|ui| {
+            ui.label("Source Image:");
+            let selected_display = if self.image_promise.is_some() {
+                if self.image_retry_count > 0 {
+                    format!("⏳ Retrying... ({}/3)", self.image_retry_count)
+                } else {
+                    "⏳ Loading images...".to_string()
+                }
+            } else if let Some(img) = self
+                .available_images
+                .iter()
+                .find(|img| img.self_link == self.selected_image)
+            {
+                img.display_name()
+            } else {
+                "Debian 13 (default)".to_string()
+            };
+
+            egui::ComboBox::from_id_salt("image_combo")
+                .selected_text(&selected_display)
+                .width(350.0)
+                .show_ui(ui, |ui| {
+                    for img in &self.available_images {
+                        ui.selectable_value(
+                            &mut self.selected_image,
+                            img.self_link.clone(),
+                            img.display_name(),
+                        );
+                    }
+                });
+        });
+
+        ui.add_space(8.0);
+
+        // Disk Size input
+        ui.horizontal(|ui| {
+            ui.label("Disk Size (GB):");
+            ui.add(egui::TextEdit::singleline(&mut self.disk_size_gb).desired_width(80.0));
+            ui.colored_label(egui::Color32::GRAY, "Minimum: 10 GB");
+        });
+
+        // Validation
+        if let Err(e) = validate_disk_size(&self.disk_size_gb) {
+            ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
+        }
+
+        ui.add_space(8.0);
+
+        // Swap size input (optional)
+        ui.horizontal(|ui| {
+            ui.label("Swap Size (GB):");
+            ui.add(egui::TextEdit::singleline(&mut self.swap_size_gb)
+                .desired_width(80.0)
+                .hint_text("Auto"));
+            ui.colored_label(egui::Color32::GRAY, "Leave empty for automatic (0-8GB)");
+        });
+
+        // Validation
+        if !self.swap_size_gb.is_empty() {
+            if let Err(e) = validate_swap_size(&self.swap_size_gb) {
+                ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
             }
         }
 
@@ -796,15 +959,21 @@ impl GcpWizard {
         ui.add_space(16.0);
 
         ui.horizontal(|ui| {
-            if ui.button("← Back").clicked() {
-                self.state = WizardState::SelectProject;
+            // Only show Back if came from full wizard
+            if !self.skip_account_project_steps {
+                if ui.button("← Back").clicked() {
+                    self.state = WizardState::SelectProject;
+                }
             }
 
             let can_create = !self.instance_name.is_empty()
                 && self.validate_instance_name(&self.instance_name)
                 && !self.selected_region.is_empty()
                 && !self.selected_zone.is_empty()
-                && !self.selected_machine_type.is_empty();
+                && !self.selected_machine_type.is_empty()
+                && validate_disk_size(&self.disk_size_gb).is_ok()
+                && (self.swap_size_gb.is_empty() || validate_swap_size(&self.swap_size_gb).is_ok())
+                && self.image_promise.is_none();
 
             let create_button = MaterialButton::filled("Create Server");
             ui.add_enabled_ui(can_create, |ui| {
@@ -1447,6 +1616,22 @@ impl GcpWizard {
         }
     }
 
+    /// Start async image loading
+    fn start_image_loading(&mut self) {
+        let access_token = self
+            .oauth_result
+            .as_ref()
+            .map(|o| o.access_token.clone())
+            .unwrap_or_default();
+
+        self.image_promise = Some(Promise::spawn_thread("load_gcp_images", move || {
+            let client = GcpRestClient::new(access_token);
+            client
+                .list_debian_ubuntu_images()
+                .map_err(|e| e.to_string())
+        }));
+    }
+
     fn start_server_creation(&mut self) {
         self.state = WizardState::CreatingServer;
         self.progress_log.push("Creating server...".to_string());
@@ -1456,6 +1641,9 @@ impl GcpWizard {
         let instance_name = self.instance_name.clone();
         let machine_type = self.selected_machine_type.clone();
         let platform_name = self.platform_name.clone();
+        let source_image = self.selected_image.clone();
+        let disk_size_gb = self.disk_size_gb.clone();
+        let swap_size_gb = self.swap_size_gb.clone();
 
         let access_token = self
             .oauth_result
@@ -1488,8 +1676,17 @@ impl GcpWizard {
                 instance_req.machine_type = format!("zones/{}/machineTypes/{}", zone, machine_type);
             }
 
+            // Apply custom image and disk size
+            instance_req.disks[0].initialize_params.source_image = source_image;
+            instance_req.disks[0].initialize_params.disk_size_gb = disk_size_gb;
+
             // Generate and add startup script metadata
-            let startup_script = Self::generate_startup_script(&ssh_public_key);
+            let swap_size = if swap_size_gb.is_empty() {
+                None
+            } else {
+                Some(validate_swap_size(&swap_size_gb).unwrap()) // Already validated
+            };
+            let startup_script = Self::generate_startup_script(&ssh_public_key, swap_size);
             instance_req.metadata = Some(Metadata {
                 items: vec![MetadataItem {
                     key: "startup-script".to_string(),
@@ -1772,7 +1969,84 @@ impl GcpWizard {
     }
 
     /// Generate startup script for VM initialization
-    fn generate_startup_script(ssh_public_key: &str) -> String {
+    fn generate_startup_script(ssh_public_key: &str, swap_size_gb: Option<u32>) -> String {
+        // Generate swap section based on user input or automatic detection
+        let swap_section = if let Some(size) = swap_size_gb {
+            // User-specified swap size
+            if size == 0 {
+                "echo \"Swap disabled by user configuration\"".to_string()
+            } else {
+                format!(
+                    r#"# User-specified swap size: {}GB
+SWAP_SIZE_GB={}
+echo "Creating user-specified ${{SWAP_SIZE_GB}}GB swap..."
+
+# Try fallocate first, fall back to dd
+if fallocate -l "${{SWAP_SIZE_GB}}G" /swapfile 2>/dev/null; then
+    echo "Created ${{SWAP_SIZE_GB}}GB swap with fallocate"
+elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
+    echo "Created ${{SWAP_SIZE_GB}}GB swap with dd"
+else
+    echo "WARNING: Failed to create swap file, continuing without swap..."
+fi
+
+# Only configure swap if file was created successfully
+if [ -f /swapfile ] && [ -s /swapfile ]; then
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "Swap added successfully: ${{SWAP_SIZE_GB}}GB"
+fi"#,
+                    size, size
+                )
+            }
+        } else {
+            // Automatic swap detection (existing logic)
+            r#"# Add swap if memory is less than 8GB
+TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+TOTAL_MEM_GB=$((TOTAL_MEM_KB / 1024 / 1024))
+DISK_AVAIL_GB=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
+
+if [ $TOTAL_MEM_GB -lt 8 ]; then
+    # Determine swap size based on available disk space
+    # Reserve 2GB for system, use the rest for swap (up to 8GB max)
+    if [ $DISK_AVAIL_GB -gt 10 ]; then
+        SWAP_SIZE_GB=8
+    elif [ $DISK_AVAIL_GB -gt 4 ]; then
+        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 4))
+    else
+        echo "Insufficient disk space (${DISK_AVAIL_GB}GB available), skipping swap"
+        SWAP_SIZE_GB=0
+    fi
+
+    if [ $SWAP_SIZE_GB -gt 0 ]; then
+        echo "Total memory is ${TOTAL_MEM_GB}GB, disk available ${DISK_AVAIL_GB}GB"
+        echo "Creating ${SWAP_SIZE_GB}GB swap..."
+
+        # Try fallocate first, fall back to dd
+        if fallocate -l "${SWAP_SIZE_GB}G" /swapfile 2>/dev/null; then
+            echo "Created ${SWAP_SIZE_GB}GB swap with fallocate"
+        elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
+            echo "Created ${SWAP_SIZE_GB}GB swap with dd"
+        else
+            echo "WARNING: Failed to create swap file, continuing without swap..."
+        fi
+
+        # Only configure swap if file was created successfully
+        if [ -f /swapfile ] && [ -s /swapfile ]; then
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            echo "Swap added successfully: ${SWAP_SIZE_GB}GB"
+        fi
+    fi
+else
+    echo "Memory is ${TOTAL_MEM_GB}GB, no swap needed"
+fi"#.to_string()
+        };
+
         format!(
             r#"#!/bin/bash
 # Don't exit on errors - we want SSH config to run even if swap fails
@@ -1792,48 +2066,7 @@ net.ipv4.tcp_congestion_control=bbr
 EOF
 sysctl -p
 
-# Add swap if memory is less than 8GB
-TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{{print $2}}')
-TOTAL_MEM_GB=$((TOTAL_MEM_KB / 1024 / 1024))
-DISK_AVAIL_GB=$(df -BG / | awk 'NR==2 {{print $4}}' | sed 's/G//')
-
-if [ $TOTAL_MEM_GB -lt 8 ]; then
-    # Determine swap size based on available disk space
-    # Reserve 2GB for system, use the rest for swap (up to 8GB max)
-    if [ $DISK_AVAIL_GB -gt 10 ]; then
-        SWAP_SIZE_GB=8
-    elif [ $DISK_AVAIL_GB -gt 2 ]; then
-        SWAP_SIZE_GB=$((DISK_AVAIL_GB - 2))
-    else
-        echo "Insufficient disk space (${{DISK_AVAIL_GB}}GB available), skipping swap"
-        SWAP_SIZE_GB=0
-    fi
-
-    if [ $SWAP_SIZE_GB -gt 0 ]; then
-        echo "Total memory is ${{TOTAL_MEM_GB}}GB, disk available ${{DISK_AVAIL_GB}}GB"
-        echo "Creating ${{SWAP_SIZE_GB}}GB swap..."
-
-        # Try fallocate first, fall back to dd
-        if fallocate -l "${{SWAP_SIZE_GB}}G" /swapfile 2>/dev/null; then
-            echo "Created ${{SWAP_SIZE_GB}}GB swap with fallocate"
-        elif dd if=/dev/zero of=/swapfile bs=1G count=$SWAP_SIZE_GB 2>/dev/null; then
-            echo "Created ${{SWAP_SIZE_GB}}GB swap with dd"
-        else
-            echo "WARNING: Failed to create swap file, continuing without swap..."
-        fi
-
-        # Only configure swap if file was created successfully
-        if [ -f /swapfile ] && [ -s /swapfile ]; then
-            chmod 600 /swapfile
-            mkswap /swapfile
-            swapon /swapfile
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
-            echo "Swap added successfully: ${{SWAP_SIZE_GB}}GB"
-        fi
-    fi
-else
-    echo "Memory is ${{TOTAL_MEM_GB}}GB, no swap needed"
-fi
+{swap_section}
 
 # Configure SSH for root access with key authentication
 echo "Configuring SSH..."
@@ -1904,6 +2137,66 @@ echo "Dure VM initialization completed at $(date)"
         name.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     }
+}
+
+/// Validate disk size (10 GB minimum, 65536 GB maximum)
+fn validate_disk_size(input: &str) -> Result<u32, String> {
+    let size = input
+        .parse::<u32>()
+        .map_err(|_| "Must be a valid number".to_string())?;
+
+    if size < 10 {
+        return Err("Minimum disk size is 10 GB".to_string());
+    }
+
+    if size > 65536 {
+        return Err("Maximum disk size is 65536 GB".to_string());
+    }
+
+    Ok(size)
+}
+
+/// Validate swap size input
+///
+/// Returns parsed value in GB, or error message.
+/// Empty string returns Ok(0) meaning automatic detection.
+fn validate_swap_size(input: &str) -> Result<u32, String> {
+    if input.is_empty() {
+        return Ok(0); // 0 means auto
+    }
+
+    let size = input.parse::<u32>()
+        .map_err(|_| "Must be a number".to_string())?;
+
+    if size > 32 {
+        return Err("Maximum 32 GB".to_string());
+    }
+
+    Ok(size)
+}
+
+/// Get fallback images when API call fails
+fn get_fallback_images() -> Vec<Image> {
+    vec![
+        Image {
+            name: "debian-13-latest".to_string(),
+            description: Some("Debian 13 (Bookworm) - latest".to_string()),
+            self_link: "projects/debian-cloud/global/images/family/debian-13".to_string(),
+            creation_timestamp: chrono::Utc::now().to_rfc3339(),
+            architecture: Some("X86_64".to_string()),
+            family: Some("debian-13".to_string()),
+            deprecated: None,
+        },
+        Image {
+            name: "ubuntu-2404-lts-latest".to_string(),
+            description: Some("Ubuntu 24.04 LTS - latest".to_string()),
+            self_link: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts".to_string(),
+            creation_timestamp: chrono::Utc::now().to_rfc3339(),
+            architecture: Some("X86_64".to_string()),
+            family: Some("ubuntu-2404-lts".to_string()),
+            deprecated: None,
+        },
+    ]
 }
 
 #[cfg(test)]
@@ -2093,7 +2386,7 @@ mod tests {
     #[test]
     fn test_generate_startup_script() {
         let ssh_key = "ssh-ed25519 AAAAC3... test@example.com";
-        let script = GcpWizard::generate_startup_script(ssh_key);
+        let script = GcpWizard::generate_startup_script(ssh_key, None); // None = automatic swap
 
         // Should be a bash script
         assert!(script.starts_with("#!/bin/bash"));
@@ -2107,5 +2400,150 @@ mod tests {
 
         // Should create swap
         assert!(script.contains("swap"));
+    }
+
+    #[test]
+    fn test_validate_disk_size() {
+        // Valid sizes
+        assert!(validate_disk_size("10").is_ok());
+        assert_eq!(validate_disk_size("10").unwrap(), 10);
+        assert!(validate_disk_size("100").is_ok());
+        assert!(validate_disk_size("65536").is_ok());
+
+        // Invalid: too small
+        assert_eq!(
+            validate_disk_size("9").unwrap_err(),
+            "Minimum disk size is 10 GB"
+        );
+
+        // Invalid: too large
+        assert_eq!(
+            validate_disk_size("65537").unwrap_err(),
+            "Maximum disk size is 65536 GB"
+        );
+
+        // Invalid: not a number
+        assert_eq!(
+            validate_disk_size("abc").unwrap_err(),
+            "Must be a valid number"
+        );
+        assert!(validate_disk_size("").is_err());
+        assert!(validate_disk_size("-5").is_err());
+    }
+
+    #[test]
+    fn test_with_platform_context() {
+        use crate::api::gcp::oauth::OAuthResult;
+
+        let oauth = OAuthResult {
+            access_token: "test-token".to_string(),
+            refresh_token: "test-refresh".to_string(),
+            expires_at: 12345,
+        };
+
+        let wizard = GcpWizard::with_platform_context(
+            "TestPlatform".to_string(),
+            "test-project".to_string(),
+            oauth.clone(),
+        );
+
+        assert_eq!(wizard.platform_name, "TestPlatform");
+        assert_eq!(wizard.selected_project_id, "test-project");
+        assert!(wizard.oauth_result.is_some());
+        assert!(wizard.skip_account_project_steps);
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+    }
+
+    #[test]
+    fn test_show_preserves_state_when_skipping() {
+        use crate::api::gcp::oauth::OAuthResult;
+
+        let oauth = OAuthResult {
+            access_token: "test".to_string(),
+            refresh_token: "test".to_string(),
+            expires_at: 12345,
+        };
+
+        let mut wizard =
+            GcpWizard::with_platform_context("Test".to_string(), "project".to_string(), oauth);
+
+        // State starts at ConfigureServer
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+
+        wizard.show();
+
+        // State should remain ConfigureServer (not reset to ConnectAccount)
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConfigureServer)
+        );
+    }
+
+    #[test]
+    fn test_show_resets_state_when_full_flow() {
+        let mut wizard = GcpWizard::new("Test".to_string());
+        wizard.state = WizardState::ConfigureServer;
+
+        wizard.show();
+
+        // State should reset to ConnectAccount for full flow
+        assert_eq!(
+            std::mem::discriminant(&wizard.state),
+            std::mem::discriminant(&WizardState::ConnectAccount)
+        );
+    }
+
+    #[test]
+    fn test_get_fallback_images() {
+        let images = get_fallback_images();
+
+        assert_eq!(images.len(), 2);
+
+        // Check Debian image
+        assert_eq!(images[0].family.as_deref(), Some("debian-13"));
+        assert_eq!(
+            images[0].self_link,
+            "projects/debian-cloud/global/images/family/debian-13"
+        );
+
+        // Check Ubuntu image
+        assert_eq!(images[1].family.as_deref(), Some("ubuntu-2404-lts"));
+        assert_eq!(
+            images[1].self_link,
+            "projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts"
+        );
+    }
+
+    #[test]
+    fn test_validate_swap_size_empty() {
+        assert_eq!(validate_swap_size(""), Ok(0));
+    }
+
+    #[test]
+    fn test_validate_swap_size_valid_numbers() {
+        assert_eq!(validate_swap_size("0"), Ok(0));
+        assert_eq!(validate_swap_size("4"), Ok(4));
+        assert_eq!(validate_swap_size("8"), Ok(8));
+        assert_eq!(validate_swap_size("16"), Ok(16));
+        assert_eq!(validate_swap_size("32"), Ok(32));
+    }
+
+    #[test]
+    fn test_validate_swap_size_too_large() {
+        assert!(validate_swap_size("33").is_err());
+        assert!(validate_swap_size("100").is_err());
+    }
+
+    #[test]
+    fn test_validate_swap_size_non_numeric() {
+        assert!(validate_swap_size("abc").is_err());
+        assert!(validate_swap_size("4.5").is_err());
+        assert!(validate_swap_size("-1").is_err());
     }
 }
