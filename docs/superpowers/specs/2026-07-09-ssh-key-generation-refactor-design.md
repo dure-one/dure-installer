@@ -1,0 +1,524 @@
+# SSH Key Generation Refactor: Replace go-webauthn-client with ed25519-dalek
+
+**Date:** 2026-07-09  
+**Status:** Approved  
+**Component:** Platform Management (GCP Wizard)
+
+## Overview
+
+### Goal
+
+Replace Go binary dependency (`go-webauthn-client`) with pure Rust (`ed25519-dalek`) for SSH Ed25519 key generation in the GCP platform wizard.
+
+### Motivation
+
+The current implementation spawns an external Go binary process to generate Ed25519 SSH keys. This introduces unnecessary complexity and external dependencies for a cryptographic operation that can be handled entirely in Rust using existing project dependencies.
+
+### Scope
+
+**In Scope:**
+- Replace key generation in `mobile/src/ui_dlg/platform_gcp.rs::generate_ssh_key_pair()`
+- Update test documentation to remove Go binary requirement
+- Maintain identical OpenSSH format output
+
+**Out of Scope:**
+- WebAuthn authentication (continues using `go-webauthn-client`)
+- OpenSSH format conversion logic (unchanged, already proven)
+- KeePass keyfile generation (already uses `ed25519-dalek`)
+- Any other cryptographic operations
+
+### Impact
+
+**Benefits:**
+- Eliminates external process spawning for SSH key generation
+- Removes Go binary requirement from SSH key generation workflow
+- Simplifies testing (no PATH setup needed)
+- Improves consistency (aligns with keyring.rs pattern)
+- Reduces attack surface (fewer external processes)
+
+**Non-Impact:**
+- WebAuthn functionality preserved (still uses `go-webauthn-client`)
+- OpenSSH format compatibility maintained
+- Public API unchanged
+- Return signature unchanged
+- Generated key format identical
+
+## Architecture
+
+### Current Implementation
+
+```
+GCP Wizard UI
+    ↓
+generate_ssh_key_pair()
+    ↓
+GoWebAuthnClient::new()
+    ↓
+spawn "go-webauthn-cli" binary
+    ↓
+JSON-RPC: ed25519_generate_key()
+    ↓
+Return keypair (private 32 bytes, public 32 bytes)
+    ↓
+ed25519_to_openssh_private()
+ed25519_to_openssh_public()
+    ↓
+Return (PEM, OpenSSH, raw private, raw public)
+```
+
+### New Implementation
+
+```
+GCP Wizard UI
+    ↓
+generate_ssh_key_pair()
+    ↓
+SigningKey::generate(&mut OsRng)
+    ↓
+to_bytes() → 32-byte private key seed
+verifying_key().to_bytes() → 32-byte public key
+    ↓
+ed25519_to_openssh_private()
+ed25519_to_openssh_public()
+    ↓
+Return (PEM, OpenSSH, raw private, raw public)
+```
+
+### Component Diagram
+
+```
+┌─────────────────────────────────────────┐
+│   mobile/src/ui_dlg/platform_gcp.rs     │
+│                                         │
+│  ┌───────────────────────────────────┐ │
+│  │ GcpWizard                         │ │
+│  │                                   │ │
+│  │  generate_ssh_key_pair()          │ │
+│  │    ├─ ed25519_dalek::SigningKey  │ │  ← NEW
+│  │    ├─ rand::OsRng                │ │  ← NEW
+│  │    ├─ ed25519_to_openssh_private │ │  (unchanged)
+│  │    └─ ed25519_to_openssh_public  │ │  (unchanged)
+│  └───────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+## Implementation Details
+
+### File Changes
+
+**File:** `mobile/src/ui_dlg/platform_gcp.rs`
+
+**Function:** `generate_ssh_key_pair()` (lines 1784-1813)
+
+### Code Changes
+
+#### Before (lines 1789-1794)
+
+```rust
+use go_webauthn_client::GoWebAuthnClient;
+
+let mut client = GoWebAuthnClient::new(None)
+    .map_err(|e| format!("Failed to create WebAuthn client: {}", e))?;
+
+let keypair = client
+    .ed25519_generate_key()
+    .map_err(|e| format!("Failed to generate key: {}", e))?;
+```
+
+#### After
+
+```rust
+use ed25519_dalek::SigningKey;
+use rand::rngs::OsRng;
+
+let signing_key = SigningKey::generate(&mut OsRng);
+let verifying_key = signing_key.verifying_key();
+
+let private_key_bytes = signing_key.to_bytes().to_vec();
+let public_key_bytes = verifying_key.to_bytes().to_vec();
+```
+
+#### Update OpenSSH Conversion Calls (lines 1797-1806)
+
+**Before:**
+```rust
+let private_key = Self::ed25519_to_openssh_private(&keypair.private_key, &keypair.public_key)?;
+let public_key = Self::ed25519_to_openssh_public(&keypair.public_key)?;
+
+Ok((
+    private_key,
+    public_key,
+    keypair.private_key,
+    keypair.public_key,
+))
+```
+
+**After:**
+```rust
+let private_key = Self::ed25519_to_openssh_private(&private_key_bytes, &public_key_bytes)?;
+let public_key = Self::ed25519_to_openssh_public(&public_key_bytes)?;
+
+Ok((
+    private_key,
+    public_key,
+    private_key_bytes,
+    public_key_bytes,
+))
+```
+
+### Key Generation Details
+
+**`SigningKey::generate(&mut OsRng)`:**
+- Uses OS-provided CSPRNG (cryptographically secure pseudorandom number generator)
+- Generates 32-byte Ed25519 private key seed
+- Deterministically derives public key from private key
+- Platform support: Linux, macOS, Windows, Android (via getrandom crate)
+- OpenBSD: Uses `getentropy(2)` system call
+
+**Key Format:**
+- Private key seed: 32 bytes (Ed25519 standard)
+- Public key: 32 bytes (Ed25519 standard)
+- Identical to keys generated by `go-webauthn-cli`
+
+### Import Changes
+
+**Remove:**
+```rust
+use go_webauthn_client::GoWebAuthnClient;
+```
+
+**Add:**
+```rust
+use ed25519_dalek::SigningKey;
+use rand::rngs::OsRng;
+```
+
+## Data Flow
+
+### Key Generation Flow
+
+```
+1. User clicks "Add SSH Key" in GCP wizard
+     ↓
+2. UI calls generate_ssh_key_pair()
+     ↓
+3. SigningKey::generate(&mut OsRng)
+     ├─ OsRng reads from /dev/urandom (Unix) or BCryptGenRandom (Windows)
+     ├─ Generate 32-byte random seed
+     └─ Derive public key via Ed25519 curve operations
+     ↓
+4. Extract bytes
+     ├─ signing_key.to_bytes() → Vec<u8> (32 bytes)
+     └─ verifying_key.to_bytes() → Vec<u8> (32 bytes)
+     ↓
+5. Convert to OpenSSH formats (unchanged)
+     ├─ ed25519_to_openssh_private() → PEM format
+     └─ ed25519_to_openssh_public() → ssh-ed25519 format
+     ↓
+6. Return tuple: (private_pem, public_openssh, raw_private, raw_public)
+     ↓
+7. UI displays public key, stores private key
+```
+
+## Error Handling
+
+### Current Error Cases (Preserved)
+
+1. **OpenSSH Conversion Errors:**
+   - Invalid key length (not 32 bytes)
+   - Format encoding errors
+   - **Handling:** Return `Err(String)` with descriptive message
+
+2. **WASM Platform:**
+   - SSH key generation not supported
+   - **Handling:** Return `Err("SSH key generation not supported on WASM")`
+
+### New Error Cases
+
+**None.** Key generation with `SigningKey::generate()` is infallible on supported platforms.
+
+### Error Handling Philosophy
+
+- Keep existing error messages and format
+- No new error cases introduced
+- OsRng failure would panic (acceptable: system entropy failure is unrecoverable)
+
+## Testing Strategy
+
+### Unit Tests
+
+**Update Existing Test:** `test_generate_ssh_key_pair` (line 2355)
+
+**Changes:**
+- Remove comment: `// Run with: PATH="$PWD/crates/go-webauthn/bin:$PATH" cargo test ...`
+- Keep all existing assertions unchanged
+
+**Assertions (unchanged):**
+```rust
+// Private key format
+assert!(private_key.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----"));
+assert!(private_key.ends_with("-----END OPENSSH PRIVATE KEY-----\n"));
+
+// Public key format
+assert!(public_key.starts_with("ssh-ed25519 "));
+assert!(public_key.ends_with(" dure-vm-key"));
+
+// Raw key lengths
+assert_eq!(raw_public.len(), 32, "Public key should be 32 bytes");
+// raw_private can be 32 or 64 bytes (seed or seed+public)
+```
+
+**Test Command:**
+
+Before:
+```bash
+PATH="$PWD/crates/go-webauthn/bin:$PATH" cargo test test_generate_ssh_key_pair -- --ignored --nocapture
+```
+
+After:
+```bash
+cargo test test_generate_ssh_key_pair -- --nocapture
+```
+
+### Manual Verification
+
+**Test Plan:**
+
+1. **Generate Key in UI:**
+   ```
+   - Open Dure desktop app
+   - Go to Platform tab → GCP
+   - Click "Add SSH Key"
+   - Verify key appears in UI
+   ```
+
+2. **Verify OpenSSH Format:**
+   ```bash
+   # Save generated private key to file
+   echo "<private_key_pem>" > test_key
+   chmod 600 test_key
+   
+   # Verify with ssh-keygen
+   ssh-keygen -l -f test_key
+   # Expected: "256 SHA256:... dure-vm-key (ED25519)"
+   ```
+
+3. **Test SSH Connection:**
+   ```bash
+   # Add public key to GCP VM
+   # Attempt SSH connection
+   ssh -i test_key user@<gcp-vm-ip>
+   # Expected: Successful authentication
+   ```
+
+4. **Cross-Platform Testing:**
+   - Linux x86_64 (musl)
+   - macOS (Intel + Apple Silicon)
+   - Windows x86_64
+   - OpenBSD (development platform)
+
+### Compatibility Testing
+
+**Objective:** Verify keys generated by new implementation work identically to old implementation.
+
+**Method:**
+1. Generate key with old implementation (save before refactor)
+2. Generate key with new implementation (after refactor)
+3. Both keys should:
+   - Have identical format structure
+   - Work with `ssh-keygen -l`
+   - Successfully authenticate to test VM
+   - Be accepted by GCP Compute Engine
+
+## Dependencies
+
+### Existing Dependencies (No Changes)
+
+**Already in `mobile/Cargo.toml`:**
+- `ed25519-dalek = "2"` (line 82)
+- `rand` (transitive, used in keyring.rs)
+
+### Dependencies NOT Removed
+
+**`go-webauthn-client` remains required for:**
+- WebAuthn passkey authentication (`mobile/src/wss/server/webauthn.rs`)
+  - User registration (passkey signup)
+  - User authentication (passkey login)
+  - Passwordless login (discoverable credentials)
+  - Multi-factor authentication (MFA)
+
+### Import Changes Summary
+
+**File:** `mobile/src/ui_dlg/platform_gcp.rs`
+
+**Remove:**
+- `use go_webauthn_client::GoWebAuthnClient;` (inside `generate_ssh_key_pair()`)
+
+**Add:**
+- `use ed25519_dalek::SigningKey;`
+- `use rand::rngs::OsRng;`
+
+## Compatibility & Migration
+
+### Generated Key Compatibility
+
+**Format:** OpenSSH standard Ed25519 keys (RFC 4253 + OpenSSH extensions)
+
+**Compatibility:**
+- ✅ Identical to keys generated by `ssh-keygen -t ed25519`
+- ✅ Identical to keys generated by `go-webauthn-cli`
+- ✅ Compatible with GCP Compute Engine
+- ✅ Compatible with all SSH servers supporting Ed25519
+
+### Migration Plan
+
+**No migration required.**
+
+- Generated keys are format-identical
+- Existing keys in GCP VMs remain valid
+- No database schema changes
+- No configuration changes
+- Users can continue using existing keys
+
+### Rollback Plan
+
+If issues arise:
+1. Revert single commit
+2. No data cleanup needed
+3. No key regeneration needed
+
+## Security Considerations
+
+### Cryptographic Strength
+
+**Before:**
+- Go's `crypto/ed25519` package
+- Uses system CSPRNG via `crypto/rand.Reader`
+
+**After:**
+- `ed25519-dalek` v2 (pure Rust, audited)
+- Uses `rand` crate with `OsRng`
+- Platform RNG sources:
+  - Linux: `getrandom(2)` syscall
+  - OpenBSD: `getentropy(2)` syscall
+  - macOS: `SecRandomCopyBytes`
+  - Windows: `BCryptGenRandom`
+
+**Both implementations are cryptographically equivalent.**
+
+### Attack Surface Reduction
+
+**Before:**
+- Spawns external process (`go-webauthn-cli`)
+- Inter-process communication (stdin/stdout)
+- JSON-RPC serialization
+- Binary must be in PATH or bundled
+
+**After:**
+- In-process key generation
+- No IPC
+- No external binary dependency
+- Smaller attack surface
+
+### Audit Trail
+
+- `ed25519-dalek` is widely audited
+- Used by Signal, Tor, and other security-critical projects
+- No known vulnerabilities in Ed25519 algorithm
+
+## Implementation Checklist
+
+- [ ] Replace key generation code in `generate_ssh_key_pair()`
+- [ ] Update import statements
+- [ ] Remove test comment about Go binary requirement
+- [ ] Run unit tests: `cargo test test_generate_ssh_key_pair`
+- [ ] Manual verification: Generate key in UI, test with `ssh-keygen`
+- [ ] Test SSH connection to GCP VM
+- [ ] Cross-platform builds (Linux, macOS, Windows, OpenBSD)
+- [ ] Update this design doc status to "Implemented"
+
+## Future Considerations
+
+### Potential Follow-up Work (Out of Scope)
+
+1. **Extract Shared Ed25519 Module:**
+   - Create `mobile/src/crypto/ed25519.rs`
+   - Share between SSH key generation and KeePass keyfile generation
+   - Benefit: DRY principle, centralized crypto operations
+
+2. **Support Other SSH Key Types:**
+   - RSA (via `rsa` crate)
+   - ECDSA P-256 (via `p256` crate)
+   - Benefit: More key type options for users
+
+3. **Key Encryption:**
+   - Support passphrase-encrypted private keys
+   - OpenSSH format with AES-256-CTR + bcrypt KDF
+   - Benefit: Defense in depth for stored keys
+
+4. **Hardware Key Support:**
+   - YubiKey/Nitrokey via PKCS#11
+   - Benefit: Private key never leaves hardware
+
+None of these are required for this refactor.
+
+## Appendix
+
+### Ed25519 Key Format Reference
+
+**Private Key Seed:** 32 bytes (256 bits)
+- Generated from CSPRNG
+- Deterministically derives public key
+
+**Public Key:** 32 bytes (256 bits)
+- Derived from private key via Ed25519 curve operations
+- Safe to share publicly
+
+**OpenSSH Private Key Format:**
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+<base64-encoded binary structure>
+-----END OPENSSH PRIVATE KEY-----
+```
+
+Binary structure (see RFC 4253 + OpenSSH PROTOCOL.key):
+- Magic: "openssh-key-v1\0"
+- Cipher: "none" (unencrypted)
+- KDF: "none"
+- Public key blob
+- Private key section (with padding)
+
+**OpenSSH Public Key Format:**
+```
+ssh-ed25519 <base64-encoded-blob> <comment>
+```
+
+Blob structure:
+- Algorithm name: "ssh-ed25519" (length-prefixed)
+- Public key bytes: 32 bytes (length-prefixed)
+
+### Code References
+
+**Files Modified:**
+- `mobile/src/ui_dlg/platform_gcp.rs` (lines 1787-1806)
+
+**Files Unchanged:**
+- `mobile/src/ui_dlg/platform_gcp.rs::ed25519_to_openssh_private()` (lines 1815-1907)
+- `mobile/src/ui_dlg/platform_gcp.rs::ed25519_to_openssh_public()` (lines 1916-1938)
+- `mobile/src/calc/keyring.rs` (Ed25519 usage for KeePass)
+- `mobile/src/wss/server/webauthn.rs` (WebAuthn authentication)
+
+**Dependencies:**
+- `ed25519-dalek = "2"` (`mobile/Cargo.toml` line 82)
+- `go-webauthn-client` (`mobile/Cargo.toml` line 99, still required)
+
+### References
+
+- [RFC 4253: SSH Transport Layer Protocol](https://datatracker.ietf.org/doc/html/rfc4253)
+- [OpenSSH PROTOCOL.key](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.key)
+- [ed25519-dalek crate documentation](https://docs.rs/ed25519-dalek/)
+- [RFC 8032: Edwards-Curve Digital Signature Algorithm (EdDSA)](https://datatracker.ietf.org/doc/html/rfc8032)
+
+---
+
+**End of Design Document**
