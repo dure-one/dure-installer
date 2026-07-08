@@ -1,0 +1,8 @@
+/home/wj/work/dure/.claude/worktrees/feature+gcp-platform-project-refactor/crates/asyncapi-gen/target/debug/deps/asyncapi_rust_codegen-c7846af897b0629f.d: /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/lib.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_attrs.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_spec_attrs.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/serde_attrs.rs
+
+/home/wj/work/dure/.claude/worktrees/feature+gcp-platform-project-refactor/crates/asyncapi-gen/target/debug/deps/libasyncapi_rust_codegen-c7846af897b0629f.so: /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/lib.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_attrs.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_spec_attrs.rs /home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/serde_attrs.rs
+
+/home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/lib.rs:
+/home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_attrs.rs:
+/home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/asyncapi_spec_attrs.rs:
+/home/wj/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/asyncapi-rust-codegen-0.2.0/src/serde_attrs.rs:

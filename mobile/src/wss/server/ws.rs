@@ -121,7 +121,7 @@ where
                             let response = if msg.is_text() {
                                 let text = msg.to_text().unwrap();
 
-                                match serde_json::from_str::<crate::site::messages::ClientMessage>(text) {
+                                match serde_json::from_str::<dure_messages::ClientMessage>(text) {
                                     Ok(client_msg) => {
                                         // Handle message and get response
                                         match super::handlers::handle_client_message(
@@ -142,8 +142,8 @@ where
                                             Err(e) => {
                                                 eprintln!("[WS] Handler error: {}", e);
                                                 // Send error response
-                                                let error = crate::site::messages::ServerMessage::Error(
-                                                    crate::site::messages::ErrorResponse {
+                                                let error = dure_messages::ServerMessage::Error(
+                                                    dure_messages::ErrorResponse {
                                                         code: "HANDLER_ERROR".to_string(),
                                                         message: e.to_string(),
                                                         request_id: None,
@@ -157,8 +157,8 @@ where
                                     Err(e) => {
                                         eprintln!("[WS] Failed to parse message: {}", e);
                                         // Send parse error
-                                        let error = crate::site::messages::ServerMessage::Error(
-                                            crate::site::messages::ErrorResponse {
+                                        let error = dure_messages::ServerMessage::Error(
+                                            dure_messages::ErrorResponse {
                                                 code: "PARSE_ERROR".to_string(),
                                                 message: format!("Invalid message format: {}", e),
                                                 request_id: None,

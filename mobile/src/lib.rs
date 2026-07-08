@@ -12,7 +12,6 @@ use directories::ProjectDirs;
 
 // Core modules
 pub mod api;
-pub mod asyncapi_spec;
 pub mod attestation;
 pub mod calc;
 pub mod i18n;

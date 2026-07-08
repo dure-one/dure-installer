@@ -2,13 +2,14 @@
 resolver = "2"
 members = [
     "mobile",
+    "crates/dure-messages",
+    "crates/dure-asyncapi-gen",
     "crates/darkhttpd-sys",
     "crates/winhttpd-sys",
     "crates/go-webauthn-client",
     "crates/windows-installer",
 ]
 exclude = [
-    "crates/asyncapi-gen",  # Standalone workspace for AsyncAPI generation
     "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
 ]
 

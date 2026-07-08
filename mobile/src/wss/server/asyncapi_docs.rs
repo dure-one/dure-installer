@@ -1,6 +1,6 @@
 //! Embedded AsyncAPI HTML documentation.
 //!
-//! At **compile time** the contents of `crates/asyncapi-gen/docs/api-docs/` are baked into
+//! At **compile time** the contents of `crates/dure-asyncapi-gen/docs/api-docs/` are baked into
 //! the binary via `include_bytes!`.  At **runtime** the server first looks for the
 //! files on disk (convenient during development); if the directory is absent or the
 //! file is missing it falls back to the embedded copy automatically.
@@ -8,7 +8,7 @@
 //! To regenerate the docs (e.g. after changing `docs/asyncapi.json`):
 //!
 //! ```sh
-//! cd crates/asyncapi-gen && asyncapi generate fromTemplate \
+//! cd crates/dure-asyncapi-gen && asyncapi generate fromTemplate \
 //!     ../../docs/asyncapi.json @asyncapi/html-template \
 //!     -o docs/api-docs --force-write
 //! ```
@@ -17,17 +17,17 @@
 
 // Paths are relative to this source file's location:
 //   mobile/src/wss/server/asyncapi_docs.rs
-//   → ../../../../crates/asyncapi-gen/docs/api-docs/
+//   → ../../../../crates/dure-asyncapi-gen/docs/api-docs/
 
 static INDEX_HTML: &[u8] =
-    include_bytes!("../../../../crates/asyncapi-gen/docs/api-docs/index.html");
+    include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/index.html");
 static ASYNCAPI_CSS: &[u8] =
-    include_bytes!("../../../../crates/asyncapi-gen/docs/api-docs/css/asyncapi.min.css");
+    include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/css/asyncapi.min.css");
 static GLOBAL_CSS: &[u8] =
-    include_bytes!("../../../../crates/asyncapi-gen/docs/api-docs/css/global.min.css");
-static APP_JS: &[u8] = include_bytes!("../../../../crates/asyncapi-gen/docs/api-docs/js/app.js");
+    include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/css/global.min.css");
+static APP_JS: &[u8] = include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/js/app.js");
 static ASYNCAPI_UI_JS: &[u8] =
-    include_bytes!("../../../../crates/asyncapi-gen/docs/api-docs/js/asyncapi-ui.min.js");
+    include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/js/asyncapi-ui.min.js");
 
 /// Serve an AsyncAPI docs file.
 ///
