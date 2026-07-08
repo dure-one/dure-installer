@@ -4,8 +4,6 @@ members = [
     "mobile",
     "crates/dure-messages",
     "crates/dure-asyncapi-gen",
-    "crates/darkhttpd-sys",
-    "crates/winhttpd-sys",
     "crates/go-webauthn-client",
     "crates/windows-installer",
 ]
