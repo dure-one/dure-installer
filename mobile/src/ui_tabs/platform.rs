@@ -13,9 +13,10 @@ use crate::ui_dlg::platform_gcp::GcpWizard;
 /// Platform row data for data table
 #[derive(Clone, Debug)]
 struct PlatformRow {
-    // Identity
-    platform_name: String, // Internal platform name from config
-    platform_type: String, // "GCP"
+    // Identity (CHANGED: project_id replaces platform_name)
+    project_id: String,              // GCP project ID (platform identifier)
+    project_display_name: String,    // Display name (may differ from ID)
+    platform_type: String,           // "GCP"
 
     // Connection state flags (for Steps column)
     gcp_connected: bool,    // Has OAuth access token
@@ -26,15 +27,18 @@ struct PlatformRow {
 
     // Drawer content data
     email: Option<String>,      // Connected Google account
-    total_project_count: usize, // Fetched from GCP API
+    total_project_count: usize, // Cached from config (not 0!)
     selected_project_id: Option<String>,
     vm_name: Option<String>,            // First VM name
-    vm_external_ip: Option<String>,     // First VM external IP
+    vm_external_ip: Option<String>,     // First VM external IP (from cache or VM)
     ssh_private_key: Option<String>,    // SSH private key from KeePass
     ssh_public_key: Option<String>,     // Derived SSH public key for verification
     ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
-    firewall_status: String,            // "✓ Whitelisted (IP)" or "✗ Not whitelisted"
+    firewall_status: String,            // Cached from config
     ssh_status: String,                 // "✓ Ready" or "? No external IP"
+
+    // NEW: Status cache metadata
+    last_refresh_time: Option<i64>,     // For staleness indicator
 
     // Action button state
     has_vm: bool,            // Enable/disable VM operation buttons
@@ -44,17 +48,17 @@ struct PlatformRow {
 /// Actions that can be triggered from platform table rows
 #[derive(Debug, Clone)]
 enum PlatformAction {
-    UpdateFirewall(String), // platform_name
-    SelectProject(String),  // platform_name
+    UpdateFirewall(String), // project_id
+    SelectProject(String),  // project_id
     DeleteVM {
-        platform_name: String,
+        project_id: String,  // CHANGED from platform_name
         vm_name: String,
         vm_zone: String,
     },
-    RegenVM(String),        // platform_name
-    RestartVM(String),      // platform_name
-    DeletePlatform(String), // platform_name
-    Refresh,                // Refresh table data
+    RegenVM(String),        // project_id
+    RestartVM(String),      // project_id
+    DeletePlatform(String), // project_id
+    Refresh(String),        // NEW: project_id for manual refresh
 }
 
 /// Platform tab state
@@ -685,19 +689,36 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     ui.add_space(8.0);
 
-    // Level 1: Email + project count
+    // Level 1: Email + project count (from cache!)
     if let Some(email) = &row.email {
         ui.label(format!(
-            "{} ({} projects total)",
+            "{} ({} projects in account)",
             email, row.total_project_count
         ));
     } else {
         ui.label("Not connected");
     }
 
-    // Level 2: Selected project
+    // Level 2: Selected project (show both display name and ID)
     if let Some(project_id) = &row.selected_project_id {
-        ui.label(format!("  └─ Project: {} (selected)", project_id));
+        ui.label(format!("  └─ Project: {} ({})", row.project_display_name, project_id));
+
+        // NEW: Show staleness indicator
+        if let Some(last_refresh) = row.last_refresh_time {
+            let elapsed = chrono::Utc::now().timestamp() - last_refresh;
+            let time_str = if elapsed < 60 {
+                "just now".to_string()
+            } else if elapsed < 3600 {
+                format!("{} min ago", elapsed / 60)
+            } else if elapsed < 86400 {
+                format!("{} hours ago", elapsed / 3600)
+            } else {
+                format!("{} days ago", elapsed / 86400)
+            };
+            ui.label(format!("        • Last refreshed: {}", time_str));
+        } else {
+            ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "        • Status never refreshed");
+        }
 
         // Level 3: VM details
         if let Some(vm_name) = &row.vm_name {
@@ -1393,9 +1414,10 @@ impl PlatformTab {
                             match self.get_valid_access_token(&mut app_config, idx, &config_path) {
                                 Ok(token) => Some(token),
                                 Err(e) => {
+                                    let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
                                     eprintln!(
-                                        "Failed to get valid access token for platform '{}': {}",
-                                        app_config.platforms[idx].name, e
+                                        "Failed to get valid access token for project '{}': {}",
+                                        project_id, e
                                     );
                                     None
                                 }
@@ -1417,12 +1439,14 @@ impl PlatformTab {
                         let firewall_updated = firewall_status_str.starts_with("✓");
 
                         // Compute SSH status from cached results only (no blocking)
+                        let project_id_key = platform.gcp_selected_project_id.as_ref()
+                            .map(|s| s.as_str()).unwrap_or("unknown");
                         let ssh_status_str =
-                            compute_ssh_status(platform, self.ssh_test_results.get(&platform.name));
+                            compute_ssh_status(platform, self.ssh_test_results.get(project_id_key));
 
                         // ssh_ready should match ssh_status: only true if actually connected
                         let ssh_ready =
-                            if let Some(result) = self.ssh_test_results.get(&platform.name) {
+                            if let Some(result) = self.ssh_test_results.get(project_id_key) {
                                 matches!(result, Ok(conn_result) if conn_result.success)
                             } else {
                                 false
@@ -1440,7 +1464,11 @@ impl PlatformTab {
                             };
 
                         let row = PlatformRow {
-                            platform_name: platform.name.clone(),
+                            // NEW: Use project_id as identifier
+                            project_id: platform.gcp_selected_project_id.clone()
+                                .unwrap_or_else(|| "unknown".to_string()),
+                            project_display_name: platform.gcp_selected_project_id.clone()
+                                .unwrap_or_else(|| "unknown".to_string()),
                             platform_type: "GCP".to_string(),
 
                             // Compute state flags
@@ -1452,18 +1480,29 @@ impl PlatformTab {
 
                             // Extract drawer data
                             email: platform.gcp_connected_email.clone(),
-                            total_project_count: 0, // Will be fetched in background
+
+                            // FIX: Use cached project count (not 0!)
+                            total_project_count: platform.cached_total_project_count.unwrap_or(0),
+
                             selected_project_id: platform.gcp_selected_project_id.clone(),
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
-                            vm_external_ip: platform
-                                .vms
-                                .first()
-                                .and_then(|vm| vm.external_ip.clone()),
+
+                            // Use cached external IP if available, fall back to VM data
+                            vm_external_ip: platform.cached_vm_external_ip.clone()
+                                .or_else(|| platform.vms.first().and_then(|vm| vm.external_ip.clone())),
+
                             ssh_private_key,
                             ssh_public_key,
                             ssh_keyring_domain,
-                            firewall_status: firewall_status_str,
+
+                            // Use cached firewall status
+                            firewall_status: platform.cached_firewall_status.clone()
+                                .unwrap_or_else(|| firewall_status_str),
+
                             ssh_status: ssh_status_str,
+
+                            // NEW: Cache metadata
+                            last_refresh_time: platform.last_status_refresh,
 
                             // Action button state
                             has_vm: !platform.vms.is_empty(),
@@ -1475,16 +1514,17 @@ impl PlatformTab {
                         // Trigger SSH connection test in background if VM has external IP
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            let platform_name = platform.name.clone();
+                            let project_id = platform.gcp_selected_project_id.clone()
+                                .unwrap_or_else(|| "unknown".to_string());
                             if platform
                                 .vms
                                 .first()
                                 .and_then(|vm| vm.external_ip.as_ref())
                                 .is_some()
-                                && !self.ssh_test_results.contains_key(&platform_name)
-                                && !self.ssh_test_promises.contains_key(&platform_name)
+                                && !self.ssh_test_results.contains_key(&project_id)
+                                && !self.ssh_test_promises.contains_key(&project_id)
                             {
-                                self.execute_test_connection(platform_name);
+                                self.execute_test_connection(project_id);
                             }
                         }
                     }
@@ -2287,13 +2327,13 @@ impl PlatformTab {
     /// Execute SSH connection test for a platform's VM
     #[cfg(not(target_arch = "wasm32"))]
     fn execute_test_connection(&mut self, platform_name: String) {
-        // Load config and find the VM for this platform
+        // Load config and find the VM for this platform (platform_name is actually project_id)
         let (vm_host, keyring_domain) = match load_config() {
             Ok((app_config, _)) => {
                 let platform = app_config
                     .platforms
                     .iter()
-                    .find(|p| p.name == platform_name);
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name));
 
                 if let Some(platform) = platform {
                     if let Some(vm) = platform.vms.first() {
