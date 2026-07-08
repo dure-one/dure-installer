@@ -14,6 +14,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -54,6 +58,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -94,6 +102,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -137,6 +149,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -180,6 +196,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -220,6 +240,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -263,6 +287,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -303,6 +331,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -346,6 +378,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -386,6 +422,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -429,6 +469,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -469,6 +513,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -512,6 +560,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -552,6 +604,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -595,6 +651,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -638,6 +698,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -681,6 +745,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -721,6 +789,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -761,6 +833,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -804,6 +880,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -844,6 +924,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -887,6 +971,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -927,6 +1015,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -970,6 +1062,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1010,6 +1106,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1053,6 +1153,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1093,6 +1197,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1136,6 +1244,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1176,6 +1288,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1219,6 +1335,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1259,6 +1379,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1302,6 +1426,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1342,6 +1470,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1385,6 +1517,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1425,6 +1561,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1468,6 +1608,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1508,6 +1652,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1551,6 +1699,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1591,6 +1743,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1634,6 +1790,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1677,6 +1837,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1717,6 +1881,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1757,6 +1925,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1800,6 +1972,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1840,6 +2016,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1883,6 +2063,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -1923,6 +2107,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -1966,6 +2154,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2009,6 +2201,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2049,6 +2245,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2092,6 +2292,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2132,6 +2336,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2175,6 +2383,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2218,6 +2430,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2258,6 +2474,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2298,6 +2518,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2341,6 +2565,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2381,6 +2609,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2424,6 +2656,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2464,6 +2700,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2507,6 +2747,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2550,6 +2794,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2590,6 +2838,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2630,6 +2882,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2673,6 +2929,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthLoginRequest'
         - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
         - $ref: '#/components/schemas/HostingInitRequest'
         - $ref: '#/components/schemas/HostingShowRequest'
         - $ref: '#/components/schemas/HostingSelectRequest'
@@ -2713,6 +2973,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2756,6 +3020,10 @@ components:
         oneOf:
         - $ref: '#/components/schemas/AuthResponse'
         - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
         - $ref: '#/components/schemas/HostingInitResponse'
         - $ref: '#/components/schemas/HostingShowResponse'
         - $ref: '#/components/schemas/HostingSelectResponse'
@@ -2791,6 +3059,370 @@ components:
         - $ref: '#/components/schemas/ConnectionStatusMessage'
         title: ServerMessage
       title: server.ping
+    webauthn.signin.begin:
+      contentType: application/json
+      name: webauthn.signin.begin
+      payload:
+        description: All client-to-server messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthLoginRequest'
+        - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
+        - $ref: '#/components/schemas/HostingInitRequest'
+        - $ref: '#/components/schemas/HostingShowRequest'
+        - $ref: '#/components/schemas/HostingSelectRequest'
+        - $ref: '#/components/schemas/HostingListRequest'
+        - $ref: '#/components/schemas/HostingCloseRequest'
+        - $ref: '#/components/schemas/MemberListRequest'
+        - $ref: '#/components/schemas/MemberInfoRequest'
+        - $ref: '#/components/schemas/MemberKickRequest'
+        - $ref: '#/components/schemas/MemberBanRequest'
+        - $ref: '#/components/schemas/ChannelListRequest'
+        - $ref: '#/components/schemas/ChannelInfoRequest'
+        - $ref: '#/components/schemas/ChannelCreateRequest'
+        - $ref: '#/components/schemas/ChannelEditRequest'
+        - $ref: '#/components/schemas/ChannelDeleteRequest'
+        - $ref: '#/components/schemas/MessageSendRequest'
+        - $ref: '#/components/schemas/MessageListRequest'
+        - $ref: '#/components/schemas/MessageEditRequest'
+        - $ref: '#/components/schemas/MessageDeleteRequest'
+        - $ref: '#/components/schemas/MessageReplyRequest'
+        - $ref: '#/components/schemas/ProductCreateRequest'
+        - $ref: '#/components/schemas/ProductListRequest'
+        - $ref: '#/components/schemas/ProductModifyRequest'
+        - $ref: '#/components/schemas/ProductDeleteRequest'
+        - $ref: '#/components/schemas/OrderCreateRequest'
+        - $ref: '#/components/schemas/OrderListRequest'
+        - $ref: '#/components/schemas/PaymentCreateRequest'
+        - $ref: '#/components/schemas/PaymentVerifyRequest'
+        - $ref: '#/components/schemas/PaymentListRequest'
+        - $ref: '#/components/schemas/ReviewCreateRequest'
+        - $ref: '#/components/schemas/ReviewListRequest'
+        title: ClientMessage
+      title: webauthn.signin.begin
+    webauthn.signin.begin.response:
+      contentType: application/json
+      name: webauthn.signin.begin.response
+      payload:
+        description: All server-to-client messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthResponse'
+        - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
+        - $ref: '#/components/schemas/HostingInitResponse'
+        - $ref: '#/components/schemas/HostingShowResponse'
+        - $ref: '#/components/schemas/HostingSelectResponse'
+        - $ref: '#/components/schemas/HostingListResponse'
+        - $ref: '#/components/schemas/MemberListResponse'
+        - $ref: '#/components/schemas/MemberInfoResponse'
+        - $ref: '#/components/schemas/MemberKickedNotification'
+        - $ref: '#/components/schemas/MemberBannedNotification'
+        - $ref: '#/components/schemas/ChannelListResponse'
+        - $ref: '#/components/schemas/ChannelInfoResponse'
+        - $ref: '#/components/schemas/ChannelCreatedNotification'
+        - $ref: '#/components/schemas/ChannelEditedNotification'
+        - $ref: '#/components/schemas/ChannelDeletedNotification'
+        - $ref: '#/components/schemas/MessageSentResponse'
+        - $ref: '#/components/schemas/MessageListResponse'
+        - $ref: '#/components/schemas/MessageReceivedNotification'
+        - $ref: '#/components/schemas/MessageEditedNotification'
+        - $ref: '#/components/schemas/MessageDeletedNotification'
+        - $ref: '#/components/schemas/ProductCreatedResponse'
+        - $ref: '#/components/schemas/ProductListResponse'
+        - $ref: '#/components/schemas/ProductModifiedNotification'
+        - $ref: '#/components/schemas/ProductDeletedNotification'
+        - $ref: '#/components/schemas/OrderCreatedResponse'
+        - $ref: '#/components/schemas/OrderListResponse'
+        - $ref: '#/components/schemas/OrderStatusUpdateNotification'
+        - $ref: '#/components/schemas/PaymentCreatedResponse'
+        - $ref: '#/components/schemas/PaymentVerifiedResponse'
+        - $ref: '#/components/schemas/PaymentListResponse'
+        - $ref: '#/components/schemas/ReviewCreatedResponse'
+        - $ref: '#/components/schemas/ReviewListResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+        - $ref: '#/components/schemas/ServerPingMessage'
+        - $ref: '#/components/schemas/ConnectionStatusMessage'
+        title: ServerMessage
+      title: webauthn.signin.begin.response
+    webauthn.signin.finish:
+      contentType: application/json
+      name: webauthn.signin.finish
+      payload:
+        description: All client-to-server messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthLoginRequest'
+        - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
+        - $ref: '#/components/schemas/HostingInitRequest'
+        - $ref: '#/components/schemas/HostingShowRequest'
+        - $ref: '#/components/schemas/HostingSelectRequest'
+        - $ref: '#/components/schemas/HostingListRequest'
+        - $ref: '#/components/schemas/HostingCloseRequest'
+        - $ref: '#/components/schemas/MemberListRequest'
+        - $ref: '#/components/schemas/MemberInfoRequest'
+        - $ref: '#/components/schemas/MemberKickRequest'
+        - $ref: '#/components/schemas/MemberBanRequest'
+        - $ref: '#/components/schemas/ChannelListRequest'
+        - $ref: '#/components/schemas/ChannelInfoRequest'
+        - $ref: '#/components/schemas/ChannelCreateRequest'
+        - $ref: '#/components/schemas/ChannelEditRequest'
+        - $ref: '#/components/schemas/ChannelDeleteRequest'
+        - $ref: '#/components/schemas/MessageSendRequest'
+        - $ref: '#/components/schemas/MessageListRequest'
+        - $ref: '#/components/schemas/MessageEditRequest'
+        - $ref: '#/components/schemas/MessageDeleteRequest'
+        - $ref: '#/components/schemas/MessageReplyRequest'
+        - $ref: '#/components/schemas/ProductCreateRequest'
+        - $ref: '#/components/schemas/ProductListRequest'
+        - $ref: '#/components/schemas/ProductModifyRequest'
+        - $ref: '#/components/schemas/ProductDeleteRequest'
+        - $ref: '#/components/schemas/OrderCreateRequest'
+        - $ref: '#/components/schemas/OrderListRequest'
+        - $ref: '#/components/schemas/PaymentCreateRequest'
+        - $ref: '#/components/schemas/PaymentVerifyRequest'
+        - $ref: '#/components/schemas/PaymentListRequest'
+        - $ref: '#/components/schemas/ReviewCreateRequest'
+        - $ref: '#/components/schemas/ReviewListRequest'
+        title: ClientMessage
+      title: webauthn.signin.finish
+    webauthn.signin.finish.response:
+      contentType: application/json
+      name: webauthn.signin.finish.response
+      payload:
+        description: All server-to-client messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthResponse'
+        - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
+        - $ref: '#/components/schemas/HostingInitResponse'
+        - $ref: '#/components/schemas/HostingShowResponse'
+        - $ref: '#/components/schemas/HostingSelectResponse'
+        - $ref: '#/components/schemas/HostingListResponse'
+        - $ref: '#/components/schemas/MemberListResponse'
+        - $ref: '#/components/schemas/MemberInfoResponse'
+        - $ref: '#/components/schemas/MemberKickedNotification'
+        - $ref: '#/components/schemas/MemberBannedNotification'
+        - $ref: '#/components/schemas/ChannelListResponse'
+        - $ref: '#/components/schemas/ChannelInfoResponse'
+        - $ref: '#/components/schemas/ChannelCreatedNotification'
+        - $ref: '#/components/schemas/ChannelEditedNotification'
+        - $ref: '#/components/schemas/ChannelDeletedNotification'
+        - $ref: '#/components/schemas/MessageSentResponse'
+        - $ref: '#/components/schemas/MessageListResponse'
+        - $ref: '#/components/schemas/MessageReceivedNotification'
+        - $ref: '#/components/schemas/MessageEditedNotification'
+        - $ref: '#/components/schemas/MessageDeletedNotification'
+        - $ref: '#/components/schemas/ProductCreatedResponse'
+        - $ref: '#/components/schemas/ProductListResponse'
+        - $ref: '#/components/schemas/ProductModifiedNotification'
+        - $ref: '#/components/schemas/ProductDeletedNotification'
+        - $ref: '#/components/schemas/OrderCreatedResponse'
+        - $ref: '#/components/schemas/OrderListResponse'
+        - $ref: '#/components/schemas/OrderStatusUpdateNotification'
+        - $ref: '#/components/schemas/PaymentCreatedResponse'
+        - $ref: '#/components/schemas/PaymentVerifiedResponse'
+        - $ref: '#/components/schemas/PaymentListResponse'
+        - $ref: '#/components/schemas/ReviewCreatedResponse'
+        - $ref: '#/components/schemas/ReviewListResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+        - $ref: '#/components/schemas/ServerPingMessage'
+        - $ref: '#/components/schemas/ConnectionStatusMessage'
+        title: ServerMessage
+      title: webauthn.signin.finish.response
+    webauthn.signup.begin:
+      contentType: application/json
+      name: webauthn.signup.begin
+      payload:
+        description: All client-to-server messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthLoginRequest'
+        - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
+        - $ref: '#/components/schemas/HostingInitRequest'
+        - $ref: '#/components/schemas/HostingShowRequest'
+        - $ref: '#/components/schemas/HostingSelectRequest'
+        - $ref: '#/components/schemas/HostingListRequest'
+        - $ref: '#/components/schemas/HostingCloseRequest'
+        - $ref: '#/components/schemas/MemberListRequest'
+        - $ref: '#/components/schemas/MemberInfoRequest'
+        - $ref: '#/components/schemas/MemberKickRequest'
+        - $ref: '#/components/schemas/MemberBanRequest'
+        - $ref: '#/components/schemas/ChannelListRequest'
+        - $ref: '#/components/schemas/ChannelInfoRequest'
+        - $ref: '#/components/schemas/ChannelCreateRequest'
+        - $ref: '#/components/schemas/ChannelEditRequest'
+        - $ref: '#/components/schemas/ChannelDeleteRequest'
+        - $ref: '#/components/schemas/MessageSendRequest'
+        - $ref: '#/components/schemas/MessageListRequest'
+        - $ref: '#/components/schemas/MessageEditRequest'
+        - $ref: '#/components/schemas/MessageDeleteRequest'
+        - $ref: '#/components/schemas/MessageReplyRequest'
+        - $ref: '#/components/schemas/ProductCreateRequest'
+        - $ref: '#/components/schemas/ProductListRequest'
+        - $ref: '#/components/schemas/ProductModifyRequest'
+        - $ref: '#/components/schemas/ProductDeleteRequest'
+        - $ref: '#/components/schemas/OrderCreateRequest'
+        - $ref: '#/components/schemas/OrderListRequest'
+        - $ref: '#/components/schemas/PaymentCreateRequest'
+        - $ref: '#/components/schemas/PaymentVerifyRequest'
+        - $ref: '#/components/schemas/PaymentListRequest'
+        - $ref: '#/components/schemas/ReviewCreateRequest'
+        - $ref: '#/components/schemas/ReviewListRequest'
+        title: ClientMessage
+      title: webauthn.signup.begin
+    webauthn.signup.begin.response:
+      contentType: application/json
+      name: webauthn.signup.begin.response
+      payload:
+        description: All server-to-client messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthResponse'
+        - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
+        - $ref: '#/components/schemas/HostingInitResponse'
+        - $ref: '#/components/schemas/HostingShowResponse'
+        - $ref: '#/components/schemas/HostingSelectResponse'
+        - $ref: '#/components/schemas/HostingListResponse'
+        - $ref: '#/components/schemas/MemberListResponse'
+        - $ref: '#/components/schemas/MemberInfoResponse'
+        - $ref: '#/components/schemas/MemberKickedNotification'
+        - $ref: '#/components/schemas/MemberBannedNotification'
+        - $ref: '#/components/schemas/ChannelListResponse'
+        - $ref: '#/components/schemas/ChannelInfoResponse'
+        - $ref: '#/components/schemas/ChannelCreatedNotification'
+        - $ref: '#/components/schemas/ChannelEditedNotification'
+        - $ref: '#/components/schemas/ChannelDeletedNotification'
+        - $ref: '#/components/schemas/MessageSentResponse'
+        - $ref: '#/components/schemas/MessageListResponse'
+        - $ref: '#/components/schemas/MessageReceivedNotification'
+        - $ref: '#/components/schemas/MessageEditedNotification'
+        - $ref: '#/components/schemas/MessageDeletedNotification'
+        - $ref: '#/components/schemas/ProductCreatedResponse'
+        - $ref: '#/components/schemas/ProductListResponse'
+        - $ref: '#/components/schemas/ProductModifiedNotification'
+        - $ref: '#/components/schemas/ProductDeletedNotification'
+        - $ref: '#/components/schemas/OrderCreatedResponse'
+        - $ref: '#/components/schemas/OrderListResponse'
+        - $ref: '#/components/schemas/OrderStatusUpdateNotification'
+        - $ref: '#/components/schemas/PaymentCreatedResponse'
+        - $ref: '#/components/schemas/PaymentVerifiedResponse'
+        - $ref: '#/components/schemas/PaymentListResponse'
+        - $ref: '#/components/schemas/ReviewCreatedResponse'
+        - $ref: '#/components/schemas/ReviewListResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+        - $ref: '#/components/schemas/ServerPingMessage'
+        - $ref: '#/components/schemas/ConnectionStatusMessage'
+        title: ServerMessage
+      title: webauthn.signup.begin.response
+    webauthn.signup.finish:
+      contentType: application/json
+      name: webauthn.signup.finish
+      payload:
+        description: All client-to-server messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthLoginRequest'
+        - $ref: '#/components/schemas/AuthLogoutRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginRequest'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishRequest'
+        - $ref: '#/components/schemas/HostingInitRequest'
+        - $ref: '#/components/schemas/HostingShowRequest'
+        - $ref: '#/components/schemas/HostingSelectRequest'
+        - $ref: '#/components/schemas/HostingListRequest'
+        - $ref: '#/components/schemas/HostingCloseRequest'
+        - $ref: '#/components/schemas/MemberListRequest'
+        - $ref: '#/components/schemas/MemberInfoRequest'
+        - $ref: '#/components/schemas/MemberKickRequest'
+        - $ref: '#/components/schemas/MemberBanRequest'
+        - $ref: '#/components/schemas/ChannelListRequest'
+        - $ref: '#/components/schemas/ChannelInfoRequest'
+        - $ref: '#/components/schemas/ChannelCreateRequest'
+        - $ref: '#/components/schemas/ChannelEditRequest'
+        - $ref: '#/components/schemas/ChannelDeleteRequest'
+        - $ref: '#/components/schemas/MessageSendRequest'
+        - $ref: '#/components/schemas/MessageListRequest'
+        - $ref: '#/components/schemas/MessageEditRequest'
+        - $ref: '#/components/schemas/MessageDeleteRequest'
+        - $ref: '#/components/schemas/MessageReplyRequest'
+        - $ref: '#/components/schemas/ProductCreateRequest'
+        - $ref: '#/components/schemas/ProductListRequest'
+        - $ref: '#/components/schemas/ProductModifyRequest'
+        - $ref: '#/components/schemas/ProductDeleteRequest'
+        - $ref: '#/components/schemas/OrderCreateRequest'
+        - $ref: '#/components/schemas/OrderListRequest'
+        - $ref: '#/components/schemas/PaymentCreateRequest'
+        - $ref: '#/components/schemas/PaymentVerifyRequest'
+        - $ref: '#/components/schemas/PaymentListRequest'
+        - $ref: '#/components/schemas/ReviewCreateRequest'
+        - $ref: '#/components/schemas/ReviewListRequest'
+        title: ClientMessage
+      title: webauthn.signup.finish
+    webauthn.signup.finish.response:
+      contentType: application/json
+      name: webauthn.signup.finish.response
+      payload:
+        description: All server-to-client messages
+        oneOf:
+        - $ref: '#/components/schemas/AuthResponse'
+        - $ref: '#/components/schemas/AuthLogoutResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSignupFinishResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninBeginResponse'
+        - $ref: '#/components/schemas/WebAuthnSigninFinishResponse'
+        - $ref: '#/components/schemas/HostingInitResponse'
+        - $ref: '#/components/schemas/HostingShowResponse'
+        - $ref: '#/components/schemas/HostingSelectResponse'
+        - $ref: '#/components/schemas/HostingListResponse'
+        - $ref: '#/components/schemas/MemberListResponse'
+        - $ref: '#/components/schemas/MemberInfoResponse'
+        - $ref: '#/components/schemas/MemberKickedNotification'
+        - $ref: '#/components/schemas/MemberBannedNotification'
+        - $ref: '#/components/schemas/ChannelListResponse'
+        - $ref: '#/components/schemas/ChannelInfoResponse'
+        - $ref: '#/components/schemas/ChannelCreatedNotification'
+        - $ref: '#/components/schemas/ChannelEditedNotification'
+        - $ref: '#/components/schemas/ChannelDeletedNotification'
+        - $ref: '#/components/schemas/MessageSentResponse'
+        - $ref: '#/components/schemas/MessageListResponse'
+        - $ref: '#/components/schemas/MessageReceivedNotification'
+        - $ref: '#/components/schemas/MessageEditedNotification'
+        - $ref: '#/components/schemas/MessageDeletedNotification'
+        - $ref: '#/components/schemas/ProductCreatedResponse'
+        - $ref: '#/components/schemas/ProductListResponse'
+        - $ref: '#/components/schemas/ProductModifiedNotification'
+        - $ref: '#/components/schemas/ProductDeletedNotification'
+        - $ref: '#/components/schemas/OrderCreatedResponse'
+        - $ref: '#/components/schemas/OrderListResponse'
+        - $ref: '#/components/schemas/OrderStatusUpdateNotification'
+        - $ref: '#/components/schemas/PaymentCreatedResponse'
+        - $ref: '#/components/schemas/PaymentVerifiedResponse'
+        - $ref: '#/components/schemas/PaymentListResponse'
+        - $ref: '#/components/schemas/ReviewCreatedResponse'
+        - $ref: '#/components/schemas/ReviewListResponse'
+        - $ref: '#/components/schemas/ErrorResponse'
+        - $ref: '#/components/schemas/ServerPingMessage'
+        - $ref: '#/components/schemas/ConnectionStatusMessage'
+        title: ServerMessage
+      title: webauthn.signup.finish.response
   schemas:
     AuthLoginRequest:
       description: Authentication login request
@@ -5071,6 +5703,145 @@ components:
       - city
       - postal_code
       - country
+      type: object
+    WebAuthnSigninBeginRequest:
+      description: Request to begin WebAuthn authentication (signin)
+      properties:
+        scenario:
+          description: 'Authentication scenario: "mfa", "passwordless", or "usernameless"'
+          type: string
+        username:
+          description: Username (empty for usernameless scenario)
+          type: string
+      required:
+      - username
+      - scenario
+      type: object
+    WebAuthnSigninBeginResponse:
+      description: Response from beginning WebAuthn authentication
+      properties:
+        challenge_json:
+          description: JSON-serialized WebAuthn assertion challenge
+          type:
+          - string
+          - 'null'
+        error:
+          type:
+          - string
+          - 'null'
+        session_id:
+          description: Session ID to use for finish request
+          type:
+          - string
+          - 'null'
+        success:
+          type: boolean
+      required:
+      - success
+      type: object
+    WebAuthnSigninFinishRequest:
+      description: Request to finish WebAuthn authentication
+      properties:
+        credential_json:
+          description: JSON-serialized credential from navigator.credentials.get()
+          type: string
+        session_id:
+          description: Session ID from begin response
+          type: string
+      required:
+      - session_id
+      - credential_json
+      type: object
+    WebAuthnSigninFinishResponse:
+      description: Response from finishing WebAuthn authentication
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+        session_token:
+          description: Session token for authenticated session
+          type:
+          - string
+          - 'null'
+        success:
+          type: boolean
+        user_id:
+          description: User ID if successful
+          type:
+          - string
+          - 'null'
+      required:
+      - success
+      type: object
+    WebAuthnSignupBeginRequest:
+      description: Request to begin WebAuthn registration (signup)
+      properties:
+        display_name:
+          description: Display name shown to user
+          type: string
+        scenario:
+          description: 'Authentication scenario: "mfa", "passwordless", or "usernameless"'
+          type: string
+        username:
+          description: Username for the account
+          type: string
+      required:
+      - username
+      - display_name
+      - scenario
+      type: object
+    WebAuthnSignupBeginResponse:
+      description: Response from beginning WebAuthn registration
+      properties:
+        challenge_json:
+          description: JSON-serialized WebAuthn creation challenge
+          type:
+          - string
+          - 'null'
+        error:
+          type:
+          - string
+          - 'null'
+        session_id:
+          description: Session ID to use for finish request
+          type:
+          - string
+          - 'null'
+        success:
+          type: boolean
+      required:
+      - success
+      type: object
+    WebAuthnSignupFinishRequest:
+      description: Request to finish WebAuthn registration
+      properties:
+        credential_json:
+          description: JSON-serialized credential from navigator.credentials.create()
+          type: string
+        session_id:
+          description: Session ID from begin response
+          type: string
+      required:
+      - session_id
+      - credential_json
+      type: object
+    WebAuthnSignupFinishResponse:
+      description: Response from finishing WebAuthn registration
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+        success:
+          type: boolean
+        user_id:
+          description: User ID if successful
+          type:
+          - string
+          - 'null'
+      required:
+      - success
       type: object
 info:
   description: Distributed e-commerce WebSocket protocol for the Dure platform. Supports real-time communication between clients, stores, and hosting servers.

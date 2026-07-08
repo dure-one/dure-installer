@@ -5,7 +5,7 @@
 
 use asyncapi_rust::AsyncApi;
 
-use crate::messages::{ClientMessage, ServerMessage};
+use dure_messages::{ClientMessage, ServerMessage};
 
 /// Dure WebSocket API Specification
 ///
