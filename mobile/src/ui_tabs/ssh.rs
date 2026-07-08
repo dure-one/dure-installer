@@ -784,7 +784,22 @@ impl SshTab {
 
         // Check all possible action IDs
         for idx in 0..self.rows.len() {
-            // Refresh
+            // Health check (before refresh)
+            let health_check_id = egui::Id::new(format!("ssh_health_check_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(health_check_id)) {
+                ui.data_mut(|d| d.remove::<String>(health_check_id));
+
+                eprintln!("Manual health check triggered for {}", host);
+
+                if let Some(row) = self.rows.get_mut(idx) {
+                    row.connection_status = ConnectionStatus::CheckingHealth;
+                    row.refresh_failed = false;
+                }
+
+                let _ = vm.check_host_health(host, 5);
+            }
+
+            // Refresh (keep existing handler for compatibility)
             let refresh_id = egui::Id::new(format!("ssh_refresh_{}", idx));
             if let Some(host) = ui.data(|d| d.get_temp::<String>(refresh_id)) {
                 // Clear temp data immediately to prevent continuous firing
@@ -1990,16 +2005,19 @@ impl SshTab {
             self.load_rows();
             self.loaded = true;
 
-            // Auto-refresh all rows on first load
-            if let Some(ref mut vm) = vm {
-                for row in &mut self.rows {
-                    row.refreshing = true;
-                    row.refresh_pending_count = 3;
-                    let _ = vm.get_linux_status(row.host.clone());
-                    let _ = vm.get_docker_status(row.host.clone());
-                    let _ = vm.get_ansible_status(row.host.clone());
-                    let _ = vm.get_dure_wss_status(row.host.clone());
+            // Auto-refresh only once per session
+            if !self.auto_refresh_done {
+                eprintln!("First session load - starting health checks");
+                if let Some(ref mut vm) = vm {
+                    for row in &mut self.rows {
+                        eprintln!("Starting health check for {}", row.host);
+                        row.connection_status = ConnectionStatus::CheckingHealth;
+                        row.refresh_failed = false;
+                        let _ = vm.check_host_health(row.host.clone(), 5);
+                    }
                 }
+            } else {
+                eprintln!("Auto-refresh already done this session, skipping");
             }
         }
 
@@ -2674,22 +2692,29 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
 
-        // Refresh - always available
-        if row.refreshing {
-            ui.add_enabled(false, MaterialButton::outlined("Refreshing...").small());
+        // Refresh - show different states
+        let button_state = if row.connection_status == ConnectionStatus::CheckingHealth {
+            ("Checking...", false, "Checking if host is reachable")
+        } else if row.refreshing {
+            ("Refreshing...", false, "Fetching host status")
+        } else if row.refresh_failed {
+            ("Refresh Failed", true, "Host unreachable - click to retry")
         } else {
-            if ui
-                .add(MaterialButton::outlined("Refresh").small())
-                .on_hover_text("Refresh host status")
-                .clicked()
-            {
-                ui.data_mut(|d| {
-                    d.insert_temp(
-                        egui::Id::new(format!("ssh_refresh_{}", idx)),
-                        row.host.clone(),
-                    )
-                });
-            }
+            ("Refresh", true, "Refresh host status")
+        };
+
+        let button = MaterialButton::outlined(button_state.0).small();
+        if ui.add_enabled(button_state.1, button)
+            .on_hover_text(button_state.2)
+            .clicked()
+        {
+            // Trigger health check first, then refresh
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(format!("ssh_health_check_{}", idx)),
+                    row.host.clone(),
+                )
+            });
         }
 
         // Delete - always available
