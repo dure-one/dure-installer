@@ -862,7 +862,7 @@ impl PlatformTab {
                             if let Some(platform) = app_config
                                 .platforms
                                 .iter_mut()
-                                .find(|p| p.name == platform_name)
+                                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                             {
                                 platform.vms.retain(|vm| vm.name != vm_name);
 
@@ -1294,7 +1294,7 @@ impl PlatformTab {
                         if let Some(platform) = app_config
                             .platforms
                             .iter()
-                            .find(|p| p.name == platform_name)
+                            .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                         {
                             if let Some(vm_cfg) = platform.vms.first() {
                                 self.regenerate_vm(
@@ -1316,7 +1316,7 @@ impl PlatformTab {
                         if let Some(platform) = app_config
                             .platforms
                             .iter()
-                            .find(|p| p.name == platform_name)
+                            .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                         {
                             if let Some(vm_config) = platform.vms.first() {
                                 self.restart_vm(
@@ -1632,8 +1632,9 @@ impl PlatformTab {
     fn fetch_gcp_summary(&mut self, platform: &CloudPlatformConfig) -> Option<String> {
         use crate::api::gcp::GcpRestClient;
 
-        // Check if we have a cached summary
-        if let Some(cached) = self.platform_summaries.get(&platform.name) {
+        // Check if we have a cached summary (keyed by project_id)
+        let project_id = platform.gcp_selected_project_id.as_ref()?;
+        if let Some(cached) = self.platform_summaries.get(project_id) {
             return Some(cached.clone());
         }
 
@@ -1692,9 +1693,11 @@ impl PlatformTab {
             None
         } else {
             let summary = summary_parts.join(", ");
-            // Cache the summary
-            self.platform_summaries
-                .insert(platform.name.clone(), summary.clone());
+            // Cache the summary (keyed by project_id)
+            if let Some(project_id) = &platform.gcp_selected_project_id {
+                self.platform_summaries
+                    .insert(project_id.clone(), summary.clone());
+            }
             Some(summary)
         }
     }
@@ -1963,7 +1966,7 @@ impl PlatformTab {
         let mut wizard = if let Ok((app_config, _)) = load_config() {
             // Find platform by name
             if let Some(platform) = app_config.platforms.iter()
-                .find(|p| p.name == platform_name)
+                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
             {
                 // Check if platform has OAuth tokens and project ID
                 if let (Some(access_token), Some(refresh_token), Some(token_expiry), Some(project_id)) = (
@@ -2036,7 +2039,7 @@ impl PlatformTab {
                     if let Some(platform) = app_config
                         .platforms
                         .iter()
-                        .find(|p| p.name == platform_name)
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                     {
                         if let Some(vm_cfg) = platform.vms.iter().find(|v| v.name == vm_name) {
                             vm_cfg.zone.clone()
@@ -2265,7 +2268,7 @@ impl PlatformTab {
                 if let Some(platform) = app_config
                     .platforms
                     .iter()
-                    .find(|p| p.name == self.delete_vm_platform)
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.delete_vm_platform))
                 {
                     if let Some(vm_config) = platform.vms.iter().find(|v| v.name == instance_name) {
                         let project_id = &vm_config.gcp_project_id;
@@ -2559,7 +2562,7 @@ impl PlatformTab {
                 if let Some(platform) = app_config
                     .platforms
                     .iter()
-                    .find(|p| p.name == platform_name)
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                 {
                     self.delete_platform_vm_count = platform.vms.len();
                 }
@@ -2900,7 +2903,7 @@ impl PlatformTab {
 
             // Send command to ViewModel
             if let Err(e) = vm.fetch_billing(
-                platform.name.clone(),
+                project_id.clone(),  // Use project_id as platform identifier
                 project_id,
                 self.billing_dataset.clone(),
                 self.billing_table.clone(),
