@@ -1784,25 +1784,25 @@ impl GcpWizard {
     fn generate_ssh_key_pair() -> Result<(String, String, Vec<u8>, Vec<u8>), String> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use go_webauthn_client::GoWebAuthnClient;
+            use ed25519_dalek::SigningKey;
+            use rand::rngs::OsRng;
 
-            let mut client = GoWebAuthnClient::new(None)
-                .map_err(|e| format!("Failed to create WebAuthn client: {}", e))?;
+            let signing_key = SigningKey::generate(&mut OsRng);
+            let verifying_key = signing_key.verifying_key();
 
-            let keypair = client
-                .ed25519_generate_key()
-                .map_err(|e| format!("Failed to generate key: {}", e))?;
+            let private_key_bytes = signing_key.to_bytes().to_vec();
+            let public_key_bytes = verifying_key.to_bytes().to_vec();
 
             // Convert to SSH format
             let private_key =
-                Self::ed25519_to_openssh_private(&keypair.private_key, &keypair.public_key)?;
-            let public_key = Self::ed25519_to_openssh_public(&keypair.public_key)?;
+                Self::ed25519_to_openssh_private(&private_key_bytes, &public_key_bytes)?;
+            let public_key = Self::ed25519_to_openssh_public(&public_key_bytes)?;
 
             Ok((
                 private_key,
                 public_key,
-                keypair.private_key,
-                keypair.public_key,
+                private_key_bytes,
+                public_key_bytes,
             ))
         }
 
@@ -2353,8 +2353,7 @@ mod tests {
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
     fn test_generate_ssh_key_pair() {
-        // This test requires go-webauthn-cli to be built
-        // Run with: PATH="$PWD/crates/go-webauthn/bin:$PATH" cargo test test_generate_ssh_key_pair -- --ignored --nocapture
+        // Test Ed25519 SSH key generation using ed25519-dalek
 
         let result = GcpWizard::generate_ssh_key_pair();
 
@@ -2377,7 +2376,7 @@ mod tests {
 
         // Check raw key lengths
         assert_eq!(raw_public.len(), 32, "Public key should be 32 bytes");
-        assert_eq!(raw_private.len(), 64, "Private key should be 64 bytes");
+        assert_eq!(raw_private.len(), 32, "Private key seed should be 32 bytes");
     }
 
     #[test]
