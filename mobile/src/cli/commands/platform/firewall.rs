@@ -46,9 +46,11 @@ pub async fn execute_firewall_inner(
 ) -> Result<()> {
     let allow_ip = get_current_ip(ip).await?;
 
+    let project_id = platform.gcp_selected_project_id.as_ref()
+        .ok_or_else(|| anyhow!("No GCP project selected"))?;
     let event = runner
         .execute_command(PlatformCommand::UpdateFirewall {
-            platform_name: platform.name.clone(),
+            platform_name: project_id.clone(),
             allow_ip: allow_ip.clone(),
         })
         .await?;
@@ -69,7 +71,7 @@ pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> 
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     // Validate platform is ready
@@ -81,9 +83,11 @@ pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> 
 
         println!("✓ Detected current IP: {}", allow_ip);
 
+        let project_id = platform.gcp_selected_project_id.as_ref()
+            .ok_or_else(|| anyhow!("No GCP project selected"))?;
         let event = runner
             .execute_command(PlatformCommand::UpdateFirewall {
-                platform_name: platform.name.clone(),
+                platform_name: project_id.clone(),
                 allow_ip: allow_ip.clone(),
             })
             .await?;

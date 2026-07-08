@@ -1071,7 +1071,7 @@ impl PlatformTab {
                 let row_for_actions = row.clone();
 
                 table = table.row(move |r| {
-                    r.cell(&row_for_cells.platform_name)
+                    r.cell(&row_for_cells.project_id)
                         .cell(&row_for_cells.platform_type)
                         .cell(&format_steps(&row_for_cells))
                         .widget_cell(move |ui| {
@@ -1093,7 +1093,7 @@ impl PlatformTab {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
                                                     egui::Id::new("platform_action_refresh"),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 )
                                             });
                                         }
@@ -1115,7 +1115,7 @@ impl PlatformTab {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
                                                     egui::Id::new("platform_action_add_vm"),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 )
                                             });
                                         }
@@ -1135,7 +1135,7 @@ impl PlatformTab {
                                                     egui::Id::new(
                                                         "platform_action_update_firewall",
                                                     ),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 )
                                             });
                                         }
@@ -1152,7 +1152,7 @@ impl PlatformTab {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
                                                     egui::Id::new("platform_action_restart_vm"),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 )
                                             });
                                         }
@@ -1170,7 +1170,7 @@ impl PlatformTab {
                                                 d.insert_temp(
                                                     egui::Id::new("platform_action_delete_vm"),
                                                     (
-                                                        row_for_actions.platform_name.clone(),
+                                                        row_for_actions.project_id.clone(),
                                                         row_for_actions
                                                             .vm_name
                                                             .clone()
@@ -1189,7 +1189,7 @@ impl PlatformTab {
                                         //     MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
                                         //     ui.data_mut(|d| d.insert_temp(
                                         //         egui::Id::new("platform_action_regen_vm"),
-                                        //         row_for_actions.platform_name.clone()
+                                        //         row_for_actions.project_id.clone()
                                         //     ));
                                         // }
 
@@ -1209,7 +1209,7 @@ impl PlatformTab {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
                                                     egui::Id::new("platform_action_billing_name"),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 );
                                                 if let Some(project_id) = &row_for_actions.selected_project_id {
                                                     d.insert_temp(
@@ -1231,7 +1231,7 @@ impl PlatformTab {
                                                     egui::Id::new(
                                                         "platform_action_delete_platform",
                                                     ),
-                                                    row_for_actions.platform_name.clone(),
+                                                    row_for_actions.project_id.clone(),
                                                 )
                                             });
                                         }
@@ -2430,7 +2430,7 @@ impl PlatformTab {
     }
 
     /// Get valid access token, refreshing if expired (standalone helper)
-    fn get_valid_access_token(platform: &mut crate::config::CloudPlatformConfig) -> Result<String, String> {
+    fn refresh_or_get_token(platform: &mut crate::config::CloudPlatformConfig) -> Result<String, String> {
         use crate::api::gcp::oauth::refresh_access_token;
 
         let token = platform.gcp_oauth_access_token.as_ref()
@@ -2468,6 +2468,7 @@ impl PlatformTab {
     fn execute_refresh(&mut self, project_id: String) {
         use crate::api::gcp::{GcpRestClient, get_current_ip};
 
+        let project_id_clone = project_id.clone();
         let promise = poll_promise::Promise::spawn_thread("refresh_status", move || {
             // Load config
             let (mut config, config_path) = load_config()
@@ -2475,16 +2476,16 @@ impl PlatformTab {
 
             // Find platform
             let platform = config.platforms.iter_mut()
-                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&project_id))
-                .ok_or_else(|| format!("Platform {} not found", project_id))?;
+                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&project_id_clone))
+                .ok_or_else(|| format!("Platform {} not found", project_id_clone))?;
 
             // Get valid access token
-            let token = get_valid_access_token(platform)?;
+            let token = Self::refresh_or_get_token(platform)?;
             let client = GcpRestClient::new(token);
 
             // Fetch VM status if VM exists
             if let Some(vm) = platform.vms.first() {
-                match client.get_instance(&project_id, &vm.zone, &vm.name) {
+                match client.get_instance(&project_id_clone, &vm.zone, &vm.name) {
                     Ok(instance) => {
                         platform.cached_vm_status = Some(instance.status.clone());
 
@@ -2504,7 +2505,7 @@ impl PlatformTab {
             // Fetch firewall status
             match get_current_ip() {
                 Ok(current_ip) => {
-                    match client.check_ip_whitelisted(&project_id, &current_ip) {
+                    match client.check_ip_whitelisted(&project_id_clone, &current_ip) {
                         Ok(whitelisted) => {
                             platform.cached_firewall_status = Some(
                                 if whitelisted {

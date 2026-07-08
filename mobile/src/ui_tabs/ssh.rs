@@ -350,7 +350,7 @@ impl SshTab {
                                 let ptype = app_config
                                     .platforms
                                     .iter()
-                                    .find(|p| &p.name == pname)
+                                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(pname))
                                     .map(|p| p.platform_type.clone());
                                 (Some(pname.clone()), ptype)
                             } else {

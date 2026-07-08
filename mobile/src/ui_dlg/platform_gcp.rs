@@ -219,7 +219,6 @@ impl GcpWizard {
                 .cloned();
 
             let mut platform_config = gcp_config.unwrap_or_else(|| CloudPlatformConfig {
-                name: "GCP".to_string(),
                 platform_type: "gcp".to_string(),
                 ..Default::default()
             });
@@ -1142,7 +1141,7 @@ impl GcpWizard {
                     if let Some(platform) = app_config
                         .platforms
                         .iter_mut()
-                        .find(|p| p.name == self.platform_name)
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.platform_name))
                     {
                         // Check if VM already exists
                         if platform.vms.iter().any(|vm| vm.instance_id == instance.id) {

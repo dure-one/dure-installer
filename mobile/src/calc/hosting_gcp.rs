@@ -93,7 +93,9 @@ pub fn regenerate_vm(
 
     // Generate VM name
     let vm_name = format!("dure-vm-{}", chrono::Utc::now().timestamp());
-    let keyring_domain = format!("gcp.{}.{}", platform.name, vm_name);
+    let project_id = platform.gcp_selected_project_id.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+    let keyring_domain = format!("gcp.{}.{}", project_id, vm_name);
 
     // Store private key in keyring
     eprintln!("DEBUG: Initializing keyring for SSH key storage...");

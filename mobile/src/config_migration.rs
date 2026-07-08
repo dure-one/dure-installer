@@ -106,6 +106,7 @@ pub fn migrate_config_v1_to_v2(v1: AppConfigV1) -> Result<AppConfig, String> {
 
     Ok(AppConfig {
         platforms: migrated_platforms,
+        ..Default::default()
     })
 }
 
