@@ -1,7 +1,0 @@
-# Rust
-target/
-Cargo.lock
-*.log
-
-# Test files
-test_www/
