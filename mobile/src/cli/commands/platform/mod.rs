@@ -90,10 +90,11 @@ pub fn execute_refresh_command(name: String) -> Result<()> {
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
-    println!("Refreshing platform '{}'...", platform.name);
+    let project_id = platform.gcp_selected_project_id.as_ref().unwrap();
+    println!("Refreshing platform '{}'...", project_id);
 
     println!("✓ Platform data refreshed");
     println!("\nRun 'dure platform {}' to see updated status", name);
@@ -108,7 +109,7 @@ pub fn execute_delete_command(name: String) -> Result<()> {
     let platform_idx = config
         .platforms
         .iter()
-        .position(|p| p.name == name)
+        .position(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     let platform = &config.platforms[platform_idx];
@@ -165,10 +166,8 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
 
     let (mut config, config_path) = load_config()?;
 
-    // Check if platform already exists
-    if config.platforms.iter().any(|p| p.name == name) {
-        return Err(anyhow!("Platform '{}' already exists", name));
-    }
+    // Note: Cannot check for duplicates yet as platform has no project_id until OAuth completes
+    // This is a limitation of the CLI add flow - platforms should be added via GUI for full workflow
 
     // Validate platform type
     let valid_types = ["gcp", "firebase", "supabase"];
@@ -180,9 +179,8 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
         ));
     }
 
-    // Create new platform
+    // Create new platform (project_id will be set during OAuth)
     let platform = CloudPlatformConfig {
-        name: name.clone(),
         platform_type: platform_type.clone(),
         ..Default::default()
     };
@@ -229,9 +227,11 @@ pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
     // Verify platform exists
     let (config, _) = load_config()?;
     let _platform = config.platforms.iter()
-        .find(|p| p.name == *platform_name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(platform_name))
         .ok_or_else(|| {
-            let available: Vec<_> = config.platforms.iter().map(|p| &p.name).collect();
+            let available: Vec<_> = config.platforms.iter()
+                .filter_map(|p| p.gcp_selected_project_id.as_ref())
+                .collect();
             if available.is_empty() {
                 anyhow!("Platform '{}' not found. No platforms configured yet.\nAdd a platform with: dure platform add <name>", platform_name)
             } else {

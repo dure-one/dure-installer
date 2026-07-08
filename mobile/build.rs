@@ -35,4 +35,53 @@ fn main() {
     }
 
     // rust2go bridge is now in the go-webauthn crate
+
+    // Build go-webauthn-cli executable
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let go_webauthn_dir = std::path::PathBuf::from("../crates/go-webauthn");
+        if go_webauthn_dir.exists() {
+            println!("cargo:rerun-if-changed=../crates/go-webauthn/cmd");
+            println!("cargo:rerun-if-changed=../crates/go-webauthn/go");
+
+            // Check if go is available
+            if std::process::Command::new("go")
+                .arg("version")
+                .output()
+                .is_ok()
+            {
+                println!("cargo:warning=Building go-webauthn-cli...");
+
+                // Create bin directory
+                let bin_dir = go_webauthn_dir.join("bin");
+                let _ = std::fs::create_dir_all(&bin_dir);
+
+                // Build the CLI
+                let status = std::process::Command::new("go")
+                    .arg("build")
+                    .arg("-o")
+                    .arg(bin_dir.join("go-webauthn-cli"))
+                    .arg("../cmd")
+                    .current_dir(go_webauthn_dir.join("go"))
+                    .status();
+
+                match status {
+                    Ok(s) if s.success() => {
+                        println!("cargo:warning=Successfully built go-webauthn-cli");
+                    }
+                    Ok(s) => {
+                        println!("cargo:warning=Failed to build go-webauthn-cli (exit code: {:?})", s.code());
+                        println!("cargo:warning=Run: cd crates/go-webauthn && ./build-cli.sh");
+                    }
+                    Err(e) => {
+                        println!("cargo:warning=Failed to execute go build: {}", e);
+                        println!("cargo:warning=Run: cd crates/go-webauthn && ./build-cli.sh");
+                    }
+                }
+            } else {
+                println!("cargo:warning=Go compiler not found - skipping go-webauthn-cli build");
+                println!("cargo:warning=Install Go or run: cd crates/go-webauthn && ./build-cli.sh");
+            }
+        }
+    }
 }

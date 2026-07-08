@@ -219,7 +219,6 @@ impl GcpWizard {
                 .cloned();
 
             let mut platform_config = gcp_config.unwrap_or_else(|| CloudPlatformConfig {
-                name: "GCP".to_string(),
                 platform_type: "gcp".to_string(),
                 ..Default::default()
             });
@@ -1142,7 +1141,7 @@ impl GcpWizard {
                     if let Some(platform) = app_config
                         .platforms
                         .iter_mut()
-                        .find(|p| p.name == self.platform_name)
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.platform_name))
                     {
                         // Check if VM already exists
                         if platform.vms.iter().any(|vm| vm.instance_id == instance.id) {
@@ -1345,8 +1344,16 @@ impl GcpWizard {
 
             ui.horizontal(|ui| {
                 if ui.button("← Start Over").clicked() {
-                    self.state = WizardState::ConnectAccount;
+                    self.state = WizardState::ConfigureServer;  // ✅ Back to server config
                     self.progress_log.clear();
+
+                    // Reset server configuration fields
+                    self.selected_region = String::new();
+                    self.selected_zone = String::new();
+                    self.selected_machine_type = String::new();
+                    self.instance_name = String::new();
+                    self.available_regions = Vec::new();
+                    self.available_machine_types = Vec::new();
                 }
 
                 if ui.button("Close").clicked() {

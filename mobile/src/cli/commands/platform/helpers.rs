@@ -82,13 +82,15 @@ pub fn validate_platform_ready(platform: &CloudPlatformConfig, operation: &str) 
         return Ok(());
     }
 
+    let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("unknown");
+
     // Check OAuth
     if platform.gcp_oauth_access_token.is_none() {
         return Err(anyhow!(
             "Platform '{}' is not connected\n\
              Run 'dure platform init {}' to authenticate",
-            platform.name,
-            platform.name
+            project_id,
+            project_id
         ));
     }
 
@@ -98,7 +100,7 @@ pub fn validate_platform_ready(platform: &CloudPlatformConfig, operation: &str) 
             return Err(anyhow!(
                 "OAuth token expired\n\
                  Run 'dure platform init {}' to reconnect",
-                platform.name
+                project_id
             ));
         }
     }
@@ -108,10 +110,8 @@ pub fn validate_platform_ready(platform: &CloudPlatformConfig, operation: &str) 
     if project_required.contains(&operation) {
         if platform.gcp_selected_project_id.is_none() {
             return Err(anyhow!(
-                "No project selected for platform '{}'\n\
-                 Run 'dure platform init {}' to select a project",
-                platform.name,
-                platform.name
+                "No project selected for platform\n\
+                 Run 'dure platform init' to select a project"
             ));
         }
     }

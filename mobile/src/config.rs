@@ -27,7 +27,6 @@ pub struct VmInstance {
 /// Cloud platform configuration (GCP, Firebase, Supabase)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CloudPlatformConfig {
-    pub name: String,
     pub platform_type: String, // "gcp", "firebase", "supabase"
 
     // GCP specific
@@ -53,6 +52,22 @@ pub struct CloudPlatformConfig {
     // VM instances (for GCP)
     #[serde(default)]
     pub vms: Vec<VmInstance>,
+
+    // Status cache fields (optional to avoid cluttering YAML when empty)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_total_project_count: Option<usize>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_vm_status: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_firewall_status: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_vm_external_ip: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_status_refresh: Option<i64>,
 }
 
 /// Platform configuration (deprecated, use platforms list)

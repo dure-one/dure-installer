@@ -24,6 +24,8 @@ pub mod ui_dlg;
 // Desktop-only modules (minimal implementations for CLI)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod config;
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub mod config_migration;
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 // pub mod error;
 

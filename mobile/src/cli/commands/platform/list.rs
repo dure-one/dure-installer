@@ -33,9 +33,10 @@ pub fn format_platform_list(config: &AppConfig) -> String {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
+        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
         output.push_str(&format!(
             "{:<20} {:<8} {}\n",
-            platform.name,
+            project_id,
             platform.platform_type.to_uppercase(),
             steps.chars().take(50).collect::<String>()
         ));
@@ -56,9 +57,11 @@ pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name.to_string()))
         .ok_or_else(|| {
-            let available: Vec<_> = config.platforms.iter().map(|p| &p.name).collect();
+            let available: Vec<_> = config.platforms.iter()
+                .filter_map(|p| p.gcp_selected_project_id.as_ref())
+                .collect();
             anyhow!(
                 "Platform '{}' not found\n\nAvailable platforms:\n{}",
                 name,
@@ -71,7 +74,8 @@ pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
         })?;
 
     let mut output = String::new();
-    output.push_str(&format!("Platform: {}\n", platform.name));
+    let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
+    output.push_str(&format!("Platform: {}\n", project_id));
     output.push_str(&format!(
         "Type: {}\n",
         platform.platform_type.to_uppercase()
@@ -149,9 +153,10 @@ pub fn execute_platform_combined() -> Result<()> {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
+        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
         println!(
             "{:<20} {:<8} {}",
-            platform.name,
+            project_id,
             platform.platform_type.to_uppercase(),
             steps.chars().take(50).collect::<String>()
         );
@@ -168,8 +173,9 @@ pub fn execute_platform_combined() -> Result<()> {
             println!();
         }
 
+        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("Platform: {}", platform.name);
+        println!("Platform: {}", project_id);
         println!("Type: {}", platform.platform_type.to_uppercase());
         println!();
 
@@ -188,7 +194,7 @@ pub fn execute_platform_combined() -> Result<()> {
         println!();
 
         println!("Available Actions:");
-        println!("  dure platform {} <action>", platform.name);
+        println!("  dure platform {} <action>", project_id);
         println!();
         println!("  Actions:");
         if platform.vms.is_empty() {
