@@ -1345,8 +1345,16 @@ impl GcpWizard {
 
             ui.horizontal(|ui| {
                 if ui.button("← Start Over").clicked() {
-                    self.state = WizardState::ConnectAccount;
+                    self.state = WizardState::ConfigureServer;  // ✅ Back to server config
                     self.progress_log.clear();
+
+                    // Reset server configuration fields
+                    self.selected_region = String::new();
+                    self.selected_zone = String::new();
+                    self.selected_machine_type = String::new();
+                    self.instance_name = String::new();
+                    self.available_regions = Vec::new();
+                    self.available_machine_types = Vec::new();
                 }
 
                 if ui.button("Close").clicked() {
