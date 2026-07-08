@@ -175,6 +175,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     ssh_test_results:
         std::collections::HashMap<String, Result<crate::calc::ssh::SshConnectionResult, String>>,
+
+    // Status refresh state (per platform, keyed by project_id)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    refresh_promises: std::collections::HashMap<String, poll_promise::Promise<Result<(), String>>>,
 }
 
 impl Default for PlatformTab {
@@ -223,6 +227,7 @@ impl Default for PlatformTab {
             select_project_loading: false,
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
+            refresh_promises: std::collections::HashMap::new(),
         }
     }
 }
@@ -977,6 +982,29 @@ impl PlatformTab {
             }
             for platform_name in completed {
                 self.ssh_test_promises.remove(&platform_name);
+            }
+        }
+
+        // Poll refresh promises
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut completed_refreshes = Vec::new();
+            for (project_id, promise) in &self.refresh_promises {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(_) => {
+                            // Reload data to show fresh status
+                            self.loaded = false;
+                        }
+                        Err(e) => {
+                            eprintln!("Refresh failed for {}: {}", project_id, e);
+                        }
+                    }
+                    completed_refreshes.push(project_id.clone());
+                }
+            }
+            for project_id in completed_refreshes {
+                self.refresh_promises.remove(&project_id);
             }
         }
 
@@ -2396,6 +2424,129 @@ impl PlatformTab {
         });
 
         self.ssh_test_promises.insert(platform_name, promise);
+    }
+
+    /// Get valid access token, refreshing if expired (standalone helper)
+    fn get_valid_access_token(platform: &mut crate::config::CloudPlatformConfig) -> Result<String, String> {
+        use crate::api::gcp::oauth::refresh_access_token;
+
+        let token = platform.gcp_oauth_access_token.as_ref()
+            .ok_or_else(|| "No OAuth access token".to_string())?;
+
+        let refresh_token = platform.gcp_oauth_refresh_token.as_ref()
+            .ok_or_else(|| "No OAuth refresh token".to_string())?;
+
+        let expiry = platform.gcp_oauth_token_expiry
+            .ok_or_else(|| "No token expiry".to_string())?;
+
+        // Check if expired (with 60 second buffer)
+        let now = chrono::Utc::now().timestamp();
+        if now >= expiry - 60 {
+            // Refresh token
+            let oauth_handler = crate::api::gcp::oauth::OAuthHandler::default();
+            let new_oauth = refresh_access_token(
+                oauth_handler.client_id(),
+                oauth_handler.client_secret(),
+                refresh_token,
+            ).map_err(|e| format!("Failed to refresh token: {}", e))?;
+
+            // Update platform
+            platform.gcp_oauth_access_token = Some(new_oauth.access_token.clone());
+            platform.gcp_oauth_token_expiry = Some(new_oauth.expires_at as i64);
+
+            Ok(new_oauth.access_token)
+        } else {
+            Ok(token.clone())
+        }
+    }
+
+    /// Execute status refresh for a platform
+    #[cfg(not(target_arch = "wasm32"))]
+    fn execute_refresh(&mut self, project_id: String) {
+        use crate::api::gcp::{GcpRestClient, get_current_ip};
+
+        let promise = poll_promise::Promise::spawn_thread("refresh_status", move || {
+            // Load config
+            let (mut config, config_path) = load_config()
+                .map_err(|e| format!("Failed to load config: {}", e))?;
+
+            // Find platform
+            let platform = config.platforms.iter_mut()
+                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&project_id))
+                .ok_or_else(|| format!("Platform {} not found", project_id))?;
+
+            // Get valid access token
+            let token = get_valid_access_token(platform)?;
+            let client = GcpRestClient::new(token);
+
+            // Fetch VM status if VM exists
+            if let Some(vm) = platform.vms.first() {
+                match client.get_instance(&project_id, &vm.zone, &vm.name) {
+                    Ok(instance) => {
+                        platform.cached_vm_status = Some(instance.status.clone());
+
+                        // Extract external IP from network interfaces
+                        if let Some(ni) = instance.network_interfaces.first() {
+                            if let Some(ac) = ni.access_configs.first() {
+                                platform.cached_vm_external_ip = ac.nat_ip.clone();
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to fetch VM status: {}", e);
+                    }
+                }
+            }
+
+            // Fetch firewall status
+            match get_current_ip() {
+                Ok(current_ip) => {
+                    match client.check_ip_whitelisted(&project_id, &current_ip) {
+                        Ok(whitelisted) => {
+                            platform.cached_firewall_status = Some(
+                                if whitelisted {
+                                    format!("✓ Whitelisted ({})", current_ip)
+                                } else {
+                                    "✗ Not whitelisted".to_string()
+                                }
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to check firewall: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to get current IP: {}", e);
+                }
+            }
+
+            // Fetch total project count
+            match client.list_projects(None) {
+                Ok(list) => {
+                    platform.cached_total_project_count = Some(list.projects.len());
+                }
+                Err(e) => {
+                    eprintln!("Failed to fetch project count: {}", e);
+                }
+            }
+
+            // Update refresh timestamp
+            platform.last_status_refresh = Some(chrono::Utc::now().timestamp());
+
+            // Save config
+            config.save(&config_path)
+                .map_err(|e| format!("Failed to save config: {}", e))?;
+
+            Ok(())
+        });
+
+        self.refresh_promises.insert(project_id, promise);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn execute_refresh(&mut self, _project_id: String) {
+        // WASM not supported
     }
 
     fn show_delete_platform_confirmation(&mut self, platform_name: String) {
