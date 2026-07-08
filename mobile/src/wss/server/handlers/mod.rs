@@ -2,7 +2,7 @@
 
 pub mod auth;
 
-use crate::site::messages::{ClientMessage, ErrorResponse, ServerMessage};
+use dure_messages::{ClientMessage, ErrorResponse, ServerMessage};
 use crate::wss::server::ServerSettings;
 use anyhow::Result;
 
