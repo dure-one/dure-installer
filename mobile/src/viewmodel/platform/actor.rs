@@ -93,7 +93,6 @@ impl PlatformActor {
                 auth_code,
             } => self.complete_oauth(platform_name, auth_code).await,
             PlatformCommand::AddPlatform {
-                name,
                 platform_type,
                 oauth_access_token,
                 oauth_refresh_token,
@@ -102,7 +101,6 @@ impl PlatformActor {
                 selected_project_id,
             } => {
                 self.add_platform(
-                    name,
                     platform_type,
                     oauth_access_token,
                     oauth_refresh_token,
@@ -147,7 +145,7 @@ impl PlatformActor {
         let platform = config
             .platforms
             .into_iter()
-            .find(|p| p.name == platform_name)
+            .find(|p| p.gcp_selected_project_id.as_deref() == Some(platform_name))
             .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
         Ok((platform, config_path))
     }
@@ -574,7 +572,7 @@ impl PlatformActor {
                 if let Some(platform) = config
                     .platforms
                     .iter_mut()
-                    .find(|p| p.name == platform_name)
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                 {
                     platform.gcp_selected_project_id = Some(project_id.clone());
                     config.save(&config_path)?;
@@ -644,7 +642,6 @@ impl PlatformActor {
 
     async fn add_platform(
         &mut self,
-        name: String,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -656,20 +653,24 @@ impl PlatformActor {
             .await;
 
         runtime::unblock({
-            let name = name.clone();
             let platform_type = platform_type.clone();
+            let selected_project_id = selected_project_id.clone();
             move || -> anyhow::Result<()> {
                 let config_path = Self::get_config_path()?;
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
-                // Check if platform already exists
-                if app_config.platforms.iter().any(|p| p.name == name) {
-                    anyhow::bail!("Platform '{}' already exists", name);
+                // Check if platform already exists (by project_id)
+                if let Some(ref project_id) = selected_project_id {
+                    if app_config.platforms.iter().any(|p| p.gcp_selected_project_id.as_ref() == Some(project_id)) {
+                        anyhow::bail!("Platform with project '{}' already exists", project_id);
+                    }
                 }
+
+                // Get project_id for audit before moving selected_project_id
+                let project_id_for_audit = selected_project_id.as_deref().unwrap_or("unknown").to_string();
 
                 // Create new platform
                 let platform = crate::config::CloudPlatformConfig {
-                    name: name.clone(),
                     platform_type: platform_type.clone(),
                     gcp_oauth_access_token: oauth_access_token,
                     gcp_oauth_refresh_token: oauth_refresh_token,
@@ -684,6 +685,11 @@ impl PlatformActor {
                     api_token: None,
                     service_account_json: None,
                     vms: Vec::new(),
+                    cached_total_project_count: None,
+                    cached_vm_status: None,
+                    cached_firewall_status: None,
+                    cached_vm_external_ip: None,
+                    last_status_refresh: None,
                 };
 
                 // Add to config
@@ -693,7 +699,7 @@ impl PlatformActor {
                 app_config.save(&config_path)?;
 
                 // Record audit event
-                let _ = crate::calc::audit::push_gui("system", "desktop", "platform add", &name);
+                let _ = crate::calc::audit::push_gui("system", "desktop", "platform add", &project_id_for_audit);
 
                 Ok(())
             }
@@ -704,7 +710,7 @@ impl PlatformActor {
             .await;
 
         self.send_event(PlatformEvent::PlatformAdded {
-            platform_name: name,
+            platform_name: selected_project_id.unwrap_or_default(),
             platform_type,
         })
         .await;
@@ -731,7 +737,7 @@ impl PlatformActor {
                 let platform = app_config
                     .platforms
                     .iter()
-                    .find(|p| p.name == platform_name)
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                     .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
 
                 let access_token = platform.gcp_oauth_access_token.clone()
@@ -797,7 +803,7 @@ impl PlatformActor {
                 let platform_idx = app_config
                     .platforms
                     .iter()
-                    .position(|p| p.name == platform_name)
+                    .position(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                     .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
 
                 let platform = app_config.platforms.remove(platform_idx);
