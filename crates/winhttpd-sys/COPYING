@@ -1,6 +1,0 @@
-This crate is dual-licensed under MIT or Apache-2.0.
-
-See LICENSE-MIT and LICENSE-Apache-2.0 in the repository root.
-
-Based on winhttpd: https://github.com/FmasterofU/winhttpd
-winhttpd is a Windows port of darkhttpd 1.12
