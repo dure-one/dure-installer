@@ -1,6 +1,6 @@
 //! Authentication message handlers
 
-use crate::site::messages::{
+use dure_messages::{
     AuthLoginRequest, AuthLogoutRequest, AuthLogoutResponse, AuthResponse, DeviceInfo,
     ServerMessage, WebAuthnSigninBeginRequest, WebAuthnSigninBeginResponse,
     WebAuthnSigninFinishRequest, WebAuthnSigninFinishResponse, WebAuthnSignupBeginRequest,
