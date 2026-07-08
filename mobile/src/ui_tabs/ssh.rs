@@ -871,9 +871,8 @@ impl SshTab {
                 self.load_containers_for_removal(Some(vm));
             }
 
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))
-            }) {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_uninstall_docker_{}", idx))));
                 let _ = vm.uninstall_docker(host);
             }
 
@@ -900,14 +899,12 @@ impl SshTab {
                     let _ = vm.install_ansible(host);
                 }
             }
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))
-            }) {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_ansible_status_{}", idx))));
                 let _ = vm.get_ansible_status(host);
             }
-            if let Some(_host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_role_{}", idx)))
-            }) {
+            if let Some(_host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_ansible_role_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_install_ansible_role_{}", idx))));
                 self.show_ansible_install_dialog = true;
                 self.ansible_install_host_idx = Some(idx);
                 self.ansible_role_input.clear();
@@ -918,16 +915,14 @@ impl SshTab {
                 self.ansible_validating = false;
                 self.ansible_validation_error = None;
             }
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))
-            }) {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_uninstall_ansible_{}", idx))));
                 let _ = vm.uninstall_ansible(host);
             }
 
             // Dure-WSS operations
-            if let Some(_host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))
-            }) {
+            if let Some(_host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_install_dure_wss_{}", idx))));
                 self.show_dure_wss_install_dialog = true;
                 self.dure_wss_install_host_idx = Some(idx);
                 self.dure_wss_domain.clear();
@@ -935,21 +930,18 @@ impl SshTab {
                 self.dure_wss_channel = "stable".to_string();
                 self.dure_wss_variant = "default".to_string();
             }
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))
-            }) {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_dure_wss_status_{}", idx))));
                 let _ = vm.get_dure_wss_status(host);
             }
-            if let Some(host) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)))
-            }) {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_uninstall_dure_wss_{}", idx))));
                 let _ = vm.uninstall_dure_wss(host);
             }
 
             // Delete
-            if let Some(host) =
-                ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_delete_{}", idx))))
-            {
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new(format!("ssh_delete_{}", idx)))) {
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new(format!("ssh_delete_{}", idx))));
                 let _ = vm.delete_ssh_host(host);
             }
         }
