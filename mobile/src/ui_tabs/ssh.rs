@@ -24,6 +24,7 @@ enum ConnectionStatus {
     Connected,
     Offline,
     Testing,
+    CheckingHealth,  // NEW: During pre-refresh health check
     Unknown,
 }
 
@@ -63,6 +64,7 @@ struct SshRowData {
     // Refresh state
     refreshing: bool,
     refresh_pending_count: u8,
+    refresh_failed: bool,  // NEW: True when health check or refresh fails
 }
 
 /// Results from batch container removal
@@ -81,6 +83,12 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    auto_refresh_done: bool,  // NEW: Session flag - false on app start
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pending_refresh_hosts: Vec<String>,  // NEW: Deferred refresh queue
 
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
@@ -241,6 +249,8 @@ impl Default for SshTab {
         Self {
             rows: Vec::new(),
             loaded: false,
+            auto_refresh_done: false,  // NEW
+            pending_refresh_hosts: Vec::new(),  // NEW
             load_error: None,
             show_add_dialog: false,
             add_host: String::new(),
@@ -369,6 +379,7 @@ impl SshTab {
                             connection_status: ConnectionStatus::Unknown,
                             refreshing: false,
                             refresh_pending_count: 0,
+                            refresh_failed: false,  // NEW
                         });
                     }
                 }
@@ -602,6 +613,38 @@ impl SshTab {
                 self.decrement_refresh_counter(&name);
             }
 
+            ViewModelEvent::Ssh(SshEvent::HostHealthChecked { name, is_alive, latency_ms }) => {
+                eprintln!("Health check result for {}: alive={}, latency={:?}", name, is_alive, latency_ms);
+
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
+                    if is_alive {
+                        // Host is reachable - queue for refresh
+                        eprintln!("Host {} is alive, queueing refresh", name);
+                        row.connection_status = ConnectionStatus::Unknown;
+                        row.refresh_failed = false;
+
+                        // Add to pending refresh queue (will process in ui() method)
+                        if !self.pending_refresh_hosts.contains(&name) {
+                            self.pending_refresh_hosts.push(name.clone());
+                        }
+                    } else {
+                        // Host unreachable - mark as failed
+                        eprintln!("Host {} is unreachable", name);
+                        row.refresh_failed = true;
+                        row.connection_status = ConnectionStatus::Offline;
+                    }
+                }
+
+                // Mark auto-refresh as done when all health checks complete
+                let all_checked = self.rows.iter().all(|r|
+                    r.connection_status != ConnectionStatus::CheckingHealth
+                );
+                if all_checked && !self.auto_refresh_done {
+                    eprintln!("All health checks complete, marking auto_refresh_done");
+                    self.auto_refresh_done = true;
+                }
+            }
+
             ViewModelEvent::Ssh(SshEvent::DureWssUninstalled { host_name }) => {
                 eprintln!("✓ Dure-WSS uninstalled from {}", host_name);
 
@@ -741,7 +784,22 @@ impl SshTab {
 
         // Check all possible action IDs
         for idx in 0..self.rows.len() {
-            // Refresh
+            // Health check (before refresh)
+            let health_check_id = egui::Id::new(format!("ssh_health_check_{}", idx));
+            if let Some(host) = ui.data(|d| d.get_temp::<String>(health_check_id)) {
+                ui.data_mut(|d| d.remove::<String>(health_check_id));
+
+                eprintln!("Manual health check triggered for {}", host);
+
+                if let Some(row) = self.rows.get_mut(idx) {
+                    row.connection_status = ConnectionStatus::CheckingHealth;
+                    row.refresh_failed = false;
+                }
+
+                let _ = vm.check_host_health(host, 5);
+            }
+
+            // Refresh (keep existing handler for compatibility)
             let refresh_id = egui::Id::new(format!("ssh_refresh_{}", idx));
             if let Some(host) = ui.data(|d| d.get_temp::<String>(refresh_id)) {
                 // Clear temp data immediately to prevent continuous firing
@@ -1875,8 +1933,24 @@ impl SshTab {
             }
         }
 
-        // Request continuous repainting while any row is refreshing
-        if self.rows.iter().any(|row| row.refreshing) {
+        // 1b. Process pending refresh queue (after health checks)
+        if let Some(ref mut vm) = vm {
+            for host in self.pending_refresh_hosts.drain(..) {
+                eprintln!("Processing pending refresh for {}", host);
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.refreshing = true;
+                    row.refresh_pending_count = 4;  // 4 operations
+
+                    let _ = vm.get_linux_status(host.clone());
+                    let _ = vm.get_docker_status(host.clone());
+                    let _ = vm.get_ansible_status(host.clone());
+                    let _ = vm.get_dure_wss_status(host);
+                }
+            }
+        }
+
+        // Request continuous repainting while any row is refreshing or checking health
+        if self.rows.iter().any(|row| row.refreshing || row.connection_status == ConnectionStatus::CheckingHealth) {
             ui.ctx().request_repaint();
         }
 
@@ -1931,16 +2005,19 @@ impl SshTab {
             self.load_rows();
             self.loaded = true;
 
-            // Auto-refresh all rows on first load
-            if let Some(ref mut vm) = vm {
-                for row in &mut self.rows {
-                    row.refreshing = true;
-                    row.refresh_pending_count = 3;
-                    let _ = vm.get_linux_status(row.host.clone());
-                    let _ = vm.get_docker_status(row.host.clone());
-                    let _ = vm.get_ansible_status(row.host.clone());
-                    let _ = vm.get_dure_wss_status(row.host.clone());
+            // Auto-refresh only once per session
+            if !self.auto_refresh_done {
+                eprintln!("First session load - starting health checks");
+                if let Some(ref mut vm) = vm {
+                    for row in &mut self.rows {
+                        eprintln!("Starting health check for {}", row.host);
+                        row.connection_status = ConnectionStatus::CheckingHealth;
+                        row.refresh_failed = false;
+                        let _ = vm.check_host_health(row.host.clone(), 5);
+                    }
                 }
+            } else {
+                eprintln!("Auto-refresh already done this session, skipping");
             }
         }
 
@@ -2615,22 +2692,29 @@ fn render_operations(ui: &mut egui::Ui, row: &SshRowData, idx: usize) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
 
-        // Refresh - always available
-        if row.refreshing {
-            ui.add_enabled(false, MaterialButton::outlined("Refreshing...").small());
+        // Refresh - show different states
+        let button_state = if row.connection_status == ConnectionStatus::CheckingHealth {
+            ("Checking...", false, "Checking if host is reachable")
+        } else if row.refreshing {
+            ("Refreshing...", false, "Fetching host status")
+        } else if row.refresh_failed {
+            ("Refresh Failed", true, "Host unreachable - click to retry")
         } else {
-            if ui
-                .add(MaterialButton::outlined("Refresh").small())
-                .on_hover_text("Refresh host status")
-                .clicked()
-            {
-                ui.data_mut(|d| {
-                    d.insert_temp(
-                        egui::Id::new(format!("ssh_refresh_{}", idx)),
-                        row.host.clone(),
-                    )
-                });
-            }
+            ("Refresh", true, "Refresh host status")
+        };
+
+        let button = MaterialButton::outlined(button_state.0).small();
+        if ui.add_enabled(button_state.1, button)
+            .on_hover_text(button_state.2)
+            .clicked()
+        {
+            // Trigger health check first, then refresh
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(format!("ssh_health_check_{}", idx)),
+                    row.host.clone(),
+                )
+            });
         }
 
         // Delete - always available

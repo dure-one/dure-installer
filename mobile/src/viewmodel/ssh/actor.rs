@@ -126,6 +126,72 @@ impl SshActor {
         Ok(())
     }
 
+    /// Check if SSH host is reachable via TCP port check with timeout
+    async fn handle_check_host_health(&self, name: String, timeout_secs: u8) {
+        let start = std::time::Instant::now();
+
+        // Load host config to get host:port
+        let host_config = match self.load_host_config(&name) {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("Failed to load host config for {}: {}", name, e);
+                let _ = self.event_tx.send(ViewModelEvent::Ssh(
+                    SshEvent::HostHealthChecked {
+                        name,
+                        is_alive: false,
+                        latency_ms: None,
+                    }
+                )).await;
+                return;
+            }
+        };
+
+        // Extract hostname/IP from "user@host" format
+        let hostname = if let Some(at_pos) = host_config.host.rfind('@') {
+            &host_config.host[at_pos + 1..]
+        } else {
+            &host_config.host
+        };
+
+        let address = format!("{}:{}", hostname, host_config.port);
+        eprintln!("Health check: connecting to {}", address);
+
+        // TCP connection attempt with timeout
+        let timeout = std::time::Duration::from_secs(timeout_secs as u64);
+        let result = smol::future::or(
+            async {
+                smol::net::TcpStream::connect(&address).await
+            },
+            async {
+                smol::Timer::after(timeout).await;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Health check timeout"
+                ))
+            }
+        ).await;
+
+        let elapsed = start.elapsed();
+        let (is_alive, latency_ms) = match result {
+            Ok(_stream) => {
+                eprintln!("Health check succeeded for {} in {:?}", name, elapsed);
+                (true, Some(elapsed.as_millis() as u64))
+            }
+            Err(e) => {
+                eprintln!("Health check failed for {}: {}", name, e);
+                (false, None)
+            }
+        };
+
+        let _ = self.event_tx.send(ViewModelEvent::Ssh(
+            SshEvent::HostHealthChecked {
+                name,
+                is_alive,
+                latency_ms,
+            }
+        )).await;
+    }
+
     pub async fn run(mut self) {
         log::info!("SshActor started");
 
@@ -202,6 +268,10 @@ impl SshActor {
             SshCommand::InstallAnsible { name } => self.install_ansible(name).await,
             SshCommand::GetAnsibleStatus { name } => self.get_ansible_status(name).await,
             SshCommand::UninstallAnsible { name } => self.uninstall_ansible(name).await,
+            SshCommand::CheckHostHealth { name, timeout_secs } => {
+                self.handle_check_host_health(name, timeout_secs).await;
+                Ok(())
+            }
 
             // Docker Lifecycle Commands
             SshCommand::InstallDockerImage {
