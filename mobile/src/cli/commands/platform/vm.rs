@@ -64,9 +64,11 @@ pub async fn execute_addvm_inner(
     zone: String,
     machine_type: String,
 ) -> Result<()> {
+    let project_id = platform.gcp_selected_project_id.as_ref()
+        .ok_or_else(|| anyhow!("Platform has no project selected"))?;
     let event = runner
         .execute_command(PlatformCommand::CreateVM {
-            platform_name: platform.name.clone(),
+            platform_name: project_id.clone(),
             vm_name: vm_name.clone(),
             zone: zone.clone(),
             machine_type: machine_type.clone(),
@@ -101,7 +103,7 @@ pub fn execute_addvm_command(
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     // Validate platform is ready
@@ -109,13 +111,14 @@ pub fn execute_addvm_command(
 
     // Check if VM already exists
     if !platform.vms.is_empty() {
+        let project_id = platform.gcp_selected_project_id.as_ref().unwrap();
         return Err(anyhow!(
             "Platform '{}' already has a VM: {}\n\n\
              To create a new VM, first delete the existing one:\n  \
              dure platform {} delvm",
-            platform.name,
+            project_id,
             platform.vms[0].name,
-            platform.name
+            project_id
         ));
     }
 
@@ -135,7 +138,7 @@ pub fn execute_addvm_command(
 
         let event = runner
             .execute_command(PlatformCommand::CreateVM {
-                platform_name: platform.name.clone(),
+                platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
                 machine_type: machine_type.clone(),
@@ -166,7 +169,7 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     // Validate platform is ready
@@ -182,7 +185,7 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
 
         let event = runner
             .execute_command(PlatformCommand::RestartVM {
-                platform_name: platform.name.clone(),
+                platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
             })
@@ -204,7 +207,7 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     // Validate platform is ready
@@ -232,7 +235,7 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
 
         let event = runner
             .execute_command(PlatformCommand::DeleteVM {
-                platform_name: platform.name.clone(),
+                platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
             })

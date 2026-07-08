@@ -34,7 +34,7 @@ pub async fn execute_billing_inner(
 
     let event = runner
         .execute_command(PlatformCommand::FetchBilling {
-            platform_name: platform.name.clone(),
+            platform_name: project_id.clone(),
             project_id: project_id.clone(),
             dataset: "billing_export".to_string(),
             table: "gcp_billing_export".to_string(),
@@ -69,7 +69,7 @@ pub fn execute_billing_command(name: String) -> Result<()> {
     let platform = config
         .platforms
         .iter()
-        .find(|p| p.name == name)
+        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name))
         .ok_or_else(|| anyhow!("Platform '{}' not found", name))?;
 
     // Validate platform is ready
@@ -79,7 +79,7 @@ pub fn execute_billing_command(name: String) -> Result<()> {
     let project_id = platform
         .gcp_selected_project_id
         .as_ref()
-        .ok_or_else(|| anyhow!("No project selected for platform '{}'", platform.name))?;
+        .ok_or_else(|| anyhow!("No project selected for platform '{}'", name))?;
 
     // Use hardcoded billing export settings (could be made configurable later)
     let dataset = "billing_export".to_string();
@@ -92,7 +92,7 @@ pub fn execute_billing_command(name: String) -> Result<()> {
 
         let event = runner
             .execute_command(PlatformCommand::FetchBilling {
-                platform_name: platform.name.clone(),
+                platform_name: project_id.clone(),
                 project_id: project_id.clone(),
                 dataset,
                 table,
