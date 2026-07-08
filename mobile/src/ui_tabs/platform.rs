@@ -3,8 +3,8 @@
 use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
 
-use crate::calc::audit;
 use crate::api::gcp::bigquery::BillingRecord;
+use crate::calc::audit;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -129,6 +129,10 @@ pub struct PlatformTab {
     delete_platform_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_platform_vm_count: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_platform_delete_vms: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_platform_delete_project: bool,
 
     // Billing dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -199,6 +203,8 @@ impl Default for PlatformTab {
             show_delete_platform_dialog: false,
             delete_platform_name: String::new(),
             delete_platform_vm_count: 0,
+            delete_platform_delete_vms: false,
+            delete_platform_delete_project: false,
             show_billing_dialog: false,
             billing_data: None,
             billing_loading: false,
@@ -765,6 +771,16 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::VMCreated {
+                        vm_name,
+                        external_ip,
+                        ..
+                    }) => {
+                        eprintln!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        // Refresh to show updated VM details
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::VMDeleted {
                         platform_name,
                         vm_name,
@@ -1091,7 +1107,7 @@ impl PlatformTab {
                                         )))]
                                         if ui
                                             .add_enabled(
-                                                row_for_actions.project_selected,
+                                                row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
                                                 MaterialButton::outlined("Billing").small(),
                                             )
                                             .on_hover_text("Estimated Billing")
@@ -1099,9 +1115,15 @@ impl PlatformTab {
                                         {
                                             ui.data_mut(|d| {
                                                 d.insert_temp(
-                                                    egui::Id::new("platform_action_billing"),
+                                                    egui::Id::new("platform_action_billing_name"),
                                                     row_for_actions.platform_name.clone(),
-                                                )
+                                                );
+                                                if let Some(project_id) = &row_for_actions.selected_project_id {
+                                                    d.insert_temp(
+                                                        egui::Id::new("platform_action_billing_project"),
+                                                        project_id.clone(),
+                                                    );
+                                                }
                                             });
                                         }
 
@@ -1225,12 +1247,20 @@ impl PlatformTab {
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
-                if let Some(_platform_name) =
-                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing")))
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_name")))
                 {
-                    self.show_billing_dialog = true;
-                    self.fetch_billing_data(vm.as_deref_mut());
-                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_billing")));
+                    if let Some(project_id) =
+                        ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_project")))
+                    {
+                        self.show_billing_dialog = true;
+                        self.billing_project_id = project_id.clone();
+                        self.fetch_billing_data(vm.as_deref_mut(), Some(project_id));
+                        ui.data_mut(|d| {
+                            d.remove::<String>(egui::Id::new("platform_action_billing_name"));
+                            d.remove::<String>(egui::Id::new("platform_action_billing_project"));
+                        });
+                    }
                 }
             }
 
@@ -1817,12 +1847,43 @@ impl PlatformTab {
 
     #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn show_gcp_wizard(&mut self, platform_name: String) {
-        let mut wizard = GcpWizard::new(platform_name);
+        // Try to load config and find platform with OAuth + project
+        let mut wizard = if let Ok((app_config, _)) = load_config() {
+            // Find platform by name
+            if let Some(platform) = app_config.platforms.iter()
+                .find(|p| p.name == platform_name)
+            {
+                // Check if platform has OAuth tokens and project ID
+                if let (Some(access_token), Some(refresh_token), Some(token_expiry), Some(project_id)) = (
+                    &platform.gcp_oauth_access_token,
+                    &platform.gcp_oauth_refresh_token,
+                    platform.gcp_oauth_token_expiry,
+                    &platform.gcp_selected_project_id,
+                ) {
+                    // Construct OAuthResult and use with_platform_context
+                    let oauth_result = crate::api::gcp::oauth::OAuthResult {
+                        access_token: access_token.clone(),
+                        refresh_token: refresh_token.clone(),
+                        expires_at: token_expiry as u64,
+                    };
 
-        // Load OAuth from config if exists
-        if let Ok((app_config, _)) = load_config() {
-            wizard.load_oauth_from_config(&app_config);
-        }
+                    GcpWizard::with_platform_context(
+                        platform_name,
+                        project_id.clone(),
+                        oauth_result,
+                    )
+                } else {
+                    // Missing OAuth or project, use full wizard
+                    GcpWizard::new(platform_name)
+                }
+            } else {
+                // Platform not found in config, use full wizard
+                GcpWizard::new(platform_name)
+            }
+        } else {
+            // Config load failed, use full wizard
+            GcpWizard::new(platform_name)
+        };
 
         wizard.show();
         self.gcp_wizard = Some(wizard);
@@ -2319,9 +2380,20 @@ impl PlatformTab {
 
                 ui.add_space(12.0);
 
+                // Delete options
+                ui.checkbox(&mut self.delete_platform_delete_vms, "Delete VMs from GCP");
+                ui.checkbox(
+                    &mut self.delete_platform_delete_project,
+                    "Delete GCP project",
+                );
+
+                ui.add_space(12.0);
+
                 ui.horizontal(|ui| {
                     if ui.button("No, Cancel").clicked() {
                         self.show_delete_platform_dialog = false;
+                        self.delete_platform_delete_vms = false;
+                        self.delete_platform_delete_project = false;
                     }
 
                     if ui
@@ -2330,12 +2402,16 @@ impl PlatformTab {
                     {
                         self.execute_delete_platform(vm.as_deref_mut());
                         self.show_delete_platform_dialog = false;
+                        self.delete_platform_delete_vms = false;
+                        self.delete_platform_delete_project = false;
                     }
                 });
             });
 
         if !open {
             self.show_delete_platform_dialog = false;
+            self.delete_platform_delete_vms = false;
+            self.delete_platform_delete_project = false;
         }
     }
 
@@ -2434,7 +2510,11 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn execute_delete_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(vm) = vm {
-            match vm.delete_platform(self.delete_platform_name.clone()) {
+            let delete_options = crate::viewmodel::platform::DeleteOptions {
+                delete_vms: self.delete_platform_delete_vms,
+                delete_project: self.delete_platform_delete_project,
+            };
+            match vm.delete_platform(self.delete_platform_name.clone(), delete_options) {
                 Ok(_) => {
                     eprintln!("✓ Platform delete command sent");
                 }
@@ -2487,7 +2567,7 @@ impl PlatformTab {
         }
     }
 
-    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>, project_id_param: Option<String>) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
             self.billing_loading = true;
@@ -2524,24 +2604,30 @@ impl PlatformTab {
             };
 
             // Get valid (possibly refreshed) access token
-            let access_token = match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
-                Ok(token) => token,
-                Err(e) => {
-                    self.billing_error = Some(format!("Failed to get valid OAuth token: {}", e));
-                    self.billing_loading = false;
-                    return;
-                }
-            };
+            let access_token =
+                match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
+                    Ok(token) => token,
+                    Err(e) => {
+                        self.billing_error =
+                            Some(format!("Failed to get valid OAuth token: {}", e));
+                        self.billing_loading = false;
+                        return;
+                    }
+                };
 
             // Get platform reference after token refresh
             let platform = &app_config.platforms[platform_idx];
 
-            // Get project ID from VMs
-            let project_id = if !platform.vms.is_empty() {
+            // Get project ID: use provided parameter, or try platform config, or fall back to VMs
+            let project_id = if let Some(pid) = project_id_param {
+                pid
+            } else if let Some(pid) = &platform.gcp_selected_project_id {
+                pid.clone()
+            } else if !platform.vms.is_empty() {
                 platform.vms[0].gcp_project_id.clone()
             } else {
                 self.billing_error = Some(
-                    "No VMs found. Please create a VM to determine the project ID.".to_string(),
+                    "No project ID available. Please select a project first.".to_string(),
                 );
                 self.billing_loading = false;
                 return;
@@ -2635,12 +2721,13 @@ impl PlatformTab {
                     ui.label("Loading billing data...");
                 } else if let Some(error) = &self.billing_error {
                     // Check if this is a "table not found" error (billing export not configured)
-                    let is_table_not_found = error.contains("was not found") || error.contains("Not found");
+                    let is_table_not_found =
+                        error.contains("was not found") || error.contains("Not found");
 
                     if is_table_not_found {
                         ui.colored_label(
                             egui::Color32::from_rgb(255, 152, 0),
-                            "⚠ Billing Export Not Configured"
+                            "⚠ Billing Export Not Configured",
                         );
                         ui.add_space(4.0);
                         ui.label("BigQuery billing export table does not exist yet.");
@@ -2784,7 +2871,7 @@ impl PlatformTab {
 
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data(vm);
+                        self.fetch_billing_data(vm, None);
                     }
 
                     if ui.add(MaterialButton::outlined("Close")).clicked() {
@@ -2792,5 +2879,17 @@ impl PlatformTab {
                     }
                 });
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_delete_options_default() {
+        let state = PlatformTab::default();
+        assert!(!state.delete_platform_delete_vms);
+        assert!(!state.delete_platform_delete_project);
     }
 }
