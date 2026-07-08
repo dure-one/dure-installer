@@ -1,6 +1,7 @@
 [package]
 name = "dure"
 build = "build.rs"
+default-run = "dure-desktop"
 version.workspace = true
 license.workspace = true
 edition.workspace = true
@@ -149,11 +150,6 @@ shellexpand = "3.1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 urlencoding = "2.1"
 
-
-# Unix-like systems (Linux, macOS, BSD) - use darkhttpd
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-darkhttpd-sys = { path = "../crates/darkhttpd-sys" }
-
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
 tray-icon = { version = "0.18", default-features = false, optional = true }
@@ -175,7 +171,6 @@ libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
-winhttpd-sys = { path = "../crates/winhttpd-sys" }
 windows-installer = { path = "../crates/windows-installer" }
 windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",

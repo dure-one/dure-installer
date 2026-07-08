@@ -65,8 +65,9 @@ pub mod tray;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod wss;
 // HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-pub mod http_server;
+// TODO: Re-enable when HTTP server implementation is available
+// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// pub mod http_server;
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 // pub mod attestation;
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
