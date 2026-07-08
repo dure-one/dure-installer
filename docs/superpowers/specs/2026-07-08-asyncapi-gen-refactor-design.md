@@ -314,14 +314,12 @@ exclude = [
 # WebSocket message types
 dure-messages = { path = "../crates/dure-messages" }
 
-# ❌ REMOVE these if only used for messages:
+# ❌ REMOVE these (only used in files being deleted):
 # asyncapi-rust = "0.2"  
 # schemars = { version = "1.2", features = ["derive", "chrono04"] }
-
-# ✅ KEEP if used elsewhere in mobile crate (need to verify)
 ```
 
-**Note:** Check if `asyncapi-rust` and `schemars` are used elsewhere in the mobile crate before removing.
+**Note:** Both `asyncapi-rust` and `schemars` are only used in `mobile/src/asyncapi_spec.rs` and `mobile/src/site/messages/*`, which are being deleted. They can be safely removed from mobile's dependencies.
 
 ### Import Changes
 
@@ -420,21 +418,16 @@ cargo metadata --format-version 1 | jq '.workspace_members' | grep -E "dure-mess
 
 **Actions:**
 1. Add `dure-messages = { path = "../crates/dure-messages" }` to `mobile/Cargo.toml`
-2. Find all imports of `crate::site::messages` in `mobile/src/`:
+2. Remove `asyncapi-rust = "0.2"` and `schemars = { ... }` dependencies from `mobile/Cargo.toml` (only used in files being deleted)
+3. Find all imports of `crate::site::messages` in `mobile/src/`:
    ```bash
    grep -r "use crate::site::messages" mobile/src/
    ```
-3. Replace each occurrence with `use dure_messages`
-4. Check if `asyncapi-rust` and `schemars` are used elsewhere in mobile:
-   ```bash
-   grep -r "use asyncapi_rust" mobile/src/
-   grep -r "use schemars" mobile/src/
-   ```
-5. Remove from `Cargo.toml` if only used for messages
-6. Delete `mobile/src/site/messages/` directory
-7. Delete `mobile/src/asyncapi_spec.rs`
-8. Update `mobile/src/site/mod.rs` - remove `pub mod messages;` if present
-9. Run `cargo check -p dure` to verify compilation
+4. Replace each occurrence with `use dure_messages`
+5. Delete `mobile/src/site/messages/` directory
+6. Delete `mobile/src/asyncapi_spec.rs`
+7. Update `mobile/src/site/mod.rs` - remove `pub mod messages;` if present
+8. Run `cargo check -p dure` to verify compilation
 
 **Verification:**
 ```bash
