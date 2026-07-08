@@ -146,7 +146,14 @@ impl SshActor {
             }
         };
 
-        let address = format!("{}:{}", host_config.host, host_config.port);
+        // Extract hostname/IP from "user@host" format
+        let hostname = if let Some(at_pos) = host_config.host.rfind('@') {
+            &host_config.host[at_pos + 1..]
+        } else {
+            &host_config.host
+        };
+
+        let address = format!("{}:{}", hostname, host_config.port);
         eprintln!("Health check: connecting to {}", address);
 
         // TCP connection attempt with timeout
