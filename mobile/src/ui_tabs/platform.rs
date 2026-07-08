@@ -231,12 +231,56 @@ fn get_config_path() -> Result<std::path::PathBuf, String> {
     Ok(proj_dirs.config_dir().join("config.yml"))
 }
 
-/// Load application config
+/// Load application config with V1 to V2 migration
 #[cfg(not(target_arch = "wasm32"))]
 fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
+    use crate::config_migration::{AppConfigV1, backup_config, migrate_config_v1_to_v2};
+
     let config_path = get_config_path()?;
-    let app_config = AppConfig::load_or_default(&config_path);
-    Ok((app_config, config_path))
+
+    if !config_path.exists() {
+        // No config exists, create default
+        let default_config = AppConfig::default();
+        return Ok((default_config, config_path));
+    }
+
+    let contents = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config: {}", e))?;
+
+    // Try loading as V2 first (current format)
+    match serde_yaml::from_str::<AppConfig>(&contents) {
+        Ok(config) => {
+            // Already V2 format
+            Ok((config, config_path))
+        }
+        Err(_v2_err) => {
+            // V2 parse failed, try V1 (with 'name' field)
+            match serde_yaml::from_str::<AppConfigV1>(&contents) {
+                Ok(v1_config) => {
+                    eprintln!("✓ Detected V1 config, migrating to V2...");
+
+                    // Create backup before migration
+                    backup_config(&config_path)?;
+
+                    // Migrate
+                    let v2_config = migrate_config_v1_to_v2(v1_config)?;
+
+                    // Save migrated config immediately
+                    v2_config.save(&config_path)
+                        .map_err(|e| format!("Failed to save migrated config: {}", e))?;
+
+                    eprintln!("✓ Migrated {} platform(s) to V2 format", v2_config.platforms.len());
+
+                    Ok((v2_config, config_path))
+                }
+                Err(v1_err) => {
+                    // Both V1 and V2 failed - config is corrupted
+                    Err(format!("Failed to parse config as V1 or V2: V2 error: {:?}, V1 error: {:?}",
+                        _v2_err, v1_err))
+                }
+            }
+        }
+    }
 }
 
 /// Format connection progress steps with status indicators
