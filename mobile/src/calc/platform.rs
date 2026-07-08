@@ -97,9 +97,9 @@ pub fn validate_platform_config(platform: &CloudPlatformConfig) -> ValidationRes
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    // Validate name
-    if platform.name.is_empty() {
-        errors.push("Platform name is required".to_string());
+    // Validate project ID for GCP platforms
+    if platform.platform_type == "gcp" && platform.gcp_selected_project_id.is_none() {
+        errors.push("GCP project ID is required".to_string());
     }
 
     // Validate platform type

@@ -17,7 +17,6 @@ pub enum PlatformCommand {
         auth_code: String,
     },
     AddPlatform {
-        name: String,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
