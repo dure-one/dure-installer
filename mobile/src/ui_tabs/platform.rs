@@ -653,7 +653,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
     // Level 2: Selected project
     if let Some(project_id) = &row.selected_project_id {
-        ui.label(format!("  └─ Project: {} (selected)", project_id));
+        ui.label(format!("  └─ Project: {}", project_id));
 
         // Level 3: VM details
         if let Some(vm_name) = &row.vm_name {
