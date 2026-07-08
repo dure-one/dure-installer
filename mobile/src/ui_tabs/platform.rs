@@ -91,6 +91,10 @@ pub struct PlatformTab {
     add_platform_project_list: Vec<(String, String)>,
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_selected_project: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_create_new: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    add_platform_new_project_id: String,
 
     // Init progress state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -195,6 +199,8 @@ impl Default for PlatformTab {
             add_platform_connected_email: None,
             add_platform_project_list: Vec::new(),
             add_platform_selected_project: None,
+            add_platform_create_new: false,
+            add_platform_new_project_id: String::new(),
             init_in_progress: false,
             init_platform_name: None,
             init_progress_log: Vec::new(),
@@ -1788,32 +1794,55 @@ impl PlatformTab {
                             }
                         }
 
-                        // Show project selection
-                        ui.label(format!(
-                            "Select Project ({} available):",
-                            self.add_platform_project_list.len()
-                        ));
+                        // Show project selection or creation
+                        ui.label("Project:");
                         ui.add_space(4.0);
 
-                        egui::ScrollArea::vertical()
-                            .max_height(200.0)
-                            .show(ui, |ui| {
-                                for (idx, (project_id, project_name)) in
-                                    self.add_platform_project_list.iter().enumerate()
-                                {
-                                    let is_selected =
-                                        self.add_platform_selected_project == Some(idx);
-                                    if ui
-                                        .selectable_label(
-                                            is_selected,
-                                            format!("{} ({})", project_name, project_id),
-                                        )
-                                        .clicked()
+                        // Radio buttons for select vs create
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut self.add_platform_create_new, false, "Select Existing");
+                            ui.radio_value(&mut self.add_platform_create_new, true, "Create New");
+                        });
+                        ui.add_space(8.0);
+
+                        if self.add_platform_create_new {
+                            // Create new project UI
+                            ui.label("New Project ID:");
+                            ui.add_space(4.0);
+                            ui.text_edit_singleline(&mut self.add_platform_new_project_id);
+                            ui.add_space(4.0);
+                            ui.colored_label(
+                                egui::Color32::GRAY,
+                                "ⓘ Project ID must be 6-30 characters, lowercase letters, digits, hyphens",
+                            );
+                        } else {
+                            // Select existing project UI
+                            ui.label(format!(
+                                "Select Project ({} available):",
+                                self.add_platform_project_list.len()
+                            ));
+                            ui.add_space(4.0);
+
+                            egui::ScrollArea::vertical()
+                                .max_height(200.0)
+                                .show(ui, |ui| {
+                                    for (idx, (project_id, project_name)) in
+                                        self.add_platform_project_list.iter().enumerate()
                                     {
-                                        self.add_platform_selected_project = Some(idx);
+                                        let is_selected =
+                                            self.add_platform_selected_project == Some(idx);
+                                        if ui
+                                            .selectable_label(
+                                                is_selected,
+                                                format!("{} ({})", project_name, project_id),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.add_platform_selected_project = Some(idx);
+                                        }
                                     }
-                                }
-                            });
+                                });
+                        }
                     } else if self.add_platform_oauth_promise.is_some() {
                         ui.spinner();
                         ui.label("Waiting for authorization...");
@@ -1858,11 +1887,14 @@ impl PlatformTab {
                         self.add_platform_connected_email = None;
                         self.add_platform_project_list.clear();
                         self.add_platform_selected_project = None;
+                        self.add_platform_create_new = false;
+                        self.add_platform_new_project_id.clear();
                     }
 
                     let can_add = self.add_platform_type != "gcp"
                         || (self.add_platform_connected_email.is_some()
-                            && self.add_platform_selected_project.is_some());
+                            && (self.add_platform_selected_project.is_some()
+                                || (!self.add_platform_new_project_id.is_empty())));
 
                     ui.add_enabled_ui(can_add, |ui| {
                         if ui.button("Add").clicked() {
@@ -1874,6 +1906,8 @@ impl PlatformTab {
                             self.add_platform_connected_email = None;
                             self.add_platform_project_list.clear();
                             self.add_platform_selected_project = None;
+                            self.add_platform_create_new = false;
+                            self.add_platform_new_project_id.clear();
                         }
                     });
 
@@ -1882,10 +1916,12 @@ impl PlatformTab {
                             && self.add_platform_connected_email.is_none()
                         {
                             ui.label("⚠ Connect to Google Cloud first");
-                        } else if self.add_platform_type == "gcp"
-                            && self.add_platform_selected_project.is_none()
-                        {
-                            ui.label("⚠ Select a project");
+                        } else if self.add_platform_type == "gcp" {
+                            if self.add_platform_create_new {
+                                ui.label("⚠ Enter project ID");
+                            } else {
+                                ui.label("⚠ Select a project");
+                            }
                         }
                     }
                 });
@@ -1906,10 +1942,24 @@ impl PlatformTab {
             let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
                 if self.add_platform_type == "gcp" {
                     if let Some(oauth) = &self.add_platform_oauth_result {
-                        let project_id = self
-                            .add_platform_selected_project
-                            .and_then(|idx| self.add_platform_project_list.get(idx))
-                            .map(|(id, _)| id.clone());
+                        let project_id = if self.add_platform_create_new {
+                            // Create new project
+                            if !self.add_platform_new_project_id.is_empty() {
+                                // TODO: Call GCP API to create project
+                                // For now, just use the entered project ID
+                                // In production, you'd call:
+                                // let client = GcpRestClient::new(oauth.access_token.clone());
+                                // client.create_project(&self.add_platform_new_project_id, &self.add_platform_new_project_id)?;
+                                Some(self.add_platform_new_project_id.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            // Select existing project
+                            self.add_platform_selected_project
+                                .and_then(|idx| self.add_platform_project_list.get(idx))
+                                .map(|(id, _)| id.clone())
+                        };
                         (
                             Some(oauth.access_token.clone()),
                             Some(oauth.refresh_token.clone()),
@@ -1926,7 +1976,6 @@ impl PlatformTab {
 
             if let Some(vm) = vm {
                 match vm.add_platform(
-                    self.add_platform_name.clone(),
                     self.add_platform_type.clone(),
                     oauth_access,
                     oauth_refresh,

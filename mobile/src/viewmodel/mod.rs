@@ -384,7 +384,6 @@ impl ViewModel {
 
     pub fn add_platform(
         &self,
-        name: String,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -394,7 +393,6 @@ impl ViewModel {
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::AddPlatform {
-                name,
                 platform_type,
                 oauth_access_token,
                 oauth_refresh_token,
