@@ -1,0 +1,32 @@
+[package]
+name = "service"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+
+[dependencies]
+# deltachat
+# NOTE: Temporarily commented due to libsqlite3-sys version conflict
+# deltachat = { path = "../../reference/deltachat-core" }
+
+# Runtime bridging
+async-compat = "0.2"
+smol = "2.0"
+
+# Event broadcasting
+async-broadcast = "0.7"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Utilities
+dure-messages = { path = "../dure-messages" }
+
+[dev-dependencies]
+smol-potat = "0.5"
+tempfile = "3"

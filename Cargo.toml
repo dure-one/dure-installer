@@ -7,9 +7,11 @@ members = [
     "crates/go-webauthn-client",
     "crates/windows-installer",
     "crates/ws",
+    "crates/service",
 ]
 exclude = [
     "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
+    "reference/deltachat-core",  # Excluded: has its own workspace
 ]
 
 [workspace.package]
