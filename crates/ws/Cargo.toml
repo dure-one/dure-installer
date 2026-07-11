@@ -33,6 +33,11 @@ anyhow = "1.0"
 # Utilities
 dure-messages = { path = "../dure-messages" }
 dashmap = "6.1"
+service = { path = "../service", optional = true }
+
+[features]
+default = []
+chat = ["dep:service"]
 
 [dev-dependencies]
 smol-potat = "0.5"

@@ -6,6 +6,9 @@
 //! - Middleware chain (CORS, compression, sessions)
 //! - Static file serving
 
+#[cfg(feature = "chat")]
+pub use service;
+
 pub mod error;
 pub mod config;
 pub mod tls;
