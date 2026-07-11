@@ -1,10 +1,27 @@
-//! WebSocket and HTTP/2 server built on wtx + smol
+//! # ws - WebSocket and HTTP/2 Server
 //!
-//! Provides high-performance WebSocket and HTTP/2 server with:
+//! High-performance WebSocket and HTTP/2 server built on wtx + smol.
+//!
+//! ## Features
+//!
+//! - HTTP/2 server with wtx (runtime-agnostic)
+//! - WebSocket server (RFC 6455)
 //! - TLS support via rustls
-//! - DDoS protection via fail2ban-rs
-//! - Middleware chain (CORS, compression, sessions)
 //! - Static file serving
+//! - Middleware chain (CORS, compression, sessions)
+//! - DDoS protection via fail2ban-rs
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use ws::{ServerConfig, WsServer};
+//!
+//! #[smol::main]
+//! async fn main() {
+//!     let config = ServerConfig::new("example.com");
+//!     WsServer::new(config).run().await.unwrap();
+//! }
+//! ```
 
 #[cfg(feature = "chat")]
 pub use service;

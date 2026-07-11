@@ -1,6 +1,31 @@
-//! Chat service layer with deltachat-core integration
+//! # service - Chat Service Layer
 //!
-//! Provides email-based chat functionality via async-compat bridge
+//! Email-based chat service using deltachat-core with async-compat bridge.
+//!
+//! ## Features
+//!
+//! - deltachat-core integration (SMTP/IMAP)
+//! - async-compat bridge (tokio ↔ smol)
+//! - Event broadcasting
+//! - End-to-end encryption (rPGP, Autocrypt)
+//!
+//! ## Example
+//!
+//! ```rust,no_run
+//! use service::ChatService;
+//!
+//! #[smol::main]
+//! async fn main() {
+//!     let service = ChatService::new("./chat.db".into())
+//!         .await
+//!         .unwrap();
+//!
+//!     let mut events = service.subscribe_events();
+//!     while let Ok(event) = events.recv().await {
+//!         println!("Event: {:?}", event);
+//!     }
+//! }
+//! ```
 
 pub mod error;
 pub mod protocol;
