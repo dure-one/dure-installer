@@ -7,8 +7,10 @@
 //! - Static file serving
 
 pub mod error;
+pub mod config;
 
 pub use error::{WsError, Result};
+pub use config::ServerConfig;
 
 #[cfg(test)]
 mod tests {
