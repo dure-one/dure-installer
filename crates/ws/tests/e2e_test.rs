@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 use ws::{ServerConfig, WsServer};
 
-#[cfg(feature = "chat")]
+#[cfg(feature = "chat-service")]
 #[smol_potat::test]
 async fn test_server_with_static_files_and_chat() {
     // Setup test environment
@@ -17,16 +17,16 @@ async fn test_server_with_static_files_and_chat() {
     // Create chat database
     let chat_db = temp_dir.path().join("chat.db");
 
-    // Initialize chat service
-    let chat_service = service::ChatService::new(chat_db).await.unwrap();
+    // Initialize chat chat
+    let chat_chat = chat::ChatService::new(chat_db).await.unwrap();
 
     // Create server configuration
     let mut config = ServerConfig::new("test.example.com");
     config.static_dir = static_dir;
     config.bind_addr = "127.0.0.1:0".parse().unwrap(); // Random port
 
-    // Create server with chat service
-    let server = WsServer::new(config).with_chat_service(chat_service);
+    // Create server with chat chat
+    let server = WsServer::new(config).with_chat_chat(chat_chat);
 
     // Verify configuration
     assert_eq!(server.config.domain, "test.example.com");

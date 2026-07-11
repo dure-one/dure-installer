@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ServiceError {
+pub enum ChatError {
     #[error("Deltachat error: {0}")]
     Deltachat(String),
 
@@ -15,7 +15,7 @@ pub enum ServiceError {
     Io(#[from] std::io::Error),
 }
 
-pub type Result<T> = std::result::Result<T, ServiceError>;
+pub type Result<T> = std::result::Result<T, ChatError>;
 
 #[cfg(test)]
 mod tests {
@@ -23,7 +23,7 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = ServiceError::Deltachat("connection failed".into());
+        let err = ChatError::Deltachat("connection failed".into());
         assert_eq!(err.to_string(), "Deltachat error: connection failed");
     }
 }

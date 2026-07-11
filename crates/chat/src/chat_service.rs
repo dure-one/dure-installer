@@ -6,7 +6,7 @@ use crate::deltachat_bridge::DeltachatBridge;
 use crate::error::Result;
 use crate::protocol::ChatEvent;
 
-/// Chat service with event broadcasting
+/// Chat chat with event broadcasting
 pub struct ChatService {
     _bridge: Arc<DeltachatBridge>,
     #[cfg(test)]
@@ -17,7 +17,7 @@ pub struct ChatService {
 }
 
 impl ChatService {
-    /// Create new chat service
+    /// Create new chat chat
     pub async fn new(db_path: PathBuf) -> Result<Self> {
         let bridge = DeltachatBridge::init(db_path).await?;
         let (event_tx, initial_rx) = broadcast(1024);
@@ -41,12 +41,12 @@ mod tests {
     use tempfile::TempDir;
 
     #[smol_potat::test]
-    async fn test_chat_service_creation() {
+    async fn test_chat_chat_creation() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("chat.db");
 
-        let service = ChatService::new(db_path).await;
-        assert!(service.is_ok());
+        let chat = ChatService::new(db_path).await;
+        assert!(chat.is_ok());
     }
 
     #[smol_potat::test]
@@ -54,8 +54,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("chat.db");
 
-        let service = ChatService::new(db_path).await.unwrap();
-        let mut rx = service.subscribe_events();
+        let chat = ChatService::new(db_path).await.unwrap();
+        let mut rx = chat.subscribe_events();
 
         // Send test event
         let test_event = ChatEvent::IncomingMessage {
@@ -63,7 +63,7 @@ mod tests {
             msg_id: 42,
         };
 
-        service.event_tx.broadcast(test_event.clone()).await.unwrap();
+        chat.event_tx.broadcast(test_event.clone()).await.unwrap();
 
         // Receive event
         let received = rx.recv().await.unwrap();

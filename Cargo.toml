@@ -2,15 +2,11 @@
 resolver = "2"
 members = [
     "mobile",
-    "crates/dure-messages",
-    "crates/dure-asyncapi-gen",
-    "crates/go-webauthn-client",
     "crates/windows-installer",
     "crates/ws",
-    "crates/service",
+    "crates/chat",
 ]
 exclude = [
-    "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
     "reference/deltachat-core",  # Excluded: has its own workspace
 ]
 

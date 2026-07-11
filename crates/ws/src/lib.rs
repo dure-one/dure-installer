@@ -22,8 +22,8 @@
 //! });
 //! ```
 
-#[cfg(feature = "chat")]
-pub use service;
+#[cfg(feature = "chat-service")]
+pub use chat;
 
 pub mod error;
 pub mod config;

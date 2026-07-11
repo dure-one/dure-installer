@@ -31,13 +31,12 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # Utilities
-dure-messages = { path = "../dure-messages" }
 dashmap = "6.1"
-service = { path = "../service", optional = true }
+chat = { path = "../chat", optional = true }
 
 [features]
 default = []
-chat = ["dep:service"]
+chat-service = ["dep:chat"]
 
 [dev-dependencies]
 smol-potat = "0.5"

@@ -1,4 +1,4 @@
-//! # service - Chat Service Layer
+//! # chat - Chat Service Layer
 //!
 //! Email-based chat service using deltachat-core with async-compat bridge.
 //!
@@ -12,14 +12,14 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use service::ChatService;
+//! use chat::ChatService;
 //!
 //! smol::block_on(async {
-//!     let service = ChatService::new("./chat.db".into())
+//!     let chat = ChatService::new("./chat.db".into())
 //!         .await
 //!         .unwrap();
 //!
-//!     let mut events = service.subscribe_events();
+//!     let mut events = chat.subscribe_events();
 //!     while let Ok(event) = events.recv().await {
 //!         println!("Event: {:?}", event);
 //!     }
@@ -31,7 +31,7 @@ pub mod protocol;
 pub mod deltachat_bridge;
 pub mod chat_service;
 
-pub use error::{ServiceError, Result};
+pub use error::{ChatError, Result};
 pub use protocol::{ChatEvent, Chat, Message};
 pub use deltachat_bridge::DeltachatBridge;
 pub use chat_service::ChatService;

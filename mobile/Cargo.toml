@@ -88,7 +88,6 @@ hex = "0.4"
 keepass = { version = "0.10", features = ["save_kdbx4"] }
 
 # WebSocket message types
-dure-messages = { path = "../crates/dure-messages" }
 
 # YAML parsing (still needed for other purposes)
 serde_yaml = "0.9"
@@ -96,7 +95,6 @@ serde_yaml = "0.9"
 # Desktop-only dependencies (all desktop platforms including OpenBSD)
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
 # go-webauthn client (CLI-based, works on OpenBSD)
-go-webauthn-client = { path = "../crates/go-webauthn-client" }
 tao = { version = "0.33", optional = true }
 trash = "5.2"
 num_cpus = "1.17"

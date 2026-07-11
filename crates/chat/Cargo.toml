@@ -1,5 +1,5 @@
 [package]
-name = "service"
+name = "chat"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
@@ -23,9 +23,6 @@ serde_json = "1.0"
 # Error handling
 thiserror = "2.0"
 anyhow = "1.0"
-
-# Utilities
-dure-messages = { path = "../dure-messages" }
 
 [dev-dependencies]
 smol-potat = "0.5"

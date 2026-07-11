@@ -2,7 +2,7 @@ use async_compat::Compat;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{ChatError, Result};
 use crate::protocol::{Chat, ChatEvent, Message};
 
 /// Bridge between smol and deltachat-core (tokio)
@@ -16,7 +16,7 @@ impl DeltachatBridge {
         // Verify database path directory exists
         if let Some(parent) = db_path.parent() {
             if !parent.exists() {
-                return Err(ServiceError::Database(
+                return Err(ChatError::Database(
                     format!("Directory does not exist: {}", parent.display())
                 ));
             }
@@ -45,6 +45,6 @@ mod tests {
         let db_path = PathBuf::from("/nonexistent/directory/chat.db");
 
         let result = DeltachatBridge::init(db_path).await;
-        assert!(matches!(result, Err(ServiceError::Database(_))));
+        assert!(matches!(result, Err(ChatError::Database(_))));
     }
 }
