@@ -10,6 +10,7 @@ pub mod error;
 pub mod config;
 pub mod tls;
 pub mod server;
+pub mod static_files;
 
 pub use error::{WsError, Result};
 pub use config::ServerConfig;

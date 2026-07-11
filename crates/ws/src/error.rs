@@ -14,6 +14,9 @@ pub enum WsError {
     #[error("Certificate error: {0}")]
     Certificate(String),
 
+    #[error("File not found: {0}")]
+    NotFound(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
