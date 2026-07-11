@@ -4,6 +4,8 @@
 
 pub mod error;
 pub mod protocol;
+pub mod deltachat_bridge;
 
 pub use error::{ServiceError, Result};
 pub use protocol::{ChatEvent, Chat, Message};
+pub use deltachat_bridge::DeltachatBridge;
