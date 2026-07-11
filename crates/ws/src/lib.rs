@@ -9,9 +9,11 @@
 pub mod error;
 pub mod config;
 pub mod tls;
+pub mod server;
 
 pub use error::{WsError, Result};
 pub use config::ServerConfig;
+pub use server::WsServer;
 
 #[cfg(test)]
 mod tests {
