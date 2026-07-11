@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 /// Main WebSocket/HTTP server
 pub struct WsServer {
-    config: Arc<ServerConfig>,
+    pub config: Arc<ServerConfig>,
 }
 
 impl WsServer {

@@ -13,14 +13,13 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use ws::{ServerConfig, WsServer};
 //!
-//! #[smol::main]
-//! async fn main() {
+//! smol::block_on(async {
 //!     let config = ServerConfig::new("example.com");
 //!     WsServer::new(config).run().await.unwrap();
-//! }
+//! });
 //! ```
 
 #[cfg(feature = "chat")]

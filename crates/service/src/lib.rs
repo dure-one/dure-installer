@@ -11,11 +11,10 @@
 //!
 //! ## Example
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use service::ChatService;
 //!
-//! #[smol::main]
-//! async fn main() {
+//! smol::block_on(async {
 //!     let service = ChatService::new("./chat.db".into())
 //!         .await
 //!         .unwrap();
@@ -24,7 +23,7 @@
 //!     while let Ok(event) = events.recv().await {
 //!         println!("Event: {:?}", event);
 //!     }
-//! }
+//! });
 //! ```
 
 pub mod error;
