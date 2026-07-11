@@ -11,6 +11,7 @@ pub mod config;
 pub mod tls;
 pub mod server;
 pub mod static_files;
+pub mod http;
 
 pub use error::{WsError, Result};
 pub use config::ServerConfig;
