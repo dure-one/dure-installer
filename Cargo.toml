@@ -6,6 +6,7 @@ members = [
     "crates/dure-asyncapi-gen",
     "crates/go-webauthn-client",
     "crates/windows-installer",
+    "crates/ws",
 ]
 exclude = [
     "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
