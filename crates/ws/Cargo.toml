@@ -37,3 +37,4 @@ dashmap = "6.1"
 [dev-dependencies]
 smol-potat = "0.5"
 criterion = "0.8"
+tempfile = "3"

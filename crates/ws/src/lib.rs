@@ -8,6 +8,7 @@
 
 pub mod error;
 pub mod config;
+pub mod tls;
 
 pub use error::{WsError, Result};
 pub use config::ServerConfig;

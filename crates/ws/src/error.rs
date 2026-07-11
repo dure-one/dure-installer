@@ -11,6 +11,9 @@ pub enum WsError {
     #[error("HTTP error: {0}")]
     Http(String),
 
+    #[error("Certificate error: {0}")]
+    Certificate(String),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
