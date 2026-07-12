@@ -290,6 +290,87 @@ impl DeltaChatActor {
                 log::info!("Chat selected: {}", chat_id);
                 Ok(())
             }
+            DeltaChatCommand::SendTextMessage { chat_id, ref text } => {
+                if let Some(context) = &self.context {
+                    let msg_id = self.tokio_runtime.block_on(async {
+                        use deltachat::chat::{ChatId, send_text_msg};
+
+                        let chat_id = ChatId::new(chat_id);
+                        send_text_msg(&context, chat_id, text.clone())
+                            .await
+                            .map_err(|e| format!("Failed to send message: {}", e))
+                    })?;
+
+                    self.emit_event(DeltaChatEvent::MessageSent {
+                        msg_id: msg_id.to_u32(),
+                        chat_id,
+                    });
+                    log::info!("Message sent: {}", msg_id.to_u32());
+                } else {
+                    return Err("Cannot send message: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::ListMessages { chat_id } => {
+                if let Some(context) = &self.context {
+                    let messages = self.tokio_runtime.block_on(async {
+                        use deltachat::chat::{ChatId, get_chat_msgs};
+
+                        let chat_id_obj = ChatId::new(chat_id);
+                        let msg_ids = get_chat_msgs(&context, chat_id_obj)
+                            .await
+                            .map_err(|e| format!("Failed to list messages: {}", e))?;
+
+                        let mut messages = Vec::new();
+                        for msg_id in msg_ids {
+                            if let Ok(msg) = deltachat::message::Message::load_from_db(&context, msg_id).await {
+                                let from_id = msg.get_from_id();
+                                let from_name = if let Ok(contact) = deltachat::contact::Contact::get_by_id(&context, from_id).await {
+                                    contact.get_display_name().to_string()
+                                } else {
+                                    "Unknown".to_string()
+                                };
+
+                                messages.push(MessageInfo {
+                                    id: msg_id.to_u32(),
+                                    from_contact_id: from_id.to_u32(),
+                                    from_name,
+                                    text: msg.get_text().to_string(),
+                                    timestamp: msg.get_timestamp(),
+                                    is_outgoing: msg.is_outgoing(),
+                                    is_seen: msg.is_seen(),
+                                });
+                            }
+                        }
+
+                        Ok::<Vec<MessageInfo>, String>(messages)
+                    })?;
+
+                    self.emit_event(DeltaChatEvent::MessagesListed { chat_id, messages });
+                    log::info!("Listed messages for chat {}", chat_id);
+                } else {
+                    return Err("Cannot list messages: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::MarkMessagesSeen { chat_id } => {
+                if let Some(context) = &self.context {
+                    self.tokio_runtime.block_on(async {
+                        use deltachat::chat::ChatId;
+
+                        let chat_id_obj = ChatId::new(chat_id);
+                        deltachat::chat::marknoticed_chat(&context, chat_id_obj)
+                            .await
+                            .map_err(|e| format!("Failed to mark messages as seen: {}", e))
+                    })?;
+
+                    self.emit_event(DeltaChatEvent::MessagesSeen { chat_id });
+                    log::info!("Messages marked as seen for chat {}", chat_id);
+                } else {
+                    return Err("Cannot mark messages as seen: not configured".to_string());
+                }
+                Ok(())
+            }
             _ => {
                 log::warn!("Command not yet implemented: {:?}", cmd);
                 Ok(())

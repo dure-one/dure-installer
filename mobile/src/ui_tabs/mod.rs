@@ -16,6 +16,7 @@ pub mod roles;
 pub mod site;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ssh;
+#[cfg(not(target_os = "openbsd"))]
 pub mod deltachat;
 
 /// Enum representing all available tabs
@@ -37,6 +38,7 @@ pub enum Tab {
     Products,
     Orders,
     Email,
+    #[cfg(not(target_os = "openbsd"))]
     DeltaChat,
     Client,
 }
@@ -60,6 +62,7 @@ impl Tab {
             Tab::Products => "Products",
             Tab::Orders => "Orders",
             Tab::Email => "Email",
+            #[cfg(not(target_os = "openbsd"))]
             Tab::DeltaChat => "DeltaChat",
             Tab::Client => "Client",
         }
@@ -83,6 +86,7 @@ impl Tab {
             Tab::Products,
             Tab::Orders,
             Tab::Email,
+            #[cfg(not(target_os = "openbsd"))]
             Tab::DeltaChat,
             Tab::Client,
         ]
