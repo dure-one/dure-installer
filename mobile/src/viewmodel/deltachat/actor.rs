@@ -1,7 +1,7 @@
 //! DeltaChat actor implementation
 
 use crate::viewmodel::common::ViewModelEvent;
-use super::{DeltaChatCommand, DeltaChatEvent};
+use super::{ContactInfo, DeltaChatCommand, DeltaChatEvent};
 use smol::channel::{Receiver, Sender};
 use std::path::PathBuf;
 
@@ -161,6 +161,67 @@ impl DeltaChatActor {
                 });
                 Ok(())
             }
+            DeltaChatCommand::AddContact { ref email } => {
+                if let Some(context) = &self.context {
+                    let contact_id = self.tokio_runtime.block_on(async {
+                        deltachat::contact::Contact::create(&context, "", email)
+                            .await
+                            .map_err(|e| format!("Failed to add contact: {}", e))
+                    })?;
+
+                    let contact = self.tokio_runtime.block_on(async {
+                        deltachat::contact::Contact::get_by_id(&context, contact_id)
+                            .await
+                            .map_err(|e| format!("Failed to get contact: {}", e))
+                    })?;
+
+                    let contact_info = ContactInfo {
+                        id: contact_id.to_u32(),
+                        name: contact.get_display_name().to_string(),
+                        email: contact.get_addr().to_string(),
+                        is_blocked: contact.is_blocked(),
+                    };
+
+                    self.emit_event(DeltaChatEvent::ContactAdded {
+                        contact: contact_info
+                    });
+                    log::info!("Contact added: {}", email);
+                } else {
+                    return Err("Cannot add contact: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::ListContacts => {
+                if let Some(context) = &self.context {
+                    let contacts = self.tokio_runtime.block_on(async {
+                        let contact_ids = deltachat::contact::Contact::get_all(
+                            &context,
+                            0, // flags
+                            None, // query
+                        ).await.map_err(|e| format!("Failed to list contacts: {}", e))?;
+
+                        let mut contacts = Vec::new();
+                        for contact_id in contact_ids {
+                            if let Ok(contact) = deltachat::contact::Contact::get_by_id(&context, contact_id).await {
+                                contacts.push(ContactInfo {
+                                    id: contact_id.to_u32(),
+                                    name: contact.get_display_name().to_string(),
+                                    email: contact.get_addr().to_string(),
+                                    is_blocked: contact.is_blocked(),
+                                });
+                            }
+                        }
+
+                        Ok::<Vec<ContactInfo>, String>(contacts)
+                    })?;
+
+                    self.emit_event(DeltaChatEvent::ContactsListed { contacts });
+                    log::info!("Listed {} contacts", contacts.len());
+                } else {
+                    return Err("Cannot list contacts: not configured".to_string());
+                }
+                Ok(())
+            }
             _ => {
                 log::warn!("Command not yet implemented: {:?}", cmd);
                 Ok(())
@@ -257,5 +318,32 @@ mod tests {
             .unwrap();
 
         assert!(context.is_open().await);
+    }
+
+    #[tokio::test]
+    async fn test_add_contact() {
+        use tempfile::TempDir;
+
+        let tmpdir = TempDir::new().unwrap();
+        let db_path = tmpdir.path().join("test.db");
+
+        let context = deltachat::ContextBuilder::new(db_path)
+            .with_id(1)
+            .open()
+            .await
+            .unwrap();
+
+        let contact_id = deltachat::contact::Contact::create(
+            &context,
+            "Test User",
+            "test@example.com"
+        ).await.unwrap();
+
+        let contact = deltachat::contact::Contact::get_by_id(&context, contact_id)
+            .await
+            .unwrap();
+
+        assert_eq!(contact.get_addr(), "test@example.com");
+        assert_eq!(contact.get_display_name(), "Test User");
     }
 }
