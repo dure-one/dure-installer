@@ -113,6 +113,54 @@ impl DeltaChatActor {
                 self.emit_event(DeltaChatEvent::ConfigurationStarted);
                 self.configure_internal(email, password).await
             }
+            DeltaChatCommand::Connect => {
+                if let Some(context) = &self.context {
+                    self.tokio_runtime.block_on(async {
+                        context.start_io().await;
+                    });
+                    self.is_connected = true;
+                    self.emit_event(DeltaChatEvent::Connected);
+                    log::info!("DeltaChat connected");
+                } else {
+                    let error = "Cannot connect: not configured".to_string();
+                    self.emit_event(DeltaChatEvent::Error {
+                        operation: "connect".to_string(),
+                        error: error.clone(),
+                    });
+                    return Err(error);
+                }
+                Ok(())
+            }
+            DeltaChatCommand::Disconnect => {
+                if let Some(context) = &self.context {
+                    self.tokio_runtime.block_on(async {
+                        context.stop_io().await;
+                    });
+                    self.is_connected = false;
+                    self.emit_event(DeltaChatEvent::Disconnected);
+                    log::info!("DeltaChat disconnected");
+                }
+                Ok(())
+            }
+            DeltaChatCommand::GetConnectionStatus => {
+                self.emit_event(DeltaChatEvent::ConnectionStatus {
+                    connected: self.is_connected,
+                    email: if self.is_configured {
+                        // Get email from context config
+                        if let Some(context) = &self.context {
+                            self.tokio_runtime.block_on(async {
+                                use deltachat::config::Config;
+                                context.get_config(Config::Addr).await.ok().flatten()
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    },
+                });
+                Ok(())
+            }
             _ => {
                 log::warn!("Command not yet implemented: {:?}", cmd);
                 Ok(())
@@ -124,6 +172,15 @@ impl DeltaChatActor {
                 if let DeltaChatCommand::Configure { email, .. } = cmd {
                     self.is_configured = true;
                     self.emit_event(DeltaChatEvent::Configured { email });
+
+                    // Auto-connect after successful configuration
+                    if let Some(context) = &self.context {
+                        self.tokio_runtime.block_on(async {
+                            context.start_io().await;
+                        });
+                        self.is_connected = true;
+                        self.emit_event(DeltaChatEvent::Connected);
+                    }
                 }
                 Ok(())
             }

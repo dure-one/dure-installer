@@ -80,8 +80,31 @@ impl DeltaChatTab {
         } else {
             ui.label(format!("Account: {}",
                 self.configured_email.as_deref().unwrap_or("Unknown")));
-            ui.label(format!("Status: {}",
-                if self.is_connected { "Connected" } else { "Disconnected" }));
+
+            ui.horizontal(|ui| {
+                ui.label(format!("Status: {}",
+                    if self.is_connected { "Connected" } else { "Disconnected" }));
+
+                if self.is_connected {
+                    if ui.button("Disconnect").clicked() {
+                        use crate::viewmodel::deltachat::DeltaChatCommand;
+                        smol::block_on(async {
+                            let _ = vm.deltachat_tx.send(DeltaChatCommand::Disconnect).await;
+                        });
+                    }
+                } else {
+                    if ui.button("Connect").clicked() {
+                        use crate::viewmodel::deltachat::DeltaChatCommand;
+                        smol::block_on(async {
+                            let _ = vm.deltachat_tx.send(DeltaChatCommand::Connect).await;
+                        });
+                    }
+                }
+
+                if ui.button("Reconfigure").clicked() {
+                    self.config_dialog_open = true;
+                }
+            });
         }
     }
 
@@ -107,6 +130,23 @@ impl DeltaChatTab {
 
                     DeltaChatEvent::ConfigurationProgress { progress, .. } => {
                         self.config_progress = progress;
+                    }
+
+                    DeltaChatEvent::Connected => {
+                        self.is_connected = true;
+                        log::info!("DeltaChat connected");
+                    }
+
+                    DeltaChatEvent::Disconnected => {
+                        self.is_connected = false;
+                        log::info!("DeltaChat disconnected");
+                    }
+
+                    DeltaChatEvent::ConnectionStatus { connected, email } => {
+                        self.is_connected = connected;
+                        if let Some(email) = email {
+                            self.configured_email = Some(email);
+                        }
                     }
 
                     _ => {}
