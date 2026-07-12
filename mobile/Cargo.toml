@@ -147,13 +147,13 @@ shellexpand = "3.1"
 # - OpenBSD: webauthn-rs (requires OpenSSL, but monoio/rust2go don't support OpenBSD)
 uuid = { version = "1.11", features = ["v4", "serde"] }
 urlencoding = "2.1"
+# DeltaChat integration (uses netwatch stub on OpenBSD for compatibility)
+deltachat = { git = "https://github.com/nikescar/core.git" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
 tray-icon = { version = "0.18", default-features = false, optional = true }
-# DeltaChat integration (netwatch dependency doesn't support OpenBSD)
-deltachat = { git = "https://github.com/nikescar/core.git" }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]

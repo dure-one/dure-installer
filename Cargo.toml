@@ -5,10 +5,18 @@ members = [
     "crates/windows-installer",
     "crates/ws",
     "crates/chat",
+    "crates/netwatch-stub",
 ]
 exclude = [
     "reference/deltachat-core",  # Excluded: has its own workspace
 ]
+
+# OpenBSD compatibility: Replace netwatch with stub implementation
+# This allows DeltaChat to compile on OpenBSD despite netwatch not supporting
+# OpenBSD's PF_ROUTE sockets. The stub provides API compatibility but no
+# actual network monitoring - users must manually reconnect after network changes.
+[patch.crates-io]
+netwatch = { path = "crates/netwatch-stub" }
 
 [workspace.package]
 edition = "2024"

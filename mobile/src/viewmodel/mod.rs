@@ -1,7 +1,6 @@
 //! ViewModel layer for actor-based MVVM architecture
 
 pub mod common;
-#[cfg(not(target_os = "openbsd"))]
 pub mod deltachat;
 pub mod io;
 pub mod ns;
@@ -25,7 +24,6 @@ pub struct ViewModel {
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
     wss_tx: Sender<wss::WssCommand>,
-    #[cfg(not(target_os = "openbsd"))]
     deltachat_tx: Sender<deltachat::DeltaChatCommand>,
 
     // Unified event receiver
@@ -92,7 +90,6 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
-        #[cfg(not(target_os = "openbsd"))]
         let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -107,12 +104,10 @@ impl ViewModel {
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
-                // DeltaChat actor
-                #[cfg(not(target_os = "openbsd"))]
+                // DeltaChat actor (uses netwatch stub on OpenBSD)
                 let db_path = std::env::var("HOME")
                     .map(|h| std::path::PathBuf::from(h).join(".local/share/dure/deltachat-default.db"))
                     .unwrap_or_else(|_| std::path::PathBuf::from("deltachat-default.db"));
-                #[cfg(not(target_os = "openbsd"))]
                 let deltachat_actor = deltachat::DeltaChatActor::new(deltachat_rx, event_tx.clone(), db_path);
 
                 // Run all actors concurrently
@@ -120,7 +115,6 @@ impl ViewModel {
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
-                #[cfg(not(target_os = "openbsd"))]
                 smol::spawn(deltachat_actor.run()).detach();
 
                 // Keep thread alive
@@ -133,7 +127,6 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
-            #[cfg(not(target_os = "openbsd"))]
             deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -149,7 +142,6 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
-        #[cfg(not(target_os = "openbsd"))]
         let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -162,19 +154,16 @@ impl ViewModel {
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
-                // DeltaChat actor
-                #[cfg(not(target_os = "openbsd"))]
+                // DeltaChat actor (uses netwatch stub on OpenBSD)
                 let db_path = std::env::var("HOME")
                     .map(|h| std::path::PathBuf::from(h).join(".local/share/dure/deltachat-default.db"))
                     .unwrap_or_else(|_| std::path::PathBuf::from("deltachat-default.db"));
-                #[cfg(not(target_os = "openbsd"))]
                 let deltachat_actor = deltachat::DeltaChatActor::new(deltachat_rx, event_tx.clone(), db_path);
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
-                #[cfg(not(target_os = "openbsd"))]
                 smol::spawn(deltachat_actor.run()).detach();
 
                 std::future::pending::<()>().await
@@ -186,7 +175,6 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
-            #[cfg(not(target_os = "openbsd"))]
             deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -205,7 +193,6 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
-        #[cfg(not(target_os = "openbsd"))]
         let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -225,22 +212,13 @@ impl ViewModel {
 
             // SSH disabled in WASM (no native SSH in browser)
             drop(ssh_rx);
-            #[cfg(target_os = "openbsd")]
-            drop(deltachat_rx);
 
             // Run actors concurrently
-            #[cfg(not(target_os = "openbsd"))]
             futures::join!(
                 platform_actor.run(),
                 ns_actor.run(),
                 wss_actor.run(),
                 deltachat_actor.run(),
-            );
-            #[cfg(target_os = "openbsd")]
-            futures::join!(
-                platform_actor.run(),
-                ns_actor.run(),
-                wss_actor.run(),
             );
         });
 
@@ -249,7 +227,6 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
-            #[cfg(not(target_os = "openbsd"))]
             deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
