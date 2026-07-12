@@ -429,7 +429,11 @@ impl DureApp {
             Tab::Products => self.tab_products.ui(ui),
             Tab::Orders => self.tab_orders.ui(ui),
             Tab::Email => self.tab_email.ui(ui),
-            Tab::DeltaChat => self.deltachat_tab.ui(ui),
+            Tab::DeltaChat => {
+                if let Some(vm) = &self.viewmodel {
+                    self.deltachat_tab.ui(ui, vm);
+                }
+            }
         }
     }
 
