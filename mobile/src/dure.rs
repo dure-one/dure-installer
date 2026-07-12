@@ -129,6 +129,7 @@ pub struct DureApp {
     pub tab_products: crate::ui_tabs::products::ProductsTab,
     pub tab_orders: crate::ui_tabs::orders::OrdersTab,
     pub tab_email: crate::ui_tabs::email::EmailTab,
+    pub deltachat_tab: crate::ui_tabs::deltachat::DeltaChatTab,
     pub tab_client: crate::ui_tabs::client::ClientTab,
 }
 
@@ -259,6 +260,7 @@ impl Default for DureApp {
             tab_products: crate::ui_tabs::products::ProductsTab::default(),
             tab_orders: crate::ui_tabs::orders::OrdersTab::default(),
             tab_email: crate::ui_tabs::email::EmailTab::default(),
+            deltachat_tab: crate::ui_tabs::deltachat::DeltaChatTab::default(),
             tab_client: crate::ui_tabs::client::ClientTab::default(),
         }
     }
@@ -345,18 +347,19 @@ impl DureApp {
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
+                //.tab(tr!("tab-client"))
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
                 .tab(tr!("tab-domains"))
                 .tab(tr!("tab-site"))
                 // .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
+                //.tab(tr!("tab-members"))
+                //.tab(tr!("tab-channel"))
+                //.tab(tr!("tab-dm"))
                 .tab(tr!("tab-products"))
                 .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                .tab(tr!("tab-email"))
+                .tab("DeltaChat"),
         );
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         ui.add(
@@ -369,7 +372,8 @@ impl DureApp {
                 .tab(tr!("tab-dm"))
                 .tab(tr!("tab-products"))
                 .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                .tab(tr!("tab-email"))
+                .tab("DeltaChat"),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -425,6 +429,7 @@ impl DureApp {
             Tab::Products => self.tab_products.ui(ui),
             Tab::Orders => self.tab_orders.ui(ui),
             Tab::Email => self.tab_email.ui(ui),
+            Tab::DeltaChat => self.deltachat_tab.ui(ui),
         }
     }
 
