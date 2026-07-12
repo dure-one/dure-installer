@@ -24,6 +24,7 @@ pub struct ViewModel {
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
     wss_tx: Sender<wss::WssCommand>,
+    deltachat_tx: Sender<deltachat::DeltaChatCommand>,
 
     // Unified event receiver
     event_rx: Receiver<ViewModelEvent>,
@@ -89,6 +90,7 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Spawn background thread with smol executor
@@ -102,11 +104,18 @@ impl ViewModel {
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
+                // DeltaChat actor
+                let db_path = std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".local/share/dure/deltachat-default.db"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("deltachat-default.db"));
+                let deltachat_actor = deltachat::DeltaChatActor::new(deltachat_rx, event_tx.clone(), db_path);
+
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(deltachat_actor.run()).detach();
 
                 // Keep thread alive
                 std::future::pending::<()>().await
@@ -118,6 +127,7 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
+            deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -132,6 +142,7 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         let runtime_handle = std::thread::spawn(move || {
@@ -143,10 +154,17 @@ impl ViewModel {
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
+                // DeltaChat actor
+                let db_path = std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".local/share/dure/deltachat-default.db"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("deltachat-default.db"));
+                let deltachat_actor = deltachat::DeltaChatActor::new(deltachat_rx, event_tx.clone(), db_path);
+
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(deltachat_actor.run()).detach();
 
                 std::future::pending::<()>().await
             })
@@ -157,6 +175,7 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
+            deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -174,6 +193,7 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (deltachat_tx, deltachat_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Spawn actors in Web Worker context
@@ -184,11 +204,20 @@ impl ViewModel {
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
+            // DeltaChat actor
+            let db_path = std::path::PathBuf::from("deltachat-default.db");
+            let deltachat_actor = deltachat::DeltaChatActor::new(deltachat_rx, event_tx.clone(), db_path);
+
             // SSH disabled in WASM (no native SSH in browser)
             drop(ssh_rx);
 
             // Run actors concurrently
-            futures::join!(platform_actor.run(), ns_actor.run(), wss_actor.run(),);
+            futures::join!(
+                platform_actor.run(),
+                ns_actor.run(),
+                wss_actor.run(),
+                deltachat_actor.run(),
+            );
         });
 
         Self {
@@ -196,6 +225,7 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
+            deltachat_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: None,
