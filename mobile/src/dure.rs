@@ -410,24 +410,48 @@ impl DureApp {
 
         // Sync scrolling_selected with active_tab enum
         use crate::ui_tabs::Tab;
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))]
         {
             self.active_tab = match self.scrolling_selected {
-                0 => Tab::Client,
-                1 => Tab::Platform,
-                2 => Tab::Ssh,
-                3 => Tab::Ns,
-                4 => Tab::Site,
-                5 => Tab::Members,
-                6 => Tab::Channel,
-                7 => Tab::DM,
-                8 => Tab::Products,
-                9 => Tab::Orders,
-                10 => Tab::Email,
+                0 => Tab::Platform,
+                1 => Tab::Ssh,
+                2 => Tab::Ns,
+                3 => Tab::Site,
+                4 => Tab::Products,
+                5 => Tab::Orders,
+                6 => Tab::Email,
+                7 => Tab::DeltaChat,
                 _ => Tab::Platform,
             };
         }
-        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+        #[cfg(all(not(any(target_os = "android", target_arch = "wasm32")), target_os = "openbsd"))]
+        {
+            self.active_tab = match self.scrolling_selected {
+                0 => Tab::Platform,
+                1 => Tab::Ssh,
+                2 => Tab::Ns,
+                3 => Tab::Site,
+                4 => Tab::Products,
+                5 => Tab::Orders,
+                6 => Tab::Email,
+                _ => Tab::Platform,
+            };
+        }
+        #[cfg(all(any(target_os = "android", target_arch = "wasm32"), not(target_os = "openbsd")))]
+        {
+            self.active_tab = match self.scrolling_selected {
+                0 => Tab::Client,
+                1 => Tab::Members,
+                2 => Tab::Channel,
+                3 => Tab::DM,
+                4 => Tab::Products,
+                5 => Tab::Orders,
+                6 => Tab::Email,
+                7 => Tab::DeltaChat,
+                _ => Tab::Client,
+            };
+        }
+        #[cfg(all(any(target_os = "android", target_arch = "wasm32"), target_os = "openbsd"))]
         {
             self.active_tab = match self.scrolling_selected {
                 0 => Tab::Client,
