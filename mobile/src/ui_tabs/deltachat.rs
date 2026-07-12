@@ -148,19 +148,25 @@ impl DeltaChatTab {
 
             // Display contacts
             egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-                for contact in &self.contacts {
-                    ui.horizontal(|ui| {
-                        ui.label(&contact.name);
-                        ui.label(format!("({})", &contact.email));
-
-                        if ui.small_button("Chat").clicked() {
-                            use crate::viewmodel::deltachat::DeltaChatCommand;
-                            let contact_id = contact.id;
-                            smol::block_on(async {
-                                let _ = vm.deltachat_tx.send(DeltaChatCommand::CreateChat { contact_id }).await;
-                            });
-                        }
+                if self.contacts.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        ui.label("No contacts yet. Add a contact to start chatting.");
                     });
+                } else {
+                    for contact in &self.contacts {
+                        ui.horizontal(|ui| {
+                            ui.label(&contact.name);
+                            ui.label(format!("({})", &contact.email));
+
+                            if ui.small_button("Chat").clicked() {
+                                use crate::viewmodel::deltachat::DeltaChatCommand;
+                                let contact_id = contact.id;
+                                smol::block_on(async {
+                                    let _ = vm.deltachat_tx.send(DeltaChatCommand::CreateChat { contact_id }).await;
+                                });
+                            }
+                        });
+                    }
                 }
             });
 
@@ -179,21 +185,27 @@ impl DeltaChatTab {
 
             // Display chats
             egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                for chat in &self.chats {
-                    ui.horizontal(|ui| {
-                        let is_selected = self.selected_chat_id == Some(chat.id);
-
-                        if ui.selectable_label(is_selected, &chat.name).clicked() {
-                            use crate::viewmodel::deltachat::DeltaChatCommand;
-                            let chat_id = chat.id;
-                            self.selected_chat_id = Some(chat_id);
-
-                            smol::block_on(async {
-                                let _ = vm.deltachat_tx.send(DeltaChatCommand::SelectChat { chat_id }).await;
-                                let _ = vm.deltachat_tx.send(DeltaChatCommand::ListMessages { chat_id }).await;
-                            });
-                        }
+                if self.chats.is_empty() {
+                    ui.vertical_centered(|ui| {
+                        ui.label("No chats yet. Create a chat from your contacts.");
                     });
+                } else {
+                    for chat in &self.chats {
+                        ui.horizontal(|ui| {
+                            let is_selected = self.selected_chat_id == Some(chat.id);
+
+                            if ui.selectable_label(is_selected, &chat.name).clicked() {
+                                use crate::viewmodel::deltachat::DeltaChatCommand;
+                                let chat_id = chat.id;
+                                self.selected_chat_id = Some(chat_id);
+
+                                smol::block_on(async {
+                                    let _ = vm.deltachat_tx.send(DeltaChatCommand::SelectChat { chat_id }).await;
+                                    let _ = vm.deltachat_tx.send(DeltaChatCommand::ListMessages { chat_id }).await;
+                                });
+                            }
+                        });
+                    }
                 }
             });
 
@@ -204,17 +216,30 @@ impl DeltaChatTab {
 
                 // Display messages
                 egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-                    for message in &self.messages {
-                        ui.horizontal(|ui| {
-                            let color = if message.is_outgoing {
-                                egui::Color32::LIGHT_BLUE
+                    if self.messages.is_empty() {
+                        ui.vertical_centered(|ui| {
+                            ui.label("No messages yet. Start the conversation!");
+                        });
+                    } else {
+                        for message in &self.messages {
+                            let frame_color = if message.is_outgoing {
+                                egui::Color32::from_rgb(200, 220, 255)
                             } else {
-                                egui::Color32::LIGHT_GRAY
+                                egui::Color32::from_rgb(220, 220, 220)
                             };
 
-                            ui.colored_label(color, &message.from_name);
-                            ui.label(&message.text);
-                        });
+                            egui::Frame::none()
+                                .fill(frame_color)
+                                .inner_margin(egui::Margin::same(6.0))
+                                .rounding(egui::Rounding::same(4.0))
+                                .show(ui, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.label(egui::RichText::new(&message.from_name).strong());
+                                        ui.label(&message.text);
+                                    });
+                                });
+                            ui.add_space(4.0);
+                        }
                     }
                 });
 
