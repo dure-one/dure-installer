@@ -129,14 +129,98 @@ impl DeltaChatTab {
             }
 
             // Display contacts
-            egui::ScrollArea::vertical().show(ui, |ui| {
+            egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
                 for contact in &self.contacts {
                     ui.horizontal(|ui| {
                         ui.label(&contact.name);
                         ui.label(format!("({})", &contact.email));
+
+                        if ui.small_button("Chat").clicked() {
+                            use crate::viewmodel::deltachat::DeltaChatCommand;
+                            let contact_id = contact.id;
+                            smol::block_on(async {
+                                let _ = vm.deltachat_tx.send(DeltaChatCommand::CreateChat { contact_id }).await;
+                            });
+                        }
                     });
                 }
             });
+
+            ui.separator();
+
+            // Chats section
+            ui.heading("Chats");
+
+            // List chats on first render or when requested
+            if self.chats.is_empty() && self.is_connected {
+                use crate::viewmodel::deltachat::DeltaChatCommand;
+                smol::block_on(async {
+                    let _ = vm.deltachat_tx.send(DeltaChatCommand::ListChats).await;
+                });
+            }
+
+            // Display chats
+            egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                for chat in &self.chats {
+                    ui.horizontal(|ui| {
+                        let is_selected = self.selected_chat_id == Some(chat.id);
+
+                        if ui.selectable_label(is_selected, &chat.name).clicked() {
+                            use crate::viewmodel::deltachat::DeltaChatCommand;
+                            let chat_id = chat.id;
+                            self.selected_chat_id = Some(chat_id);
+
+                            smol::block_on(async {
+                                let _ = vm.deltachat_tx.send(DeltaChatCommand::SelectChat { chat_id }).await;
+                                let _ = vm.deltachat_tx.send(DeltaChatCommand::ListMessages { chat_id }).await;
+                            });
+                        }
+                    });
+                }
+            });
+
+            // Messages section
+            if let Some(chat_id) = self.selected_chat_id {
+                ui.separator();
+                ui.heading("Messages");
+
+                // Display messages
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                    for message in &self.messages {
+                        ui.horizontal(|ui| {
+                            let color = if message.is_outgoing {
+                                egui::Color32::LIGHT_BLUE
+                            } else {
+                                egui::Color32::LIGHT_GRAY
+                            };
+
+                            ui.colored_label(color, &message.from_name);
+                            ui.label(&message.text);
+                        });
+                    }
+                });
+
+                // Compose message
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.compose_text);
+
+                    let can_send = !self.compose_text.is_empty();
+
+                    if ui.add_enabled(can_send, egui::Button::new("Send")).clicked() {
+                        use crate::viewmodel::deltachat::DeltaChatCommand;
+                        let text = self.compose_text.clone();
+
+                        smol::block_on(async {
+                            let _ = vm.deltachat_tx.send(DeltaChatCommand::SendTextMessage {
+                                chat_id,
+                                text
+                            }).await;
+                        });
+
+                        self.compose_text.clear();
+                    }
+                });
+            }
         }
     }
 
@@ -227,6 +311,41 @@ impl DeltaChatTab {
                     DeltaChatEvent::ContactsListed { contacts } => {
                         self.contacts = contacts;
                         log::info!("Contacts list updated: {} contacts", self.contacts.len());
+                    }
+
+                    DeltaChatEvent::ChatCreated { chat } => {
+                        self.chats.push(chat.clone());
+                        self.selected_chat_id = Some(chat.id);
+                        log::info!("Chat created and selected");
+                    }
+
+                    DeltaChatEvent::ChatsListed { chats } => {
+                        self.chats = chats;
+                        log::info!("Chats list updated: {} chats", self.chats.len());
+                    }
+
+                    DeltaChatEvent::ChatSelected { chat_id } => {
+                        self.selected_chat_id = Some(chat_id);
+                        log::info!("Chat selected: {}", chat_id);
+                    }
+
+                    DeltaChatEvent::MessageSent { msg_id, chat_id } => {
+                        log::info!("Message sent: {} in chat {}", msg_id, chat_id);
+                        // Request messages refresh
+                    }
+
+                    DeltaChatEvent::MessagesListed { chat_id, messages } => {
+                        if Some(chat_id) == self.selected_chat_id {
+                            self.messages = messages;
+                            log::info!("Messages list updated: {} messages", self.messages.len());
+                        }
+                    }
+
+                    DeltaChatEvent::NewMessageReceived { chat_id, message } => {
+                        if Some(chat_id) == self.selected_chat_id {
+                            self.messages.push(message);
+                        }
+                        log::info!("New message received in chat {}", chat_id);
                     }
 
                     _ => {}
