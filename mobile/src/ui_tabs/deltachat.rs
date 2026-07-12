@@ -62,6 +62,24 @@ impl DeltaChatTab {
         // Poll for events
         self.handle_events(vm);
 
+        // Auto-refresh messages when connected and chat selected
+        if self.is_connected {
+            if let Some(chat_id) = self.selected_chat_id {
+                let should_fetch = self.last_fetch
+                    .map(|last| last.elapsed().as_secs() > 5)
+                    .unwrap_or(true);
+
+                if should_fetch {
+                    use crate::viewmodel::deltachat::DeltaChatCommand;
+                    smol::block_on(async {
+                        let _ = vm.deltachat_tx.send(DeltaChatCommand::FetchMessages).await;
+                        let _ = vm.deltachat_tx.send(DeltaChatCommand::ListMessages { chat_id }).await;
+                    });
+                    self.last_fetch = Some(std::time::Instant::now());
+                }
+            }
+        }
+
         // Show configuration dialog
         if self.config_dialog_open {
             self.render_config_dialog(ui, vm);

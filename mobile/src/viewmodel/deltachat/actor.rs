@@ -371,6 +371,22 @@ impl DeltaChatActor {
                 }
                 Ok(())
             }
+            DeltaChatCommand::FetchMessages => {
+                if let Some(context) = &self.context {
+                    self.tokio_runtime.block_on(async {
+                        context.fetch().await
+                            .map_err(|e| format!("Failed to fetch messages: {}", e))
+                    })?;
+                    log::info!("Fetched new messages from server");
+                } else {
+                    return Err("Cannot fetch messages: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::GetContactInfo { .. } => {
+                log::warn!("GetContactInfo not yet implemented");
+                Ok(())
+            }
             _ => {
                 log::warn!("Command not yet implemented: {:?}", cmd);
                 Ok(())
