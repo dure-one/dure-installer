@@ -1,6 +1,7 @@
 //! ViewModel layer for actor-based MVVM architecture
 
 pub mod common;
+pub mod deltachat;
 pub mod io;
 pub mod ns;
 pub mod platform;

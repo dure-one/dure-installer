@@ -76,8 +76,6 @@ md5 = "0.7"
 
 # Async runtime
 smol = "2.0"
-deltachat = { git = "https://github.com/nikescar/core.git" }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Cryptography
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
@@ -153,6 +151,9 @@ urlencoding = "2.1"
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
 tray-icon = { version = "0.18", default-features = false, optional = true }
+# DeltaChat integration (netwatch dependency doesn't support OpenBSD)
+deltachat = { git = "https://github.com/nikescar/core.git" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]
@@ -168,6 +169,9 @@ ureq = { version = "2.12", default-features = false, features = ["tls", "json"] 
 diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
 diesel_migrations = "2.3"
 libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
+# DeltaChat integration
+deltachat = { git = "https://github.com/nikescar/core.git" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -211,9 +215,15 @@ sqlite-wasm-vfs = "0.2.0"
 sqlite-wasm-rs = "0.5.2"
 serde-wasm-bindgen = "0.6"
 webauthn-rs-proto = { version = "0.5.0", features = ["wasm"] }
+# DeltaChat integration
+deltachat = { git = "https://github.com/nikescar/core.git" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 tempfile = "3.27"
+
+[patch.crates-io]
+netwatch = { git = "https://github.com/n0-computer/netwatch", branch = "main" }
 
 [build-dependencies]
 winres = "0.1.12"
