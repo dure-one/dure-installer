@@ -1,7 +1,7 @@
 //! DeltaChat actor implementation
 
 use crate::viewmodel::common::ViewModelEvent;
-use super::{ContactInfo, DeltaChatCommand, DeltaChatEvent};
+use super::{ChatInfo, ContactInfo, DeltaChatCommand, DeltaChatEvent, MessageInfo};
 use smol::channel::{Receiver, Sender};
 use std::path::PathBuf;
 
@@ -220,6 +220,74 @@ impl DeltaChatActor {
                 } else {
                     return Err("Cannot list contacts: not configured".to_string());
                 }
+                Ok(())
+            }
+            DeltaChatCommand::CreateChat { contact_id } => {
+                if let Some(context) = &self.context {
+                    let chat_id = self.tokio_runtime.block_on(async {
+                        use deltachat::chat::ChatId;
+                        use deltachat::contact::ContactId;
+
+                        let contact_id = ContactId::new(contact_id);
+                        deltachat::chat::create_by_contact_id(&context, contact_id)
+                            .await
+                            .map_err(|e| format!("Failed to create chat: {}", e))
+                    })?;
+
+                    let chat = self.tokio_runtime.block_on(async {
+                        deltachat::chat::Chat::load_from_db(&context, chat_id)
+                            .await
+                            .map_err(|e| format!("Failed to load chat: {}", e))
+                    })?;
+
+                    let chat_info = ChatInfo {
+                        id: chat_id.to_u32(),
+                        name: chat.get_name().to_string(),
+                        last_message: None,
+                        unread_count: 0,
+                        timestamp: 0,
+                    };
+
+                    self.emit_event(DeltaChatEvent::ChatCreated { chat: chat_info });
+                    log::info!("Chat created: {}", chat_id.to_u32());
+                } else {
+                    return Err("Cannot create chat: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::ListChats => {
+                if let Some(context) = &self.context {
+                    let chats = self.tokio_runtime.block_on(async {
+                        let chat_ids = deltachat::chat::get_chat_ids(&context, 0, None, None)
+                            .await
+                            .map_err(|e| format!("Failed to list chats: {}", e))?;
+
+                        let mut chats = Vec::new();
+                        for chat_id in chat_ids {
+                            if let Ok(chat) = deltachat::chat::Chat::load_from_db(&context, chat_id).await {
+                                chats.push(ChatInfo {
+                                    id: chat_id.to_u32(),
+                                    name: chat.get_name().to_string(),
+                                    last_message: None,
+                                    unread_count: 0,
+                                    timestamp: 0,
+                                });
+                            }
+                        }
+
+                        Ok::<Vec<ChatInfo>, String>(chats)
+                    })?;
+
+                    self.emit_event(DeltaChatEvent::ChatsListed { chats });
+                    log::info!("Listed {} chats", chats.len());
+                } else {
+                    return Err("Cannot list chats: not configured".to_string());
+                }
+                Ok(())
+            }
+            DeltaChatCommand::SelectChat { chat_id } => {
+                self.emit_event(DeltaChatEvent::ChatSelected { chat_id });
+                log::info!("Chat selected: {}", chat_id);
                 Ok(())
             }
             _ => {
