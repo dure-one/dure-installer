@@ -105,7 +105,77 @@ impl DeltaChatTab {
                     self.config_dialog_open = true;
                 }
             });
+
+            ui.separator();
+
+            // Contacts section
+            ui.heading("Contacts");
+
+            if ui.button("Add Contact").clicked() {
+                self.add_contact_dialog_open = true;
+            }
+
+            // Show add contact dialog
+            if self.add_contact_dialog_open {
+                self.render_add_contact_dialog(ui, vm);
+            }
+
+            // List contacts on first render or when requested
+            if self.contacts.is_empty() && self.is_connected {
+                use crate::viewmodel::deltachat::DeltaChatCommand;
+                smol::block_on(async {
+                    let _ = vm.deltachat_tx.send(DeltaChatCommand::ListContacts).await;
+                });
+            }
+
+            // Display contacts
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for contact in &self.contacts {
+                    ui.horizontal(|ui| {
+                        ui.label(&contact.name);
+                        ui.label(format!("({})", &contact.email));
+                    });
+                }
+            });
         }
+    }
+
+    fn render_add_contact_dialog(&mut self, ui: &mut egui::Ui, vm: &ViewModel) {
+        use crate::viewmodel::deltachat::DeltaChatCommand;
+
+        egui::Window::new("Add Contact")
+            .collapsible(false)
+            .resizable(false)
+            .show(ui.ctx(), |ui| {
+                ui.vertical(|ui| {
+                    ui.label("Email Address:");
+                    ui.text_edit_singleline(&mut self.add_contact_email);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.add_contact_dialog_open = false;
+                            self.add_contact_email.clear();
+                        }
+
+                        let can_submit = !self.add_contact_email.is_empty();
+
+                        if ui.add_enabled(can_submit, egui::Button::new("Add"))
+                            .clicked()
+                        {
+                            let cmd = DeltaChatCommand::AddContact {
+                                email: self.add_contact_email.clone(),
+                            };
+
+                            smol::block_on(async {
+                                let _ = vm.deltachat_tx.send(cmd).await;
+                            });
+
+                            self.add_contact_dialog_open = false;
+                            self.add_contact_email.clear();
+                        }
+                    });
+                });
+            });
     }
 
     fn handle_events(&mut self, vm: &ViewModel) {
@@ -147,6 +217,16 @@ impl DeltaChatTab {
                         if let Some(email) = email {
                             self.configured_email = Some(email);
                         }
+                    }
+
+                    DeltaChatEvent::ContactAdded { contact } => {
+                        self.contacts.push(contact);
+                        log::info!("Contact added to UI");
+                    }
+
+                    DeltaChatEvent::ContactsListed { contacts } => {
+                        self.contacts = contacts;
+                        log::info!("Contacts list updated: {} contacts", self.contacts.len());
                     }
 
                     _ => {}
