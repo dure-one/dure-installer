@@ -44,26 +44,105 @@ impl DeltaChatActor {
         while let Ok(cmd) = self.command_rx.recv().await {
             log::debug!("DeltaChatActor received command: {:?}", cmd);
 
-            let result = smol::unblock({
-                let rt = &self.tokio_runtime;
-                move || {
-                    rt.block_on(async {
-                        // TODO: handle commands
-                        Ok::<(), String>(())
-                    })
-                }
-            }).await;
-
-            if let Err(e) = result {
+            // Handle command (moves into tokio runtime)
+            if let Err(e) = self.handle_command(cmd).await {
                 log::error!("DeltaChat command failed: {}", e);
-                self.emit_event(DeltaChatEvent::Error {
-                    operation: "command".to_string(),
-                    error: e,
-                });
             }
         }
 
         log::info!("DeltaChatActor stopped");
+    }
+
+    async fn initialize_context(&mut self) -> Result<(), String> {
+        let db_path = self.database_path.clone();
+
+        // Ensure database directory exists
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create database directory: {}", e))?;
+        }
+
+        // Open/create database in tokio runtime
+        let context = self.tokio_runtime.block_on(async {
+            deltachat::ContextBuilder::new(db_path)
+                .with_id(1)
+                .open()
+                .await
+                .map_err(|e| format!("Cannot open DeltaChat database: {}", e))
+        })?;
+
+        self.context = Some(context);
+        log::info!("DeltaChat context initialized");
+
+        Ok(())
+    }
+
+    async fn configure_internal(&mut self, email: &str, password: &str) -> Result<(), String> {
+        // Initialize context if not already done
+        if self.context.is_none() {
+            self.initialize_context().await?;
+        }
+
+        let context = self.context.as_ref().ok_or("Context not initialized")?;
+
+        self.tokio_runtime.block_on(async {
+            use deltachat::config::Config;
+
+            // Set configuration
+            context.set_config(Config::Addr, Some(email))
+                .await
+                .map_err(|e| format!("Failed to set email: {}", e))?;
+
+            context.set_config(Config::MailPw, Some(password))
+                .await
+                .map_err(|e| format!("Failed to set password: {}", e))?;
+
+            // Run configuration
+            context.configure()
+                .await
+                .map_err(|e| format!("Configuration failed: {}", e))?;
+
+            Ok::<(), String>(())
+        })
+    }
+
+    async fn handle_command(&mut self, cmd: DeltaChatCommand) -> Result<(), String> {
+        // Wrap tokio calls with runtime
+        let result = match cmd {
+            DeltaChatCommand::Configure { ref email, ref password } => {
+                self.emit_event(DeltaChatEvent::ConfigurationStarted);
+                self.configure_internal(email, password).await
+            }
+            _ => {
+                log::warn!("Command not yet implemented: {:?}", cmd);
+                Ok(())
+            }
+        };
+
+        match result {
+            Ok(_) if matches!(cmd, DeltaChatCommand::Configure { .. }) => {
+                if let DeltaChatCommand::Configure { email, .. } = cmd {
+                    self.is_configured = true;
+                    self.emit_event(DeltaChatEvent::Configured { email });
+                }
+                Ok(())
+            }
+            Err(e) => {
+                let error_msg = if e.contains("authentication") || e.contains("login") {
+                    "Invalid email or password.".to_string()
+                } else if e.contains("network") || e.contains("connection") {
+                    "Cannot reach email server.".to_string()
+                } else {
+                    format!("Configuration failed: {}", e)
+                };
+
+                self.emit_event(DeltaChatEvent::ConfigurationFailed {
+                    error: error_msg.clone()
+                });
+                Err(error_msg)
+            }
+            Ok(_) => Ok(()),
+        }
     }
 
     fn emit_event(&self, event: DeltaChatEvent) {
@@ -105,5 +184,21 @@ mod tests {
             let received = cmd_rx.recv().await.unwrap();
             assert!(matches!(received, DeltaChatCommand::GetConnectionStatus));
         });
+    }
+
+    #[tokio::test]
+    async fn test_initialize_context() {
+        use tempfile::TempDir;
+
+        let tmpdir = TempDir::new().unwrap();
+        let db_path = tmpdir.path().join("test.db");
+
+        let context = deltachat::ContextBuilder::new(db_path.clone())
+            .with_id(1)
+            .open()
+            .await
+            .unwrap();
+
+        assert!(context.is_open().await);
     }
 }
