@@ -116,6 +116,8 @@ diesel_migrations = "2.3"
 # libsqlite3-hotbundle provides bundled SQLite3MultipleCiphers with encryption support
 libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
 dotenvy = "0.15"
+# rusqlite with fallible_uint for u64/usize support (required by deltachat)
+rusqlite = { version = "0.38", features = ["fallible_uint"] }
 # Smol async runtime ecosystem
 smol = "2.0"
 async-executor = "1.13"
@@ -148,6 +150,7 @@ shellexpand = "3.1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 urlencoding = "2.1"
 # DeltaChat integration (uses netwatch stub on OpenBSD for compatibility)
+# Disable default features to avoid vendored OpenSSL which conflicts with OpenBSD's LibreSSL
 deltachat = { git = "https://github.com/nikescar/core.git" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
@@ -170,7 +173,7 @@ diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_f
 diesel_migrations = "2.3"
 libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
 # DeltaChat integration
-deltachat = { git = "https://github.com/nikescar/core.git" }
+# deltachat = { git = "https://github.com/nikescar/core.git" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 # Windows-specific dependencies

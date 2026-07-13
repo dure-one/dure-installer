@@ -1,6 +1,6 @@
 //! DeltaChat actor events
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContactInfo {
     pub id: u32,
     pub name: String,
@@ -8,7 +8,7 @@ pub struct ContactInfo {
     pub is_blocked: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatInfo {
     pub id: u32,
     pub name: String,
@@ -17,7 +17,7 @@ pub struct ChatInfo {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MessageInfo {
     pub id: u32,
     pub from_contact_id: u32,

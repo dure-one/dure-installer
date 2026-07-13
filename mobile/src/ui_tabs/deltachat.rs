@@ -230,8 +230,8 @@ impl DeltaChatTab {
 
                             egui::Frame::none()
                                 .fill(frame_color)
-                                .inner_margin(egui::Margin::same(6.0))
-                                .rounding(egui::Rounding::same(4.0))
+                                .inner_margin(egui::Margin::same(6))
+                                .rounding(egui::Rounding::same(4))
                                 .show(ui, |ui| {
                                     ui.vertical(|ui| {
                                         ui.label(egui::RichText::new(&message.from_name).strong());

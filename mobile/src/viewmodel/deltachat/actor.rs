@@ -8,7 +8,7 @@ use std::path::PathBuf;
 pub struct DeltaChatActor {
     command_rx: Receiver<DeltaChatCommand>,
     event_tx: Sender<ViewModelEvent>,
-    context: Option<deltachat::Context>,
+    context: Option<deltachat::context::Context>,
     tokio_runtime: tokio::runtime::Runtime,
     database_path: PathBuf,
     is_configured: bool,
@@ -62,14 +62,17 @@ impl DeltaChatActor {
                 .map_err(|e| format!("Cannot create database directory: {}", e))?;
         }
 
-        // Open/create database in tokio runtime
-        let context = self.tokio_runtime.block_on(async {
-            deltachat::ContextBuilder::new(db_path)
-                .with_id(1)
-                .open()
-                .await
-                .map_err(|e| format!("Cannot open DeltaChat database: {}", e))
-        })?;
+        // Open/create database - use spawn to avoid blocking the Smol executor
+        let runtime = self.tokio_runtime.handle().clone();
+        let context = smol::unblock(move || {
+            runtime.block_on(async move {
+                deltachat::context::ContextBuilder::new(db_path)
+                    .with_id(1)
+                    .open()
+                    .await
+                    .map_err(|e| format!("Cannot open DeltaChat database: {}", e))
+            })
+        }).await?;
 
         self.context = Some(context);
         log::info!("DeltaChat context initialized");
@@ -83,27 +86,33 @@ impl DeltaChatActor {
             self.initialize_context().await?;
         }
 
-        let context = self.context.as_ref().ok_or("Context not initialized")?;
+        let context = self.context.as_ref().ok_or("Context not initialized")?.clone();
+        let email = email.to_string();
+        let password = password.to_string();
+        let runtime = self.tokio_runtime.handle().clone();
 
-        self.tokio_runtime.block_on(async {
-            use deltachat::config::Config;
+        // Run in blocking context to avoid runtime conflicts
+        smol::unblock(move || {
+            runtime.block_on(async move {
+                use deltachat::config::Config;
 
-            // Set configuration
-            context.set_config(Config::Addr, Some(email))
-                .await
-                .map_err(|e| format!("Failed to set email: {}", e))?;
+                // Set configuration
+                context.set_config(Config::Addr, Some(&email))
+                    .await
+                    .map_err(|e| format!("Failed to set email: {}", e))?;
 
-            context.set_config(Config::MailPw, Some(password))
-                .await
-                .map_err(|e| format!("Failed to set password: {}", e))?;
+                context.set_config(Config::MailPw, Some(&password))
+                    .await
+                    .map_err(|e| format!("Failed to set password: {}", e))?;
 
-            // Run configuration
-            context.configure()
-                .await
-                .map_err(|e| format!("Configuration failed: {}", e))?;
+                // Run configuration
+                context.configure()
+                    .await
+                    .map_err(|e| format!("Configuration failed: {}", e))?;
 
-            Ok::<(), String>(())
-        })
+                Ok::<(), String>(())
+            })
+        }).await
     }
 
     async fn handle_command(&mut self, cmd: DeltaChatCommand) -> Result<(), String> {
@@ -215,8 +224,9 @@ impl DeltaChatActor {
                         Ok::<Vec<ContactInfo>, String>(contacts)
                     })?;
 
+                    let count = contacts.len();
                     self.emit_event(DeltaChatEvent::ContactsListed { contacts });
-                    log::info!("Listed {} contacts", contacts.len());
+                    log::info!("Listed {} contacts", count);
                 } else {
                     return Err("Cannot list contacts: not configured".to_string());
                 }
@@ -224,25 +234,25 @@ impl DeltaChatActor {
             }
             DeltaChatCommand::CreateChat { contact_id } => {
                 if let Some(context) = &self.context {
-                    let chat_id = self.tokio_runtime.block_on(async {
-                        use deltachat::chat::ChatId;
+                    let (chat_id, chat) = self.tokio_runtime.block_on(async {
+                        use deltachat::chat::{Chat, ChatId};
                         use deltachat::contact::ContactId;
 
                         let contact_id = ContactId::new(contact_id);
-                        deltachat::chat::create_by_contact_id(&context, contact_id)
+                        let chat_id = ChatId::create_for_contact(&context, contact_id)
                             .await
-                            .map_err(|e| format!("Failed to create chat: {}", e))
-                    })?;
+                            .map_err(|e| format!("Failed to create chat: {}", e))?;
 
-                    let chat = self.tokio_runtime.block_on(async {
-                        deltachat::chat::Chat::load_from_db(&context, chat_id)
+                        let chat = Chat::load_from_db(&context, chat_id)
                             .await
-                            .map_err(|e| format!("Failed to load chat: {}", e))
+                            .map_err(|e| format!("Failed to load chat: {}", e))?;
+
+                        Ok::<(ChatId, Chat), String>((chat_id, chat))
                     })?;
 
                     let chat_info = ChatInfo {
                         id: chat_id.to_u32(),
-                        name: chat.get_name().to_string(),
+                        name: chat.name,
                         last_message: None,
                         unread_count: 0,
                         timestamp: 0,
@@ -258,16 +268,19 @@ impl DeltaChatActor {
             DeltaChatCommand::ListChats => {
                 if let Some(context) = &self.context {
                     let chats = self.tokio_runtime.block_on(async {
-                        let chat_ids = deltachat::chat::get_chat_ids(&context, 0, None, None)
+                        use deltachat::chatlist::Chatlist;
+
+                        let chatlist = Chatlist::try_load(&context, 0, None, None)
                             .await
                             .map_err(|e| format!("Failed to list chats: {}", e))?;
 
                         let mut chats = Vec::new();
-                        for chat_id in chat_ids {
+                        for i in 0..chatlist.len() {
+                            let chat_id = chatlist.get_chat_id(i).map_err(|e| format!("Failed to get chat ID: {}", e))?;
                             if let Ok(chat) = deltachat::chat::Chat::load_from_db(&context, chat_id).await {
                                 chats.push(ChatInfo {
                                     id: chat_id.to_u32(),
-                                    name: chat.get_name().to_string(),
+                                    name: chat.name,
                                     last_message: None,
                                     unread_count: 0,
                                     timestamp: 0,
@@ -278,8 +291,9 @@ impl DeltaChatActor {
                         Ok::<Vec<ChatInfo>, String>(chats)
                     })?;
 
+                    let count = chats.len();
                     self.emit_event(DeltaChatEvent::ChatsListed { chats });
-                    log::info!("Listed {} chats", chats.len());
+                    log::info!("Listed {} chats", count);
                 } else {
                     return Err("Cannot list chats: not configured".to_string());
                 }
@@ -314,32 +328,37 @@ impl DeltaChatActor {
             DeltaChatCommand::ListMessages { chat_id } => {
                 if let Some(context) = &self.context {
                     let messages = self.tokio_runtime.block_on(async {
-                        use deltachat::chat::{ChatId, get_chat_msgs};
+                        use deltachat::chat::{ChatId, ChatItem, get_chat_msgs};
+                        use deltachat::message::MessageState;
 
                         let chat_id_obj = ChatId::new(chat_id);
-                        let msg_ids = get_chat_msgs(&context, chat_id_obj)
+                        let chat_items = get_chat_msgs(&context, chat_id_obj)
                             .await
                             .map_err(|e| format!("Failed to list messages: {}", e))?;
 
                         let mut messages = Vec::new();
-                        for msg_id in msg_ids {
-                            if let Ok(msg) = deltachat::message::Message::load_from_db(&context, msg_id).await {
-                                let from_id = msg.get_from_id();
-                                let from_name = if let Ok(contact) = deltachat::contact::Contact::get_by_id(&context, from_id).await {
-                                    contact.get_display_name().to_string()
-                                } else {
-                                    "Unknown".to_string()
-                                };
+                        for item in chat_items {
+                            // Only process actual messages, skip day markers
+                            if let ChatItem::Message { msg_id } = item {
+                                if let Ok(msg) = deltachat::message::Message::load_from_db(&context, msg_id).await {
+                                    let from_id = msg.get_from_id();
+                                    let from_name = if let Ok(contact) = deltachat::contact::Contact::get_by_id(&context, from_id).await {
+                                        contact.get_display_name().to_string()
+                                    } else {
+                                        "Unknown".to_string()
+                                    };
 
-                                messages.push(MessageInfo {
-                                    id: msg_id.to_u32(),
-                                    from_contact_id: from_id.to_u32(),
-                                    from_name,
-                                    text: msg.get_text().to_string(),
-                                    timestamp: msg.get_timestamp(),
-                                    is_outgoing: msg.is_outgoing(),
-                                    is_seen: msg.is_seen(),
-                                });
+                                    let state = msg.get_state();
+                                    messages.push(MessageInfo {
+                                        id: msg_id.to_u32(),
+                                        from_contact_id: from_id.to_u32(),
+                                        from_name,
+                                        text: msg.get_text(),
+                                        timestamp: msg.get_timestamp(),
+                                        is_outgoing: state.is_outgoing(),
+                                        is_seen: state == MessageState::InSeen,
+                                    });
+                                }
                             }
                         }
 
@@ -372,15 +391,9 @@ impl DeltaChatActor {
                 Ok(())
             }
             DeltaChatCommand::FetchMessages => {
-                if let Some(context) = &self.context {
-                    self.tokio_runtime.block_on(async {
-                        context.fetch().await
-                            .map_err(|e| format!("Failed to fetch messages: {}", e))
-                    })?;
-                    log::info!("Fetched new messages from server");
-                } else {
-                    return Err("Cannot fetch messages: not configured".to_string());
-                }
+                // Note: In newer deltachat versions, fetching is automatic via start_io()
+                // Manual fetch() method has been removed from the API
+                log::info!("FetchMessages command received - fetching is automatic when connected");
                 Ok(())
             }
             DeltaChatCommand::GetContactInfo { .. } => {
@@ -476,7 +489,7 @@ mod tests {
         let tmpdir = TempDir::new().unwrap();
         let db_path = tmpdir.path().join("test.db");
 
-        let context = deltachat::ContextBuilder::new(db_path.clone())
+        let context = deltachat::context::ContextBuilder::new(db_path.clone())
             .with_id(1)
             .open()
             .await
@@ -492,7 +505,7 @@ mod tests {
         let tmpdir = TempDir::new().unwrap();
         let db_path = tmpdir.path().join("test.db");
 
-        let context = deltachat::ContextBuilder::new(db_path)
+        let context = deltachat::context::ContextBuilder::new(db_path)
             .with_id(1)
             .open()
             .await

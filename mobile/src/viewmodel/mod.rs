@@ -20,24 +20,24 @@ use std::collections::{HashMap, VecDeque};
 /// ViewModel coordinates actors and exposes unified API for UI/CLI
 pub struct ViewModel {
     // Actor communication channels
-    platform_tx: Sender<platform::PlatformCommand>,
-    ssh_tx: Sender<ssh::SshCommand>,
-    ns_tx: Sender<ns::NsCommand>,
-    wss_tx: Sender<wss::WssCommand>,
-    deltachat_tx: Sender<deltachat::DeltaChatCommand>,
+    pub platform_tx: Sender<platform::PlatformCommand>,
+    pub ssh_tx: Sender<ssh::SshCommand>,
+    pub ns_tx: Sender<ns::NsCommand>,
+    pub wss_tx: Sender<wss::WssCommand>,
+    pub deltachat_tx: Sender<deltachat::DeltaChatCommand>,
 
     // Unified event receiver
-    event_rx: Receiver<ViewModelEvent>,
+    pub event_rx: Receiver<ViewModelEvent>,
 
     // Transient state
-    state: ViewModelState,
+    pub state: ViewModelState,
 
     // Runtime handle
     runtime_handle: Option<RuntimeHandle>,
 
     // Optional egui context (for GUI mode)
     #[cfg(feature = "gui")]
-    egui_ctx: Option<egui::Context>,
+    pub egui_ctx: Option<egui::Context>,
 }
 
 enum RuntimeHandle {

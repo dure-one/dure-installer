@@ -26,6 +26,12 @@ rust-version = "1.85"
 version = "0.0.1"
 readme = "README.md"
 
+# rusqlite 0.38 compatibility: Enable fallible_uint feature
+# Rusqlite 0.38 moved u64/usize support behind the fallible_uint feature flag.
+# DeltaChat uses these types extensively for database IDs.
+[workspace.dependencies]
+rusqlite = { version = "0.38", features = ["fallible_uint"] }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
