@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "mobile",
     "crates/ws",
-    "crates/chat",
     "crates/windows-installer",
 ]
 

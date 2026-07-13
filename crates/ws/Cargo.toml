@@ -32,11 +32,9 @@ anyhow = "1.0"
 
 # Utilities
 dashmap = "6.1"
-chat = { path = "../chat", optional = true }
 
 [features]
 default = []
-chat-service = ["dep:chat"]
 
 [dev-dependencies]
 smol-potat = "0.5"

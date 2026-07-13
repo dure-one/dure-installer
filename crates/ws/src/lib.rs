@@ -22,9 +22,6 @@
 //! });
 //! ```
 
-#[cfg(feature = "chat-service")]
-pub use chat;
-
 pub mod error;
 pub mod config;
 pub mod tls;

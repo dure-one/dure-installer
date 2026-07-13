@@ -21,14 +21,6 @@ impl WsServer {
     }
 }
 
-#[cfg(feature = "chat-service")]
-impl WsServer {
-    /// Attach chat chat
-    pub fn with_chat_chat(mut self, _chat: chat::ChatService) -> Self {
-        // TODO: Store chat in WsServer once we add WebSocket handler
-        self
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -47,16 +39,4 @@ mod integration_tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[cfg(feature = "chat-service")]
-    #[smol_potat::test]
-    async fn test_server_with_chat_chat() {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("chat.db");
-
-        let chat = chat::ChatService::new(db_path).await.unwrap();
-        let config = ServerConfig::new("example.com");
-        let server = WsServer::new(config).with_chat_chat(chat);
-
-        assert_eq!(server.config.domain, "example.com");
-    }
 }
