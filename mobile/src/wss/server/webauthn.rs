@@ -2,10 +2,158 @@
 //!
 //! Provides passkey-based authentication using WebAuthn protocol via go-webauthn-client.
 //! Uses CLI-based JSON-RPC communication (works on all platforms including OpenBSD).
+//!
+//! NOTE: Currently disabled - go_webauthn_client crate not available.
 
 use anyhow::Result;
-use go_webauthn_client::*;
+// Disabled: go_webauthn_client crate not available
+// use go_webauthn_client::*;
 use std::sync::{Arc, Mutex};
+
+// Stub types for go_webauthn_client (disabled feature)
+#[derive(Clone)]
+#[allow(dead_code)]
+struct GoWebAuthnClient;
+
+impl GoWebAuthnClient {
+    fn new(_config: Option<String>) -> Result<Self> {
+        Ok(GoWebAuthnClient)
+    }
+
+    fn webauthn_signup_begin(&mut self, _params: WebAuthnSignupBeginParams) -> Result<WebAuthnSignupBeginResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_signup_finish(&mut self, _params: WebAuthnSignupFinishParams) -> Result<WebAuthnSignupFinishResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_signin_begin(&mut self, _params: WebAuthnSigninBeginParams) -> Result<WebAuthnSigninBeginResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_signin_finish(&mut self, _params: WebAuthnSigninFinishParams) -> Result<WebAuthnSigninFinishResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_passkey_login_begin(&mut self, _params: WebAuthnPasskeyLoginBeginParams) -> Result<WebAuthnPasskeyLoginBeginResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_passkey_login_finish(&mut self, _params: WebAuthnPasskeyLoginFinishParams) -> Result<WebAuthnPasskeyLoginFinishResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_mfa_login_begin(&mut self, _params: WebAuthnMfaLoginBeginParams) -> Result<WebAuthnMfaLoginBeginResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+
+    fn webauthn_mfa_login_finish(&mut self, _params: WebAuthnMfaLoginFinishParams) -> Result<WebAuthnMfaLoginFinishResult> {
+        Err(anyhow::anyhow!("WebAuthn not available"))
+    }
+}
+
+#[allow(dead_code)]
+#[allow(dead_code)]
+struct WebAuthnSignupBeginParams {
+    rp_display_name: String,
+    rp_id: String,
+    rp_origins: String,
+    username: String,
+    display_name: String,
+    scenario: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSignupBeginResult {
+    session_id: String,
+    challenge_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSignupFinishParams {
+    session_id: String,
+    credential_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSignupFinishResult {
+    user_id: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSigninBeginParams {
+    username: String,
+    scenario: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSigninBeginResult {
+    session_id: String,
+    challenge_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSigninFinishParams {
+    session_id: String,
+    credential_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnSigninFinishResult {
+    user_id: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnPasskeyLoginBeginParams {
+    rp_display_name: String,
+    rp_id: String,
+    rp_origins: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnPasskeyLoginBeginResult {
+    session_id: String,
+    challenge_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnPasskeyLoginFinishParams {
+    session_id: String,
+    credential_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnPasskeyLoginFinishResult {
+    user_id: String,
+    username: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnMfaLoginBeginParams {
+    rp_display_name: String,
+    rp_id: String,
+    rp_origins: String,
+    username: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnMfaLoginBeginResult {
+    session_id: String,
+    challenge_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnMfaLoginFinishParams {
+    session_id: String,
+    credential_json: String,
+}
+
+#[allow(dead_code)]
+struct WebAuthnMfaLoginFinishResult {
+    success: bool,
+    user_id: String,
+}
 
 /// Custom errors for WebAuthn operations
 #[derive(Debug)]
@@ -36,6 +184,7 @@ impl From<anyhow::Error> for AuthError {
 /// Uses CLI-based JSON-RPC communication with go-webauthn process.
 /// Session management is handled by the CLI process.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct WebAuthnState {
     /// Relying party ID (domain name)
     pub rp_id: String,

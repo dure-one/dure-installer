@@ -21,6 +21,7 @@ pub mod handlers;
 pub mod http_get;
 pub mod http_post;
 pub mod https;
+pub mod messages;
 pub mod tls;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod webauthn;

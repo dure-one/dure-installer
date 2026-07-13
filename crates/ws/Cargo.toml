@@ -1,0 +1,44 @@
+[package]
+name = "ws"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+
+[dependencies]
+# wtx framework
+wtx = { version = "0.47", default-features = false, features = ["http2", "web-socket", "crypto-ring"] }
+
+# Async runtime
+smol = "2.0"
+async-io = "2.4"
+async-net = "2.0"
+futures-lite = "2.6"
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls-pemfile = "2"
+
+# Database
+diesel = { version = "2.3", features = ["sqlite", "r2d2"] }
+r2d2 = "0.8"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Utilities
+dashmap = "6.1"
+chat = { path = "../chat", optional = true }
+
+[features]
+default = []
+chat-service = ["dep:chat"]
+
+[dev-dependencies]
+smol-potat = "0.5"
+criterion = "0.8"
+tempfile = "3"

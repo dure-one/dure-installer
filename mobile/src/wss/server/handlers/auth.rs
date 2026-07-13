@@ -1,6 +1,6 @@
 //! Authentication message handlers
 
-use dure_messages::{
+use crate::wss::server::messages::{
     AuthLoginRequest, AuthLogoutRequest, AuthLogoutResponse, AuthResponse, DeviceInfo,
     ServerMessage, WebAuthnSigninBeginRequest, WebAuthnSigninBeginResponse,
     WebAuthnSigninFinishRequest, WebAuthnSigninFinishResponse, WebAuthnSignupBeginRequest,
@@ -76,8 +76,10 @@ pub async fn handle_login(
     let device_info = DeviceInfo {
         device_id: req.device_id.clone(),
         device_name: None,
-        platform: req.client_version.clone(),
-        last_seen: Some(Utc::now()),
+        platform: req.device_info.as_ref().map(|d| d.platform.clone()).unwrap_or_else(|| "unknown".to_string()),
+        os_version: req.device_info.as_ref().and_then(|d| d.os_version.clone()),
+        app_version: req.client_version.clone(),
+        last_seen: Utc::now().timestamp(),
     };
 
     // TODO: Generate actual server public key for E2E encryption
@@ -95,7 +97,7 @@ pub async fn handle_login(
         server_public_key,
         error: None,
         device_info: Some(device_info),
-        expires_at: Some(Utc::now() + chrono::Duration::hours(24)),
+        expires_at: Some((Utc::now() + chrono::Duration::hours(24)).timestamp()),
     }))
 }
 
@@ -131,6 +133,7 @@ pub async fn handle_logout(
     Ok(ServerMessage::AuthLogoutResponse(AuthLogoutResponse {
         success: true,
         message: Some("Logged out successfully".to_string()),
+        error: None,
     }))
 }
 

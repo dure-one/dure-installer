@@ -8,6 +8,7 @@ use std::io;
 use std::time::{Duration, Instant};
 
 use super::https::HttpRequest;
+use super::messages as dure_messages;
 use super::{ServerSettings, Stats, generate_session_id};
 
 /// Calculate Sec-WebSocket-Accept header value
