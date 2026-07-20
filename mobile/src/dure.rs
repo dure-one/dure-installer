@@ -345,31 +345,31 @@ impl DureApp {
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
+                // .tab(tr!("tab-client"))
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
                 .tab(tr!("tab-domains"))
                 .tab(tr!("tab-site"))
                 // .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                // .tab(tr!("tab-members"))
+                // .tab(tr!("tab-channel"))
+                // .tab(tr!("tab-dm"))
+                // .tab(tr!("tab-products"))
+                // .tab(tr!("tab-orders"))
+                // .tab(tr!("tab-email")),
         );
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
+                // .tab(tr!("tab-client"))
                 // .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                // .tab(tr!("tab-members"))
+                // .tab(tr!("tab-channel"))
+                // .tab(tr!("tab-dm"))
+                // .tab(tr!("tab-products"))
+                // .tab(tr!("tab-orders"))
+                // .tab(tr!("tab-email")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -377,31 +377,31 @@ impl DureApp {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             self.active_tab = match self.scrolling_selected {
-                0 => Tab::Client,
-                1 => Tab::Platform,
-                2 => Tab::Ssh,
-                3 => Tab::Ns,
-                4 => Tab::Site,
-                5 => Tab::Members,
-                6 => Tab::Channel,
-                7 => Tab::DM,
-                8 => Tab::Products,
-                9 => Tab::Orders,
-                10 => Tab::Email,
+                // 0 => Tab::Client,
+                0 => Tab::Platform,
+                1 => Tab::Ssh,
+                2 => Tab::Ns,
+                3 => Tab::Site,
+                // 5 => Tab::Members,
+                // 6 => Tab::Channel,
+                // 7 => Tab::DM,
+                // 8 => Tab::Products,
+                // 9 => Tab::Orders,
+                // 10 => Tab::Email,
                 _ => Tab::Platform,
             };
         }
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         {
             self.active_tab = match self.scrolling_selected {
-                0 => Tab::Client,
-                1 => Tab::Members,
-                2 => Tab::Channel,
-                3 => Tab::DM,
-                4 => Tab::Products,
-                5 => Tab::Orders,
-                6 => Tab::Email,
-                _ => Tab::Client,
+                // 0 => Tab::Client,
+                // 1 => Tab::Members,
+                // 2 => Tab::Channel,
+                // 3 => Tab::DM,
+                // 4 => Tab::Products,
+                // 5 => Tab::Orders,
+                // 6 => Tab::Email,
+                _ => Tab::Platform,
             };
         }
 
@@ -409,7 +409,7 @@ impl DureApp {
 
         // Render active tab content
         match self.active_tab {
-            Tab::Client => self.tab_client.ui(ui),
+            // Tab::Client => self.tab_client.ui(ui),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -419,12 +419,13 @@ impl DureApp {
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
             Tab::Roles => self.tab_roles.ui(ui),
-            Tab::Members => self.tab_members.ui(ui),
-            Tab::Channel => self.tab_channel.ui(ui),
-            Tab::DM => self.tab_dm.ui(ui),
-            Tab::Products => self.tab_products.ui(ui),
-            Tab::Orders => self.tab_orders.ui(ui),
-            Tab::Email => self.tab_email.ui(ui),
+            // Tab::Members => self.tab_members.ui(ui),
+            // Tab::Channel => self.tab_channel.ui(ui),
+            // Tab::DM => self.tab_dm.ui(ui),
+            // Tab::Products => self.tab_products.ui(ui),
+            // Tab::Orders => self.tab_orders.ui(ui),
+            // Tab::Email => self.tab_email.ui(ui),
+            _ => {},
         }
     }
 
