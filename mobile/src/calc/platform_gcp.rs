@@ -34,7 +34,6 @@ mod tests {
     #[test]
     fn test_compute_platform_status() {
         let platform = CloudPlatformConfig {
-            name: "test".to_string(),
             platform_type: "gcp".to_string(),
             gcp_selected_project_id: Some("dure".to_string()),
             vms: vec![],
@@ -48,7 +47,6 @@ mod tests {
     #[test]
     fn test_compute_project_status_whitelisted() {
         let platform = CloudPlatformConfig {
-            name: "test".to_string(),
             platform_type: "gcp".to_string(),
             gcp_selected_project_id: Some("dure".to_string()),
             vms: vec![],
@@ -63,7 +61,6 @@ mod tests {
     #[test]
     fn test_compute_project_status_not_whitelisted() {
         let platform = CloudPlatformConfig {
-            name: "test".to_string(),
             platform_type: "gcp".to_string(),
             gcp_selected_project_id: Some("dure".to_string()),
             vms: vec![],
