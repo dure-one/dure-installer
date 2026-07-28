@@ -18,6 +18,7 @@
 //! cargo run --bin wss-client -- --url https://example.com --mode post --path /webhook/test
 //! ```
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_net::TcpStream;
 use async_tungstenite::{client_async, tungstenite::Message};
 use futures::io::{AsyncReadExt, AsyncWriteExt};

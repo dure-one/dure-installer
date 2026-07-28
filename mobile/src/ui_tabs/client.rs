@@ -1,5 +1,6 @@
 //! Client tab - Audit | DNS Client | Crypt Codec | Key Mgmt Ops
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 use egui_material3::{MaterialButton, tabs_secondary};

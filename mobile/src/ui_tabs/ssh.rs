@@ -1,5 +1,6 @@
 //! SSH tab - SSH host configuration and management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::MaterialButton;
 
@@ -1931,12 +1932,12 @@ impl SshTab {
                 eprintln!("Processing pending refresh for {}", host);
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.refreshing = true;
-                    row.refresh_pending_count = 4;  // 4 operations
+                    row.refresh_pending_count = 3;  // 3 operations: Linux, Docker, Ansible
 
                     let _ = vm.get_linux_status(host.clone());
                     let _ = vm.get_docker_status(host.clone());
                     let _ = vm.get_ansible_status(host.clone());
-                    let _ = vm.get_dure_wss_status(host);
+                    // Note: get_dure_wss_status not implemented in SSH actor yet
                 }
             }
         }

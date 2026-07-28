@@ -13,6 +13,7 @@
 //! The build process (`build.wasm.sh`) creates compressed versions of WASM and JS files.
 //! The server automatically selects the best available compression based on client support.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_fs as fs;
 use futures::StreamExt;
 use futures::io::AsyncWriteExt;

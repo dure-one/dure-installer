@@ -1,5 +1,6 @@
 //! NS tab - Domain and DNS record management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::MaterialButton;
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};

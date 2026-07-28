@@ -1,5 +1,6 @@
 //! SSH actor implementation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
 use crate::viewmodel::{ViewModelEvent, runtime};
 use crate::calc::{docker, ansible, dure_wss};
@@ -193,17 +194,17 @@ impl SshActor {
     }
 
     pub async fn run(mut self) {
-        log::info!("SshActor started");
+        dure_info!("SshActor started");
 
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("SshActor command failed: {}", e);
+                        dure_error!("SshActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
-                    log::info!("SshActor: channel closed, shutting down");
+                    dure_info!("SshActor: channel closed, shutting down");
                     break;
                 }
             }

@@ -13,6 +13,7 @@ mod tests;
 
 pub use common::*;
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use smol::channel::{Receiver, Sender};
 use std::collections::{HashMap, VecDeque};
 
@@ -93,7 +94,7 @@ impl ViewModel {
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
-                log::info!("ViewModel runtime started");
+                dure_info!("ViewModel runtime started");
 
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
@@ -135,7 +136,7 @@ impl ViewModel {
 
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
-                log::info!("ViewModel runtime started (headless)");
+                dure_info!("ViewModel runtime started (headless)");
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
@@ -177,7 +178,7 @@ impl ViewModel {
 
         // Spawn actors in Web Worker context
         spawn_local(async move {
-            log::info!("ViewModel runtime started (WASM)");
+            dure_info!("ViewModel runtime started (WASM)");
 
             let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());

@@ -28,16 +28,16 @@ pub fn android_main(app: AndroidApp) {
             .with_tag("Dure")
     );
 
-    log::info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));
+    dure_info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));
 
     // Initialize application configuration and database
     let config = crate::Config::new().unwrap_or_else(|e| {
-        log::error!("Failed to initialize application config: {}", e);
+        dure_error!("Failed to initialize application config: {}", e);
         std::panic::panic_any("Failed to initialize config");
     });
     let db_path = config.data_dir.join("dure.db");
     crate::calc::db::set_db_path(db_path.to_string_lossy().to_string());
-    log::info!("Database path set to: {}", db_path.display());
+    dure_info!("Database path set to: {}", db_path.display());
 
     // Initialize background image bridge (legacy feature)
     crate::android_wallpaper::init_wallpaper_bridge();
@@ -57,7 +57,7 @@ pub fn android_main(app: AndroidApp) {
         };
 
         if is_expected_window_panic {
-            log::warn!(
+            dure_warn!(
                 "Expected window destruction during activity lifecycle change: {}",
                 panic_info
             );
@@ -66,9 +66,9 @@ pub fn android_main(app: AndroidApp) {
         }
 
         // For other panics, log as errors
-        log::error!("PANIC: {}", panic_info);
+        dure_error!("PANIC: {}", panic_info);
         if let Some(location) = panic_info.location() {
-            log::error!("Location: {}:{}", location.file(), location.line());
+            dure_error!("Location: {}:{}", location.file(), location.line());
         }
     }));
 
@@ -133,7 +133,7 @@ pub fn android_main(app: AndroidApp) {
 
             // Initialize i18n with Auto language detection
             if let Err(e) = crate::i18n::init_i18n("Auto") {
-                log::error!("Failed to initialize i18n: {}", e);
+                dure_error!("Failed to initialize i18n: {}", e);
             }
 
             let mut app = DureApp::default();
@@ -141,16 +141,16 @@ pub fn android_main(app: AndroidApp) {
             // Inject Android background image setter (legacy feature)
             app.set_wallpaper_setter(Arc::new(AndroidWallpaperService));
 
-            log::info!("DureApp initialized with Android services");
+            dure_info!("DureApp initialized with Android services");
 
             Ok(Box::new(app))
         }),
     ) {
         Ok(_) => {
-            log::info!("DureApp exited successfully");
+            dure_info!("DureApp exited successfully");
         }
         Err(e) => {
-            log::error!("DureApp failed: {}", e);
+            dure_error!("DureApp failed: {}", e);
         }
     }
 }

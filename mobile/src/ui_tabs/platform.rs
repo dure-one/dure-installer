@@ -1,5 +1,6 @@
 //! Platform tab - Platform configuration and management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
 
