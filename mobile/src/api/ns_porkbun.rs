@@ -134,8 +134,8 @@ impl PorkbunClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        eprintln!(
-            "DEBUG: Porkbun DNS records response: {}",
+        dure_debug!(
+            "Porkbun DNS records response: {}",
             if body.len() > 500 {
                 &body[..500]
             } else {

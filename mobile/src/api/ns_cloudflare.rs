@@ -147,9 +147,9 @@ impl CloudflareClient {
             anyhow::bail!("Cloudflare API error: {}", errors.join(", "));
         }
 
-        eprintln!("DEBUG: Cloudflare returned {} zones", result.result.len());
+        dure_debug!("Cloudflare returned {} zones", result.result.len());
         for zone in &result.result {
-            eprintln!("DEBUG:   - {} ({})", zone.name, zone.id);
+            dure_debug!("  - {} ({})", zone.name, zone.id);
         }
 
         Ok(result.result)
