@@ -69,13 +69,13 @@ pub async fn read_http_request<S: AsyncReadExt + Unpin>(stream: &mut S) -> io::R
 
     // Debug: Print raw request line
     if debug {
-        eprintln!("DEBUG: Request line: {:?}", request_line);
+        dure_debug!("Request line: {:?}", request_line);
     }
 
     let parts: Vec<&str> = request_line.split_whitespace().collect();
     if parts.len() < 3 {
         if debug {
-            eprintln!("DEBUG: Invalid request line - parts: {:?}", parts);
+            dure_debug!("Invalid request line - parts: {:?}", parts);
         }
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -88,8 +88,8 @@ pub async fn read_http_request<S: AsyncReadExt + Unpin>(stream: &mut S) -> io::R
     let version = parts[2].to_string();
 
     if debug {
-        eprintln!(
-            "DEBUG: Method={}, Path={}, Version={}",
+        dure_debug!(
+            "Method={}, Path={}, Version={}",
             method, path, version
         );
     }
@@ -115,7 +115,7 @@ pub async fn read_http_request<S: AsyncReadExt + Unpin>(stream: &mut S) -> io::R
             let key = line[..colon_pos].trim().to_lowercase();
             let value = line[colon_pos + 1..].trim().to_string();
             if debug {
-                eprintln!("DEBUG: Header: {} = {}", key, value);
+                dure_debug!("Header: {} = {}", key, value);
             }
             headers.insert(key, value);
         }
@@ -124,7 +124,7 @@ pub async fn read_http_request<S: AsyncReadExt + Unpin>(stream: &mut S) -> io::R
     let body = if let Some(content_length) = headers.get("content-length") {
         if let Ok(len) = content_length.parse::<usize>() {
             if debug {
-                eprintln!("DEBUG: Reading body of {} bytes", len);
+                dure_debug!("Reading body of {} bytes", len);
             }
             let mut body = vec![0u8; len];
             stream.read_exact(&mut body).await?;
@@ -137,7 +137,7 @@ pub async fn read_http_request<S: AsyncReadExt + Unpin>(stream: &mut S) -> io::R
     };
 
     if debug {
-        eprintln!("DEBUG: Request parsed successfully");
+        dure_debug!("Request parsed successfully");
     }
 
     Ok(HttpRequest {
@@ -165,8 +165,8 @@ pub fn build_http_response(
     response.push_str("Connection: close\r\n\r\n");
 
     if debug {
-        eprintln!(
-            "DEBUG: Response status: {} {}, body size: {} bytes",
+        dure_debug!(
+            "Response status: {} {}, body size: {} bytes",
             status,
             status_text,
             body.len()

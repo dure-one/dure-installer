@@ -379,7 +379,7 @@ async fn handle_connection(
     let debug = std::env::var("DURE_DEBUG_HTTP").is_ok() || settings.debug_http;
 
     if debug {
-        eprintln!("DEBUG: New connection from {}", peer_addr);
+        dure_debug!("New connection from {}", peer_addr);
     }
     stats.connection_started();
 
@@ -387,14 +387,14 @@ async fn handle_connection(
         if let Some(acceptor) = acceptor {
             // TLS mode: HTTPS and WSS
             if debug {
-                eprintln!("DEBUG: Accepting TLS connection from {}", peer_addr);
+                dure_debug!("Accepting TLS connection from {}", peer_addr);
             }
             let mut tls_stream = acceptor
                 .accept(stream)
                 .await
                 .map_err(|e| io::Error::other(format!("TLS error: {}", e)))?;
             if debug {
-                eprintln!("DEBUG: TLS handshake completed for {}", peer_addr);
+                dure_debug!("TLS handshake completed for {}", peer_addr);
             }
             let request = read_http_request(&mut tls_stream).await?;
 
@@ -411,7 +411,7 @@ async fn handle_connection(
         } else {
             // Plain mode: HTTP and WS (no TLS)
             if debug {
-                eprintln!("DEBUG: Plain connection (no TLS) from {}", peer_addr);
+                dure_debug!("Plain connection (no TLS) from {}", peer_addr);
             }
             let mut plain_stream = stream;
             let request = read_http_request(&mut plain_stream).await?;

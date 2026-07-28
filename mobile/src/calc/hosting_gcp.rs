@@ -99,23 +99,23 @@ pub fn regenerate_vm(
     let keyring_domain = format!("gcp.{}.{}", project_id, vm_name);
 
     // Store private key in keyring
-    eprintln!("DEBUG: Initializing keyring for SSH key storage...");
+    dure_debug!("Initializing keyring for SSH key storage...");
 
     // Ensure KeePass database exists (will create KPKey if needed)
     let kdbx_path = match keyring::ensure_kdbx_exists() {
         Ok(path) => {
-            eprintln!("DEBUG: KeePass database ready at: {}", path.display());
+            dure_debug!("KeePass database ready at: {}", path.display());
             path
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to initialize KeePass database: {}", e);
+            dure_debug!("Failed to initialize KeePass database: {}", e);
             return Err(e).context("Failed to initialize KeePass database");
         }
     };
 
     let kpkey_path = keyring::get_default_kpkey_path()?;
-    eprintln!("DEBUG: KPKey path: {}", kpkey_path.display());
-    eprintln!("DEBUG: Storing SSH key with domain: {}", keyring_domain);
+    dure_debug!("KPKey path: {}", kpkey_path.display());
+    dure_debug!("Storing SSH key with domain: {}", keyring_domain);
 
     keyring::add_key_with_ssh(
         &kdbx_path,
@@ -127,7 +127,7 @@ pub fn regenerate_vm(
         Some(&format!("SSH key for GCP VM {}", vm_name)),
     )
     .map_err(|e| {
-        eprintln!("DEBUG: Failed to add key to keyring: {}", e);
+        dure_debug!("Failed to add key to keyring: {}", e);
         e
     })
     .context("Failed to store SSH key")?;

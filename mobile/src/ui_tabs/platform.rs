@@ -540,15 +540,15 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
     // Try to interpret as OpenSSH format first
     if let Ok(key_str) = String::from_utf8(raw_bytes.to_vec()) {
         if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-            eprintln!("DEBUG: Extracting public key from OpenSSH format");
+            dure_debug!("Extracting public key from OpenSSH format");
             return extract_pubkey_from_openssh(&key_str);
         }
     }
 
     // Otherwise, treat as raw 32-byte Ed25519 key
     if raw_bytes.len() != 32 {
-        eprintln!(
-            "DEBUG: Key is neither OpenSSH format nor raw 32 bytes (length: {})",
+        dure_debug!(
+            "Key is neither OpenSSH format nor raw 32 bytes (length: {})",
             raw_bytes.len()
         );
         return None;
@@ -580,39 +580,39 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
 
     let domain = match keyring_domain.as_ref() {
         Some(d) => {
-            eprintln!("DEBUG: Loading SSH key for domain: {}", d);
+            dure_debug!("Loading SSH key for domain: {}", d);
             d
         }
         None => {
-            eprintln!("DEBUG: No keyring domain provided");
+            dure_debug!("No keyring domain provided");
             return (None, None);
         }
     };
 
     let kdbx_path = match keyring::get_default_kdbx_path() {
         Ok(p) => {
-            eprintln!("DEBUG: KeePass DB path: {}", p.display());
+            dure_debug!("KeePass DB path: {}", p.display());
             p
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to get kdbx path: {}", e);
+            dure_debug!("Failed to get kdbx path: {}", e);
             return (None, None);
         }
     };
     let kpkey_path = match keyring::get_default_kpkey_path() {
         Ok(p) => {
-            eprintln!("DEBUG: KPKey path: {}", p.display());
+            dure_debug!("KPKey path: {}", p.display());
             p
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to get kpkey path: {}", e);
+            dure_debug!("Failed to get kpkey path: {}", e);
             return (None, None);
         }
     };
 
     let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
         Ok(k) => {
-            eprintln!("DEBUG: Found {} keys in keyring", k.len());
+            dure_debug!("Found {} keys in keyring", k.len());
             for key in &k {
                 eprintln!(
                     "  - Domain: {}, Username: {}, Has SSH: {}",
@@ -624,7 +624,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
             k
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to list keys: {}", e);
+            dure_debug!("Failed to list keys: {}", e);
             return (None, None);
         }
     };
@@ -632,41 +632,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
         Some(e) => {
-            eprintln!("DEBUG: Found matching key entry");
+            dure_debug!("Found matching key entry");
             e
         }
         None => {
-            eprintln!("DEBUG: No key found for domain: {}", domain);
+            dure_debug!("No key found for domain: {}", domain);
             return (None, None);
         }
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        eprintln!("DEBUG: SSH key bytes length: {}", ssh_key_bytes.len());
+        dure_debug!("SSH key bytes length: {}", ssh_key_bytes.len());
 
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
         if let Some(ref pk) = public_key {
-            eprintln!("DEBUG: Derived public key: {}", pk);
+            dure_debug!("Derived public key: {}", pk);
         } else {
-            eprintln!("DEBUG: Failed to derive public key");
+            dure_debug!("Failed to derive public key");
         }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                eprintln!("DEBUG: Key already in OpenSSH format");
+                dure_debug!("Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
 
         // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
-        eprintln!("DEBUG: Converting raw bytes to OpenSSH format");
+        dure_debug!("Converting raw bytes to OpenSSH format");
         let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
         (private_key, public_key)
     } else {
-        eprintln!("DEBUG: Key entry has no SSH key attachment");
+        dure_debug!("Key entry has no SSH key attachment");
         (None, None)
     }
 }

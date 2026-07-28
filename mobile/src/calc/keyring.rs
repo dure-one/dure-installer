@@ -128,9 +128,9 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         .write_all(verifying_key.as_bytes())
         .context("Failed to write public key")?;
 
-    eprintln!("✓ Generated new Ed25519 key pair:");
-    eprintln!("  KPKey (private): {}", kpkey_path.display());
-    eprintln!("  KPPubKey:        {}", kppubkey_path.display());
+    dure_info!("✓ Generated new Ed25519 key pair:");
+    dure_info!("  KPKey (private): {}", kpkey_path.display());
+    dure_info!("  KPPubKey:        {}", kppubkey_path.display());
 
     Ok(kpkey_path)
 }
