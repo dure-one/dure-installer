@@ -400,9 +400,9 @@ pub fn open_oauth_browser(url: &str) -> Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     {
         if let Err(e) = webbrowser::open(url) {
-            eprintln!("Failed to open browser: {}", e);
-            eprintln!("Please manually open this URL:");
-            eprintln!("{}", url);
+            dure_info!("Failed to open browser: {}", e);
+            dure_info!("Please manually open this URL:");
+            dure_info!("{}", url);
         }
     }
     Ok(())

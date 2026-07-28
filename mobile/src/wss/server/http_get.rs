@@ -26,7 +26,7 @@ use super::https::{HttpRequest, build_http_response};
 
 /// Download and extract dure-wasm static files
 pub async fn download_static_files(dir: &Path) -> io::Result<()> {
-    eprintln!("Downloading static files from GitHub...");
+    dure_debug!("Downloading static files from GitHub...");
 
     fs::create_dir_all(dir).await?;
 
@@ -46,7 +46,7 @@ pub async fn download_static_files(dir: &Path) -> io::Result<()> {
     .join()
     .map_err(|_| io::Error::other("Thread panicked"))??;
 
-    eprintln!("Downloaded to {:?}, extracting...", zip_path);
+    dure_debug!("Downloaded to {:?}, extracting...", zip_path);
 
     let dir_clone = dir.to_path_buf();
     std::thread::spawn(move || -> io::Result<()> {
@@ -90,7 +90,7 @@ pub async fn download_static_files(dir: &Path) -> io::Result<()> {
         fs::remove_dir(&extracted_dir).await?;
     }
 
-    eprintln!("✓ Static files ready at {:?}", dir);
+    dure_info!(" Static files ready at {:?}", dir);
     Ok(())
 }
 
@@ -426,7 +426,7 @@ pub async fn handle_http_get<S: AsyncWriteExt + Unpin>(
                     encoding
                 );
             } else {
-                eprintln!("Served {} - {} bytes", path, content.len());
+                dure_debug!("Served {} - {} bytes", path, content.len());
             }
 
             let response = build_http_response(200, "OK", headers, &content);

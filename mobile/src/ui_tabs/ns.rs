@@ -2490,7 +2490,7 @@ impl NsTab {
                     // Save config to persist refreshed token
                     if provider.starts_with("gcloud:") {
                         if let Err(e) = save_ns_config(&config) {
-                            eprintln!("Warning: Failed to save refreshed token: {}", e);
+                            dure_debug!("Warning: Failed to save refreshed token: {}", e);
                         }
                     }
 

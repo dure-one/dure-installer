@@ -210,7 +210,7 @@ impl ViewModel {
         let mut events = Vec::new();
 
         while let Ok(event) = self.event_rx.try_recv() {
-            eprintln!("🔍 ViewModel: Received event: {:?}", event);
+            dure_debug!(" ViewModel: Received event: {:?}", event);
             self.apply_event(&event, Some(ctx));
             events.push(event);
         }

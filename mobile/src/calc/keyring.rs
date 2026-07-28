@@ -101,7 +101,7 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         return Ok(kpkey_path);
     }
 
-    eprintln!("Generating Ed25519 keypair for KeePass...");
+    dure_info!("Generating Ed25519 keypair for KeePass...");
 
     // Create config directory if it doesn't exist
     let config_dir = get_config_dir()?;
@@ -149,7 +149,7 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         return Ok(kpkey_path);
     }
 
-    eprintln!("Generating Ed25519 keypair for KeePass...");
+    dure_info!("Generating Ed25519 keypair for KeePass...");
 
     // Create config directory if it doesn't exist
     let config_dir = get_config_dir()?;
@@ -176,7 +176,7 @@ pub fn ensure_kpkey_exists() -> Result<PathBuf> {
         .write_all(&verifying_key.to_bytes())
         .context("Failed to write KPPubKey")?;
 
-    eprintln!("✓ Generated KPKey at: {}", kpkey_path.display());
+    dure_info!(" Generated KPKey at: {}", kpkey_path.display());
 
     Ok(kpkey_path)
 }
@@ -223,7 +223,7 @@ pub fn ensure_kdbx_exists() -> Result<PathBuf> {
     db.save(&mut file, key)
         .context("Failed to save KeePass database")?;
 
-    eprintln!("✓ Created new KeePass database: {}", kdbx_path.display());
+    dure_info!(" Created new KeePass database: {}", kdbx_path.display());
 
     Ok(kdbx_path)
 }

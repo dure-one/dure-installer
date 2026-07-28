@@ -577,7 +577,7 @@ impl NsConfig {
                         account.refresh_token = oauth_result.refresh_token;
                     }
                     Err(e) => {
-                        eprintln!("Failed to refresh GCP token for {}: {}", email, e);
+                        dure_info!("Failed to refresh GCP token for {}: {}", email, e);
                         // Continue with old token, might still work
                     }
                 }

@@ -151,7 +151,7 @@ fn check_porkbun_domain(domain: &str, token: Option<&str>) -> Result<DomainRegis
 
     // TODO: Implement actual Porkbun API call
     // For now, return a placeholder
-    eprintln!("Porkbun domain check not yet implemented for: {}", domain);
+    dure_info!("Porkbun domain check not yet implemented for: {}", domain);
 
     Ok(DomainRegistrationCheck {
         registered: false,
@@ -220,7 +220,7 @@ pub fn update_nameservers(
 
 fn update_porkbun_nameservers(domain: &str, _token: &str, _nameservers: Vec<String>) -> Result<()> {
     // TODO: Implement Porkbun NS update
-    eprintln!("Porkbun NS update not yet implemented for: {}", domain);
+    dure_info!("Porkbun NS update not yet implemented for: {}", domain);
     anyhow::bail!("Porkbun NS update not yet implemented")
 }
 
@@ -230,7 +230,7 @@ fn update_cloudflare_nameservers(
     _nameservers: Vec<String>,
 ) -> Result<()> {
     // TODO: Implement Cloudflare NS update
-    eprintln!("Cloudflare NS update not yet implemented for: {}", domain);
+    dure_info!("Cloudflare NS update not yet implemented for: {}", domain);
     anyhow::bail!("Cloudflare NS update not yet implemented")
 }
 
@@ -280,7 +280,7 @@ pub fn update_dns_records(
 
 fn update_porkbun_dns(domain: &str, _token: &str, _records: HashMap<String, String>) -> Result<()> {
     // TODO: Implement Porkbun DNS update
-    eprintln!("Porkbun DNS update not yet implemented for: {}", domain);
+    dure_info!("Porkbun DNS update not yet implemented for: {}", domain);
     anyhow::bail!("Porkbun DNS update not yet implemented")
 }
 
@@ -290,13 +290,13 @@ fn update_cloudflare_dns(
     _records: HashMap<String, String>,
 ) -> Result<()> {
     // TODO: Implement Cloudflare DNS update
-    eprintln!("Cloudflare DNS update not yet implemented for: {}", domain);
+    dure_info!("Cloudflare DNS update not yet implemented for: {}", domain);
     anyhow::bail!("Cloudflare DNS update not yet implemented")
 }
 
 fn update_duckdns_dns(domain: &str, _token: &str, _records: HashMap<String, String>) -> Result<()> {
     // TODO: Implement DuckDNS update
-    eprintln!("DuckDNS update not yet implemented for: {}", domain);
+    dure_info!("DuckDNS update not yet implemented for: {}", domain);
     anyhow::bail!("DuckDNS update not yet implemented")
 }
 
@@ -310,7 +310,7 @@ pub fn create_vm(
     match provider {
         "gcp" => create_gcp_vm(token, instance_name, zone),
         "cafe24vps" => {
-            eprintln!("Cafe24 VPS requires manual setup");
+            dure_info!("Cafe24 VPS requires manual setup");
             anyhow::bail!("Cafe24 VPS requires manual setup - VM creation not supported via API")
         }
         _ => anyhow::bail!("Unsupported VM provider: {}", provider),
@@ -319,7 +319,7 @@ pub fn create_vm(
 
 fn create_gcp_vm(_token: &str, instance_name: &str, _zone: Option<&str>) -> Result<VmStatusCheck> {
     // TODO: Implement GCP VM creation using google-cloud-rust or gcloud CLI
-    eprintln!("GCP VM creation not yet implemented for: {}", instance_name);
+    dure_info!("GCP VM creation not yet implemented for: {}", instance_name);
     anyhow::bail!("GCP VM creation not yet implemented")
 }
 
@@ -390,7 +390,7 @@ pub fn delete_vm(provider: &str, token: &str, instance_id: &str) -> Result<()> {
 
 fn delete_gcp_vm(_token: &str, instance_id: &str) -> Result<()> {
     // TODO: Implement GCP VM deletion
-    eprintln!("GCP VM deletion not yet implemented for: {}", instance_id);
+    dure_info!("GCP VM deletion not yet implemented for: {}", instance_id);
     anyhow::bail!("GCP VM deletion not yet implemented")
 }
 

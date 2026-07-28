@@ -191,7 +191,7 @@ where
     use crate::storage::models::session;
 
     stats.http_request();
-    eprintln!("{} {} from {}", request.method, request.path, peer_addr);
+    dure_debug!("{} {} from {}", request.method, request.path, peer_addr);
 
     let session_id = request.get_session_id().unwrap_or_else(generate_session_id);
 
@@ -203,7 +203,7 @@ where
             peer_addr.to_string(),
         );
         if let Err(e) = session::store_session(&mut db, &sess) {
-            eprintln!("Failed to store session: {}", e);
+            dure_debug!("Failed to store session: {}", e);
         }
     }
 

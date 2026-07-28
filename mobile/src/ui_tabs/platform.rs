@@ -273,7 +273,7 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
             // V2 parse failed, try V1 (with 'name' field)
             match serde_yaml::from_str::<AppConfigV1>(&contents) {
                 Ok(v1_config) => {
-                    eprintln!("✓ Detected V1 config, migrating to V2...");
+                    dure_info!(" Detected V1 config, migrating to V2...");
 
                     // Create backup before migration
                     backup_config(&config_path)?;
@@ -285,7 +285,7 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
                     v2_config.save(&config_path)
                         .map_err(|e| format!("Failed to save migrated config: {}", e))?;
 
-                    eprintln!("✓ Migrated {} platform(s) to V2 format", v2_config.platforms.len());
+                    dure_info!(" Migrated {} platform(s) to V2 format", v2_config.platforms.len());
 
                     Ok((v2_config, config_path))
                 }
@@ -688,7 +688,7 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
         match client.list_projects(None) {
             Ok(list) => list.projects.len(),
             Err(e) => {
-                eprintln!("Failed to fetch project count: {}", e);
+                dure_debug!("Failed to fetch project count: {}", e);
                 0
             }
         }
@@ -833,7 +833,7 @@ impl PlatformTab {
                         self.load_error = None;
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { vm_name, .. }) => {
-                        eprintln!("✓ VM {} restarted successfully", vm_name);
+                        dure_info!(" VM {} restarted successfully", vm_name);
                         // Refresh to show updated status
                         self.loaded = false;
                         self.load_error = None;
@@ -843,7 +843,7 @@ impl PlatformTab {
                         message,
                         ..
                     }) => {
-                        eprintln!("✓ {}", message);
+                        dure_info!(" {}", message);
                         // Refresh to show updated VM details
                         self.loaded = false;
                         self.load_error = None;
@@ -853,7 +853,7 @@ impl PlatformTab {
                         external_ip,
                         ..
                     }) => {
-                        eprintln!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        dure_info!(" VM '{}' created successfully with IP {}", vm_name, external_ip);
                         // Refresh to show updated VM details
                         self.loaded = false;
                         self.load_error = None;
@@ -862,7 +862,7 @@ impl PlatformTab {
                         platform_name,
                         vm_name,
                     }) => {
-                        eprintln!("✓ VM {} deleted successfully", vm_name);
+                        dure_info!(" VM {} deleted successfully", vm_name);
 
                         // Remove VM from config
                         if let Ok((mut app_config, config_path)) = load_config() {
@@ -876,7 +876,7 @@ impl PlatformTab {
                                 if let Err(e) = app_config.save(&config_path) {
                                     self.load_error = Some(format!("Failed to save config: {}", e));
                                 } else {
-                                    eprintln!("✓ Config updated, refreshing spreadsheet");
+                                    dure_info!(" Config updated, refreshing spreadsheet");
                                     self.loaded = false;
                                     self.load_error = None;
                                 }
@@ -903,7 +903,7 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::ProjectSelected {
                         project_id, ..
                     }) => {
-                        eprintln!("✓ Project selected: {}", project_id);
+                        dure_info!(" Project selected: {}", project_id);
                         // Refresh spreadsheet to show updated project
                         self.loaded = false;
                         self.load_error = None;
@@ -912,7 +912,7 @@ impl PlatformTab {
                         platform_name,
                         platform_type,
                     }) => {
-                        eprintln!("✓ Platform '{}' ({}) added", platform_name, platform_type);
+                        dure_info!(" Platform '{}' ({}) added", platform_name, platform_type);
                         // Refresh spreadsheet to show new platform
                         self.loaded = false;
                         self.load_error = None;
@@ -921,7 +921,7 @@ impl PlatformTab {
                         platform_name,
                         vm_count,
                     }) => {
-                        eprintln!("✓ Platform '{}' deleted ({} VMs)", platform_name, vm_count);
+                        dure_info!(" Platform '{}' deleted ({} VMs)", platform_name, vm_count);
                         // Refresh spreadsheet to show removal
                         self.loaded = false;
                         self.load_error = None;
@@ -1004,7 +1004,7 @@ impl PlatformTab {
                             self.loaded = false;
                         }
                         Err(e) => {
-                            eprintln!("Refresh failed for {}: {}", project_id, e);
+                            dure_debug!("Refresh failed for {}: {}", project_id, e);
                         }
                     }
                     completed_refreshes.push(project_id.clone());
@@ -1415,7 +1415,7 @@ impl PlatformTab {
 
             // Detect wizard closure - if it was open and now closed, refresh
             if self.wizard_was_open && !wizard_is_open {
-                eprintln!("✓ GCP wizard closed, refreshing platform spreadsheet");
+                dure_info!(" GCP wizard closed, refreshing platform spreadsheet");
                 self.loaded = false;
             }
 
@@ -1789,7 +1789,7 @@ impl PlatformTab {
                                             .collect();
                                     }
                                     Err(e) => {
-                                        eprintln!("Failed to fetch projects: {}", e);
+                                        dure_debug!("Failed to fetch projects: {}", e);
                                     }
                                 }
                             }
@@ -1985,7 +1985,7 @@ impl PlatformTab {
                     selected_project,
                 ) {
                     Ok(_) => {
-                        eprintln!("✓ Platform add command sent");
+                        dure_info!(" Platform add command sent");
                     }
                     Err(e) => {
                         self.load_error = Some(format!("Failed to add platform: {}", e));
@@ -2136,7 +2136,7 @@ impl PlatformTab {
             let current_ip = match get_current_ip() {
                 Ok(ip) => ip,
                 Err(e) => {
-                    eprintln!("Failed to get current IP: {}", e);
+                    dure_debug!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
                     return;
                 }
@@ -2334,10 +2334,10 @@ impl PlatformTab {
                             &format!("{}:{}", project_id, instance_name),
                         ) {
                             Ok(audit_id) => {
-                                eprintln!("✓ Audit record created: ID {}", audit_id);
+                                dure_info!(" Audit record created: ID {}", audit_id);
                             }
                             Err(e) => {
-                                eprintln!("⚠ Failed to record audit event: {}", e);
+                                dure_warn!(" Failed to record audit event: {}", e);
                             }
                         }
                     }
@@ -2383,7 +2383,7 @@ impl PlatformTab {
         }
 
         // Token expired, refresh it
-        eprintln!("Access token expired, refreshing...");
+        dure_debug!("Access token expired, refreshing...");
 
         use crate::api::gcp::oauth::{self, OAuthHandler};
 
@@ -2406,7 +2406,7 @@ impl PlatformTab {
             .save(config_path)
             .map_err(|e| format!("Failed to save refreshed token: {}", e))?;
 
-        eprintln!("✓ Access token refreshed");
+        dure_info!(" Access token refreshed");
         Ok(oauth_result.access_token)
     }
 
@@ -2552,7 +2552,7 @@ impl PlatformTab {
                         }
                     }
                     Err(e) => {
-                        eprintln!("Failed to fetch VM status: {}", e);
+                        dure_debug!("Failed to fetch VM status: {}", e);
                     }
                 }
             }
@@ -2571,12 +2571,12 @@ impl PlatformTab {
                             );
                         }
                         Err(e) => {
-                            eprintln!("Failed to check firewall: {}", e);
+                            dure_debug!("Failed to check firewall: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to get current IP: {}", e);
+                    dure_debug!("Failed to get current IP: {}", e);
                 }
             }
 
@@ -2586,7 +2586,7 @@ impl PlatformTab {
                     platform.cached_total_project_count = Some(list.projects.len());
                 }
                 Err(e) => {
-                    eprintln!("Failed to fetch project count: {}", e);
+                    dure_debug!("Failed to fetch project count: {}", e);
                 }
             }
 
@@ -2810,7 +2810,7 @@ impl PlatformTab {
             };
             match vm.delete_platform(self.delete_platform_name.clone(), delete_options) {
                 Ok(_) => {
-                    eprintln!("✓ Platform delete command sent");
+                    dure_info!(" Platform delete command sent");
                 }
                 Err(e) => {
                     self.load_error = Some(format!("Failed to delete platform: {}", e));
@@ -2854,7 +2854,7 @@ impl PlatformTab {
                     self.add_platform_connected_email = Some(display);
                 }
                 Err(e) => {
-                    eprintln!("Failed to fetch user info: {}", e);
+                    dure_debug!("Failed to fetch user info: {}", e);
                     self.add_platform_connected_email = Some("Connected Account".to_string());
                 }
             }

@@ -111,16 +111,16 @@ impl OAuthHandler {
         let auth_url = self.build_auth_url(&redirect_uri, &state)?;
 
         // Open browser
-        eprintln!("Opening browser for OAuth authorization...");
-        eprintln!("If the browser doesn't open, visit: {}", auth_url);
+        dure_info!("Opening browser for OAuth authorization...");
+        dure_info!("If the browser doesn't open, visit: {}", auth_url);
         if let Err(e) = webbrowser::open(&auth_url) {
-            eprintln!("⚠ Failed to open browser: {}", e);
-            eprintln!("Please manually open this URL:");
-            eprintln!("{}", auth_url);
+            dure_warn!("Failed to open browser: {}", e);
+            dure_info!("Please manually open this URL:");
+            dure_info!("{}", auth_url);
         }
 
         // Wait for OAuth callback
-        eprintln!("Waiting for OAuth callback on http://localhost:{}...", port);
+        dure_info!("Waiting for OAuth callback on http://localhost:{}...", port);
 
         // Accept one connection (blocking)
         let (stream, _) = listener.accept().context("Failed to accept connection")?;

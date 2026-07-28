@@ -238,8 +238,8 @@ pub fn start_server(config: &WssServerConfig) -> Result<()> {
         std::fs::write(&pid_path, format!("{}\n{}", pid, started_at))
             .context("Failed to write PID file")?;
 
-        eprintln!("Server PID: {}", pid);
-        eprintln!("Log file:   {:?}", log_path);
+        dure_info!("Server PID: {}", pid);
+        dure_info!("Log file:   {:?}", log_path);
 
         Ok(())
     }
