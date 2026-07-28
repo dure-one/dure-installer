@@ -339,9 +339,7 @@ impl Stats {
     }
 
     pub fn print_stats(&self) {
-        eprintln!(
-            "Stats: active={}, total={}, http={}, wss={}, webhooks={}",
-            self.active_connections.load(Ordering::Relaxed),
+        dure_debug!("Stats: active={}, total={}, http={}, wss={}, webhooks={}", self.active_connections.load(Ordering::Relaxed),
             self.total_connections.load(Ordering::Relaxed),
             self.total_http_requests.load(Ordering::Relaxed),
             self.total_wss_messages.load(Ordering::Relaxed),

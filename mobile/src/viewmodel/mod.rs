@@ -216,9 +216,7 @@ impl ViewModel {
         }
 
         if !events.is_empty() {
-            eprintln!(
-                "🔍 ViewModel: Collected {} events, requesting repaint",
-                events.len()
+            dure_debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
             );
             ctx.request_repaint();
         }

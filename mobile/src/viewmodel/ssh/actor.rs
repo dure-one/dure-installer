@@ -612,24 +612,18 @@ impl SshActor {
         .await?;
 
         // Test connection (async operation - russh uses tokio internally)
-        eprintln!(
-            "🔍 SSH Actor: Starting SSH connection test to {}:{}...",
-            host_config.host, host_config.port
+        dure_debug!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port
         );
         let result =
             async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
-        eprintln!(
-            "🔍 SSH Actor: Connection test completed in {}ms",
-            latency_ms
+        dure_debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms
         );
 
         match result {
             Ok(conn_result) => {
-                eprintln!(
-                    "✓ SSH Actor: Connection test succeeded: {}",
-                    conn_result.success
+                dure_debug!("✓ SSH Actor: Connection test succeeded: {}", conn_result.success
                 );
                 self.send_event(SshEvent::ConnectionTested {
                     name,

@@ -419,9 +419,7 @@ pub async fn handle_http_get<S: AsyncWriteExt + Unpin>(
             if let Some(encoding) = content_encoding {
                 encoding_str = encoding.to_string();
                 headers.push(("Content-Encoding", &encoding_str));
-                eprintln!(
-                    "Served {} - {} bytes ({} compressed)",
-                    path,
+                dure_debug!("Served {} - {} bytes ({} compressed)", path,
                     content.len(),
                     encoding
                 );

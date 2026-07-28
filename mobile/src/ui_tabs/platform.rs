@@ -614,9 +614,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
         Ok(k) => {
             dure_debug!("Found {} keys in keyring", k.len());
             for key in &k {
-                eprintln!(
-                    "  - Domain: {}, Username: {}, Has SSH: {}",
-                    key.domain,
+                dure_debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
                     key.ssh_key.is_some()
                 );
@@ -824,9 +822,7 @@ impl PlatformTab {
                         whitelisted_ip,
                         ..
                     }) => {
-                        eprintln!(
-                            "✓ Successfully added {} to firewall whitelist",
-                            whitelisted_ip
+                        dure_debug!("✓ Successfully added {} to firewall whitelist", whitelisted_ip
                         );
                         // Refresh to show updated status
                         self.loaded = false;
@@ -887,9 +883,7 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        eprintln!(
-                            "✓ Projects listed for {}: {} projects",
-                            platform_name,
+                        dure_debug!("✓ Projects listed for {}: {} projects", platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -1449,9 +1443,7 @@ impl PlatformTab {
                                 Ok(token) => Some(token),
                                 Err(e) => {
                                     let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
-                                    eprintln!(
-                                        "Failed to get valid access token for project '{}': {}",
-                                        project_id, e
+                                    dure_debug!("Failed to get valid access token for project '{}': {}", project_id, e
                                     );
                                     None
                                 }

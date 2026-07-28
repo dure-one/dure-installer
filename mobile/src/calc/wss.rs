@@ -260,9 +260,7 @@ pub fn stop_server(domain: &str) -> Result<()> {
         if !process_alive(pid) {
             // Already dead — just clean up the stale PID file
             let _ = pid_file_path(domain).map(std::fs::remove_file);
-            eprintln!(
-                "Process {} was already stopped (stale PID file removed)",
-                pid
+            dure_warn!("Process {} was already stopped (stale PID file removed)", pid
             );
             return Ok(());
         }
@@ -286,9 +284,7 @@ pub fn stop_server(domain: &str) -> Result<()> {
         }
 
         if process_alive(pid) {
-            eprintln!(
-                "Warning: process {} did not stop within 5 s, sending SIGKILL",
-                pid
+            dure_warn!("Warning: process {} did not stop within 5 s, sending SIGKILL", pid
             );
             let _ = std::process::Command::new("kill")
                 .args(["-9", &pid.to_string()])

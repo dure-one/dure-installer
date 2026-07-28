@@ -87,9 +87,7 @@ pub async fn handle_login(
     // For now, use a placeholder
     let server_public_key = Some(format!("SERVER_KEY_{}", settings.server_id));
 
-    eprintln!(
-        "[Auth] Successfully authenticated device: {}",
-        req.device_id
+    dure_debug!("[Auth] Successfully authenticated device: {}", req.device_id
     );
 
     Ok(ServerMessage::AuthResponse(AuthResponse {
@@ -167,9 +165,7 @@ pub async fn handle_webauthn_signup_begin(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signup begin successful, session: {}",
-            response.session_id
+        dure_debug!("[WebAuthn] Signup begin successful, session: {}", response.session_id
         );
         Ok(WebAuthnSignupBeginResponse {
             success: true,
@@ -211,9 +207,7 @@ pub async fn handle_webauthn_signup_finish(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signup finish successful, user: {}",
-            response.user_id
+        dure_debug!("[WebAuthn] Signup finish successful, user: {}", response.user_id
         );
         Ok(WebAuthnSignupFinishResponse {
             success: true,
@@ -235,9 +229,7 @@ pub async fn handle_webauthn_signup_finish(
 pub async fn handle_webauthn_signin_begin(
     req: WebAuthnSigninBeginRequest,
 ) -> Result<WebAuthnSigninBeginResponse> {
-    eprintln!(
-        "[WebAuthn] Signin begin for user: {} (scenario: {})",
-        req.username, req.scenario
+    dure_debug!("[WebAuthn] Signin begin for user: {} (scenario: {})", req.username, req.scenario
     );
 
     let go_req = go_webauthn::SigninBeginRequest {
@@ -256,9 +248,7 @@ pub async fn handle_webauthn_signin_begin(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signin begin successful, session: {}",
-            response.session_id
+        dure_debug!("[WebAuthn] Signin begin successful, session: {}", response.session_id
         );
         Ok(WebAuthnSigninBeginResponse {
             success: true,
@@ -300,9 +290,7 @@ pub async fn handle_webauthn_signin_finish(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signin finish successful, user: {}",
-            response.user_id
+        dure_debug!("[WebAuthn] Signin finish successful, user: {}", response.user_id
         );
         Ok(WebAuthnSigninFinishResponse {
             success: true,

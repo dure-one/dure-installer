@@ -165,9 +165,7 @@ fn check_cloudflare_domain(domain: &str, token: Option<&str>) -> Result<DomainRe
 
     // TODO: Implement actual Cloudflare API call
     // For now, return a placeholder
-    eprintln!(
-        "Cloudflare domain check not yet implemented for: {}",
-        domain
+    dure_warn!("Cloudflare domain check not yet implemented for: {}", domain
     );
 
     Ok(DomainRegistrationCheck {
@@ -188,18 +186,14 @@ pub fn register_domain(domain: &str, provider: &str, token: &str) -> Result<()> 
 
 fn register_porkbun_domain(domain: &str, _token: &str) -> Result<()> {
     // TODO: Implement Porkbun domain registration
-    eprintln!(
-        "Porkbun domain registration not yet implemented for: {}",
-        domain
+    dure_warn!("Porkbun domain registration not yet implemented for: {}", domain
     );
     anyhow::bail!("Porkbun domain registration not yet implemented")
 }
 
 fn register_cloudflare_domain(domain: &str, _token: &str) -> Result<()> {
     // TODO: Implement Cloudflare domain registration
-    eprintln!(
-        "Cloudflare domain registration not yet implemented for: {}",
-        domain
+    dure_warn!("Cloudflare domain registration not yet implemented for: {}", domain
     );
     anyhow::bail!("Cloudflare domain registration not yet implemented")
 }
@@ -337,9 +331,7 @@ pub fn check_vm_status(provider: &str, token: &str, instance_id: &str) -> Result
 
 fn check_gcp_vm_status(_token: &str, instance_id: &str) -> Result<VmStatusCheck> {
     // TODO: Implement GCP VM status check
-    eprintln!(
-        "GCP VM status check not yet implemented for: {}",
-        instance_id
+    dure_warn!("GCP VM status check not yet implemented for: {}", instance_id
     );
     Ok(VmStatusCheck {
         exists: false,
@@ -355,9 +347,7 @@ pub fn check_ssh_connection(
     key_path: Option<&str>,
 ) -> Result<SshConnectionCheck> {
     // TODO: Implement SSH connection check using ssh2-rs
-    eprintln!(
-        "SSH connection check not yet implemented for: {}@{}",
-        user, ip_address
+    dure_warn!("SSH connection check not yet implemented for: {}@{}", user, ip_address
     );
     let _key_path = key_path;
 
@@ -371,9 +361,7 @@ pub fn check_ssh_connection(
 /// Install dure service on remote host via SSH
 pub fn install_dure_service(ip_address: &str, user: &str, key_path: Option<&str>) -> Result<()> {
     // TODO: Implement SSH remote installation using ssh2-rs
-    eprintln!(
-        "Dure service installation not yet implemented for: {}@{}",
-        user, ip_address
+    dure_warn!("Dure service installation not yet implemented for: {}@{}", user, ip_address
     );
     let _key_path = key_path;
     anyhow::bail!("Dure service installation not yet implemented")

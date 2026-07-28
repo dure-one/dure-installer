@@ -70,9 +70,7 @@ where
 {
     use crate::storage::models::session;
 
-    eprintln!(
-        "WebSocket connection: {} (session: {})",
-        peer_addr, session_id
+    dure_debug!("WebSocket connection: {} (session: {})", peer_addr, session_id
     );
 
     if let Ok(mut db) = settings.db.lock() {

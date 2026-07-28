@@ -143,9 +143,7 @@ impl Stats {
     }
 
     fn print_stats(&self) {
-        eprintln!(
-            "Stats: connections={}, http={}, ws_sent={}, ws_received={}",
-            self.total_connections.load(Ordering::Relaxed),
+        dure_debug!("Stats: connections={}, http={}, ws_sent={}, ws_received={}", self.total_connections.load(Ordering::Relaxed),
             self.total_http_requests.load(Ordering::Relaxed),
             self.total_wss_messages_sent.load(Ordering::Relaxed),
             self.total_wss_messages_received.load(Ordering::Relaxed),
@@ -479,9 +477,7 @@ async fn run_client() -> io::Result<()> {
             }
         }
         ClientMode::HttpPost => {
-            eprintln!(
-                "🚀 HTTPS POST Client  URL: {}  Path: {}  Body: {}",
-                url, path, body
+            dure_debug!("🚀 HTTPS POST Client  URL: {}  Path: {}  Body: {}", url, path, body
             );
             match https_post_request(&url, &path, &body, false, &stats).await {
                 Ok(response) => println!("Response:\n{}", response),
