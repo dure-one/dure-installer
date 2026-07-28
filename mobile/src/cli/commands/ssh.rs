@@ -73,9 +73,7 @@ pub fn execute_ssh_status() -> Result<()> {
         dure_info!("   Port: {}", host.port);
 
         if host.private_key_path.is_some() {
-            eprintln!(
-                "   Auth: Private key ({})",
-                host.private_key_path.as_ref().unwrap()
+            dure_info!("   Auth: Private key ({})", host.private_key_path.as_ref().unwrap()
             );
         } else if host.password.is_some() {
             dure_info!("   Auth: Password");
@@ -83,9 +81,7 @@ pub fn execute_ssh_status() -> Result<()> {
             dure_info!("   Auth: SSH agent");
         }
 
-        eprintln!(
-            "   Initialized: {}",
-            if host.initialized { "Yes" } else { "No" }
+        dure_info!("   Initialized: {}", if host.initialized { "Yes" } else { "No" }
         );
 
         // Test connection (russh uses tokio, wrap with async-compat)

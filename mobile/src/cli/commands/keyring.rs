@@ -47,9 +47,7 @@ pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
     dure_info!("  Output: {}", output_path.display());
     dure_info!("");
     dure_warn!(" Keep this file secure! It contains your credentials.");
-    eprintln!(
-        "  The file is protected by your KPKey: {}",
-        get_default_kpkey_path()?.display()
+    dure_info!("  The file is protected by your KPKey: {}", get_default_kpkey_path()?.display()
     );
 
     Ok(())
@@ -131,9 +129,7 @@ pub fn execute_key_status() -> Result<()> {
         // Print keys
         for key in &keys {
             let created = format_timestamp(key.created_at);
-            eprintln!(
-                "{:<30} {:<30} {:<15}",
-                truncate(&key.domain, 28),
+            dure_info!("{:<30} {:<30} {:<15}", truncate(&key.domain, 28),
                 truncate(&key.username, 28),
                 created
             );

@@ -122,8 +122,8 @@ pub fn execute_nft_remove(ip: String) -> Result<()> {
     dure_info!("");
 
     if remaining_ips.is_empty() {
-        eprintln!(
-            "⚠ Warning: No IPs are whitelisted. SSH access (port 22) is now blocked for all IPs."
+        dure_warn!(
+            "No IPs are whitelisted. SSH access (port 22) is now blocked for all IPs."
         );
         dure_info!("");
         dure_info!("To restore SSH access, whitelist an IP:");

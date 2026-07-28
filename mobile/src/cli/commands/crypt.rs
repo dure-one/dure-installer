@@ -54,9 +54,7 @@ pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: boo
 
     dure_info!("");
     dure_info!(" Data encrypted successfully");
-    eprintln!(
-        "  Size: {} bytes plaintext → {} bytes encrypted",
-        data_bytes.len(),
+    dure_info!("  Size: {} bytes plaintext → {} bytes encrypted", data_bytes.len(),
         encrypted.len()
     );
 
@@ -135,9 +133,7 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
         if let Some(existing) = get_current_device_keys(&mut conn)? {
             dure_info!("Device keys already exist for: {}", existing.device_id);
             dure_info!("");
-            eprintln!(
-                "Public key (base64): {}",
-                encode_base64(&existing.public_key)
+            dure_info!("Public key (base64): {}", encode_base64(&existing.public_key)
             );
             dure_info!("");
             dure_info!("To regenerate keys, use --force flag");

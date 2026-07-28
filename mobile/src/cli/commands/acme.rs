@@ -244,9 +244,7 @@ pub fn execute_acme_issue(domains: Vec<String>) -> Result<()> {
     dure_info!(" Configuration updated");
 
     dure_info!("");
-    eprintln!(
-        "Certificate will expire in {} days",
-        (cert.expires_at - cert.issued_at) / 86400
+    dure_info!("Certificate will expire in {} days", (cert.expires_at - cert.issued_at) / 86400
     );
     dure_info!("Remember to renew before expiry:");
     dure_info!("  dure acme renew");
@@ -277,9 +275,7 @@ pub fn execute_acme_renew(domain: String, force: bool) -> Result<()> {
             if !existing_cert.needs_renewal() {
                 let days_until_expiry =
                     (existing_cert.expires_at as i64 - chrono::Utc::now().timestamp()) / 86400;
-                eprintln!(
-                    "Certificate does not need renewal yet ({} days until expiry)",
-                    days_until_expiry
+                dure_info!("Certificate does not need renewal yet ({} days until expiry)", days_until_expiry
                 );
                 dure_info!("Use --force to renew anyway");
                 return Ok(());
