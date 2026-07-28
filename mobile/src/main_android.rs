@@ -24,8 +24,8 @@ pub fn android_main(app: AndroidApp) {
     // Initialize Android logger
     android_logger::init_once(
         android_logger::Config::default()
-            .with_max_level(log::LevelFilter::Debug) // Changed to Debug to see android-activity logs
-            .with_tag("dure"),
+            .with_max_level(log::LevelFilter::Debug)
+            .with_tag("Dure")
     );
 
     log::info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));

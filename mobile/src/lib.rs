@@ -15,8 +15,13 @@ pub mod api;
 pub mod attestation;
 pub mod calc;
 pub mod i18n;
+pub mod logging;
 pub mod site;
 pub mod storage;
+
+// Test modules
+#[cfg(test)]
+pub mod logging_test;
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
 

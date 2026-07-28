@@ -55,7 +55,20 @@ fn main() -> Result<()> {
         log_file_opt
     };
 
-    // Initialize logger
+    // Initialize logger with tab-separated format
+    let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
+
+    builder.format(|buf, record| {
+        use std::io::Write;
+        writeln!(
+            buf,
+            "{}\t[{}]\t{}",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            record.level(),
+            record.args()
+        )
+    });
+
     if let Some(log_path) = &log_file {
         // File-based logging
         let log_path = if log_path.is_empty() {
@@ -75,13 +88,10 @@ fn main() -> Result<()> {
                 }),
         );
 
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-            .target(env_logger::Target::Pipe(target))
-            .init();
-    } else {
-        // Console logging (default)
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        builder.target(env_logger::Target::Pipe(target));
     }
+
+    builder.init();
 
     log::info!("Dure v{} starting...", env!("CARGO_PKG_VERSION"));
 
