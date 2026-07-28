@@ -3,6 +3,7 @@
 //! Provides CLI commands for managing credentials (domain/username/password)
 //! in a KeePass database file without using SQLite.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::keyring::{
     add_key, delete_key, ensure_kdbx_exists, get_default_kdbx_path, get_default_kpkey_path,
     list_keys,
@@ -18,7 +19,7 @@ use std::path::Path;
 ///
 /// * `output_path` - Optional output path (defaults to ./exported_keys.kdbx)
 pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
-    eprintln!("Saving keyring to KeePass database...");
+    dure_info!("Saving keyring to KeePass database...");
 
     // Get source database path
     let source_path = get_default_kdbx_path()?;
@@ -32,20 +33,20 @@ pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
 
     // Check if file already exists
     if output_path.exists() {
-        eprintln!("⚠ Warning: File already exists: {}", output_path.display());
-        eprintln!("  It will be overwritten.");
-        eprintln!();
+        dure_warn!(" Warning: File already exists: {}", output_path.display());
+        dure_info!("  It will be overwritten.");
+        dure_info!("");
     }
 
     // Copy the database file
     std::fs::copy(&source_path, output_path)
         .with_context(|| format!("Failed to save keyring to {}", output_path.display()))?;
 
-    eprintln!();
-    eprintln!("✓ Keyring saved successfully");
-    eprintln!("  Output: {}", output_path.display());
-    eprintln!();
-    eprintln!("⚠ Keep this file secure! It contains your credentials.");
+    dure_info!("");
+    dure_info!(" Keyring saved successfully");
+    dure_info!("  Output: {}", output_path.display());
+    dure_info!("");
+    dure_warn!(" Keep this file secure! It contains your credentials.");
     eprintln!(
         "  The file is protected by your KPKey: {}",
         get_default_kpkey_path()?.display()
@@ -62,7 +63,7 @@ pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
 ///
 /// * `input_path` - Path to the KeePass database file (.kdbx)
 pub fn execute_key_load(input_path: String) -> Result<()> {
-    eprintln!("Loading keyring from KeePass database...");
+    dure_info!("Loading keyring from KeePass database...");
 
     let input_path = Path::new(&input_path);
 
@@ -76,9 +77,9 @@ pub fn execute_key_load(input_path: String) -> Result<()> {
 
     // Warn if replacing existing keyring
     if dest_path.exists() {
-        eprintln!("⚠ Warning: This will replace your current keyring!");
-        eprintln!("  Current keyring: {}", dest_path.display());
-        eprintln!();
+        dure_warn!(" Warning: This will replace your current keyring!");
+        dure_info!("  Current keyring: {}", dest_path.display());
+        dure_info!("");
     }
 
     // Ensure config directory exists
@@ -90,12 +91,12 @@ pub fn execute_key_load(input_path: String) -> Result<()> {
     std::fs::copy(input_path, &dest_path)
         .with_context(|| format!("Failed to load keyring from {}", input_path.display()))?;
 
-    eprintln!();
-    eprintln!("✓ Keyring loaded successfully");
-    eprintln!("  Loaded from: {}", input_path.display());
-    eprintln!("  Installed to: {}", dest_path.display());
-    eprintln!();
-    eprintln!("Use 'dure key status' to view loaded keys.");
+    dure_info!("");
+    dure_info!(" Keyring loaded successfully");
+    dure_info!("  Loaded from: {}", input_path.display());
+    dure_info!("  Installed to: {}", dest_path.display());
+    dure_info!("");
+    dure_info!("Use 'dure key status' to view loaded keys.");
 
     Ok(())
 }
@@ -112,20 +113,20 @@ pub fn execute_key_status() -> Result<()> {
     let keys = list_keys(&kdbx_path, Some(&kpkey_path))?;
 
     if keys.is_empty() {
-        eprintln!("No keys found in keyring.");
-        eprintln!();
-        eprintln!("Use 'dure key add <domain> <username> <password>' to add keys.");
+        dure_info!("No keys found in keyring.");
+        dure_info!("");
+        dure_info!("Use 'dure key add <domain> <username> <password>' to add keys.");
     } else {
-        eprintln!("Keyring status:");
-        eprintln!("  Database: {}", kdbx_path.display());
-        eprintln!("  KPKey:    {}", kpkey_path.display());
-        eprintln!();
-        eprintln!("Keys ({} total):", keys.len());
-        eprintln!();
+        dure_info!("Keyring status:");
+        dure_info!("  Database: {}", kdbx_path.display());
+        dure_info!("  KPKey:    {}", kpkey_path.display());
+        dure_info!("");
+        dure_info!("Keys ({} total):", keys.len());
+        dure_info!("");
 
         // Print header
-        eprintln!("{:<30} {:<30} {:<15}", "Domain", "Username", "Created");
-        eprintln!("{:-<75}", "");
+        dure_info!("{:<30} {:<30} {:<15}", "Domain", "Username", "Created");
+        dure_info!("{:-<75}", "");
 
         // Print keys
         for key in &keys {
@@ -137,7 +138,7 @@ pub fn execute_key_status() -> Result<()> {
                 created
             );
         }
-        eprintln!();
+        dure_info!("");
     }
 
     Ok(())
@@ -153,7 +154,7 @@ pub fn execute_key_status() -> Result<()> {
 /// * `username` - Username/email (e.g., "nikescar@gmail.com")
 /// * `password` - The password/credential
 pub fn execute_key_add(domain: String, username: String, password: String) -> Result<()> {
-    eprintln!("Adding key to keyring...");
+    dure_info!("Adding key to keyring...");
 
     // Ensure database exists
     let kdbx_path = ensure_kdbx_exists()?;
@@ -162,12 +163,12 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
     // Add the key
     add_key(&kdbx_path, Some(&kpkey_path), &domain, &username, &password)?;
 
-    eprintln!();
-    eprintln!("✓ Key added successfully");
-    eprintln!("  Domain:   {}", domain);
-    eprintln!("  Username: {}", username);
-    eprintln!();
-    eprintln!("Use 'dure key status' to view all keys.");
+    dure_info!("");
+    dure_info!(" Key added successfully");
+    dure_info!("  Domain:   {}", domain);
+    dure_info!("  Username: {}", username);
+    dure_info!("");
+    dure_info!("Use 'dure key status' to view all keys.");
 
     Ok(())
 }
@@ -180,7 +181,7 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
 ///
 /// * `domain` - Domain/URL of the key to delete
 pub fn execute_key_del(domain: String) -> Result<()> {
-    eprintln!("Deleting key from keyring...");
+    dure_info!("Deleting key from keyring...");
 
     // Ensure database exists
     let kdbx_path = ensure_kdbx_exists()?;
@@ -190,14 +191,14 @@ pub fn execute_key_del(domain: String) -> Result<()> {
     let deleted = delete_key(&kdbx_path, Some(&kpkey_path), &domain)?;
 
     if deleted {
-        eprintln!();
-        eprintln!("✓ Key deleted successfully");
-        eprintln!("  Domain: {}", domain);
+        dure_info!("");
+        dure_info!(" Key deleted successfully");
+        dure_info!("  Domain: {}", domain);
     } else {
-        eprintln!();
-        eprintln!("⚠ No key found with domain: {}", domain);
-        eprintln!();
-        eprintln!("Use 'dure key status' to view available keys.");
+        dure_info!("");
+        dure_warn!(" No key found with domain: {}", domain);
+        dure_info!("");
+        dure_info!("Use 'dure key status' to view available keys.");
     }
 
     Ok(())

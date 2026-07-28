@@ -1,5 +1,6 @@
 //! NFTables command implementation for firewall management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::db;
 use crate::calc::nft::{
     WhitelistedIp, remove_whitelisted_ip as remove_ip_from_nft, show_ruleset,
@@ -16,8 +17,8 @@ use anyhow::Result;
 /// Displays the current nftables ruleset.
 /// Requires nftables to be installed.
 pub fn execute_nft_show() -> Result<()> {
-    eprintln!("Fetching current nftables ruleset...");
-    eprintln!();
+    dure_info!("Fetching current nftables ruleset...");
+    dure_info!("");
 
     let ruleset = show_ruleset()?;
 
@@ -53,7 +54,7 @@ pub fn execute_nft_whitelist(ip: String, description: Option<String>) -> Result<
 
     // Check if IP is already whitelisted
     if is_ip_whitelisted(&mut conn, &ip)? {
-        eprintln!("IP {} is already whitelisted", ip);
+        dure_info!("IP {} is already whitelisted", ip);
         return Ok(());
     }
 
@@ -64,21 +65,21 @@ pub fn execute_nft_whitelist(ip: String, description: Option<String>) -> Result<
     // Add to database
     add_whitelisted_ip(&mut conn, &whitelisted_ip)?;
 
-    eprintln!("Added {} to whitelist", ip);
+    dure_info!("Added {} to whitelist", ip);
 
     // Get all whitelisted IPs
     let all_ips = list_whitelisted_ips(&mut conn)?;
     let ip_list: Vec<String> = all_ips.iter().map(|w| w.ip.clone()).collect();
 
     // Update nftables rules
-    eprintln!("Updating nftables rules...");
+    dure_info!("Updating nftables rules...");
     add_ip_to_nft(&ip, &ip_list)?;
 
-    eprintln!("✓ Firewall rules updated successfully");
-    eprintln!();
-    eprintln!("SSH access (port 22) is now allowed from:");
+    dure_info!(" Firewall rules updated successfully");
+    dure_info!("");
+    dure_info!("SSH access (port 22) is now allowed from:");
     for whitelisted in &all_ips {
-        eprintln!("  {} - {}", whitelisted.ip, whitelisted.description);
+        dure_info!("  {} - {}", whitelisted.ip, whitelisted.description);
     }
 
     Ok(())
@@ -107,30 +108,30 @@ pub fn execute_nft_remove(ip: String) -> Result<()> {
     // Remove from database
     remove_from_db(&mut conn, &ip)?;
 
-    eprintln!("Removed {} from whitelist", ip);
+    dure_info!("Removed {} from whitelist", ip);
 
     // Get remaining whitelisted IPs
     let remaining_ips = list_whitelisted_ips(&mut conn)?;
     let ip_list: Vec<String> = remaining_ips.iter().map(|w| w.ip.clone()).collect();
 
     // Update nftables rules
-    eprintln!("Updating nftables rules...");
+    dure_info!("Updating nftables rules...");
     remove_ip_from_nft(&ip, &ip_list)?;
 
-    eprintln!("✓ Firewall rules updated successfully");
-    eprintln!();
+    dure_info!(" Firewall rules updated successfully");
+    dure_info!("");
 
     if remaining_ips.is_empty() {
         eprintln!(
             "⚠ Warning: No IPs are whitelisted. SSH access (port 22) is now blocked for all IPs."
         );
-        eprintln!();
-        eprintln!("To restore SSH access, whitelist an IP:");
-        eprintln!("  dure nft whitelist <ip-address>");
+        dure_info!("");
+        dure_info!("To restore SSH access, whitelist an IP:");
+        dure_info!("  dure nft whitelist <ip-address>");
     } else {
-        eprintln!("SSH access (port 22) is still allowed from:");
+        dure_info!("SSH access (port 22) is still allowed from:");
         for whitelisted in &remaining_ips {
-            eprintln!("  {} - {}", whitelisted.ip, whitelisted.description);
+            dure_info!("  {} - {}", whitelisted.ip, whitelisted.description);
         }
     }
 
