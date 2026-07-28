@@ -8,6 +8,7 @@
 //!
 //! Supports A, AAAA, TXT, and NS record types.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

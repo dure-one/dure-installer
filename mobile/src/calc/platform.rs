@@ -3,6 +3,7 @@
 //! Handles cloud platform management (GCP, Firebase, Supabase)
 //! including OAuth, project setup, and resource provisioning.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 

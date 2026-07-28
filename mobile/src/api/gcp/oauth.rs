@@ -16,6 +16,7 @@
 //! 7. Store refresh token securely (keyring)
 //! 8. Close local server
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -403,6 +404,21 @@ pub fn refresh_access_token(
     client_secret: &str,
     refresh_token: &str,
 ) -> Result<OAuthResult> {
+    // Validate inputs
+    if client_id.is_empty() {
+        dure_error!("OAuth client_id is empty - check GOOGLE_OAUTH_CLIENT_ID environment variable");
+        return Err(anyhow::anyhow!("OAuth client_id is not configured"));
+    }
+    if client_secret.is_empty() {
+        dure_error!("OAuth client_secret is empty - check GOOGLE_OAUTH_CLIENT_SECRET environment variable");
+        return Err(anyhow::anyhow!("OAuth client_secret is not configured"));
+    }
+    if refresh_token.is_empty() {
+        return Err(anyhow::anyhow!("Refresh token is empty"));
+    }
+
+    dure_debug!("Refreshing access token (client_id: {}...)", &client_id.chars().take(10).collect::<String>());
+
     let params = [
         ("client_id", client_id),
         ("client_secret", client_secret),
@@ -418,11 +434,28 @@ pub fn refresh_access_token(
 
     let response = ureq::post("https://oauth2.googleapis.com/token")
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&body)
-        .context("Failed to refresh token")?;
+        .send_string(&body);
+
+    let response = match response {
+        Ok(resp) => resp,
+        Err(ureq::Error::Status(code, resp)) => {
+            let error_text = resp.into_string().unwrap_or_default();
+            dure_error!("Token refresh failed with status {}: {}", code, error_text);
+            return Err(anyhow::anyhow!(
+                "Token refresh failed (HTTP {}): {}",
+                code,
+                error_text
+            ));
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!("Network error during token refresh: {}", e));
+        }
+    };
 
     if response.status() != 200 {
+        let status = response.status();
         let error_text = response.into_string().unwrap_or_default();
+        dure_error!("Unexpected status {}: {}", status, error_text);
         return Err(anyhow::anyhow!("Token refresh failed: {}", error_text));
     }
 

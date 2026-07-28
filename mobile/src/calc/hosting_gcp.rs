@@ -3,6 +3,7 @@
 //! Handles VM lifecycle management including creation, deletion,
 //! restart, regeneration, and SSH key generation.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::api::gcp::GcpRestClient;
 use crate::config::{CloudPlatformConfig, VmInstance};
 use anyhow::{Context, Result};

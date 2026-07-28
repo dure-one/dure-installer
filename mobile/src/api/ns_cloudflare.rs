@@ -3,6 +3,7 @@
 //! Cloudflare DNS API for managing zones and DNS records.
 //! API Documentation: https://developers.cloudflare.com/api/
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 

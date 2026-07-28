@@ -2,6 +2,7 @@
 //!
 //! Handles VM instances, firewall rules, and zone/region operations.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use urlencoding;
@@ -793,12 +794,12 @@ impl GcpRestClient {
         // Fetch Debian images
         match self.list_images("debian-cloud") {
             Ok(list) => {
-                log::info!("Fetched {} Debian images", list.items.len());
+                dure_info!("Fetched {} Debian images", list.items.len());
                 all_images.extend(list.items);
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Debian images: {}", e);
-                log::warn!("{}", err_msg);
+                dure_warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }
@@ -806,12 +807,12 @@ impl GcpRestClient {
         // Fetch Ubuntu images
         match self.list_images("ubuntu-os-cloud") {
             Ok(list) => {
-                log::info!("Fetched {} Ubuntu images", list.items.len());
+                dure_info!("Fetched {} Ubuntu images", list.items.len());
                 all_images.extend(list.items);
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Ubuntu images: {}", e);
-                log::warn!("{}", err_msg);
+                dure_warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }
@@ -821,12 +822,12 @@ impl GcpRestClient {
             return Err(anyhow::anyhow!("Failed to fetch images: {}", errors.join("; ")));
         }
 
-        log::info!("Total images before filtering: {}", all_images.len());
+        dure_info!("Total images before filtering: {}", all_images.len());
 
         // Sample first few images to debug architecture values
         if !all_images.is_empty() {
             let sample = &all_images[0];
-            log::info!(
+            dure_info!(
                 "Sample image: name={}, arch={:?}, deprecated={:?}, created={}",
                 sample.name,
                 sample.architecture,
@@ -854,8 +855,8 @@ impl GcpRestClient {
             })
             .collect();
 
-        log::info!("Images after filtering: {}", filtered.len());
-        log::info!(
+        dure_info!("Images after filtering: {}", filtered.len());
+        dure_info!(
             "Filter stats - Old rejected: {}, Deprecated/Obsolete rejected: {}",
             stats.0,
             stats.1

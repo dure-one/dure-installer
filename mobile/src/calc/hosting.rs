@@ -3,6 +3,7 @@
 //! Handles domain registration, DNS configuration, VM creation,
 //! and service deployment orchestration.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

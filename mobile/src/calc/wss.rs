@@ -3,6 +3,7 @@
 //! Provides WebSocket server functionality using TLS certificates from ACME,
 //! with SQLite-based storage for session and connection tracking.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};

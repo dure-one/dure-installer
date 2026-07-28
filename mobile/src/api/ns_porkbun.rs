@@ -3,6 +3,7 @@
 //! Porkbun is a domain registrar and DNS provider with a REST API.
 //! API Documentation: https://porkbun.com/api/json/v3/documentation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
