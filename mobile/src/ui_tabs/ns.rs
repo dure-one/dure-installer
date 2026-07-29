@@ -387,9 +387,9 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
 
 /// Render domains table with drawer-based records
 fn render_domains_table(
-    domain_rows: &[DomainRowData],
+    ns_tab: &mut NsTab,
     ui: &mut egui::Ui,
-    _vm: Option<&mut crate::viewmodel::ViewModel>
+    vm: Option<&mut crate::viewmodel::ViewModel>
 ) {
     use egui_material3::data_table;
 
@@ -415,7 +415,7 @@ fn render_domains_table(
         .column("Provider", 200.0 * width_ratio, false)
         .column("Operations", 250.0 * width_ratio, false);
 
-    for (idx, domain_row) in domain_rows.iter().enumerate() {
+    for (idx, domain_row) in ns_tab.domain_rows.iter().enumerate() {
         let row_for_cells = domain_row.clone();
         let row_for_ops = domain_row.clone();
         let row_for_drawer = domain_row.clone();
@@ -435,6 +435,9 @@ fn render_domains_table(
     egui::ScrollArea::vertical().show(ui, |ui| {
         table.show(ui);
     });
+
+    // Process action triggers
+    ns_tab.process_action_triggers(ui, vm);
 }
 
 /// Get config file path
@@ -1238,7 +1241,7 @@ impl NsTab {
         ui.add_space(8.0);
 
         // Domain table with drawer-based records
-        render_domains_table(&self.domain_rows, ui, vm.as_deref_mut());
+        render_domains_table(self, ui, vm.as_deref_mut());
 
         ui.add_space(16.0);
         ui.separator();
@@ -1336,6 +1339,69 @@ impl NsTab {
         self.show_add_record_dialog(ui.ctx(), vm);
         self.show_error_dialog(ui.ctx());
         self.show_nameservers_dialog(ui.ctx());
+    }
+
+    /// Process action triggers from operations buttons
+    fn process_action_triggers(
+        &mut self,
+        ui: &mut egui::Ui,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>
+    ) {
+        // Process each domain row's action triggers
+        for idx in 0..self.domain_rows.len() {
+            // Add Record trigger
+            let add_record_id = egui::Id::new(format!("add_record_{}", idx));
+            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(add_record_id)) {
+                ui.data_mut(|d| d.remove::<(String, String)>(add_record_id));
+
+                // Open add record dialog with pre-filled domain
+                self.show_add_record_dialog = true;
+                self.add_record_name.clear();
+                self.add_record_value.clear();
+
+                // Store selected domain for dialog
+                self.selected_domain = Some((provider, domain));
+            }
+
+            // View Nameservers trigger
+            let view_ns_id = egui::Id::new(format!("view_ns_{}", idx));
+            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(view_ns_id)) {
+                ui.data_mut(|d| d.remove::<(String, String)>(view_ns_id));
+
+                self.show_nameservers(&provider, &domain);
+            }
+
+            // Delete Domain trigger
+            let delete_domain_id = egui::Id::new(format!("delete_domain_{}", idx));
+            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(delete_domain_id)) {
+                ui.data_mut(|d| d.remove::<(String, String)>(delete_domain_id));
+
+                self.execute_delete_domain(&domain, vm.as_deref_mut());
+            }
+
+            // Delete Record triggers (check all record indices)
+            for rec_idx in 0..100 {  // Max 100 records per domain (reasonable limit)
+                let delete_record_id = egui::Id::new(format!("delete_record_{}_{}", idx, rec_idx));
+                if let Some((provider, domain, name, record_type)) = ui.data(|d| {
+                    d.get_temp::<(String, String, String, String)>(delete_record_id)
+                }) {
+                    ui.data_mut(|d| d.remove::<(String, String, String, String)>(delete_record_id));
+
+                    // ViewModel-based implementation
+                    if let Some(ref mut vm) = vm {
+                        if let Err(e) = vm.delete_dns_record(provider.clone(), domain.clone(), name, record_type) {
+                            self.error_message = format!("Failed to delete DNS record: {}", e);
+                            self.show_error_dialog = true;
+                        }
+                    } else {
+                        self.error_message = "ViewModel not available".to_string();
+                        self.show_error_dialog = true;
+                    }
+
+                    break;  // Only process one delete per frame
+                }
+            }
+        }
     }
 
     /// Load domain data from config
