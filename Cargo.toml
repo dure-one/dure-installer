@@ -2,13 +2,8 @@
 resolver = "2"
 members = [
     "mobile",
-    "crates/dure-messages",
-    "crates/dure-asyncapi-gen",
-    "crates/go-webauthn-client",
+    "crates/ws",
     "crates/windows-installer",
-]
-exclude = [
-    "crates/go-webauthn",  # Excluded: monoio dependency unsupported on OpenBSD (use go-webauthn-client instead)
 ]
 
 [workspace.package]

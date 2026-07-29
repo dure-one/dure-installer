@@ -3,6 +3,7 @@
 //! Provides functionality for managing sites that can communicate with each other
 //! via WebSocket with DNS TXT record-based authentication.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 

@@ -4,6 +4,7 @@
 //! Platform-specific functionality is injected via traits.
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::api::desktop::check_user_mismatch;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::install;
@@ -297,11 +298,11 @@ impl eframe::App for DureApp {
         if self.dlg_settings.save_clicked {
             self.dlg_settings.save_clicked = false; // Reset flag after processing
             // TODO: save settings to file
-            log::info!("Settings saved");
+            dure_info!("Settings saved");
         }
         if let Some(theme_name) = self.dlg_settings.theme_to_apply.take() {
             // TODO: apply theme
-            log::info!("Applying theme: {}", theme_name);
+            dure_info!("Applying theme: {}", theme_name);
         }
 
         // Show about dialog
@@ -345,31 +346,31 @@ impl DureApp {
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
+                // .tab(tr!("tab-client"))
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
                 .tab(tr!("tab-domains"))
                 .tab(tr!("tab-site"))
                 // .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                // .tab(tr!("tab-members"))
+                // .tab(tr!("tab-channel"))
+                // .tab(tr!("tab-dm"))
+                // .tab(tr!("tab-products"))
+                // .tab(tr!("tab-orders"))
+                // .tab(tr!("tab-email")),
         );
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
+                // .tab(tr!("tab-client"))
                 // .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                // .tab(tr!("tab-members"))
+                // .tab(tr!("tab-channel"))
+                // .tab(tr!("tab-dm"))
+                // .tab(tr!("tab-products"))
+                // .tab(tr!("tab-orders"))
+                // .tab(tr!("tab-email")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -377,31 +378,31 @@ impl DureApp {
         #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
         {
             self.active_tab = match self.scrolling_selected {
-                0 => Tab::Client,
-                1 => Tab::Platform,
-                2 => Tab::Ssh,
-                3 => Tab::Ns,
-                4 => Tab::Site,
-                5 => Tab::Members,
-                6 => Tab::Channel,
-                7 => Tab::DM,
-                8 => Tab::Products,
-                9 => Tab::Orders,
-                10 => Tab::Email,
+                // 0 => Tab::Client,
+                0 => Tab::Platform,
+                1 => Tab::Ssh,
+                2 => Tab::Ns,
+                3 => Tab::Site,
+                // 5 => Tab::Members,
+                // 6 => Tab::Channel,
+                // 7 => Tab::DM,
+                // 8 => Tab::Products,
+                // 9 => Tab::Orders,
+                // 10 => Tab::Email,
                 _ => Tab::Platform,
             };
         }
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         {
             self.active_tab = match self.scrolling_selected {
-                0 => Tab::Client,
-                1 => Tab::Members,
-                2 => Tab::Channel,
-                3 => Tab::DM,
-                4 => Tab::Products,
-                5 => Tab::Orders,
-                6 => Tab::Email,
-                _ => Tab::Client,
+                // 0 => Tab::Client,
+                // 1 => Tab::Members,
+                // 2 => Tab::Channel,
+                // 3 => Tab::DM,
+                // 4 => Tab::Products,
+                // 5 => Tab::Orders,
+                // 6 => Tab::Email,
+                _ => Tab::Platform,
             };
         }
 
@@ -409,7 +410,7 @@ impl DureApp {
 
         // Render active tab content
         match self.active_tab {
-            Tab::Client => self.tab_client.ui(ui),
+            // Tab::Client => self.tab_client.ui(ui),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -419,12 +420,13 @@ impl DureApp {
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
             Tab::Roles => self.tab_roles.ui(ui),
-            Tab::Members => self.tab_members.ui(ui),
-            Tab::Channel => self.tab_channel.ui(ui),
-            Tab::DM => self.tab_dm.ui(ui),
-            Tab::Products => self.tab_products.ui(ui),
-            Tab::Orders => self.tab_orders.ui(ui),
-            Tab::Email => self.tab_email.ui(ui),
+            // Tab::Members => self.tab_members.ui(ui),
+            // Tab::Channel => self.tab_channel.ui(ui),
+            // Tab::DM => self.tab_dm.ui(ui),
+            // Tab::Products => self.tab_products.ui(ui),
+            // Tab::Orders => self.tab_orders.ui(ui),
+            // Tab::Email => self.tab_email.ui(ui),
+            _ => {},
         }
     }
 
@@ -701,7 +703,7 @@ impl DureApp {
                             self.update_status
                         )
                     };
-                    log::warn!(
+                    dure_warn!(
                         "Update aborted: update_available={}, download_url_empty={}",
                         self.update_available,
                         self.update_download_url.is_empty()
@@ -723,11 +725,11 @@ impl DureApp {
                 std::path::PathBuf::from("./tmp")
             };
 
-            log::info!(
+            dure_info!(
                 "Starting update download from: {}",
                 self.update_download_url
             );
-            log::info!("Temporary directory: {}", tmp_dir.display());
+            dure_info!("Temporary directory: {}", tmp_dir.display());
 
             // Use the stored download URL and version from check_for_update()
             match crate::install::do_update(
@@ -736,7 +738,7 @@ impl DureApp {
                 &tmp_dir,
             ) {
                 InstallResult::Success(msg) => {
-                    log::info!("Update successful: {}", msg);
+                    dure_info!("Update successful: {}", msg);
                     self.install_message = msg;
                     self.update_available = false;
                     self.update_status.clear();
@@ -744,14 +746,14 @@ impl DureApp {
                     self.dlg_about.close();
 
                     // Give the filesystem time to sync before checking status
-                    log::debug!("Waiting for filesystem to sync after update...");
+                    dure_debug!("Waiting for filesystem to sync after update...");
                     std::thread::sleep(std::time::Duration::from_millis(200));
 
                     // Refresh install status with retries (same logic as install)
                     let old_status = self.install_status;
                     let mut retries = 3;
                     loop {
-                        log::debug!(
+                        dure_debug!(
                             "Checking install status after update (attempt {}/{})",
                             4 - retries,
                             3
@@ -763,7 +765,7 @@ impl DureApp {
                             new_status == crate::install_stt::InstallStatus::Installed;
 
                         if status_is_correct || retries == 0 {
-                            log::info!(
+                            dure_info!(
                                 "Install status after update: {:?} -> {:?}",
                                 old_status,
                                 new_status
@@ -773,7 +775,7 @@ impl DureApp {
                         }
 
                         // Status not as expected, wait and retry
-                        log::warn!(
+                        dure_warn!(
                             "Install status check unexpected, retrying... ({} retries left)",
                             retries
                         );
@@ -782,7 +784,7 @@ impl DureApp {
                     }
 
                     if retries == 0 {
-                        log::error!("Install status check failed after all retries!");
+                        dure_error!("Install status check failed after all retries!");
                         self.install_message = format!(
                             "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                             self.install_message
@@ -790,7 +792,7 @@ impl DureApp {
                     }
                 }
                 InstallResult::Error(err) => {
-                    log::error!("Update failed: {}", err);
+                    dure_error!("Update failed: {}", err);
                     self.install_message = format!("Error: {}", err);
                 }
             }
@@ -801,10 +803,10 @@ impl DureApp {
         {
             // On Android, open browser to download page using stored URL
             if let Err(e) = webbrowser::open(&self.update_download_url) {
-                log::error!("Failed to open browser for update download: {}", e);
+                dure_error!("Failed to open browser for update download: {}", e);
                 self.update_status = format!("Failed to open browser: {}", e);
             } else {
-                log::info!("Opened browser for update download");
+                dure_info!("Opened browser for update download");
                 self.dlg_about.close();
             }
         }
@@ -844,38 +846,38 @@ impl DureApp {
 
         // Prevent concurrent operations
         if self.install_in_progress {
-            log::warn!("Install operation already in progress, ignoring duplicate request");
+            dure_warn!("Install operation already in progress, ignoring duplicate request");
             return;
         }
 
         self.install_in_progress = true;
-        log::info!(
+        dure_info!(
             "Performing install action, current status: {:?}",
             self.install_status
         );
 
         let result = if self.install_status == crate::install_stt::InstallStatus::Installed {
-            log::info!("Uninstalling...");
+            dure_info!("Uninstalling...");
             crate::install::do_uninstall()
         } else {
-            log::info!("Installing...");
+            dure_info!("Installing...");
             crate::install::do_install()
         };
 
         match result {
             InstallResult::Success(msg) => {
-                log::info!("Operation succeeded: {}", msg);
+                dure_info!("Operation succeeded: {}", msg);
                 self.install_message = msg;
 
                 // Give the filesystem time to sync before checking status
                 // This is especially important on Windows where file operations may be asynchronous
-                log::debug!("Waiting for filesystem to sync...");
+                dure_debug!("Waiting for filesystem to sync...");
                 std::thread::sleep(std::time::Duration::from_millis(200));
 
                 // Refresh install status with retries
                 let mut retries = 3;
                 loop {
-                    log::debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
+                    dure_debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
                     let new_status = crate::install::check_install();
 
                     // Check if status changed as expected
@@ -895,7 +897,7 @@ impl DureApp {
                     };
 
                     if status_changed_correctly || retries == 0 {
-                        log::info!(
+                        dure_info!(
                             "Install status updated: {:?} -> {:?}",
                             self.install_status,
                             new_status
@@ -905,7 +907,7 @@ impl DureApp {
                     }
 
                     // Status didn't change, wait and retry
-                    log::warn!(
+                    dure_warn!(
                         "Install status didn't change as expected, retrying... ({} retries left)",
                         retries
                     );
@@ -914,7 +916,7 @@ impl DureApp {
                 }
 
                 if retries == 0 {
-                    log::error!("Install status check failed after all retries!");
+                    dure_error!("Install status check failed after all retries!");
                     self.install_message = format!(
                         "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                         self.install_message
@@ -922,7 +924,7 @@ impl DureApp {
                 }
             }
             InstallResult::Error(err) => {
-                log::error!("Operation failed: {}", err);
+                dure_error!("Operation failed: {}", err);
                 self.install_message = format!("Error: {}", err);
             }
         }

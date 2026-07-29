@@ -8,6 +8,7 @@
 //!   Event Details (timestamps, IP addresses, actor IDs, device IDs, object affected)
 //!   Changes in Privilege (identity switches, elevated privilege grants)
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::db;
 use crate::storage::models::audit::{
     AuditCategory, AuditEvent, AuditOutcome, AuditRecord, clear_all, init_audit_table, list_recent,

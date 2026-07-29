@@ -1,5 +1,6 @@
 //! NS actor implementation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{DnsDomain, DnsProvider, DnsRecord, NsCommand, NsEvent};
 use crate::viewmodel::{ViewModelEvent, runtime};
 use smol::channel::{Receiver, Sender};
@@ -18,17 +19,17 @@ impl NsActor {
     }
 
     pub async fn run(mut self) {
-        log::info!("NsActor started");
+        dure_info!("NsActor started");
 
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("NsActor command failed: {}", e);
+                        dure_error!("NsActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
-                    log::info!("NsActor: channel closed, shutting down");
+                    dure_info!("NsActor: channel closed, shutting down");
                     break;
                 }
             }

@@ -2,6 +2,7 @@
 //!
 //! Provides Ansible Galaxy API integration and role lifecycle management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use crate::config::{SshHostConfig, AnsibleRoleConfig};

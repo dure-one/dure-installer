@@ -8,7 +8,6 @@ use std::collections::VecDeque;
 /// Mock platform with full OAuth and VM
 pub fn mock_platform_connected() -> CloudPlatformConfig {
     CloudPlatformConfig {
-        name: "test-gcp".to_string(),
         platform_type: "gcp".to_string(),
         gcp_oauth_access_token: Some("mock_token".to_string()),
         gcp_oauth_refresh_token: Some("mock_refresh".to_string()),
@@ -43,7 +42,6 @@ pub fn mock_platform_no_vm() -> CloudPlatformConfig {
 /// Mock platform with no OAuth connection
 pub fn mock_platform_disconnected() -> CloudPlatformConfig {
     CloudPlatformConfig {
-        name: "test-gcp".to_string(),
         platform_type: "gcp".to_string(),
         gcp_oauth_access_token: None,
         ..Default::default()

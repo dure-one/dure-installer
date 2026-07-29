@@ -3,6 +3,7 @@
 //! Google Cloud DNS API for managing managed zones and resource record sets.
 //! API Documentation: https://cloud.google.com/dns/docs/reference/v1
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 

@@ -7,6 +7,7 @@
 
 #![cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -186,7 +187,7 @@ pub fn download_lego(config_dir: &Path) -> Result<()> {
                 std::fs::set_permissions(&dest_path, perms)?;
             }
 
-            log::info!("Downloaded lego to: {}", dest_path.display());
+            dure_info!("Downloaded lego to: {}", dest_path.display());
             return Ok(());
         }
     }

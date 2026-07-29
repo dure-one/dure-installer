@@ -2,6 +2,7 @@
 // Reference: https://developer.android.com/reference/android/view/inputmethod/InputMethodManager
 
 #[cfg(target_os = "android")]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::{JObject, JValue};
 
 #[cfg(target_os = "android")]
@@ -148,9 +149,9 @@ pub fn show_soft_input() -> std::io::Result<()> {
     })?;
 
     if success {
-        log::debug!("Soft keyboard shown successfully");
+        dure_debug!("Soft keyboard shown successfully");
     } else {
-        log::warn!("showSoftInput returned false");
+        dure_warn!("showSoftInput returned false");
     }
 
     Ok(())
@@ -316,9 +317,9 @@ pub fn hide_soft_input() -> std::io::Result<()> {
     })?;
 
     if success {
-        log::debug!("Soft keyboard hidden successfully");
+        dure_debug!("Soft keyboard hidden successfully");
     } else {
-        log::debug!("hideSoftInputFromWindow returned false (keyboard may not be showing)");
+        dure_debug!("hideSoftInputFromWindow returned false (keyboard may not be showing)");
     }
 
     Ok(())
@@ -419,7 +420,7 @@ pub fn toggle_soft_input() -> std::io::Result<()> {
         )
     })?;
 
-    log::debug!("Toggled soft keyboard");
+    dure_debug!("Toggled soft keyboard");
     Ok(())
 }
 

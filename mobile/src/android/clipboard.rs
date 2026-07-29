@@ -2,6 +2,7 @@
 // Reference: https://developer.android.com/reference/android/content/ClipboardManager
 
 #[cfg(target_os = "android")]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::{JObject, JValue};
 
 #[cfg(target_os = "android")]
@@ -476,7 +477,7 @@ pub fn set_text(text: &str) -> std::io::Result<()> {
         )
     })?;
 
-    log::debug!("Text copied to clipboard");
+    dure_debug!("Text copied to clipboard");
     Ok(())
 }
 

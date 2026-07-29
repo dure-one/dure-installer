@@ -3,6 +3,7 @@
 //! CLI commands for managing hosting infrastructure including domain registration,
 //! DNS configuration, VM creation, and service deployment.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::audit;
 use crate::calc::db;
 use anyhow::Result;
@@ -163,9 +164,9 @@ pub fn execute_hosting_init(
     // Validate configuration
     let validation = validate_hosting_config(&hosting);
     if !validation.valid {
-        eprintln!("Configuration errors:");
+        dure_info!("Configuration errors:");
         for error in &validation.errors {
-            eprintln!("  - {}", error);
+            dure_info!("  - {}", error);
         }
         anyhow::bail!("Invalid hosting configuration");
     }
@@ -198,7 +199,7 @@ pub fn execute_hosting_init(
                                 hosting.domain_registered = true;
                             }
                             Err(e) => {
-                                eprintln!("❌ Failed to register domain: {}", e);
+                                dure_error!(" Failed to register domain: {}", e);
                             }
                         }
                     }
@@ -219,13 +220,13 @@ pub fn execute_hosting_init(
                                     Some(serde_json::to_string(&check.nameservers)?);
                             }
                             Err(e) => {
-                                eprintln!("❌ Failed to update nameservers: {}", e);
+                                dure_error!(" Failed to update nameservers: {}", e);
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to check domain registration: {}", e);
+                    dure_error!(" Failed to check domain registration: {}", e);
                 }
             }
         } else {
@@ -258,16 +259,16 @@ pub fn execute_hosting_init(
                             println!("✅ DNS records verified");
                             hosting.dns_configured = true;
                         } else {
-                            eprintln!("⚠️  DNS records not yet propagated");
+                            dure_warn!("️  DNS records not yet propagated");
                         }
                     }
                     Err(e) => {
-                        eprintln!("❌ Failed to verify DNS records: {}", e);
+                        dure_error!(" Failed to verify DNS records: {}", e);
                     }
                 }
             }
             Err(e) => {
-                eprintln!("❌ Failed to update DNS records: {}", e);
+                dure_error!(" Failed to update DNS records: {}", e);
             }
         }
     } else {
@@ -307,21 +308,21 @@ pub fn execute_hosting_init(
                                         if ssh_check.reachable {
                                             println!("✅ SSH connection successful");
                                         } else {
-                                            eprintln!("❌ SSH connection failed");
+                                            dure_error!(" SSH connection failed");
                                         }
                                     }
                                     Err(e) => {
-                                        eprintln!("❌ SSH check error: {}", e);
+                                        dure_error!(" SSH check error: {}", e);
                                     }
                                 }
                             }
                         }
                     } else {
-                        eprintln!("❌ Failed to create VM");
+                        dure_error!(" Failed to create VM");
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ VM creation error: {}", e);
+                    dure_error!(" VM creation error: {}", e);
                 }
             }
         } else {
@@ -347,7 +348,7 @@ pub fn execute_hosting_init(
                     hosting.service_running = true;
                 }
                 Err(e) => {
-                    eprintln!("❌ Service installation error: {}", e);
+                    dure_error!(" Service installation error: {}", e);
                 }
             }
         }
@@ -577,7 +578,7 @@ pub fn execute_hosting_delete(domain: String, force: bool) -> Result<()> {
                         println!("✅ VM deleted");
                     }
                     Err(e) => {
-                        eprintln!("❌ Failed to delete VM: {}", e);
+                        dure_error!(" Failed to delete VM: {}", e);
                         println!("Continuing with configuration deletion...");
                     }
                 }

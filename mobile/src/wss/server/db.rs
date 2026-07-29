@@ -4,6 +4,7 @@
 //! Tables are initialised on first open. Callers lock the connection and call
 //! the storage-layer functions in `crate::storage::models` directly.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use std::sync::{Arc, Mutex};
 
 use std::io;

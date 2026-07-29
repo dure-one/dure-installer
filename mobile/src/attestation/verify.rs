@@ -1,5 +1,6 @@
 //! Verify attestations against binaries
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::download::{compute_file_hash, download_attestations};
 use super::types::{AttestationPayload, AttestationResult, VerificationError};
 use std::path::Path;
@@ -19,20 +20,20 @@ pub fn verify_binary(
     owner: &str,
     repo: &str,
 ) -> Result<AttestationResult, VerificationError> {
-    log::info!("Verifying binary: {}", binary_path);
-    log::info!("Repository: {}/{}", owner, repo);
+    dure_info!("Verifying binary: {}", binary_path);
+    dure_info!("Repository: {}/{}", owner, repo);
 
     let path = Path::new(binary_path);
 
     // Step 1: Compute the hash of the binary
     let digest = compute_file_hash(path)?;
-    log::info!("Binary SHA256: {}", digest);
+    dure_info!("Binary SHA256: {}", digest);
 
     // Step 2: Download attestations from GitHub
     let attestations = download_attestations(binary_path, owner, repo)?;
 
     if attestations.is_empty() {
-        log::warn!("No attestations found for this binary");
+        dure_warn!("No attestations found for this binary");
         return Err(VerificationError::NoAttestationsFound);
     }
 
@@ -45,7 +46,7 @@ pub fn verify_binary(
         // Check if signature was verified by GitHub
         if let Some(summary) = &attestation.verification_summary {
             if !summary.signature_verified {
-                log::warn!("Attestation signature not verified");
+                dure_warn!("Attestation signature not verified");
                 continue;
             }
 
@@ -62,13 +63,13 @@ pub fn verify_binary(
             Ok(payload) => {
                 last_predicate_type = payload.predicate_type.clone();
                 verified_count += 1;
-                log::info!(
+                dure_info!(
                     "Verified attestation with predicate: {}",
                     payload.predicate_type
                 );
             }
             Err(e) => {
-                log::warn!("Failed to verify attestation payload: {}", e);
+                dure_warn!("Failed to verify attestation payload: {}", e);
             }
         }
     }
@@ -138,8 +139,8 @@ pub fn verify_wasm(
 ) -> Result<AttestationResult, VerificationError> {
     use sha2::{Digest, Sha256};
 
-    log::info!("Verifying WASM binary");
-    log::info!("Repository: {}/{}", owner, repo);
+    dure_info!("Verifying WASM binary");
+    dure_info!("Repository: {}/{}", owner, repo);
 
     // Compute SHA256 of WASM bytes
     let mut hasher = Sha256::new();
@@ -147,11 +148,11 @@ pub fn verify_wasm(
     let digest_bytes = hasher.finalize();
     let digest = format!("{:x}", digest_bytes);
 
-    log::info!("WASM SHA256: {}", digest);
+    dure_info!("WASM SHA256: {}", digest);
 
     // For WASM, we'd need to fetch attestations via ehttp
     // This is a simplified implementation
-    log::warn!("WASM attestation verification not fully implemented");
+    dure_warn!("WASM attestation verification not fully implemented");
 
     // Return a result indicating the hash was computed but not verified
     Ok(AttestationResult {

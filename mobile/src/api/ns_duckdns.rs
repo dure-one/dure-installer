@@ -6,6 +6,7 @@
 //!
 //! API Documentation: https://www.duckdns.org/spec.jsp
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
