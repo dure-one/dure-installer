@@ -375,9 +375,11 @@ fn render_domains_table(
         });
     }
 
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        table.show(ui);
-    });
+    egui::ScrollArea::vertical()
+        .id_source("ns_domains_table_scroll")
+        .show(ui, |ui| {
+            table.show(ui);
+        });
 
     // Process action triggers
     ns_tab.process_action_triggers(ui, vm);
@@ -1165,6 +1167,7 @@ impl NsTab {
             ui.add_space(8.0);
             ui.label("Progress:");
             egui::ScrollArea::vertical()
+                .id_source("ns_progress_log_scroll")
                 .max_height(150.0)
                 .show(ui, |ui| {
                     for line in &self.progress_log {
