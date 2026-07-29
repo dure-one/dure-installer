@@ -16,6 +16,7 @@
 // static int 	wtf(String tag, String msg)
 
 #[cfg(target_os = "android")]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]

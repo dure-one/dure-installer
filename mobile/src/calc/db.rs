@@ -8,6 +8,7 @@
 //!
 //! All migrations are embedded and run automatically on connection establishment.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use diesel::prelude::*;
 use std::sync::Mutex;
 
@@ -26,21 +27,6 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 #[cfg(target_family = "wasm")]
 static VFS: Mutex<(i32, Once)> = Mutex::new((0, Once::new()));
 
-#[cfg(target_family = "wasm")]
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-macro_rules! console_log {
-    ($($t:tt)*) => {
-        #[cfg(target_family = "wasm")]
-        log(&format_args!($($t)*).to_string());
-        #[cfg(not(target_family = "wasm"))]
-        log::info!($($t)*);
-    }
-}
 
 #[cfg(not(target_family = "wasm"))]
 static DB_PATH: Mutex<Option<String>> = Mutex::new(None);
@@ -101,7 +87,7 @@ pub mod sqlite {
                 .unwrap_or_else(|_| panic!("Error connecting to {url}"));
             once.call_once(|| {
                 conn.run_pending_migrations(MIGRATIONS).unwrap();
-                console_log!("WASM database migrations completed successfully");
+                dure_info!("WASM database migrations completed successfully");
             });
             return conn;
         }
@@ -142,7 +128,7 @@ pub mod sqlite {
                 conn.run_pending_migrations(MIGRATIONS)
                     .expect("Failed to run database migrations");
                 *migrations_ran = true;
-                console_log!("Database migrations completed successfully");
+                dure_info!("Database migrations completed successfully");
             }
 
             conn
@@ -238,7 +224,7 @@ pub fn establish_connection_result() -> Result<SqliteConnection, anyhow::Error> 
             conn.run_pending_migrations(MIGRATIONS)
                 .map_err(|e| anyhow::anyhow!("Failed to run database migrations: {}", e))?;
             *migrations_ran = true;
-            console_log!("Database migrations completed successfully");
+            dure_info!("Database migrations completed successfully");
         }
 
         Ok(conn)

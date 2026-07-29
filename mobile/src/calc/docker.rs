@@ -2,6 +2,7 @@
 //!
 //! Provides Docker Hub API integration and container lifecycle management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use crate::config::{SshHostConfig, DockerContainerConfig};

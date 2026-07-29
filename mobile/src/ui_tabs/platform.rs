@@ -1,5 +1,6 @@
 //! Platform tab - Platform configuration and management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
 
@@ -272,7 +273,7 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
             // V2 parse failed, try V1 (with 'name' field)
             match serde_yaml::from_str::<AppConfigV1>(&contents) {
                 Ok(v1_config) => {
-                    eprintln!("✓ Detected V1 config, migrating to V2...");
+                    dure_info!(" Detected V1 config, migrating to V2...");
 
                     // Create backup before migration
                     backup_config(&config_path)?;
@@ -284,7 +285,7 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
                     v2_config.save(&config_path)
                         .map_err(|e| format!("Failed to save migrated config: {}", e))?;
 
-                    eprintln!("✓ Migrated {} platform(s) to V2 format", v2_config.platforms.len());
+                    dure_info!(" Migrated {} platform(s) to V2 format", v2_config.platforms.len());
 
                     Ok((v2_config, config_path))
                 }
@@ -539,15 +540,15 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
     // Try to interpret as OpenSSH format first
     if let Ok(key_str) = String::from_utf8(raw_bytes.to_vec()) {
         if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-            eprintln!("DEBUG: Extracting public key from OpenSSH format");
+            dure_debug!("Extracting public key from OpenSSH format");
             return extract_pubkey_from_openssh(&key_str);
         }
     }
 
     // Otherwise, treat as raw 32-byte Ed25519 key
     if raw_bytes.len() != 32 {
-        eprintln!(
-            "DEBUG: Key is neither OpenSSH format nor raw 32 bytes (length: {})",
+        dure_debug!(
+            "Key is neither OpenSSH format nor raw 32 bytes (length: {})",
             raw_bytes.len()
         );
         return None;
@@ -579,43 +580,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
 
     let domain = match keyring_domain.as_ref() {
         Some(d) => {
-            eprintln!("DEBUG: Loading SSH key for domain: {}", d);
+            dure_debug!("Loading SSH key for domain: {}", d);
             d
         }
         None => {
-            eprintln!("DEBUG: No keyring domain provided");
+            dure_debug!("No keyring domain provided");
             return (None, None);
         }
     };
 
     let kdbx_path = match keyring::get_default_kdbx_path() {
         Ok(p) => {
-            eprintln!("DEBUG: KeePass DB path: {}", p.display());
+            dure_debug!("KeePass DB path: {}", p.display());
             p
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to get kdbx path: {}", e);
+            dure_debug!("Failed to get kdbx path: {}", e);
             return (None, None);
         }
     };
     let kpkey_path = match keyring::get_default_kpkey_path() {
         Ok(p) => {
-            eprintln!("DEBUG: KPKey path: {}", p.display());
+            dure_debug!("KPKey path: {}", p.display());
             p
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to get kpkey path: {}", e);
+            dure_debug!("Failed to get kpkey path: {}", e);
             return (None, None);
         }
     };
 
     let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
         Ok(k) => {
-            eprintln!("DEBUG: Found {} keys in keyring", k.len());
+            dure_debug!("Found {} keys in keyring", k.len());
             for key in &k {
-                eprintln!(
-                    "  - Domain: {}, Username: {}, Has SSH: {}",
-                    key.domain,
+                dure_debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
                     key.ssh_key.is_some()
                 );
@@ -623,7 +622,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
             k
         }
         Err(e) => {
-            eprintln!("DEBUG: Failed to list keys: {}", e);
+            dure_debug!("Failed to list keys: {}", e);
             return (None, None);
         }
     };
@@ -631,41 +630,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
         Some(e) => {
-            eprintln!("DEBUG: Found matching key entry");
+            dure_debug!("Found matching key entry");
             e
         }
         None => {
-            eprintln!("DEBUG: No key found for domain: {}", domain);
+            dure_debug!("No key found for domain: {}", domain);
             return (None, None);
         }
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        eprintln!("DEBUG: SSH key bytes length: {}", ssh_key_bytes.len());
+        dure_debug!("SSH key bytes length: {}", ssh_key_bytes.len());
 
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
         if let Some(ref pk) = public_key {
-            eprintln!("DEBUG: Derived public key: {}", pk);
+            dure_debug!("Derived public key: {}", pk);
         } else {
-            eprintln!("DEBUG: Failed to derive public key");
+            dure_debug!("Failed to derive public key");
         }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                eprintln!("DEBUG: Key already in OpenSSH format");
+                dure_debug!("Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
 
         // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
-        eprintln!("DEBUG: Converting raw bytes to OpenSSH format");
+        dure_debug!("Converting raw bytes to OpenSSH format");
         let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
         (private_key, public_key)
     } else {
-        eprintln!("DEBUG: Key entry has no SSH key attachment");
+        dure_debug!("Key entry has no SSH key attachment");
         (None, None)
     }
 }
@@ -687,7 +686,7 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
         match client.list_projects(None) {
             Ok(list) => list.projects.len(),
             Err(e) => {
-                eprintln!("Failed to fetch project count: {}", e);
+                dure_debug!("Failed to fetch project count: {}", e);
                 0
             }
         }
@@ -823,16 +822,14 @@ impl PlatformTab {
                         whitelisted_ip,
                         ..
                     }) => {
-                        eprintln!(
-                            "✓ Successfully added {} to firewall whitelist",
-                            whitelisted_ip
+                        dure_debug!("✓ Successfully added {} to firewall whitelist", whitelisted_ip
                         );
                         // Refresh to show updated status
                         self.loaded = false;
                         self.load_error = None;
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { vm_name, .. }) => {
-                        eprintln!("✓ VM {} restarted successfully", vm_name);
+                        dure_info!(" VM {} restarted successfully", vm_name);
                         // Refresh to show updated status
                         self.loaded = false;
                         self.load_error = None;
@@ -842,7 +839,7 @@ impl PlatformTab {
                         message,
                         ..
                     }) => {
-                        eprintln!("✓ {}", message);
+                        dure_info!(" {}", message);
                         // Refresh to show updated VM details
                         self.loaded = false;
                         self.load_error = None;
@@ -852,7 +849,7 @@ impl PlatformTab {
                         external_ip,
                         ..
                     }) => {
-                        eprintln!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        dure_info!(" VM '{}' created successfully with IP {}", vm_name, external_ip);
                         // Refresh to show updated VM details
                         self.loaded = false;
                         self.load_error = None;
@@ -861,7 +858,7 @@ impl PlatformTab {
                         platform_name,
                         vm_name,
                     }) => {
-                        eprintln!("✓ VM {} deleted successfully", vm_name);
+                        dure_info!(" VM {} deleted successfully", vm_name);
 
                         // Remove VM from config
                         if let Ok((mut app_config, config_path)) = load_config() {
@@ -875,7 +872,7 @@ impl PlatformTab {
                                 if let Err(e) = app_config.save(&config_path) {
                                     self.load_error = Some(format!("Failed to save config: {}", e));
                                 } else {
-                                    eprintln!("✓ Config updated, refreshing spreadsheet");
+                                    dure_info!(" Config updated, refreshing spreadsheet");
                                     self.loaded = false;
                                     self.load_error = None;
                                 }
@@ -886,9 +883,7 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        eprintln!(
-                            "✓ Projects listed for {}: {} projects",
-                            platform_name,
+                        dure_debug!("✓ Projects listed for {}: {} projects", platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -902,7 +897,7 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::ProjectSelected {
                         project_id, ..
                     }) => {
-                        eprintln!("✓ Project selected: {}", project_id);
+                        dure_info!(" Project selected: {}", project_id);
                         // Refresh spreadsheet to show updated project
                         self.loaded = false;
                         self.load_error = None;
@@ -911,7 +906,7 @@ impl PlatformTab {
                         platform_name,
                         platform_type,
                     }) => {
-                        eprintln!("✓ Platform '{}' ({}) added", platform_name, platform_type);
+                        dure_info!(" Platform '{}' ({}) added", platform_name, platform_type);
                         // Refresh spreadsheet to show new platform
                         self.loaded = false;
                         self.load_error = None;
@@ -920,7 +915,7 @@ impl PlatformTab {
                         platform_name,
                         vm_count,
                     }) => {
-                        eprintln!("✓ Platform '{}' deleted ({} VMs)", platform_name, vm_count);
+                        dure_info!(" Platform '{}' deleted ({} VMs)", platform_name, vm_count);
                         // Refresh spreadsheet to show removal
                         self.loaded = false;
                         self.load_error = None;
@@ -1003,7 +998,7 @@ impl PlatformTab {
                             self.loaded = false;
                         }
                         Err(e) => {
-                            eprintln!("Refresh failed for {}: {}", project_id, e);
+                            dure_debug!("Refresh failed for {}: {}", project_id, e);
                         }
                     }
                     completed_refreshes.push(project_id.clone());
@@ -1414,7 +1409,7 @@ impl PlatformTab {
 
             // Detect wizard closure - if it was open and now closed, refresh
             if self.wizard_was_open && !wizard_is_open {
-                eprintln!("✓ GCP wizard closed, refreshing platform spreadsheet");
+                dure_info!(" GCP wizard closed, refreshing platform spreadsheet");
                 self.loaded = false;
             }
 
@@ -1448,9 +1443,7 @@ impl PlatformTab {
                                 Ok(token) => Some(token),
                                 Err(e) => {
                                     let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
-                                    eprintln!(
-                                        "Failed to get valid access token for project '{}': {}",
-                                        project_id, e
+                                    dure_debug!("Failed to get valid access token for project '{}': {}", project_id, e
                                     );
                                     None
                                 }
@@ -1788,7 +1781,7 @@ impl PlatformTab {
                                             .collect();
                                     }
                                     Err(e) => {
-                                        eprintln!("Failed to fetch projects: {}", e);
+                                        dure_debug!("Failed to fetch projects: {}", e);
                                     }
                                 }
                             }
@@ -1984,7 +1977,7 @@ impl PlatformTab {
                     selected_project,
                 ) {
                     Ok(_) => {
-                        eprintln!("✓ Platform add command sent");
+                        dure_info!(" Platform add command sent");
                     }
                     Err(e) => {
                         self.load_error = Some(format!("Failed to add platform: {}", e));
@@ -2135,7 +2128,7 @@ impl PlatformTab {
             let current_ip = match get_current_ip() {
                 Ok(ip) => ip,
                 Err(e) => {
-                    eprintln!("Failed to get current IP: {}", e);
+                    dure_debug!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
                     return;
                 }
@@ -2333,10 +2326,10 @@ impl PlatformTab {
                             &format!("{}:{}", project_id, instance_name),
                         ) {
                             Ok(audit_id) => {
-                                eprintln!("✓ Audit record created: ID {}", audit_id);
+                                dure_info!(" Audit record created: ID {}", audit_id);
                             }
                             Err(e) => {
-                                eprintln!("⚠ Failed to record audit event: {}", e);
+                                dure_warn!(" Failed to record audit event: {}", e);
                             }
                         }
                     }
@@ -2382,7 +2375,7 @@ impl PlatformTab {
         }
 
         // Token expired, refresh it
-        eprintln!("Access token expired, refreshing...");
+        dure_debug!("Access token expired, refreshing...");
 
         use crate::api::gcp::oauth::{self, OAuthHandler};
 
@@ -2405,7 +2398,7 @@ impl PlatformTab {
             .save(config_path)
             .map_err(|e| format!("Failed to save refreshed token: {}", e))?;
 
-        eprintln!("✓ Access token refreshed");
+        dure_info!(" Access token refreshed");
         Ok(oauth_result.access_token)
     }
 
@@ -2551,7 +2544,7 @@ impl PlatformTab {
                         }
                     }
                     Err(e) => {
-                        eprintln!("Failed to fetch VM status: {}", e);
+                        dure_debug!("Failed to fetch VM status: {}", e);
                     }
                 }
             }
@@ -2570,12 +2563,12 @@ impl PlatformTab {
                             );
                         }
                         Err(e) => {
-                            eprintln!("Failed to check firewall: {}", e);
+                            dure_debug!("Failed to check firewall: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to get current IP: {}", e);
+                    dure_debug!("Failed to get current IP: {}", e);
                 }
             }
 
@@ -2585,7 +2578,7 @@ impl PlatformTab {
                     platform.cached_total_project_count = Some(list.projects.len());
                 }
                 Err(e) => {
-                    eprintln!("Failed to fetch project count: {}", e);
+                    dure_debug!("Failed to fetch project count: {}", e);
                 }
             }
 
@@ -2809,7 +2802,7 @@ impl PlatformTab {
             };
             match vm.delete_platform(self.delete_platform_name.clone(), delete_options) {
                 Ok(_) => {
-                    eprintln!("✓ Platform delete command sent");
+                    dure_info!(" Platform delete command sent");
                 }
                 Err(e) => {
                     self.load_error = Some(format!("Failed to delete platform: {}", e));
@@ -2853,7 +2846,7 @@ impl PlatformTab {
                     self.add_platform_connected_email = Some(display);
                 }
                 Err(e) => {
-                    eprintln!("Failed to fetch user info: {}", e);
+                    dure_debug!("Failed to fetch user info: {}", e);
                     self.add_platform_connected_email = Some("Connected Account".to_string());
                 }
             }

@@ -339,7 +339,6 @@ mod tests {
     #[test]
     fn test_cloud_platform_config_with_selected_project() {
         let config = CloudPlatformConfig {
-            name: "test-gcp".to_string(),
             platform_type: "gcp".to_string(),
             gcp_selected_project_id: Some("dure".to_string()),
             gcp_connected_email: None,
@@ -354,6 +353,7 @@ mod tests {
             api_token: None,
             service_account_json: None,
             vms: vec![],
+            ..Default::default()
         };
 
         assert_eq!(config.gcp_selected_project_id, Some("dure".to_string()));
@@ -362,7 +362,6 @@ mod tests {
     #[test]
     fn test_config_serialization_with_selected_project() {
         let config = CloudPlatformConfig {
-            name: "test".to_string(),
             platform_type: "gcp".to_string(),
             gcp_selected_project_id: Some("project-123".to_string()),
             gcp_connected_email: None,
@@ -377,6 +376,7 @@ mod tests {
             api_token: None,
             service_account_json: None,
             vms: vec![],
+            ..Default::default()
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();

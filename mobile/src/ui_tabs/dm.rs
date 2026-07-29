@@ -1,5 +1,6 @@
 //! DM tab - Direct messaging
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 
 /// DM tab state

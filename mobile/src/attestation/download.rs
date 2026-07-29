@@ -1,5 +1,6 @@
 //! Download attestations from GitHub
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::types::{AttestationBundle, AttestationsResponse, VerificationError};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -55,7 +56,7 @@ pub fn download_attestations(
         owner, repo, digest
     );
 
-    log::info!("Fetching attestations from: {}", api_url);
+    dure_info!("Fetching attestations from: {}", api_url);
 
     // Make HTTP request to GitHub API
     #[cfg(not(target_arch = "wasm32"))]
@@ -93,7 +94,7 @@ fn download_attestations_native(
                     VerificationError::JsonError(format!("Failed to parse JSON: {}", e))
                 })?;
 
-            log::info!(
+            dure_info!(
                 "Downloaded {} attestations",
                 attestations_response.attestations.len()
             );
@@ -101,7 +102,7 @@ fn download_attestations_native(
         }
         Err(ureq::Error::Status(code, _)) => {
             if code == 404 {
-                log::warn!("No attestations found (404)");
+                dure_warn!("No attestations found (404)");
                 Ok(Vec::new())
             } else {
                 Err(VerificationError::HttpError(format!(
@@ -122,7 +123,7 @@ fn download_attestations_native(
 fn download_attestations_wasm(api_url: &str) -> Result<Vec<AttestationBundle>, VerificationError> {
     // For WASM, we need to use ehttp which is async-compatible with egui
     // This is a simplified version - in practice, you'd want to handle this asynchronously
-    log::warn!("WASM attestation download not fully implemented - returning empty list");
+    dure_warn!("WASM attestation download not fully implemented - returning empty list");
     Ok(Vec::new())
 }
 
@@ -143,7 +144,7 @@ pub fn save_attestations_to_file(
             .map_err(|e| VerificationError::IoError(format!("Failed to write: {}", e)))?;
     }
 
-    log::info!(
+    dure_info!(
         "Saved {} attestations to {}",
         attestations.len(),
         output_path
@@ -169,7 +170,7 @@ pub fn load_attestations_from_file(
         attestations.push(attestation);
     }
 
-    log::info!(
+    dure_info!(
         "Loaded {} attestations from {}",
         attestations.len(),
         input_path

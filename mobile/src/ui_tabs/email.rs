@@ -1,5 +1,6 @@
 //! Email tab - Email management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui::{self, Id, Rect};
 use egui_material3::{
     MaterialButton, MaterialIconButton, TooltipPosition, data_table, noto_emoji,

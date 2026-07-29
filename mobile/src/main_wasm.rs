@@ -3,6 +3,7 @@
 //! This module contains the WASM-specific initialization code that runs
 //! when the application is loaded in a web browser.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::wasm_bindgen::JsCast as _;
 
 /// WASM entry point — called automatically by the browser via wasm-bindgen.
@@ -83,17 +84,17 @@ pub fn wasm_start() {
                     if let Err(e) = load_theme_from_json_str(include_str!(
                         "../resources/material-theme-lightblue.json"
                     )) {
-                        log::warn!("Failed to load lightblue theme: {e}");
+                        dure_warn!("Failed to load lightblue theme: {e}");
                     }
 
                     // Initialize i18n with Auto language detection
                     if let Err(e) = crate::i18n::init_i18n("Auto") {
-                        log::error!("Failed to initialize i18n: {}", e);
+                        dure_error!("Failed to initialize i18n: {}", e);
                     }
 
                     let app = crate::dure::DureApp::default();
 
-                    log::info!("DureApp initialized for WASM");
+                    dure_info!("DureApp initialized for WASM");
 
                     Ok(Box::new(app))
                 }),

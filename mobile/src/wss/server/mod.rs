@@ -21,11 +21,13 @@ pub mod handlers;
 pub mod http_get;
 pub mod http_post;
 pub mod https;
+pub mod messages;
 pub mod tls;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod webauthn;
 pub mod ws;
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_net::{TcpListener, TcpStream};
 use futures_rustls::TlsAcceptor;
 use std::io;
@@ -58,7 +60,7 @@ fn generate_self_signed_cert(domain: &str) -> (String, String) {
     tls::generate_self_signed(domain, &ss_cert, &ss_key)
         .expect("Failed to generate self-signed certificate");
 
-    eprintln!("✓ Self-signed certificate generated");
+    dure_info!(" Self-signed certificate generated");
 
     (
         ss_cert.to_string_lossy().to_string(),
@@ -337,9 +339,7 @@ impl Stats {
     }
 
     pub fn print_stats(&self) {
-        eprintln!(
-            "Stats: active={}, total={}, http={}, wss={}, webhooks={}",
-            self.active_connections.load(Ordering::Relaxed),
+        dure_debug!("Stats: active={}, total={}, http={}, wss={}, webhooks={}", self.active_connections.load(Ordering::Relaxed),
             self.total_connections.load(Ordering::Relaxed),
             self.total_http_requests.load(Ordering::Relaxed),
             self.total_wss_messages.load(Ordering::Relaxed),
@@ -377,7 +377,7 @@ async fn handle_connection(
     let debug = std::env::var("DURE_DEBUG_HTTP").is_ok() || settings.debug_http;
 
     if debug {
-        eprintln!("DEBUG: New connection from {}", peer_addr);
+        dure_debug!("New connection from {}", peer_addr);
     }
     stats.connection_started();
 
@@ -385,14 +385,14 @@ async fn handle_connection(
         if let Some(acceptor) = acceptor {
             // TLS mode: HTTPS and WSS
             if debug {
-                eprintln!("DEBUG: Accepting TLS connection from {}", peer_addr);
+                dure_debug!("Accepting TLS connection from {}", peer_addr);
             }
             let mut tls_stream = acceptor
                 .accept(stream)
                 .await
                 .map_err(|e| io::Error::other(format!("TLS error: {}", e)))?;
             if debug {
-                eprintln!("DEBUG: TLS handshake completed for {}", peer_addr);
+                dure_debug!("TLS handshake completed for {}", peer_addr);
             }
             let request = read_http_request(&mut tls_stream).await?;
 
@@ -409,7 +409,7 @@ async fn handle_connection(
         } else {
             // Plain mode: HTTP and WS (no TLS)
             if debug {
-                eprintln!("DEBUG: Plain connection (no TLS) from {}", peer_addr);
+                dure_debug!("Plain connection (no TLS) from {}", peer_addr);
             }
             let mut plain_stream = stream;
             let request = read_http_request(&mut plain_stream).await?;
@@ -483,17 +483,17 @@ async fn run_server_async(
     download_static: bool,
 ) -> io::Result<()> {
     let db = db::open_db(&db_path)?;
-    eprintln!("✓ Database opened: {}", db_path);
+    dure_info!(" Database opened: {}", db_path);
 
     // Placeholder for now - will be updated after loading config
     let server_settings = ServerSettings::new(domain.clone(), db, false);
 
     if download_static && !http_get::static_files_exist(&server_settings.static_dir).await {
         if let Err(e) = http_get::download_static_files(&server_settings.static_dir).await {
-            eprintln!("Warning: Failed to download static files: {}", e);
+            dure_debug!("Warning: Failed to download static files: {}", e);
         }
     } else if http_get::static_files_exist(&server_settings.static_dir).await {
-        eprintln!("✓ Static files present at {:?}", server_settings.static_dir);
+        dure_info!(" Static files present at {:?}", server_settings.static_dir);
     }
 
     // Try to load certificate from config.yml first
@@ -516,10 +516,10 @@ async fn run_server_async(
             app_config.domain.cert.key_path.as_ref(),
         ) {
             if std::path::Path::new(cert).exists() && std::path::Path::new(key).exists() {
-                eprintln!("✓ Using certificates from config.yml");
+                dure_info!(" Using certificates from config.yml");
                 Some((cert.clone(), key.clone()))
             } else {
-                eprintln!("⚠ Certificate paths in config.yml are invalid");
+                dure_warn!(" Certificate paths in config.yml are invalid");
                 None
             }
         } else {
@@ -534,7 +534,7 @@ async fn run_server_async(
                     let key_path = cert_dir.join(format!("{}.key", domain));
                     
                     if cert_path.exists() && key_path.exists() {
-                        eprintln!("✓ Found existing lego certificates");
+                        dure_info!(" Found existing lego certificates");
                         Some((
                             cert_path.to_string_lossy().to_string(),
                             key_path.to_string_lossy().to_string(),
@@ -546,18 +546,18 @@ async fn run_server_async(
         })
         // Last resort: generate certificate
         .unwrap_or_else(|| {
-            eprintln!("⚠ No valid SSL certificate found");
+            dure_warn!(" No valid SSL certificate found");
             
             // Check if we have DNS provider configuration
             if !app_config.domain.dns_provider.is_empty() 
                 && has_dns_credentials(&app_config.domain) 
             {
-                eprintln!("  Attempting to issue certificate with lego...");
+                dure_debug!("  Attempting to issue certificate with lego...");
                 
                 // Try to issue certificate automatically
                 match issue_cert_with_lego(&domain, &app_config) {
                     Ok((cert, key, issuer)) => {
-                        eprintln!("✓ Certificate issued successfully with lego");
+                        dure_info!(" Certificate issued successfully with lego");
                         
                         // Update config.yml
                         app_config.domain.cert.cert_path = Some(cert.clone());
@@ -568,16 +568,16 @@ async fn run_server_async(
                         (cert, key)
                     }
                     Err(e) => {
-                        eprintln!("  Failed to auto-issue certificate: {}", e);
-                        eprintln!("  Falling back to self-signed certificate");
+                        dure_debug!("  Failed to auto-issue certificate: {}", e);
+                        dure_debug!("  Falling back to self-signed certificate");
                         generate_self_signed_cert(&domain)
                     }
                 }
             } else {
-                eprintln!("  No DNS provider configured in config.yml");
-                eprintln!("  Configure domain.dns_provider and DNS provider credentials");
-                eprintln!("  or run: dure acme issue");
-                eprintln!("  Falling back to self-signed certificate");
+                dure_debug!("  No DNS provider configured in config.yml");
+                dure_debug!("  Configure domain.dns_provider and DNS provider credentials");
+                dure_debug!("  or run: dure acme issue");
+                dure_debug!("  Falling back to self-signed certificate");
                 generate_self_signed_cert(&domain)
             }
         });
@@ -585,16 +585,16 @@ async fn run_server_async(
     // Load TLS configuration if enabled
     let use_tls = app_config.server.use_tls;
     let acceptor = if use_tls {
-        eprintln!("Loading TLS configuration...");
-        eprintln!("  Certificate: {}", cert_path);
-        eprintln!("  Private key: {}", key_path);
+        dure_debug!("Loading TLS configuration...");
+        dure_debug!("  Certificate: {}", cert_path);
+        dure_debug!("  Private key: {}", key_path);
 
         Some(create_acceptor(
             std::path::Path::new(&cert_path),
             std::path::Path::new(&key_path),
         )?)
     } else {
-        eprintln!("⚠ TLS disabled - running in plain HTTP/WS mode (insecure!)");
+        dure_warn!(" TLS disabled - running in plain HTTP/WS mode (insecure!)");
         None
     };
 
@@ -605,16 +605,16 @@ async fn run_server_async(
             let rp_origin = format!("https://{}:443", domain);
             match webauthn::WebAuthnState::new(&domain, &rp_origin, Some("Dure")) {
                 Ok(webauthn_state) => {
-                    eprintln!("✓ WebAuthn initialized for domain: {}", domain);
+                    dure_info!(" WebAuthn initialized for domain: {}", domain);
                     server_settings.webauthn = Some(webauthn_state);
                 }
                 Err(e) => {
-                    eprintln!("⚠ Failed to initialize WebAuthn: {:?}", e);
-                    eprintln!("  WebAuthn authentication will not be available");
+                    dure_warn!(" Failed to initialize WebAuthn: {:?}", e);
+                    dure_debug!("  WebAuthn authentication will not be available");
                 }
             }
         } else {
-            eprintln!("⚠ WebAuthn disabled (requires TLS)");
+            dure_warn!(" WebAuthn disabled (requires TLS)");
         }
     }
 
@@ -636,23 +636,23 @@ async fn run_server_async(
     let listener = TcpListener::bind(socket_addr).await?;
 
     if use_tls {
-        eprintln!("🚀 HTTPS/WSS server (TLS enabled)");
-        eprintln!("   Domain:        {}", domain);
-        eprintln!("   Address:       https://{}", socket_addr);
-        eprintln!("   Static:        {:?}", server_settings.static_dir);
-        eprintln!("   Database:      {}", db_path);
-        eprintln!("   Swagger UI:    https://{}/swagger-ui", domain);
-        eprintln!("   AsyncAPI docs: https://{}/asyncapi-docs/", domain);
+        dure_info!(" HTTPS/WSS server (TLS enabled)");
+        dure_debug!("   Domain:        {}", domain);
+        dure_debug!("   Address:       https://{}", socket_addr);
+        dure_debug!("   Static:        {:?}", server_settings.static_dir);
+        dure_debug!("   Database:      {}", db_path);
+        dure_debug!("   Swagger UI:    https://{}/swagger-ui", domain);
+        dure_debug!("   AsyncAPI docs: https://{}/asyncapi-docs/", domain);
     } else {
-        eprintln!("🚀 HTTP/WS server (TLS disabled - development mode)");
-        eprintln!("   Domain:        {}", domain);
-        eprintln!("   Address:       http://{}", socket_addr);
-        eprintln!("   Static:        {:?}", server_settings.static_dir);
-        eprintln!("   Database:      {}", db_path);
-        eprintln!("   Swagger UI:    http://{}/swagger-ui", domain);
-        eprintln!("   AsyncAPI docs: http://{}/asyncapi-docs/", domain);
+        dure_info!(" HTTP/WS server (TLS disabled - development mode)");
+        dure_debug!("   Domain:        {}", domain);
+        dure_debug!("   Address:       http://{}", socket_addr);
+        dure_debug!("   Static:        {:?}", server_settings.static_dir);
+        dure_debug!("   Database:      {}", db_path);
+        dure_debug!("   Swagger UI:    http://{}/swagger-ui", domain);
+        dure_debug!("   AsyncAPI docs: http://{}/asyncapi-docs/", domain);
     }
-    eprintln!("\nPress Ctrl+C to stop");
+    dure_debug!("\nPress Ctrl+C to stop");
 
     loop {
         match listener.accept().await {
@@ -669,12 +669,12 @@ async fn run_server_async(
 
                 smol::spawn(async move {
                     if let Err(e) = handle_connection(stream, acceptor, settings, stats).await {
-                        eprintln!("Connection error: {}", e);
+                        dure_debug!("Connection error: {}", e);
                     }
                 })
                 .detach();
             }
-            Err(e) => eprintln!("Accept error: {}", e),
+            Err(e) => dure_debug!("Accept error: {}", e),
         }
     }
 }

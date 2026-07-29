@@ -3,6 +3,7 @@
 //! Handles domain registration, DNS configuration, VM creation,
 //! and service deployment orchestration.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -150,7 +151,7 @@ fn check_porkbun_domain(domain: &str, token: Option<&str>) -> Result<DomainRegis
 
     // TODO: Implement actual Porkbun API call
     // For now, return a placeholder
-    eprintln!("Porkbun domain check not yet implemented for: {}", domain);
+    dure_info!("Porkbun domain check not yet implemented for: {}", domain);
 
     Ok(DomainRegistrationCheck {
         registered: false,
@@ -164,9 +165,7 @@ fn check_cloudflare_domain(domain: &str, token: Option<&str>) -> Result<DomainRe
 
     // TODO: Implement actual Cloudflare API call
     // For now, return a placeholder
-    eprintln!(
-        "Cloudflare domain check not yet implemented for: {}",
-        domain
+    dure_warn!("Cloudflare domain check not yet implemented for: {}", domain
     );
 
     Ok(DomainRegistrationCheck {
@@ -187,18 +186,14 @@ pub fn register_domain(domain: &str, provider: &str, token: &str) -> Result<()> 
 
 fn register_porkbun_domain(domain: &str, _token: &str) -> Result<()> {
     // TODO: Implement Porkbun domain registration
-    eprintln!(
-        "Porkbun domain registration not yet implemented for: {}",
-        domain
+    dure_warn!("Porkbun domain registration not yet implemented for: {}", domain
     );
     anyhow::bail!("Porkbun domain registration not yet implemented")
 }
 
 fn register_cloudflare_domain(domain: &str, _token: &str) -> Result<()> {
     // TODO: Implement Cloudflare domain registration
-    eprintln!(
-        "Cloudflare domain registration not yet implemented for: {}",
-        domain
+    dure_warn!("Cloudflare domain registration not yet implemented for: {}", domain
     );
     anyhow::bail!("Cloudflare domain registration not yet implemented")
 }
@@ -219,7 +214,7 @@ pub fn update_nameservers(
 
 fn update_porkbun_nameservers(domain: &str, _token: &str, _nameservers: Vec<String>) -> Result<()> {
     // TODO: Implement Porkbun NS update
-    eprintln!("Porkbun NS update not yet implemented for: {}", domain);
+    dure_info!("Porkbun NS update not yet implemented for: {}", domain);
     anyhow::bail!("Porkbun NS update not yet implemented")
 }
 
@@ -229,7 +224,7 @@ fn update_cloudflare_nameservers(
     _nameservers: Vec<String>,
 ) -> Result<()> {
     // TODO: Implement Cloudflare NS update
-    eprintln!("Cloudflare NS update not yet implemented for: {}", domain);
+    dure_info!("Cloudflare NS update not yet implemented for: {}", domain);
     anyhow::bail!("Cloudflare NS update not yet implemented")
 }
 
@@ -279,7 +274,7 @@ pub fn update_dns_records(
 
 fn update_porkbun_dns(domain: &str, _token: &str, _records: HashMap<String, String>) -> Result<()> {
     // TODO: Implement Porkbun DNS update
-    eprintln!("Porkbun DNS update not yet implemented for: {}", domain);
+    dure_info!("Porkbun DNS update not yet implemented for: {}", domain);
     anyhow::bail!("Porkbun DNS update not yet implemented")
 }
 
@@ -289,13 +284,13 @@ fn update_cloudflare_dns(
     _records: HashMap<String, String>,
 ) -> Result<()> {
     // TODO: Implement Cloudflare DNS update
-    eprintln!("Cloudflare DNS update not yet implemented for: {}", domain);
+    dure_info!("Cloudflare DNS update not yet implemented for: {}", domain);
     anyhow::bail!("Cloudflare DNS update not yet implemented")
 }
 
 fn update_duckdns_dns(domain: &str, _token: &str, _records: HashMap<String, String>) -> Result<()> {
     // TODO: Implement DuckDNS update
-    eprintln!("DuckDNS update not yet implemented for: {}", domain);
+    dure_info!("DuckDNS update not yet implemented for: {}", domain);
     anyhow::bail!("DuckDNS update not yet implemented")
 }
 
@@ -309,7 +304,7 @@ pub fn create_vm(
     match provider {
         "gcp" => create_gcp_vm(token, instance_name, zone),
         "cafe24vps" => {
-            eprintln!("Cafe24 VPS requires manual setup");
+            dure_info!("Cafe24 VPS requires manual setup");
             anyhow::bail!("Cafe24 VPS requires manual setup - VM creation not supported via API")
         }
         _ => anyhow::bail!("Unsupported VM provider: {}", provider),
@@ -318,7 +313,7 @@ pub fn create_vm(
 
 fn create_gcp_vm(_token: &str, instance_name: &str, _zone: Option<&str>) -> Result<VmStatusCheck> {
     // TODO: Implement GCP VM creation using google-cloud-rust or gcloud CLI
-    eprintln!("GCP VM creation not yet implemented for: {}", instance_name);
+    dure_info!("GCP VM creation not yet implemented for: {}", instance_name);
     anyhow::bail!("GCP VM creation not yet implemented")
 }
 
@@ -336,9 +331,7 @@ pub fn check_vm_status(provider: &str, token: &str, instance_id: &str) -> Result
 
 fn check_gcp_vm_status(_token: &str, instance_id: &str) -> Result<VmStatusCheck> {
     // TODO: Implement GCP VM status check
-    eprintln!(
-        "GCP VM status check not yet implemented for: {}",
-        instance_id
+    dure_warn!("GCP VM status check not yet implemented for: {}", instance_id
     );
     Ok(VmStatusCheck {
         exists: false,
@@ -354,9 +347,7 @@ pub fn check_ssh_connection(
     key_path: Option<&str>,
 ) -> Result<SshConnectionCheck> {
     // TODO: Implement SSH connection check using ssh2-rs
-    eprintln!(
-        "SSH connection check not yet implemented for: {}@{}",
-        user, ip_address
+    dure_warn!("SSH connection check not yet implemented for: {}@{}", user, ip_address
     );
     let _key_path = key_path;
 
@@ -370,9 +361,7 @@ pub fn check_ssh_connection(
 /// Install dure service on remote host via SSH
 pub fn install_dure_service(ip_address: &str, user: &str, key_path: Option<&str>) -> Result<()> {
     // TODO: Implement SSH remote installation using ssh2-rs
-    eprintln!(
-        "Dure service installation not yet implemented for: {}@{}",
-        user, ip_address
+    dure_warn!("Dure service installation not yet implemented for: {}@{}", user, ip_address
     );
     let _key_path = key_path;
     anyhow::bail!("Dure service installation not yet implemented")
@@ -389,7 +378,7 @@ pub fn delete_vm(provider: &str, token: &str, instance_id: &str) -> Result<()> {
 
 fn delete_gcp_vm(_token: &str, instance_id: &str) -> Result<()> {
     // TODO: Implement GCP VM deletion
-    eprintln!("GCP VM deletion not yet implemented for: {}", instance_id);
+    dure_info!("GCP VM deletion not yet implemented for: {}", instance_id);
     anyhow::bail!("GCP VM deletion not yet implemented")
 }
 

@@ -3,6 +3,7 @@
 //! Provides WebSocket server functionality using TLS certificates from ACME,
 //! with SQLite-based storage for session and connection tracking.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -237,8 +238,8 @@ pub fn start_server(config: &WssServerConfig) -> Result<()> {
         std::fs::write(&pid_path, format!("{}\n{}", pid, started_at))
             .context("Failed to write PID file")?;
 
-        eprintln!("Server PID: {}", pid);
-        eprintln!("Log file:   {:?}", log_path);
+        dure_info!("Server PID: {}", pid);
+        dure_info!("Log file:   {:?}", log_path);
 
         Ok(())
     }
@@ -259,9 +260,7 @@ pub fn stop_server(domain: &str) -> Result<()> {
         if !process_alive(pid) {
             // Already dead — just clean up the stale PID file
             let _ = pid_file_path(domain).map(std::fs::remove_file);
-            eprintln!(
-                "Process {} was already stopped (stale PID file removed)",
-                pid
+            dure_warn!("Process {} was already stopped (stale PID file removed)", pid
             );
             return Ok(());
         }
@@ -285,9 +284,7 @@ pub fn stop_server(domain: &str) -> Result<()> {
         }
 
         if process_alive(pid) {
-            eprintln!(
-                "Warning: process {} did not stop within 5 s, sending SIGKILL",
-                pid
+            dure_warn!("Warning: process {} did not stop within 5 s, sending SIGKILL", pid
             );
             let _ = std::process::Command::new("kill")
                 .args(["-9", &pid.to_string()])

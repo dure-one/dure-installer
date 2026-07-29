@@ -3,6 +3,7 @@
 //! Cloudflare DNS API for managing zones and DNS records.
 //! API Documentation: https://developers.cloudflare.com/api/
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -146,9 +147,9 @@ impl CloudflareClient {
             anyhow::bail!("Cloudflare API error: {}", errors.join(", "));
         }
 
-        eprintln!("DEBUG: Cloudflare returned {} zones", result.result.len());
+        dure_debug!("Cloudflare returned {} zones", result.result.len());
         for zone in &result.result {
-            eprintln!("DEBUG:   - {} ({})", zone.name, zone.id);
+            dure_debug!("  - {} ({})", zone.name, zone.id);
         }
 
         Ok(result.result)

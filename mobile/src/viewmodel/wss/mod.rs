@@ -6,6 +6,7 @@ mod events;
 pub use commands::WssCommand;
 pub use events::WssEvent;
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::viewmodel::ViewModelEvent;
 use smol::channel::{Receiver, Sender};
 
@@ -23,11 +24,11 @@ impl WssActor {
     }
 
     pub async fn run(mut self) {
-        log::info!("WssActor stub - not implemented yet");
+        dure_info!("WssActor stub - not implemented yet");
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
-                    log::warn!(
+                    dure_warn!(
                         "WssActor received command but is not implemented: {:?}",
                         cmd
                     );
@@ -40,7 +41,7 @@ impl WssActor {
                         .await;
                 }
                 Err(_) => {
-                    log::info!("WssActor: channel closed");
+                    dure_info!("WssActor: channel closed");
                     break;
                 }
             }

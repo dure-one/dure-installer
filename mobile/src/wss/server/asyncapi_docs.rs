@@ -19,15 +19,36 @@
 //   mobile/src/wss/server/asyncapi_docs.rs
 //   → ../../../../crates/dure-asyncapi-gen/docs/api-docs/
 
+// Embedded AsyncAPI docs (optional - only if files exist)
+// If not generated, these will be empty and the server will only serve from filesystem
+#[cfg(asyncapi_docs_available)]
 static INDEX_HTML: &[u8] =
     include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/index.html");
+#[cfg(not(asyncapi_docs_available))]
+static INDEX_HTML: &[u8] = b"";
+
+#[cfg(asyncapi_docs_available)]
 static ASYNCAPI_CSS: &[u8] =
     include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/css/asyncapi.min.css");
+#[cfg(not(asyncapi_docs_available))]
+static ASYNCAPI_CSS: &[u8] = b"";
+
+#[cfg(asyncapi_docs_available)]
 static GLOBAL_CSS: &[u8] =
     include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/css/global.min.css");
+#[cfg(not(asyncapi_docs_available))]
+static GLOBAL_CSS: &[u8] = b"";
+
+#[cfg(asyncapi_docs_available)]
 static APP_JS: &[u8] = include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/js/app.js");
+#[cfg(not(asyncapi_docs_available))]
+static APP_JS: &[u8] = b"";
+
+#[cfg(asyncapi_docs_available)]
 static ASYNCAPI_UI_JS: &[u8] =
     include_bytes!("../../../../crates/dure-asyncapi-gen/docs/api-docs/js/asyncapi-ui.min.js");
+#[cfg(not(asyncapi_docs_available))]
+static ASYNCAPI_UI_JS: &[u8] = b"";
 
 /// Serve an AsyncAPI docs file.
 ///

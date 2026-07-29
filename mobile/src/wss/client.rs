@@ -18,6 +18,7 @@
 //! cargo run --bin wss-client -- --url https://example.com --mode post --path /webhook/test
 //! ```
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_net::TcpStream;
 use async_tungstenite::{client_async, tungstenite::Message};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
@@ -142,9 +143,7 @@ impl Stats {
     }
 
     fn print_stats(&self) {
-        eprintln!(
-            "Stats: connections={}, http={}, ws_sent={}, ws_received={}",
-            self.total_connections.load(Ordering::Relaxed),
+        dure_debug!("Stats: connections={}, http={}, ws_sent={}, ws_received={}", self.total_connections.load(Ordering::Relaxed),
             self.total_http_requests.load(Ordering::Relaxed),
             self.total_wss_messages_sent.load(Ordering::Relaxed),
             self.total_wss_messages_received.load(Ordering::Relaxed),
@@ -184,7 +183,7 @@ async fn https_get_request(
     let port = url.port().unwrap_or(443);
     let addr = format!("{}:{}", host, port);
 
-    eprintln!("Connecting to {}...", addr);
+    dure_debug!("Connecting to {}...", addr);
     let tcp_stream = TcpStream::connect(addr).await?;
     let connector = if insecure {
         create_tls_connector_insecure()
@@ -198,7 +197,7 @@ async fn https_get_request(
         )
     })?;
     let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
-    eprintln!("TLS handshake completed");
+    dure_debug!("TLS handshake completed");
 
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: dure-test-client/1.0\r\nConnection: close\r\n\r\n",
@@ -210,7 +209,7 @@ async fn https_get_request(
     stats.total_connections.fetch_add(1, Ordering::Relaxed);
     stats.total_http_requests.fetch_add(1, Ordering::Relaxed);
 
-    eprintln!("Request sent, reading response...");
+    dure_debug!("Request sent, reading response...");
     let mut response = Vec::new();
     if let Err(e) = tls_stream.read_to_end(&mut response).await {
         // Servers that close TCP without TLS close_notify trigger this error, but the
@@ -236,7 +235,7 @@ async fn https_post_request(
     let port = url.port().unwrap_or(443);
     let addr = format!("{}:{}", host, port);
 
-    eprintln!("Connecting to {}...", addr);
+    dure_debug!("Connecting to {}...", addr);
     let tcp_stream = TcpStream::connect(addr).await?;
     let connector = if insecure {
         create_tls_connector_insecure()
@@ -250,7 +249,7 @@ async fn https_post_request(
         )
     })?;
     let mut tls_stream = connector.connect(server_name, tcp_stream).await?;
-    eprintln!("TLS handshake completed");
+    dure_debug!("TLS handshake completed");
 
     let request = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: dure-test-client/1.0\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -265,7 +264,7 @@ async fn https_post_request(
     stats.total_connections.fetch_add(1, Ordering::Relaxed);
     stats.total_http_requests.fetch_add(1, Ordering::Relaxed);
 
-    eprintln!("Request sent, reading response...");
+    dure_debug!("Request sent, reading response...");
     let mut response = Vec::new();
     if let Err(e) = tls_stream.read_to_end(&mut response).await {
         if response.is_empty() {
@@ -283,7 +282,7 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
     let port = url.port().unwrap_or(443);
     let addr = format!("{}:{}", host, port);
 
-    eprintln!("Connecting to {}...", addr);
+    dure_debug!("Connecting to {}...", addr);
     let tcp_stream = TcpStream::connect(addr).await?;
     let connector = if insecure {
         create_tls_connector_insecure()
@@ -297,7 +296,7 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
         )
     })?;
     let tls_stream = connector.connect(server_name, tcp_stream).await?;
-    eprintln!("TLS handshake completed");
+    dure_debug!("TLS handshake completed");
 
     let request = async_tungstenite::tungstenite::http::Request::builder()
         .method("GET")
@@ -318,7 +317,7 @@ async fn connect_websocket(url: &str, insecure: bool) -> io::Result<WsStream> {
         .await
         .map_err(|e| io::Error::other(e))?;
 
-    eprintln!("WebSocket connection established");
+    dure_debug!("WebSocket connection established");
     Ok(ws_stream)
 }
 
@@ -356,7 +355,7 @@ async fn handle_websocket_connection(
         // Check for incoming stdin messages (non-blocking).
         while let Ok(text) = stdin_rx.try_recv() {
             if let Err(e) = ws_sender.send(Message::Text(text.into())).await {
-                eprintln!("Send error: {}", e);
+                dure_debug!("Send error: {}", e);
                 return Ok(());
             }
             stats
@@ -383,16 +382,16 @@ async fn handle_websocket_connection(
                             println!("< [binary: {} bytes]", msg.len());
                             stats.total_wss_messages_received.fetch_add(1, Ordering::Relaxed);
                         } else if msg.is_close() {
-                            eprintln!("Server closed connection");
+                            dure_debug!("Server closed connection");
                             return Ok(());
                         }
                     }
                     Some(Err(e)) => {
-                        eprintln!("Receive error: {}", e);
+                        dure_debug!("Receive error: {}", e);
                         return Ok(());
                     }
                     None => {
-                        eprintln!("Stream ended");
+                        dure_debug!("Stream ended");
                         return Ok(());
                     }
                 }
@@ -471,24 +470,22 @@ async fn run_client() -> io::Result<()> {
 
     match mode {
         ClientMode::HttpGet => {
-            eprintln!("🚀 HTTPS GET Client  URL: {}  Path: {}", url, path);
+            dure_info!(" HTTPS GET Client  URL: {}  Path: {}", url, path);
             match https_get_request(&url, &path, false, &stats).await {
                 Ok(response) => println!("Response:\n{}", response),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => dure_debug!("Error: {}", e),
             }
         }
         ClientMode::HttpPost => {
-            eprintln!(
-                "🚀 HTTPS POST Client  URL: {}  Path: {}  Body: {}",
-                url, path, body
+            dure_debug!("🚀 HTTPS POST Client  URL: {}  Path: {}  Body: {}", url, path, body
             );
             match https_post_request(&url, &path, &body, false, &stats).await {
                 Ok(response) => println!("Response:\n{}", response),
-                Err(e) => eprintln!("Error: {}", e),
+                Err(e) => dure_debug!("Error: {}", e),
             }
         }
         ClientMode::WebSocket => {
-            eprintln!("🚀 WebSocket Client  URL: {}", url);
+            dure_info!(" WebSocket Client  URL: {}", url);
             let should_exit = Arc::new(AtomicBool::new(false));
             match connect_websocket(&url, false).await {
                 Ok(ws_stream) => {
@@ -496,10 +493,10 @@ async fn run_client() -> io::Result<()> {
                     if let Err(e) =
                         handle_websocket_connection(ws_stream, stats.clone(), should_exit).await
                     {
-                        eprintln!("WebSocket error: {}", e);
+                        dure_debug!("WebSocket error: {}", e);
                     }
                 }
-                Err(e) => eprintln!("Connection failed: {}", e),
+                Err(e) => dure_debug!("Connection failed: {}", e),
             }
         }
     }
@@ -528,7 +525,7 @@ pub fn run_with_args(
         let stats = Arc::new(Stats::new());
         let result = match client_mode {
             ClientMode::HttpGet => {
-                eprintln!("🚀 HTTPS GET  {} {}", url, path);
+                dure_info!(" HTTPS GET  {} {}", url, path);
                 match https_get_request(&url, &path, insecure, &stats).await {
                     Ok(response) => {
                         println!("{}", response);
@@ -538,7 +535,7 @@ pub fn run_with_args(
                 }
             }
             ClientMode::HttpPost => {
-                eprintln!("🚀 HTTPS POST  {} {}  body: {}", url, path, body);
+                dure_info!(" HTTPS POST  {} {}  body: {}", url, path, body);
                 match https_post_request(&url, &path, &body, insecure, &stats).await {
                     Ok(response) => {
                         println!("{}", response);
@@ -548,7 +545,7 @@ pub fn run_with_args(
                 }
             }
             ClientMode::WebSocket => {
-                eprintln!("🚀 WebSocket  {}", url);
+                dure_info!(" WebSocket  {}", url);
                 let should_exit = Arc::new(AtomicBool::new(false));
                 match connect_websocket(&url, insecure).await {
                     Ok(ws_stream) => {
