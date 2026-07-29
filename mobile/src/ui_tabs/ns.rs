@@ -3,7 +3,6 @@
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::MaterialButton;
-use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 use poll_promise::Promise;
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -23,28 +22,11 @@ pub struct NsTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     domain_rows: Vec<DomainRowData>,
 
-    /// Cached domain/record rows (domain, provider, record count) - OLD, will be removed
-    #[cfg_attr(feature = "serde", serde(skip))]
-    old_domain_rows: Vec<[String; 3]>,
-
-    /// Cached records for selected domain (name, type, value)
-    #[cfg_attr(feature = "serde", serde(skip))]
-    record_rows: Vec<[String; 3]>,
-
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
 
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
-
-    // Spreadsheets
-    #[cfg_attr(feature = "serde", serde(skip))]
-    domain_spreadsheet: Option<MaterialSpreadsheet>,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    record_spreadsheet: Option<MaterialSpreadsheet>,
-
-    row_selection_enabled: bool,
 
     // Selected domain for record view (provider, domain)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -148,50 +130,11 @@ pub struct NsTab {
 
 impl Default for NsTab {
     fn default() -> Self {
-        let domain_spreadsheet = {
-            let columns = vec![
-                text_column("Domain", 250.0),
-                text_column("Provider", 120.0),
-                text_column("Records", 80.0),
-            ];
-
-            MaterialSpreadsheet::new("ns_domain_spreadsheet", columns)
-                .ok()
-                .map(|mut s| {
-                    s.set_striped(true);
-                    s.set_row_selection_enabled(true);
-                    s.set_allow_selection(true);
-                    s
-                })
-        };
-
-        let record_spreadsheet = {
-            let columns = vec![
-                text_column("Name", 150.0),
-                text_column("Type", 80.0),
-                text_column("Value", 300.0),
-            ];
-
-            MaterialSpreadsheet::new("ns_record_spreadsheet", columns)
-                .ok()
-                .map(|mut s| {
-                    s.set_striped(true);
-                    s.set_row_selection_enabled(true);
-                    s.set_allow_selection(true);
-                    s
-                })
-        };
-
         Self {
             selected_row: None,
             domain_rows: Vec::new(),
-            old_domain_rows: Vec::new(),
-            record_rows: Vec::new(),
             loaded: false,
             load_error: None,
-            domain_spreadsheet,
-            record_spreadsheet,
-            row_selection_enabled: true,
             selected_domain: None,
             show_add_provider_dialog: false,
             add_provider_type: "cloudflare".to_string(),
@@ -986,7 +929,6 @@ impl NsTab {
                             if let Err(e) = save_ns_config(&config) {
                                 self.add_progress(format!("Error saving config: {}", e));
                             } else {
-                                self.load_records();
                                 self.load_data();
                             }
                         }
@@ -1079,7 +1021,7 @@ impl NsTab {
                                                 e
                                             ));
                                         } else {
-                                            self.load_records();
+                                            self.load_data();
                                         }
                                     }
                                 }
@@ -1121,7 +1063,6 @@ impl NsTab {
                                     if let Some((sel_prov, sel_dom)) = &self.selected_domain {
                                         if sel_prov == &provider_name && sel_dom == &domain {
                                             self.selected_domain = None;
-                                            self.record_rows.clear();
                                         }
                                     }
                                     self.load_data();
@@ -1207,32 +1148,6 @@ impl NsTab {
                 self.add_domain.clear();
             }
 
-            let domain_selected = self
-                .domain_spreadsheet
-                .as_ref()
-                .and_then(|s| s.get_selected_row())
-                .is_some();
-
-            let delete_button = MaterialButton::outlined("Delete Domain");
-            let delete_button = if domain_selected {
-                delete_button
-            } else {
-                delete_button.enabled(false)
-            };
-
-            if ui.add(delete_button).clicked() {
-                if let Some(idx) = self
-                    .domain_spreadsheet
-                    .as_ref()
-                    .and_then(|s| s.get_selected_row())
-                {
-                    if idx < self.old_domain_rows.len() {
-                        let domain = self.old_domain_rows[idx][0].clone();
-                        self.execute_delete_domain(&domain, vm.as_deref_mut());
-                    }
-                }
-            }
-
             if ui.add(MaterialButton::text("Refresh")).clicked() {
                 self.refresh_from_api();
             }
@@ -1242,81 +1157,6 @@ impl NsTab {
 
         // Domain table with drawer-based records
         render_domains_table(self, ui, vm.as_deref_mut());
-
-        ui.add_space(16.0);
-        ui.separator();
-        ui.add_space(8.0);
-
-        // Records section
-        if let Some((provider, domain)) = self.selected_domain.clone() {
-            ui.horizontal(|ui| {
-                ui.label(format!("Records for {} ({}):", domain, provider));
-                ui.add_space(8.0);
-
-                if ui.add(MaterialButton::filled("Add Record")).clicked() {
-                    self.show_add_record_dialog = true;
-                    self.add_record_name.clear();
-                    self.add_record_value.clear();
-                }
-
-                // Disable "Show Nameservers" button for DuckDNS
-                let is_duckdns =
-                    provider.to_lowercase() == "duckdns" || domain.ends_with(".duckdns.org");
-                let nameservers_button = MaterialButton::outlined("Show Nameservers");
-                let nameservers_button = if is_duckdns {
-                    nameservers_button.enabled(false)
-                } else {
-                    nameservers_button
-                };
-
-                if ui.add(nameservers_button).clicked() {
-                    self.show_nameservers(&provider, &domain);
-                }
-
-                let record_selected = self
-                    .record_spreadsheet
-                    .as_ref()
-                    .and_then(|s| s.get_selected_row())
-                    .is_some();
-
-                let delete_record_button = MaterialButton::outlined("Delete Record");
-                let delete_record_button = if record_selected {
-                    delete_record_button
-                } else {
-                    delete_record_button.enabled(false)
-                };
-
-                if ui.add(delete_record_button).clicked() {
-                    if let Some(idx) = self
-                        .record_spreadsheet
-                        .as_ref()
-                        .and_then(|s| s.get_selected_row())
-                    {
-                        if idx < self.record_rows.len() {
-                            let name = self.record_rows[idx][0].clone();
-                            let record_type = self.record_rows[idx][1].clone();
-                            let value = self.record_rows[idx][2].clone();
-                            self.execute_delete_record(
-                                &name,
-                                &record_type,
-                                &value,
-                                vm.as_deref_mut(),
-                            );
-                        }
-                    }
-                }
-            });
-
-            ui.add_space(8.0);
-
-            if let Some(ref mut spreadsheet) = self.record_spreadsheet {
-                ui.push_id("record_spreadsheet_container", |ui| {
-                    spreadsheet.show(ui);
-                });
-            }
-        } else {
-            ui.label("Select a domain to view and manage its records");
-        }
 
         // Progress log
         if !self.progress_log.is_empty() {
@@ -1434,57 +1274,6 @@ impl NsTab {
     }
 
     /// Load records for selected domain
-    fn load_records(&mut self) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-        {
-            if let Some((ref provider, ref domain)) = self.selected_domain {
-                match load_ns_config() {
-                    Ok(config) => {
-                        if let Some(domain_entry) = config.get_domain(provider, domain) {
-                            self.record_rows = domain_entry
-                                .records
-                                .iter()
-                                .map(|r| {
-                                    [
-                                        r.name.clone(),
-                                        r.record_type.as_str().to_uppercase(),
-                                        r.value.clone(),
-                                    ]
-                                })
-                                .collect();
-
-                            // Recreate spreadsheet with fresh data to avoid duplicates
-                            let columns = vec![
-                                text_column("Name", 150.0),
-                                text_column("Type", 80.0),
-                                text_column("Value", 300.0),
-                            ];
-
-                            self.record_spreadsheet =
-                                MaterialSpreadsheet::new("ns_record_spreadsheet", columns)
-                                    .ok()
-                                    .map(|mut s| {
-                                        s.set_striped(true);
-                                        s.set_row_selection_enabled(true);
-                                        s.set_allow_selection(true);
-                                        s.init_with_data(
-                                            self.record_rows
-                                                .iter()
-                                                .map(|row| row.iter().cloned().collect())
-                                                .collect(),
-                                        );
-                                        s
-                                    });
-                        }
-                    }
-                    Err(e) => {
-                        self.add_progress(format!("Error loading records: {}", e));
-                    }
-                }
-            }
-        }
-    }
-
     /// Show add nameserver provider dialog
     fn show_add_provider_dialog(
         &mut self,
@@ -3349,10 +3138,6 @@ impl NsTab {
                             Ok(_) => {
                                 self.add_progress(format!("✓ Refreshed {} domains", updated_count));
                                 self.load_data();
-                                // Also reload records if a domain is selected
-                                if self.selected_domain.is_some() {
-                                    self.load_records();
-                                }
                             }
                             Err(e) => {
                                 self.add_progress(format!("❌ Error saving config: {}", e));
@@ -3530,7 +3315,6 @@ impl NsTab {
                                             value
                                         ));
 
-                                        self.load_records();
                                         self.load_data();
                                     }
                                     Err(e) => {
