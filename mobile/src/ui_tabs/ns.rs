@@ -336,7 +336,8 @@ fn render_domains_table(
 ) {
     use egui_material3::data_table;
 
-    let available_width = ui.available_width();
+    // Reserve space for borders, padding, and scrollbar
+    let available_width = ui.available_width() - 40.0;
     let base_width = 300.0 + 200.0 + 250.0; // 750px total
     let width_ratio = calculate_width_ratio(available_width, base_width);
 

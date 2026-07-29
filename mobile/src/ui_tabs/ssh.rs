@@ -958,7 +958,8 @@ impl SshTab {
         use egui_material3::data_table;
 
         // Calculate width ratio for responsive columns
-        let available_width = ui.available_width();
+        // Reserve space for borders, padding, and scrollbar
+        let available_width = ui.available_width() - 40.0;
         let base_width = 200.0 + 150.0 + 300.0 + 350.0; // 1000.0 total
         let width_ratio = calculate_width_ratio(available_width, base_width);
 
