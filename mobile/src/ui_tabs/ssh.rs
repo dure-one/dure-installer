@@ -334,6 +334,11 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
     Ok((app_config, config_path))
 }
 
+/// Calculate width ratio with clamping to prevent extreme scaling
+fn calculate_width_ratio(available_width: f32, base_width: f32) -> f32 {
+    (available_width / base_width).max(0.5).min(2.0)
+}
+
 impl SshTab {
     /// Load SSH hosts from config and build row data
     fn load_rows(&mut self) {
@@ -952,6 +957,11 @@ impl SshTab {
     fn render_table(&mut self, ui: &mut egui::Ui, vm: Option<&mut crate::viewmodel::ViewModel>) {
         use egui_material3::data_table;
 
+        // Calculate width ratio for responsive columns
+        let available_width = ui.available_width();
+        let base_width = 200.0 + 150.0 + 300.0 + 350.0; // 1000.0 total
+        let width_ratio = calculate_width_ratio(available_width, base_width);
+
         let table_id = egui::Id::new("ssh_table");
 
         // Initialize drawer state (all closed by default)
@@ -962,15 +972,15 @@ impl SshTab {
         });
         ui.data_mut(|d| d.insert_persisted(table_id, state));
 
-        // Build table
+        // Build table with scaled widths
         let mut table = data_table()
             .id(table_id)
             .allow_selection(false)
             .allow_drawer(true)
-            .column("Host (Port)", 200.0, false)
-            .column("Platform", 150.0, false)
-            .column("Status", 300.0, false)
-            .column("Operations", 350.0, false);
+            .column("Host (Port)", 200.0 * width_ratio, false)
+            .column("Platform", 150.0 * width_ratio, false)
+            .column("Status", 300.0 * width_ratio, false)
+            .column("Operations", 350.0 * width_ratio, false);
 
         for (idx, row) in self.rows.iter().enumerate() {
             let row_for_cells = row.clone();
@@ -2890,5 +2900,34 @@ mod docker_name_tests {
         let containers = vec![make_container("wireguard-1")];
         let name = generate_container_name("linuxserver/wireguard:latest", &containers);
         assert_eq!(name, "wireguard-2");
+    }
+}
+
+#[cfg(test)]
+mod ssh_width_tests {
+    use super::*;
+
+    #[test]
+    fn test_width_ratio_normal_window() {
+        let ratio = calculate_width_ratio(1000.0, 1000.0);
+        assert_eq!(ratio, 1.0);
+    }
+
+    #[test]
+    fn test_width_ratio_narrow_window() {
+        let ratio = calculate_width_ratio(400.0, 1000.0);
+        assert_eq!(ratio, 0.5);
+    }
+
+    #[test]
+    fn test_width_ratio_wide_window() {
+        let ratio = calculate_width_ratio(2500.0, 1000.0);
+        assert_eq!(ratio, 2.0);
+    }
+
+    #[test]
+    fn test_width_ratio_zero_base() {
+        let ratio = calculate_width_ratio(1000.0, 0.0);
+        assert_eq!(ratio, 2.0);
     }
 }
