@@ -19,9 +19,13 @@ pub struct NsTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     selected_row: Option<usize>,
 
-    /// Cached domain/record rows (domain, provider, record count)
+    /// Display data for domain table
     #[cfg_attr(feature = "serde", serde(skip))]
-    domain_rows: Vec<[String; 3]>,
+    domain_rows: Vec<DomainRowData>,
+
+    /// Cached domain/record rows (domain, provider, record count) - OLD, will be removed
+    #[cfg_attr(feature = "serde", serde(skip))]
+    old_domain_rows: Vec<[String; 3]>,
 
     /// Cached records for selected domain (name, type, value)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -181,6 +185,7 @@ impl Default for NsTab {
         Self {
             selected_row: None,
             domain_rows: Vec::new(),
+            old_domain_rows: Vec::new(),
             record_rows: Vec::new(),
             loaded: false,
             load_error: None,
@@ -220,6 +225,62 @@ impl Default for NsTab {
             progress_log: Vec::new(),
         }
     }
+}
+
+/// Display data for domain table row + drawer
+#[derive(Clone, Debug)]
+struct DomainRowData {
+    domain: String,
+    provider: String,              // Internal identifier (e.g., "cloudflare", "gcloud:email")
+    provider_display: String,      // Display name (e.g., "Cloudflare", "Google Cloud (email)")
+    records: Vec<crate::calc::ns::DnsRecord>,
+}
+
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+fn build_domain_rows(config: &crate::calc::ns::NsConfig) -> Vec<DomainRowData> {
+    let mut rows = Vec::new();
+
+    // Add domains from regular providers (cloudflare, porkbun, duckdns)
+    for (provider, provider_config) in &config.providers {
+        for domain_entry in &provider_config.domains {
+            let provider_display = match provider.as_str() {
+                "cloudflare" => "Cloudflare".to_string(),
+                "porkbun" => "Porkbun".to_string(),
+                "duckdns" => "DuckDNS".to_string(),
+                _ => provider.clone(),
+            };
+
+            rows.push(DomainRowData {
+                domain: domain_entry.domain.clone(),
+                provider: provider.clone(),
+                provider_display,
+                records: domain_entry.records.clone(),
+            });
+        }
+    }
+
+    // Add domains from GCP accounts
+    for gcp_account in &config.gcp_accounts {
+        let provider = format!("gcloud:{}", gcp_account.connected_email);
+        let provider_display = format!("Google Cloud ({})", gcp_account.connected_email);
+
+        for domain_entry in &gcp_account.domains {
+            rows.push(DomainRowData {
+                domain: domain_entry.domain.clone(),
+                provider: provider.clone(),
+                provider_display: provider_display.clone(),
+                records: domain_entry.records.clone(),
+            });
+        }
+    }
+
+    rows.sort_by(|a, b| a.domain.cmp(&b.domain));
+    rows
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+fn build_domain_rows(_config: &crate::calc::ns::NsConfig) -> Vec<DomainRowData> {
+    Vec::new()
 }
 
 /// Get config file path
@@ -1008,8 +1069,8 @@ impl NsTab {
                     .as_ref()
                     .and_then(|s| s.get_selected_row())
                 {
-                    if idx < self.domain_rows.len() {
-                        let domain = self.domain_rows[idx][0].clone();
+                    if idx < self.old_domain_rows.len() {
+                        let domain = self.old_domain_rows[idx][0].clone();
                         self.execute_delete_domain(&domain, vm.as_deref_mut());
                     }
                 }
@@ -1030,9 +1091,9 @@ impl NsTab {
 
             // Check for selection change
             if let Some(selected_idx) = spreadsheet.get_selected_row() {
-                if selected_idx < self.domain_rows.len() {
-                    let domain = self.domain_rows[selected_idx][0].clone();
-                    let provider_display = self.domain_rows[selected_idx][1].clone();
+                if selected_idx < self.old_domain_rows.len() {
+                    let domain = self.old_domain_rows[selected_idx][0].clone();
+                    let provider_display = self.old_domain_rows[selected_idx][1].clone();
                     // Extract provider identifier
                     let provider = if provider_display.starts_with("Google Cloud (")
                         && provider_display.ends_with(")")
@@ -1165,7 +1226,7 @@ impl NsTab {
                         config.total_domains()
                     ));
 
-                    self.domain_rows = config
+                    self.old_domain_rows = config
                         .iter_all_domains()
                         .iter()
                         .map(|(provider, d)| {
@@ -1201,7 +1262,7 @@ impl NsTab {
                                 s.set_row_selection_enabled(true);
                                 s.set_allow_selection(true);
                                 s.init_with_data(
-                                    self.domain_rows
+                                    self.old_domain_rows
                                         .iter()
                                         .map(|row| row.iter().cloned().collect())
                                         .collect(),
@@ -3705,6 +3766,107 @@ impl NsTab {
                     self.add_progress(format!("⚠ Failed to load projects: {}", e));
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod ns_table_tests {
+    use super::*;
+
+    #[test]
+    fn test_domain_row_data_from_empty_config() {
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        {
+            use crate::calc::ns::NsConfig;
+            let config = NsConfig::default();
+            let rows = build_domain_rows(&config);
+            assert_eq!(rows.len(), 0);
+        }
+    }
+
+    #[test]
+    fn test_domain_with_no_records() {
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        {
+            use crate::calc::ns::NsConfig;
+            let mut config = NsConfig::default();
+            config.add_domain(
+                "cloudflare".to_string(),
+                "example.com".to_string(),
+                "test_token".to_string()
+            ).unwrap();
+
+            let rows = build_domain_rows(&config);
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].domain, "example.com");
+            assert_eq!(rows[0].provider, "cloudflare");
+            assert_eq!(rows[0].provider_display, "Cloudflare");
+            assert_eq!(rows[0].records.len(), 0);
+        }
+    }
+
+    #[test]
+    fn test_domain_with_multiple_records() {
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        {
+            use crate::calc::ns::{NsConfig, DnsRecord, RecordType};
+            let mut config = NsConfig::default();
+            config.add_domain(
+                "cloudflare".to_string(),
+                "example.com".to_string(),
+                "test_token".to_string()
+            ).unwrap();
+
+            let domain_entry = config.get_domain_mut("cloudflare", "example.com").unwrap();
+            domain_entry.records.push(DnsRecord {
+                record_type: RecordType::A,
+                name: "www".to_string(),
+                value: "1.2.3.4".to_string(),
+                ttl: Some(300),
+            });
+            domain_entry.records.push(DnsRecord {
+                record_type: RecordType::TXT,
+                name: "_dmarc".to_string(),
+                value: "v=DMARC1; p=none;".to_string(),
+                ttl: Some(3600),
+            });
+
+            let rows = build_domain_rows(&config);
+            assert_eq!(rows[0].records.len(), 2);
+            assert_eq!(rows[0].records[0].name, "www");
+            assert_eq!(rows[0].records[1].name, "_dmarc");
+        }
+    }
+
+    #[test]
+    fn test_gcp_provider_display_format() {
+        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        {
+            use crate::calc::ns::{NsConfig, GcpAccount};
+            let mut config = NsConfig::default();
+
+            // Add GCP account first
+            let gcp_account = GcpAccount {
+                access_token: "test_token".to_string(),
+                refresh_token: "refresh_token".to_string(),
+                token_expiry: 3600,
+                connected_email: "user@gmail.com".to_string(),
+                project_id: "test-project".to_string(),
+                domains: Vec::new(),
+            };
+            config.add_gcp_account(gcp_account).unwrap();
+
+            // Now add domain to GCP account
+            config.add_domain(
+                "gcloud:user@gmail.com".to_string(),
+                "example.com".to_string(),
+                "test_token".to_string()
+            ).unwrap();
+
+            let rows = build_domain_rows(&config);
+            assert_eq!(rows[0].provider, "gcloud:user@gmail.com");
+            assert_eq!(rows[0].provider_display, "Google Cloud (user@gmail.com)");
         }
     }
 }
