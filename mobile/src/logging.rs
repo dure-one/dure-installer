@@ -85,6 +85,15 @@ pub fn module_name(path: &str) -> String {
     }
 }
 
+/// Truncate module name to maximum 10 characters
+pub fn truncate_module_name(name: &str) -> String {
+    if name.len() <= 10 {
+        name.to_string()
+    } else {
+        name.chars().take(10).collect()
+    }
+}
+
 /// Capitalize a component name (handle acronyms and snake_case)
 fn capitalize_component(s: &str) -> String {
     // Handle known acronyms
@@ -151,6 +160,14 @@ mod tests {
     fn test_module_name_android() {
         assert_eq!(module_name("dure::android::activity"), "Android");
     }
+
+    #[test]
+    fn test_truncate_module_name() {
+        assert_eq!(truncate_module_name("Short"), "Short");
+        assert_eq!(truncate_module_name("TenCharact"), "TenCharact");
+        assert_eq!(truncate_module_name("API::EhttpCache"), "API::Ehttp");
+        assert_eq!(truncate_module_name("VeryLongModuleName"), "VeryLongMo");
+    }
 }
 
 // Non-WASM platforms: use standard log crate
@@ -158,7 +175,7 @@ mod tests {
 #[macro_export]
 macro_rules! dure_info {
     ($($arg:tt)*) => {
-        log::info!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*))
+        log::info!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*))
     };
 }
 
@@ -166,7 +183,7 @@ macro_rules! dure_info {
 #[macro_export]
 macro_rules! dure_debug {
     ($($arg:tt)*) => {
-        log::debug!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*))
+        log::debug!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*))
     };
 }
 
@@ -174,7 +191,7 @@ macro_rules! dure_debug {
 #[macro_export]
 macro_rules! dure_warn {
     ($($arg:tt)*) => {
-        log::warn!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*))
+        log::warn!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*))
     };
 }
 
@@ -182,7 +199,7 @@ macro_rules! dure_warn {
 #[macro_export]
 macro_rules! dure_error {
     ($($arg:tt)*) => {
-        log::error!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*))
+        log::error!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*))
     };
 }
 
@@ -192,7 +209,7 @@ macro_rules! dure_error {
 macro_rules! dure_info {
     ($($arg:tt)*) => {
         web_sys::console::log_1(
-            &format!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*)).into()
+            &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
         )
     };
 }
@@ -203,7 +220,7 @@ macro_rules! dure_debug {
     ($($arg:tt)*) => {
         // In WASM, debug logs still go to console (user controls via browser devtools)
         web_sys::console::debug_1(
-            &format!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*)).into()
+            &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
         )
     };
 }
@@ -213,7 +230,7 @@ macro_rules! dure_debug {
 macro_rules! dure_warn {
     ($($arg:tt)*) => {
         web_sys::console::warn_1(
-            &format!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*)).into()
+            &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
         )
     };
 }
@@ -223,7 +240,7 @@ macro_rules! dure_warn {
 macro_rules! dure_error {
     ($($arg:tt)*) => {
         web_sys::console::error_1(
-            &format!("[{}]\t{}", $crate::logging::module_name(module_path!()), format!($($arg)*)).into()
+            &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
         )
     };
 }

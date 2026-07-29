@@ -64,8 +64,8 @@ fn main() -> Result<()> {
         use std::io::Write;
         writeln!(
             buf,
-            "{}\t[{}]\t{}",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            "{} [{}] {}",
+            chrono::Local::now().format("%Y%m%dT%H%M%S"),
             record.level(),
             record.args()
         )
