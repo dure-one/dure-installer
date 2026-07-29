@@ -1,7 +1,7 @@
 //! ehttp response cache to avoid re-fetching same URLs
 //! This cache persists responses to disk and survives activity recreations
 
-use log::{debug, info, warn};
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -64,8 +64,8 @@ impl EhttpCache {
     pub fn new(cache_dir: Option<PathBuf>, default_ttl: u64) -> Self {
         GLOBAL_CACHE
             .get_or_init(|| {
-                info!("🔧 CACHE INIT: Creating global EhttpCache singleton");
-                info!(
+                dure_info!("🔧 CACHE INIT: Creating global EhttpCache singleton");
+                dure_info!(
                     "🔧 CACHE CONFIG: TTL={}s ({}h), Disk={:?}",
                     default_ttl,
                     default_ttl / 3600,
@@ -86,9 +86,9 @@ impl EhttpCache {
                     if dir.exists() {
                         cache.load_from_disk();
                     } else if let Err(e) = std::fs::create_dir_all(dir) {
-                        warn!("❌ CACHE INIT: Failed to create cache directory: {}", e);
+                        dure_warn!("❌ CACHE INIT: Failed to create cache directory: {}", e);
                     } else {
-                        info!("✅ CACHE INIT: Created cache directory: {:?}", dir);
+                        dure_info!("✅ CACHE INIT: Created cache directory: {:?}", dir);
                     }
                 }
 
@@ -108,7 +108,7 @@ impl EhttpCache {
                     .unwrap()
                     .as_secs()
                     - entry.timestamp;
-                info!(
+                dure_info!(
                     "🟢 CACHE HIT: {} (age: {}s, size: {} bytes, ttl: {}s)",
                     url,
                     age_secs,
@@ -122,13 +122,13 @@ impl EhttpCache {
                     .unwrap()
                     .as_secs()
                     - entry.timestamp;
-                info!(
+                dure_info!(
                     "🟡 CACHE EXPIRED: {} (age: {}s > ttl: {}s)",
                     url, age_secs, entry.ttl_seconds
                 );
             }
         } else {
-            info!("🔴 CACHE MISS: {} (not in cache)", url);
+            dure_info!("🔴 CACHE MISS: {} (not in cache)", url);
         }
 
         None
@@ -151,7 +151,7 @@ impl EhttpCache {
             ttl_seconds: ttl,
         };
 
-        info!(
+        dure_info!(
             "💾 CACHE STORE: {} (status: {}, size: {} bytes, ttl: {}s)",
             response.url,
             response.status,
@@ -179,13 +179,13 @@ impl EhttpCache {
             .collect();
 
         for url in &expired {
-            debug!("Removing expired cache entry: {}", url);
+            dure_debug!("Removing expired cache entry: {}", url);
             cache.remove(url);
             self.remove_entry_from_disk(url);
         }
 
         if !expired.is_empty() {
-            info!("Cleared {} expired cache entries", expired.len());
+            dure_info!("Cleared {} expired cache entries", expired.len());
         }
     }
 
@@ -204,20 +204,20 @@ impl EhttpCache {
             }
         }
 
-        info!("Cleared all cache entries");
+        dure_info!("Cleared all cache entries");
     }
 
     /// Load cache from disk
     fn load_from_disk(&self) {
         let Some(ref dir) = self.cache_dir else {
-            info!("💾 DISK CACHE: Disabled (no cache directory)");
+            dure_info!("💾 DISK CACHE: Disabled (no cache directory)");
             return;
         };
 
-        info!("💾 DISK CACHE: Loading from {:?}", dir);
+        dure_info!("💾 DISK CACHE: Loading from {:?}", dir);
 
         let Ok(entries) = std::fs::read_dir(dir) else {
-            warn!("❌ DISK CACHE: Failed to read cache directory");
+            dure_warn!("❌ DISK CACHE: Failed to read cache directory");
             return;
         };
 
@@ -230,7 +230,7 @@ impl EhttpCache {
                 if let Ok(data) = std::fs::read(entry.path()) {
                     if let Ok(cache_entry) = bincode::deserialize::<CacheEntry>(&data) {
                         if !cache_entry.is_expired() {
-                            debug!(
+                            dure_debug!(
                                 "💾 DISK CACHE LOADED: {} ({} bytes)",
                                 cache_entry.url,
                                 cache_entry.bytes.len()
@@ -239,7 +239,7 @@ impl EhttpCache {
                             cache.insert(cache_entry.url.clone(), cache_entry);
                             loaded_count += 1;
                         } else {
-                            debug!(
+                            dure_debug!(
                                 "🗑️  DISK CACHE EXPIRED: {} - removing file",
                                 cache_entry.url
                             );
@@ -255,7 +255,7 @@ impl EhttpCache {
             }
         }
 
-        info!(
+        dure_info!(
             "💾 DISK CACHE: Loaded {} entries, removed {} expired, {} errors",
             loaded_count, expired_count, error_count
         );
@@ -264,7 +264,7 @@ impl EhttpCache {
     /// Save a cache entry to disk
     fn save_entry_to_disk(&self, entry: &CacheEntry) {
         let Some(ref dir) = self.cache_dir else {
-            debug!("💾 DISK CACHE: Disabled (no cache directory)");
+            dure_debug!("💾 DISK CACHE: Disabled (no cache directory)");
             return;
         };
 
@@ -274,9 +274,9 @@ impl EhttpCache {
 
         if let Ok(data) = bincode::serialize(entry) {
             if let Err(e) = std::fs::write(&filepath, &data) {
-                warn!("❌ DISK CACHE SAVE FAILED: {} - {}", entry.url, e);
+                dure_warn!("❌ DISK CACHE SAVE FAILED: {} - {}", entry.url, e);
             } else {
-                debug!(
+                dure_debug!(
                     "💾 DISK CACHE SAVED: {} -> {:?} ({} bytes)",
                     entry.url,
                     filepath,
@@ -310,19 +310,19 @@ impl EhttpCache {
 
         // Check cache first
         if let Some(cached_response) = self.get(&url) {
-            info!("✅ RETURNING CACHED RESPONSE: {}", url);
+            dure_info!("✅ RETURNING CACHED RESPONSE: {}", url);
             callback(Ok(cached_response));
             return;
         }
 
         // Not in cache, fetch from network
-        info!("🌐 FETCHING FROM NETWORK: {}", url);
+        dure_info!("🌐 FETCHING FROM NETWORK: {}", url);
         let cache = self.clone();
         let url_for_log = url.clone();
         ehttp::fetch(request, move |response| {
             match response {
                 Ok(ref resp) if resp.ok => {
-                    info!(
+                    dure_info!(
                         "✅ NETWORK SUCCESS: {} (status: {}, size: {} bytes)",
                         url_for_log,
                         resp.status,
@@ -334,14 +334,14 @@ impl EhttpCache {
                 }
                 Ok(resp) => {
                     // Don't cache failed responses
-                    warn!(
+                    dure_warn!(
                         "❌ NETWORK FAILED: {} (status: {}), NOT CACHING",
                         url_for_log, resp.status
                     );
                     callback(Ok(resp));
                 }
                 Err(ref err) => {
-                    warn!("❌ NETWORK ERROR: {} - {}", url_for_log, err);
+                    dure_warn!("❌ NETWORK ERROR: {} - {}", url_for_log, err);
                     callback(Err(err.clone()));
                 }
             }

@@ -2,6 +2,7 @@
 // Provides functions to launch specific Android settings screens and apps.
 
 #[cfg(target_os = "android")]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]
@@ -11,7 +12,7 @@ use ndk_context;
 #[cfg(target_os = "android")]
 pub fn open_build_number_settings() {
     if let Err(e) = open_build_number_settings_inner() {
-        log::error!("Failed to open build number settings: {}", e);
+        dure_error!("Failed to open build number settings: {}", e);
     }
 }
 
@@ -73,7 +74,7 @@ fn open_build_number_settings_inner() -> Result<(), Box<dyn std::error::Error>> 
 #[cfg(target_os = "android")]
 pub fn open_wireless_debugging_settings() {
     if let Err(e) = open_wireless_debugging_settings_inner() {
-        log::error!("Failed to open wireless debugging settings: {}", e);
+        dure_error!("Failed to open wireless debugging settings: {}", e);
     }
 }
 
@@ -120,7 +121,7 @@ fn open_wireless_debugging_settings_inner() -> Result<(), Box<dyn std::error::Er
         Ok(_) => {}
         Err(_) => {
             env.exception_clear()?;
-            log::warn!("Failed to open developer settings");
+            dure_warn!("Failed to open developer settings");
         }
     }
 
@@ -131,7 +132,7 @@ fn open_wireless_debugging_settings_inner() -> Result<(), Box<dyn std::error::Er
 #[cfg(target_os = "android")]
 pub fn open_android_vending(package_name: &str) {
     if let Err(e) = open_android_vending_inner(package_name) {
-        log::error!("Failed to open Google Play Store: {}", e);
+        dure_error!("Failed to open Google Play Store: {}", e);
     }
 }
 
@@ -213,7 +214,7 @@ fn open_android_vending_inner(package_name: &str) -> Result<(), Box<dyn std::err
 #[cfg(target_os = "android")]
 pub fn open_setup_page() {
     if let Err(e) = open_setup_page_inner() {
-        log::error!("Failed to open setup page: {}", e);
+        dure_error!("Failed to open setup page: {}", e);
     }
 }
 
@@ -257,20 +258,20 @@ fn open_setup_page_inner() -> Result<(), Box<dyn std::error::Error>> {
 // Non-Android stub implementations
 #[cfg(not(target_os = "android"))]
 pub fn open_build_number_settings() {
-    log::debug!("open_build_number_settings is only available on Android");
+    dure_debug!("open_build_number_settings is only available on Android");
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_wireless_debugging_settings() {
-    log::debug!("open_wireless_debugging_settings is only available on Android");
+    dure_debug!("open_wireless_debugging_settings is only available on Android");
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_android_vending(package_name: &str) {
-    log::debug!("open_android_vending({}) is only available on Android", package_name);
+    dure_debug!("open_android_vending({}) is only available on Android", package_name);
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_setup_page() {
-    log::debug!("open_setup_page is only available on Android");
+    dure_debug!("open_setup_page is only available on Android");
 }

@@ -1,5 +1,6 @@
 //! WebSocket handshake and message handling for the HTTPS/WSS server.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_tungstenite::{WebSocketStream, tungstenite::Message};
 use base64::Engine;
 use futures::io::AsyncWriteExt;
@@ -69,9 +70,7 @@ where
 {
     use crate::storage::models::session;
 
-    eprintln!(
-        "WebSocket connection: {} (session: {})",
-        peer_addr, session_id
+    dure_debug!("WebSocket connection: {} (session: {})", peer_addr, session_id
     );
 
     if let Ok(mut db) = settings.db.lock() {
@@ -82,7 +81,7 @@ where
             peer_addr.to_string(),
         );
         if let Err(e) = session::store_session(&mut db, &sess) {
-            eprintln!("Failed to store session: {}", e);
+            dure_debug!("Failed to store session: {}", e);
         }
     }
 
@@ -135,13 +134,13 @@ where
                                                 match serde_json::to_string(&server_msg) {
                                                     Ok(json) => Message::Text(json.into()),
                                                     Err(e) => {
-                                                        eprintln!("[WS] Failed to serialize response: {}", e);
+                                                        dure_debug!("[WS] Failed to serialize response: {}", e);
                                                         continue;
                                                     }
                                                 }
                                             }
                                             Err(e) => {
-                                                eprintln!("[WS] Handler error: {}", e);
+                                                dure_debug!("[WS] Handler error: {}", e);
                                                 // Send error response
                                                 let error = dure_messages::ServerMessage::Error(
                                                     dure_messages::ErrorResponse {
@@ -156,7 +155,7 @@ where
                                         }
                                     }
                                     Err(e) => {
-                                        eprintln!("[WS] Failed to parse message: {}", e);
+                                        dure_debug!("[WS] Failed to parse message: {}", e);
                                         // Send parse error
                                         let error = dure_messages::ServerMessage::Error(
                                             dure_messages::ErrorResponse {
@@ -184,7 +183,7 @@ where
                         }
                     }
                     Some(Err(e)) => {
-                        eprintln!("WebSocket error: {}", e);
+                        dure_debug!("WebSocket error: {}", e);
                         break;
                     }
                     None => break,
@@ -207,6 +206,6 @@ where
         }
     }
 
-    eprintln!("WebSocket closed: {}", peer_addr);
+    dure_debug!("WebSocket closed: {}", peer_addr);
     Ok(())
 }

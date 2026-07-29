@@ -1,5 +1,6 @@
 //! ACME command implementation for SSL certificate management using lego
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::lego::{self, DnsProvider};
 use crate::storage::models::acme::{
     get_certificate, get_certificates_needing_renewal, list_certificates, store_certificate,
@@ -134,24 +135,24 @@ fn copy_cert_to_config_dir(domain: &str, config_dir: &PathBuf) -> Result<(String
 
 /// Execute ACME install command (lego auto-downloads when needed)
 pub fn execute_acme_install() -> Result<()> {
-    eprintln!("Checking lego installation...");
+    dure_info!("Checking lego installation...");
 
     let config = Config::new()?;
     let config_dir = config.config_dir;
 
     if lego::check_lego_installed(&config_dir) {
-        eprintln!("✓ lego is already installed");
+        dure_info!(" lego is already installed");
         return Ok(());
     }
 
-    eprintln!("Downloading lego...");
+    dure_info!("Downloading lego...");
     lego::download_lego(&config_dir)?;
 
-    eprintln!("✓ lego installed successfully");
-    eprintln!();
-    eprintln!("Next steps:");
-    eprintln!("  1. Configure DNS provider in config.yml");
-    eprintln!("  2. Issue a certificate: dure acme issue");
+    dure_info!(" lego installed successfully");
+    dure_info!("");
+    dure_info!("Next steps:");
+    dure_info!("  1. Configure DNS provider in config.yml");
+    dure_info!("  2. Issue a certificate: dure acme issue");
 
     Ok(())
 }
@@ -179,12 +180,12 @@ pub fn execute_acme_issue(domains: Vec<String>) -> Result<()> {
         format!("admin@{}", target_domain)
     };
 
-    eprintln!("Issuing certificate for: {}", target_domain);
-    eprintln!("Email: {}", email);
+    dure_info!("Issuing certificate for: {}", target_domain);
+    dure_info!("Email: {}", email);
 
     // Get DNS provider from config
     let dns_provider = get_dns_provider(&app_config.domain)?;
-    eprintln!("DNS Provider: {:?}", dns_provider);
+    dure_info!("DNS Provider: {:?}", dns_provider);
 
     // Build environment variables
     let env_vars = build_dns_env_vars(&dns_provider, &app_config.domain)?;
@@ -194,8 +195,8 @@ pub fn execute_acme_issue(domains: Vec<String>) -> Result<()> {
         .collect();
 
     if env_refs.is_empty() {
-        eprintln!("⚠ Warning: No DNS provider credentials found in config.yml");
-        eprintln!("Please configure domain.cloudflare/duckdns/gcloud/porkbun in config.yml");
+        dure_warn!(" Warning: No DNS provider credentials found in config.yml");
+        dure_info!("Please configure domain.cloudflare/duckdns/gcloud/porkbun in config.yml");
     }
 
     // Issue certificate using lego
@@ -207,19 +208,19 @@ pub fn execute_acme_issue(domains: Vec<String>) -> Result<()> {
         &env_refs,
     )?;
 
-    eprintln!("✓ Certificate issued successfully");
+    dure_info!(" Certificate issued successfully");
 
     // Copy certificates to config directory
-    eprintln!("Copying certificates to config directory...");
+    dure_info!("Copying certificates to config directory...");
     let (cert_path, key_path, issuer_path) =
         copy_cert_to_config_dir(&target_domain, &config.config_dir)?;
 
-    eprintln!("✓ Certificates copied");
-    eprintln!();
-    eprintln!("Certificate details:");
-    eprintln!("  Certificate: {}", cert_path);
-    eprintln!("  Private key: {}", key_path);
-    eprintln!("  Issuer: {}", issuer_path);
+    dure_info!(" Certificates copied");
+    dure_info!("");
+    dure_info!("Certificate details:");
+    dure_info!("  Certificate: {}", cert_path);
+    dure_info!("  Private key: {}", key_path);
+    dure_info!("  Issuer: {}", issuer_path);
 
     // Store in database
     let mut conn = db::establish_connection();
@@ -240,15 +241,13 @@ pub fn execute_acme_issue(domains: Vec<String>) -> Result<()> {
     app_config.domain.cert.email = Some(email);
 
     app_config.save(&config_path)?;
-    eprintln!("✓ Configuration updated");
+    dure_info!(" Configuration updated");
 
-    eprintln!();
-    eprintln!(
-        "Certificate will expire in {} days",
-        (cert.expires_at - cert.issued_at) / 86400
+    dure_info!("");
+    dure_info!("Certificate will expire in {} days", (cert.expires_at - cert.issued_at) / 86400
     );
-    eprintln!("Remember to renew before expiry:");
-    eprintln!("  dure acme renew");
+    dure_info!("Remember to renew before expiry:");
+    dure_info!("  dure acme renew");
 
     Ok(())
 }
@@ -267,7 +266,7 @@ pub fn execute_acme_renew(domain: String, force: bool) -> Result<()> {
         anyhow::bail!("No domain specified");
     };
 
-    eprintln!("Renewing certificate for: {}", target_domain);
+    dure_info!("Renewing certificate for: {}", target_domain);
 
     // Check if renewal is needed
     if !force {
@@ -276,11 +275,9 @@ pub fn execute_acme_renew(domain: String, force: bool) -> Result<()> {
             if !existing_cert.needs_renewal() {
                 let days_until_expiry =
                     (existing_cert.expires_at as i64 - chrono::Utc::now().timestamp()) / 86400;
-                eprintln!(
-                    "Certificate does not need renewal yet ({} days until expiry)",
-                    days_until_expiry
+                dure_info!("Certificate does not need renewal yet ({} days until expiry)", days_until_expiry
                 );
-                eprintln!("Use --force to renew anyway");
+                dure_info!("Use --force to renew anyway");
                 return Ok(());
             }
         }
@@ -300,7 +297,7 @@ pub fn execute_acme_renew(domain: String, force: bool) -> Result<()> {
     let cert =
         lego::renew_certificate(&config.config_dir, &target_domain, dns_provider, &env_refs)?;
 
-    eprintln!("✓ Certificate renewed successfully");
+    dure_info!(" Certificate renewed successfully");
 
     // Copy certificates to config directory
     let (cert_path, key_path, issuer_path) =
@@ -324,7 +321,7 @@ pub fn execute_acme_renew(domain: String, force: bool) -> Result<()> {
     app_config.domain.cert.issuer_path = Some(issuer_path);
     app_config.save(&config_path)?;
 
-    eprintln!("✓ Certificate and configuration updated");
+    dure_info!(" Certificate and configuration updated");
 
     Ok(())
 }
@@ -336,29 +333,29 @@ pub fn execute_acme_list() -> Result<()> {
     let certs = list_certificates(&mut conn)?;
 
     if certs.is_empty() {
-        eprintln!("No certificates found.");
-        eprintln!();
-        eprintln!("Run 'dure acme issue' to create a certificate");
+        dure_info!("No certificates found.");
+        dure_info!("");
+        dure_info!("Run 'dure acme issue' to create a certificate");
         return Ok(());
     }
 
-    eprintln!("SSL Certificates:");
-    eprintln!();
+    dure_info!("SSL Certificates:");
+    dure_info!("");
 
     for cert in certs {
-        eprintln!("Domain: {}", cert.domain);
-        eprintln!("  Certificate: {}", cert.cert_path);
-        eprintln!("  Key: {}", cert.key_path);
-        eprintln!("  Issuer: {}", cert.issuer_path);
-        eprintln!("  Valid: {}", if cert.is_valid { "Yes" } else { "No" });
+        dure_info!("Domain: {}", cert.domain);
+        dure_info!("  Certificate: {}", cert.cert_path);
+        dure_info!("  Key: {}", cert.key_path);
+        dure_info!("  Issuer: {}", cert.issuer_path);
+        dure_info!("  Valid: {}", if cert.is_valid { "Yes" } else { "No" });
 
         if cert.needs_renewal() {
-            eprintln!("  ⚠ Needs renewal (expires soon)");
+            dure_info!("  ⚠ Needs renewal (expires soon)");
         }
 
         let days_left = (cert.expires_at as i64 - chrono::Utc::now().timestamp()) / 86400;
-        eprintln!("  Expires in: {} days", days_left);
-        eprintln!();
+        dure_info!("  Expires in: {} days", days_left);
+        dure_info!("");
     }
 
     Ok(())
@@ -371,27 +368,27 @@ pub fn execute_acme_status() -> Result<()> {
     let renewal_certs = get_certificates_needing_renewal(&mut conn)?;
 
     if renewal_certs.is_empty() {
-        eprintln!("✓ All certificates are up to date");
+        dure_info!(" All certificates are up to date");
         return Ok(());
     }
 
-    eprintln!("Certificates needing renewal ({}):", renewal_certs.len());
-    eprintln!();
+    dure_info!("Certificates needing renewal ({}):", renewal_certs.len());
+    dure_info!("");
 
     for cert in renewal_certs {
         let days_left = (cert.expires_at as i64 - chrono::Utc::now().timestamp()) / 86400;
-        eprintln!("  {} - expires in {} days", cert.domain, days_left);
+        dure_info!("  {} - expires in {} days", cert.domain, days_left);
     }
 
-    eprintln!();
-    eprintln!("Run 'dure acme renew' to renew certificates");
+    dure_info!("");
+    dure_info!("Run 'dure acme renew' to renew certificates");
 
     Ok(())
 }
 
 /// Execute ACME sync command (deprecated)
 pub fn execute_acme_sync() -> Result<()> {
-    eprintln!("ACME sync command is deprecated.");
-    eprintln!("Certificates are tracked automatically in the database.");
+    dure_info!("ACME sync command is deprecated.");
+    dure_info!("Certificates are tracked automatically in the database.");
     Ok(())
 }

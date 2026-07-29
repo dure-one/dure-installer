@@ -3,6 +3,7 @@
 //! This module handles fluent translation initialization and language switching.
 //! Translation files are embedded at compile time from mobile/assets/languages/fluent/
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::Result;
 
 /// Embedded fluent translation files
@@ -20,7 +21,7 @@ const KO_KR_FTL: &str = include_str!("../assets/languages/fluent/ko-KR.ftl");
 /// * `language` - Language code ("en-US", "ko-KR", or "Auto")
 #[cfg(feature = "gui")]
 pub fn init_i18n(language: &str) -> Result<()> {
-    log::info!("Initializing i18n system with language: {}", language);
+    dure_info!("Initializing i18n system with language: {}", language);
 
     // On Windows, Fluent wraps placeables in Unicode directionality marks
     // (U+2068 / U+2069) that some native text renderers display as garbage.
@@ -31,11 +32,11 @@ pub fn init_i18n(language: &str) -> Result<()> {
     // Load all translation bundles
     egui_i18n::load_translations_from_text("en-US", EN_US_FTL)
         .map_err(|e| anyhow::anyhow!("Failed to load en-US translations: {}", e))?;
-    log::debug!("Loaded en-US translations");
+    dure_debug!("Loaded en-US translations");
 
     egui_i18n::load_translations_from_text("ko-KR", KO_KR_FTL)
         .map_err(|e| anyhow::anyhow!("Failed to load ko-KR translations: {}", e))?;
-    log::debug!("Loaded ko-KR translations");
+    dure_debug!("Loaded ko-KR translations");
 
     // Set fallback language
     egui_i18n::set_fallback("en-US");
@@ -49,7 +50,7 @@ pub fn init_i18n(language: &str) -> Result<()> {
 
     set_language(&lang_to_use)?;
 
-    log::info!(
+    dure_info!(
         "i18n initialized successfully with language: {}",
         lang_to_use
     );
@@ -59,7 +60,7 @@ pub fn init_i18n(language: &str) -> Result<()> {
 /// Initialize the i18n system (no-op for headless builds)
 #[cfg(not(feature = "gui"))]
 pub fn init_i18n(_language: &str) -> Result<()> {
-    log::debug!("i18n disabled (headless build)");
+    dure_debug!("i18n disabled (headless build)");
     Ok(())
 }
 
@@ -75,7 +76,7 @@ pub fn set_language(language: &str) -> Result<()> {
         language.to_string()
     };
 
-    log::info!("Setting language to: {}", lang_code);
+    dure_info!("Setting language to: {}", lang_code);
     egui_i18n::set_language(&lang_code);
 
     Ok(())
@@ -105,9 +106,9 @@ fn detect_locale() -> Option<String> {
     {
         let lang = web_sys::window().and_then(|w| w.navigator().language());
         if lang.is_some() {
-            log::debug!("Detected browser language: {:?}", lang);
+            dure_debug!("Detected browser language: {:?}", lang);
         } else {
-            log::debug!("Could not detect browser language");
+            dure_debug!("Could not detect browser language");
         }
         return lang;
     }
@@ -116,9 +117,9 @@ fn detect_locale() -> Option<String> {
     {
         let locale = sys_locale::get_locale();
         if let Some(ref l) = locale {
-            log::debug!("Detected system locale: {}", l);
+            dure_debug!("Detected system locale: {}", l);
         } else {
-            log::debug!("Could not detect system locale");
+            dure_debug!("Could not detect system locale");
         }
         locale
     }
@@ -133,12 +134,12 @@ fn map_locale_to_language(locale: &Option<String>) -> String {
             } else if locale.starts_with("en") {
                 "en-US".to_string()
             } else {
-                log::debug!("Unsupported locale {}, falling back to en-US", locale);
+                dure_debug!("Unsupported locale {}, falling back to en-US", locale);
                 "en-US".to_string()
             }
         }
         None => {
-            log::debug!("No locale detected, falling back to en-US");
+            dure_debug!("No locale detected, falling back to en-US");
             "en-US".to_string()
         }
     }

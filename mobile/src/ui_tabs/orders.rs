@@ -1,5 +1,6 @@
 //! Orders tab - Order management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 
 /// Orders tab state

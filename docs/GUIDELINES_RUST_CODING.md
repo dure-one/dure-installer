@@ -914,3 +914,65 @@ These sections may be populated in future versions of the guidelines.
 - [MISRA Compliance 2020](https://www.misra.org.uk/)
 - [Rust Reference - Unsafe Code](https://doc.rust-lang.org/reference/unsafety.html)
 - [Rust Nomicon](https://doc.rust-lang.org/nomicon/)
+
+## Logging Standards
+
+Use Dure logging macros with descriptive messages. The macros automatically add module context and format logs consistently.
+
+### Good Examples
+
+✅ **Info messages** (always visible):
+```rust
+dure_info!("Starting OAuth flow");
+dure_info!("Created VM: {}", vm_name);
+dure_info!("Actor loop shutting down");
+```
+
+✅ **Debug messages** (only when RUST_LOG=debug):
+```rust
+dure_debug!("Fetching images from project: {}", project_id);
+dure_debug!("Refreshing access token for client: {}", client_id_prefix);
+dure_debug!("Health check passed for host: {}", hostname);
+```
+
+✅ **Warning/Error messages**:
+```rust
+dure_warn!("No attestations found for binary: {}", binary_path);
+dure_error!("Failed to connect to VM: {}", error);
+```
+
+### Bad Examples
+
+❌ **Wrong macro** (bypasses module prefix):
+```rust
+log::info!("Starting OAuth flow");  // DON'T USE log:: directly
+```
+
+❌ **Too terse** (unclear what's happening):
+```rust
+dure_info!("OAuth");
+dure_debug!("Fetch");
+```
+
+❌ **Too verbose** (belongs in debug, not info):
+```rust
+dure_info!("Parsed Docker image: {}:{}, with {} env vars and {} port mappings", 
+           image, tag, env_count, port_count);
+// Better as dure_debug!
+```
+
+### Guidelines
+
+- **info**: Important events users/operators should see
+- **debug**: Detailed troubleshooting information (only shows when `RUST_LOG=debug`)
+- **warn**: Recoverable issues or unexpected conditions
+- **error**: Failures that prevent operations from completing
+
+### Log Format
+
+Logs are automatically formatted as tab-separated columns:
+```
+2026-07-29 14:23:10	[INFO]	[Module::Component]	Message here
+```
+
+The module prefix is injected automatically - you don't need to add it to your messages.

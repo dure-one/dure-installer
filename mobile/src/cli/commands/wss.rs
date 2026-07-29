@@ -1,5 +1,6 @@
 //! WebSocket Secure (WSS) command implementation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::db;
 use crate::calc::wss::{WssServerConfig, get_server_status, start_server};
 use crate::storage::models::acme::get_certificate;
@@ -21,8 +22,8 @@ pub fn execute_wss_status(domain: Option<String>) -> Result<()> {
 
     if let Some(domain) = domain {
         // Show status for specific domain
-        eprintln!("WebSocket Server Status for: {}", domain);
-        eprintln!();
+        dure_info!("WebSocket Server Status for: {}", domain);
+        dure_info!("");
 
         let status = get_server_status(&domain)?;
 
@@ -139,12 +140,12 @@ pub fn execute_wss_start(
     // Check if server is already running
     let status = get_server_status(&domain)?;
     if status.is_running {
-        eprintln!("WebSocket server for {} is already running", domain);
+        dure_info!("WebSocket server for {} is already running", domain);
         return Ok(());
     }
 
     // Check for ACME certificate
-    eprintln!("Checking for TLS certificate...");
+    dure_info!("Checking for TLS certificate...");
 
     let cert = get_certificate(&mut conn, &domain)?;
     let cert = cert.ok_or_else(|| {
@@ -164,10 +165,10 @@ pub fn execute_wss_start(
         );
     }
 
-    eprintln!("✓ Found valid TLS certificate");
-    eprintln!("  Certificate: {}", cert.cert_path);
-    eprintln!("  Private Key: {}", cert.key_path);
-    eprintln!();
+    dure_info!(" Found valid TLS certificate");
+    dure_info!("  Certificate: {}", cert.cert_path);
+    dure_info!("  Private Key: {}", cert.key_path);
+    dure_info!("");
 
     // Create or update server configuration
     let mut config = get_server_config(&mut conn, &domain)?
@@ -183,16 +184,16 @@ pub fn execute_wss_start(
 
     store_server_config(&mut conn, &config)?;
 
-    eprintln!("Starting WebSocket server...");
-    eprintln!();
+    dure_info!("Starting WebSocket server...");
+    dure_info!("");
 
     // Start the server
     start_server(&config)?;
 
-    eprintln!();
-    eprintln!("✓ WebSocket server started successfully");
-    eprintln!("  Domain: {}", config.domain);
-    eprintln!("  Address: wss://{}", config.bind_address());
+    dure_info!("");
+    dure_info!(" WebSocket server started successfully");
+    dure_info!("  Domain: {}", config.domain);
+    dure_info!("  Address: wss://{}", config.bind_address());
 
     Ok(())
 }
@@ -249,22 +250,22 @@ pub fn execute_wss_stop(domain: String) -> Result<()> {
     // Check if server is running
     let status = get_server_status(&domain)?;
     if !status.is_running {
-        eprintln!("WebSocket server for {} is not running", domain);
+        dure_info!("WebSocket server for {} is not running", domain);
         return Ok(());
     }
 
-    eprintln!("Stopping WebSocket server for {}...", domain);
+    dure_info!("Stopping WebSocket server for {}...", domain);
 
     // Stop the server
     crate::calc::wss::stop_server(&domain)?;
 
     // Cleanup old sessions
-    eprintln!("Cleaning up sessions...");
+    dure_info!("Cleaning up sessions...");
     let deleted = cleanup_old_sessions(&mut conn, 0)?; // Delete all sessions
-    eprintln!("Cleaned up {} sessions", deleted);
+    dure_info!("Cleaned up {} sessions", deleted);
 
-    eprintln!();
-    eprintln!("✓ WebSocket server stopped successfully");
+    dure_info!("");
+    dure_info!(" WebSocket server stopped successfully");
 
     Ok(())
 }

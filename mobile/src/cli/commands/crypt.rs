@@ -3,6 +3,7 @@
 //! Provides CLI commands for encrypting and decrypting data using X25519 + ChaCha20-Poly1305.
 //! Uses device keys stored in the SQLite database.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::crypt::{
     PUBLIC_KEY_SIZE, decode_base64, decrypt, encode_base64, encrypt, generate_keypair,
 };
@@ -23,7 +24,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// * `data` - Data to encrypt (plain text or base64)
 /// * `output_hex` - If true, output as hex instead of base64
 pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: bool) -> Result<()> {
-    eprintln!("Encrypting data...");
+    dure_info!("Encrypting data...");
 
     // Try to decode recipient public key from base64 or hex
     let recipient_pubkey_bytes = decode_base64(&recipient_pubkey)
@@ -51,11 +52,9 @@ pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: boo
         println!("{}", encode_base64(&encrypted));
     }
 
-    eprintln!();
-    eprintln!("✓ Data encrypted successfully");
-    eprintln!(
-        "  Size: {} bytes plaintext → {} bytes encrypted",
-        data_bytes.len(),
+    dure_info!("");
+    dure_info!(" Data encrypted successfully");
+    dure_info!("  Size: {} bytes plaintext → {} bytes encrypted", data_bytes.len(),
         encrypted.len()
     );
 
@@ -71,7 +70,7 @@ pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: boo
 /// * `encrypted_data` - Encrypted data (base64 or hex encoded)
 /// * `output_raw` - If true, output raw bytes; otherwise interpret as UTF-8 text
 pub fn execute_crypt_dec(encrypted_data: String, output_raw: bool) -> Result<()> {
-    eprintln!("Decrypting data...");
+    dure_info!("Decrypting data...");
 
     // Get database connection
     let _db_path = get_db_path()?;
@@ -104,9 +103,9 @@ pub fn execute_crypt_dec(encrypted_data: String, output_raw: bool) -> Result<()>
         println!("{}", text);
     }
 
-    eprintln!();
-    eprintln!("✓ Data decrypted successfully");
-    eprintln!("  Device: {}", keys.device_id);
+    dure_info!("");
+    dure_info!(" Data decrypted successfully");
+    dure_info!("  Device: {}", keys.device_id);
 
     Ok(())
 }
@@ -121,7 +120,7 @@ pub fn execute_crypt_dec(encrypted_data: String, output_raw: bool) -> Result<()>
 /// * `device_id` - Optional device ID (defaults to hostname)
 /// * `force` - If true, regenerate keys even if they exist
 pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> {
-    eprintln!("Initializing device encryption keys...");
+    dure_info!("Initializing device encryption keys...");
 
     // Get database connection
     let db_path = get_db_path()?;
@@ -132,14 +131,12 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
     // Check if keys already exist
     if !force {
         if let Some(existing) = get_current_device_keys(&mut conn)? {
-            eprintln!("Device keys already exist for: {}", existing.device_id);
-            eprintln!();
-            eprintln!(
-                "Public key (base64): {}",
-                encode_base64(&existing.public_key)
+            dure_info!("Device keys already exist for: {}", existing.device_id);
+            dure_info!("");
+            dure_info!("Public key (base64): {}", encode_base64(&existing.public_key)
             );
-            eprintln!();
-            eprintln!("To regenerate keys, use --force flag");
+            dure_info!("");
+            dure_info!("To regenerate keys, use --force flag");
             return Ok(());
         }
     }
@@ -152,7 +149,7 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
             .unwrap_or_else(|| format!("device-{}", chrono::Utc::now().timestamp()))
     });
 
-    eprintln!("Device ID: {}", device_id);
+    dure_info!("Device ID: {}", device_id);
 
     // Generate new keypair
     let (private_key, public_key) = generate_keypair();
@@ -172,17 +169,17 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
     // Store in database
     store_device_keys(&mut conn, &keys)?;
 
-    eprintln!();
-    eprintln!("✓ Device encryption keys initialized successfully");
-    eprintln!();
-    eprintln!("Device ID: {}", device_id);
-    eprintln!("Public Key (base64):");
-    eprintln!("{}", encode_base64(&public_key));
-    eprintln!();
-    eprintln!("Share your public key with others to receive encrypted messages.");
-    eprintln!();
-    eprintln!("⚠ Keep your private key secure! It is stored in:");
-    eprintln!("  {}", db_path.display());
+    dure_info!("");
+    dure_info!(" Device encryption keys initialized successfully");
+    dure_info!("");
+    dure_info!("Device ID: {}", device_id);
+    dure_info!("Public Key (base64):");
+    dure_info!("{}", encode_base64(&public_key));
+    dure_info!("");
+    dure_info!("Share your public key with others to receive encrypted messages.");
+    dure_info!("");
+    dure_warn!(" Keep your private key secure! It is stored in:");
+    dure_info!("  {}", db_path.display());
 
     Ok(())
 }

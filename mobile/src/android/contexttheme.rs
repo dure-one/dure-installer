@@ -2,6 +2,7 @@
 // Reference: https://developer.android.com/reference/android/content/res/Configuration
 
 #[cfg(target_os = "android")]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]
@@ -119,7 +120,7 @@ pub fn get_ui_theme_mode() -> std::io::Result<UiThemeMode> {
     // Apply UI_MODE_NIGHT_MASK to get night mode bits
     let current_night_mode = ui_mode_value & UI_MODE_NIGHT_MASK;
 
-    log::debug!(
+    dure_debug!(
         "UI mode value: 0x{:x}, night mode: 0x{:x}",
         ui_mode_value,
         current_night_mode
@@ -128,15 +129,15 @@ pub fn get_ui_theme_mode() -> std::io::Result<UiThemeMode> {
     // Check against constants
     let theme_mode = match current_night_mode {
         UI_MODE_NIGHT_NO => {
-            log::debug!("System theme mode: Light (UI_MODE_NIGHT_NO)");
+            dure_debug!("System theme mode: Light (UI_MODE_NIGHT_NO)");
             UiThemeMode::Light
         }
         UI_MODE_NIGHT_YES => {
-            log::debug!("System theme mode: Dark (UI_MODE_NIGHT_YES)");
+            dure_debug!("System theme mode: Dark (UI_MODE_NIGHT_YES)");
             UiThemeMode::Dark
         }
         _ => {
-            log::debug!("System theme mode: Unspecified (unknown value)");
+            dure_debug!("System theme mode: Unspecified (unknown value)");
             UiThemeMode::Unspecified
         }
     };

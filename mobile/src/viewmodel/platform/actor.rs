@@ -1,5 +1,6 @@
 //! Platform actor implementation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{PlatformCommand, PlatformEvent, VmInfo};
 use crate::api::gcp::GcpRestClient;
 use crate::config::AppConfig;
@@ -21,17 +22,17 @@ impl PlatformActor {
     }
 
     pub async fn run(mut self) {
-        log::info!("PlatformActor started");
+        dure_info!("PlatformActor started");
 
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("PlatformActor command failed: {}", e);
+                        dure_error!("PlatformActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
-                    log::info!("PlatformActor: channel closed, shutting down");
+                    dure_info!("PlatformActor: channel closed, shutting down");
                     break;
                 }
             }
@@ -151,7 +152,13 @@ impl PlatformActor {
     }
 
     async fn list_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("list_vms", 0.1, "Loading platform config...")
+        self.send_progress("list_vms", 0.1, "Checking authentication...")
+            .await;
+
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
+        self.send_progress("list_vms", 0.2, "Loading platform config...")
             .await;
 
         // Load platform config
@@ -167,9 +174,6 @@ impl PlatformActor {
         let project_id = platform
             .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform
-            .gcp_oauth_access_token
-            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         // Get zones to query (from existing VMs or list all zones)
         let zones = runtime::unblock({
@@ -204,7 +208,7 @@ impl PlatformActor {
                 for zone in zones {
                     match client.list_instances(&project_id, &zone) {
                         Ok(list) => all_vms.extend(list.items),
-                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
+                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
                     }
                 }
                 Ok(all_vms)
@@ -435,9 +439,16 @@ impl PlatformActor {
         platform_name: String,
         allow_ip: String,
     ) -> anyhow::Result<()> {
+        self.send_progress("update_firewall", 0.3, "Checking authentication...")
+            .await;
+
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
         self.send_progress("update_firewall", 0.5, "Updating firewall rules...")
             .await;
 
+        // Get project ID
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
             move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
@@ -447,9 +458,6 @@ impl PlatformActor {
         let project_id = platform
             .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform
-            .gcp_oauth_access_token
-            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         runtime::unblock({
             let allow_ip = allow_ip.clone();
@@ -477,18 +485,14 @@ impl PlatformActor {
         dataset: String,
         table: String,
     ) -> anyhow::Result<()> {
-        self.send_progress("fetch_billing", 0.5, "Fetching billing data...")
+        self.send_progress("fetch_billing", 0.3, "Checking authentication...")
             .await;
 
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
 
-        let access_token = platform
-            .gcp_oauth_access_token
-            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+        self.send_progress("fetch_billing", 0.5, "Fetching billing data...")
+            .await;
 
         let records = runtime::unblock(
             move || -> anyhow::Result<Vec<crate::api::gcp::bigquery::BillingRecord>> {
@@ -508,19 +512,14 @@ impl PlatformActor {
     }
 
     async fn list_projects(&mut self, platform_name: String) -> anyhow::Result<()> {
-        self.send_progress("list_projects", 0.3, "Fetching GCP projects...")
+        self.send_progress("list_projects", 0.2, "Checking authentication...")
             .await;
 
-        // Load platform to get access token
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
 
-        let access_token = platform
-            .gcp_oauth_access_token
-            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+        self.send_progress("list_projects", 0.4, "Fetching GCP projects...")
+            .await;
 
         self.send_progress("list_projects", 0.6, "Retrieving project list...")
             .await;
@@ -723,13 +722,19 @@ impl PlatformActor {
         platform_name: String,
         delete_options: crate::viewmodel::platform::DeleteOptions,
     ) -> anyhow::Result<()> {
+        self.send_progress("delete_platform", 0.2, "Checking authentication...")
+            .await;
+
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
         self.send_progress("delete_platform", 0.25, "Preparing deletion...")
             .await;
 
         // Get platform data before deletion
-        let (access_token, project_id, vms) = runtime::unblock({
+        let (project_id, vms) = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || -> anyhow::Result<(String, String, Vec<crate::config::VmInstance>)> {
+            move || -> anyhow::Result<(String, Vec<crate::config::VmInstance>)> {
                 let config_path = Self::get_config_path()?;
                 let app_config = crate::config::AppConfig::load_or_default(&config_path);
 
@@ -740,13 +745,11 @@ impl PlatformActor {
                     .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                     .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
 
-                let access_token = platform.gcp_oauth_access_token.clone()
-                    .ok_or_else(|| anyhow::anyhow!("No OAuth token for platform"))?;
                 let project_id = platform.gcp_selected_project_id.clone()
                     .ok_or_else(|| anyhow::anyhow!("No project selected for platform"))?;
                 let vms = platform.vms.clone();
 
-                Ok((access_token, project_id, vms))
+                Ok((project_id, vms))
             }
         })
         .await?;
@@ -835,6 +838,69 @@ impl PlatformActor {
         .await;
 
         Ok(())
+    }
+
+    /// Helper to get a valid access token, refreshing if expired
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn get_valid_access_token(
+        platform_name: &str,
+    ) -> anyhow::Result<(String, PathBuf)> {
+        runtime::unblock({
+            let platform_name = platform_name.to_string();
+            move || -> anyhow::Result<(String, PathBuf)> {
+                let config_path = Self::get_config_path()?;
+                let mut config = AppConfig::load_or_default(&config_path);
+
+                let platform = config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+
+                // Check if we have tokens
+                let access_token = platform
+                    .gcp_oauth_access_token
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+                let refresh_token = platform
+                    .gcp_oauth_refresh_token
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("No refresh token available"))?;
+
+                // Check if token is expired (with 5 minute buffer)
+                let now = chrono::Utc::now().timestamp();
+                let expiry = platform.gcp_oauth_token_expiry.unwrap_or(0);
+                let needs_refresh = expiry <= now + 300; // Refresh if expires in < 5 minutes
+
+                if needs_refresh {
+                    dure_info!("Access token expired or expiring soon, refreshing...");
+
+                    // Get OAuth credentials
+                    let oauth_handler = crate::api::gcp::oauth::OAuthHandler::default();
+
+                    // Refresh the token
+                    let oauth_result = crate::api::gcp::oauth::refresh_access_token(
+                        oauth_handler.client_id(),
+                        oauth_handler.client_secret(),
+                        refresh_token,
+                    )?;
+
+                    // Update platform config with new token
+                    platform.gcp_oauth_access_token = Some(oauth_result.access_token.clone());
+                    platform.gcp_oauth_token_expiry = Some(oauth_result.expires_at as i64);
+                    // Keep the existing refresh token (it doesn't change)
+
+                    // Save config
+                    config.save(&config_path)?;
+
+                    dure_info!("Access token refreshed successfully");
+                    Ok((oauth_result.access_token, config_path))
+                } else {
+                    Ok((access_token.clone(), config_path))
+                }
+            }
+        })
+        .await
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {

@@ -15,8 +15,10 @@ pub mod api;
 pub mod attestation;
 pub mod calc;
 pub mod i18n;
+pub mod logging;
 pub mod site;
 pub mod storage;
+
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
 
@@ -111,7 +113,7 @@ impl Config {
             let config_dir = PathBuf::from("/data/data/pe.nikescar.dure/files");
             let cache_dir = PathBuf::from("/data/data/pe.nikescar.dure/cache");
 
-            log::info!(
+            dure_info!(
                 "Android config paths - config_dir: {:?}, cache_dir: {:?}",
                 config_dir,
                 cache_dir
@@ -123,8 +125,8 @@ impl Config {
             // Create directories if they don't exist
             for dir in [&config_dir, &cache_dir, &tmp_dir, &data_dir] {
                 match fs::create_dir_all(dir) {
-                    Ok(()) => log::info!("Successfully created directory: {:?}", dir),
-                    Err(e) => log::error!("Failed to create directory: {:?} - Error: {}", dir, e),
+                    Ok(()) => dure_info!("Successfully created directory: {:?}", dir),
+                    Err(e) => dure_error!("Failed to create directory: {:?} - Error: {}", dir, e),
                 }
             }
 
@@ -142,7 +144,7 @@ impl Config {
         #[cfg(target_arch = "wasm32")]
         {
             // WASM: No filesystem, return empty paths
-            log::info!("WASM config - no filesystem access");
+            dure_info!("WASM config - no filesystem access");
 
             Ok(Config {
                 config_dir: PathBuf::new(),
@@ -177,7 +179,7 @@ impl Config {
                 let example_config = PathBuf::from("mobile/config.example.yml");
                 if example_config.exists() {
                     fs::copy(&example_config, &config_file)?;
-                    log::info!("Created config file: {:?}", config_file);
+                    dure_info!("Created config file: {:?}", config_file);
                 }
             }
 

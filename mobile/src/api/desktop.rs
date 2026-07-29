@@ -6,6 +6,7 @@
 //! - WASM: Browser-based integrations
 
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use std::process::Command;
 
 /// Detect the desktop environment (Linux only)

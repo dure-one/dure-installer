@@ -1,5 +1,6 @@
 //! Authentication message handlers
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::wss::server::messages::{
     AuthLoginRequest, AuthLogoutRequest, AuthLogoutResponse, AuthResponse, DeviceInfo,
     ServerMessage, WebAuthnSigninBeginRequest, WebAuthnSigninBeginResponse,
@@ -18,7 +19,7 @@ pub async fn handle_login(
     session_id: &str,
     settings: &ServerSettings,
 ) -> Result<ServerMessage> {
-    eprintln!("[Auth] Login request from device: {}", req.device_id);
+    dure_debug!("[Auth] Login request from device: {}", req.device_id);
 
     // Validate request
     if req.device_id.is_empty() || req.public_key.is_empty() {
@@ -38,7 +39,7 @@ pub async fn handle_login(
             if let Ok(Some(_)) =
                 crate::storage::models::session::get_session(&mut db, reconnect_session_id)
             {
-                eprintln!("[Auth] Reconnecting session: {}", reconnect_session_id);
+                dure_debug!("[Auth] Reconnecting session: {}", reconnect_session_id);
                 // TODO: Validate the session belongs to this device
             }
         }
@@ -60,7 +61,7 @@ pub async fn handle_login(
 
     if let Ok(mut db) = settings.db.lock() {
         if let Err(e) = crate::storage::models::device::store_device_auth(&mut db, &device) {
-            eprintln!("[Auth] Failed to store device auth: {}", e);
+            dure_debug!("[Auth] Failed to store device auth: {}", e);
             return Ok(ServerMessage::AuthResponse(AuthResponse {
                 success: false,
                 session_id: None,
@@ -86,9 +87,7 @@ pub async fn handle_login(
     // For now, use a placeholder
     let server_public_key = Some(format!("SERVER_KEY_{}", settings.server_id));
 
-    eprintln!(
-        "[Auth] Successfully authenticated device: {}",
-        req.device_id
+    dure_debug!("[Auth] Successfully authenticated device: {}", req.device_id
     );
 
     Ok(ServerMessage::AuthResponse(AuthResponse {
@@ -107,7 +106,7 @@ pub async fn handle_logout(
     session_id: &str,
     settings: &ServerSettings,
 ) -> Result<ServerMessage> {
-    eprintln!("[Auth] Logout request for session: {}", req.session_id);
+    dure_debug!("[Auth] Logout request for session: {}", req.session_id);
 
     // Verify the session_id matches or allow logout of own session
     let target_session = if req.session_id.is_empty() {
@@ -128,7 +127,7 @@ pub async fn handle_logout(
         }
     }
 
-    eprintln!("[Auth] Successfully logged out session: {}", target_session);
+    dure_debug!("[Auth] Successfully logged out session: {}", target_session);
 
     Ok(ServerMessage::AuthLogoutResponse(AuthLogoutResponse {
         success: true,
@@ -146,7 +145,7 @@ pub async fn handle_logout(
 pub async fn handle_webauthn_signup_begin(
     req: WebAuthnSignupBeginRequest,
 ) -> Result<WebAuthnSignupBeginResponse> {
-    eprintln!("[WebAuthn] Signup begin for user: {}", req.username);
+    dure_debug!("[WebAuthn] Signup begin for user: {}", req.username);
 
     let go_req = go_webauthn::SignupBeginRequest {
         username: req.username.clone(),
@@ -166,9 +165,7 @@ pub async fn handle_webauthn_signup_begin(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signup begin successful, session: {}",
-            response.session_id
+        dure_debug!("[WebAuthn] Signup begin successful, session: {}", response.session_id
         );
         Ok(WebAuthnSignupBeginResponse {
             success: true,
@@ -177,7 +174,7 @@ pub async fn handle_webauthn_signup_begin(
             error: None,
         })
     } else {
-        eprintln!("[WebAuthn] Signup begin failed: {}", response.error);
+        dure_debug!("[WebAuthn] Signup begin failed: {}", response.error);
         Ok(WebAuthnSignupBeginResponse {
             success: false,
             session_id: None,
@@ -192,7 +189,7 @@ pub async fn handle_webauthn_signup_begin(
 pub async fn handle_webauthn_signup_finish(
     req: WebAuthnSignupFinishRequest,
 ) -> Result<WebAuthnSignupFinishResponse> {
-    eprintln!("[WebAuthn] Signup finish for session: {}", req.session_id);
+    dure_debug!("[WebAuthn] Signup finish for session: {}", req.session_id);
 
     let go_req = go_webauthn::SignupFinishRequest {
         session_id: req.session_id.clone(),
@@ -210,9 +207,7 @@ pub async fn handle_webauthn_signup_finish(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signup finish successful, user: {}",
-            response.user_id
+        dure_debug!("[WebAuthn] Signup finish successful, user: {}", response.user_id
         );
         Ok(WebAuthnSignupFinishResponse {
             success: true,
@@ -220,7 +215,7 @@ pub async fn handle_webauthn_signup_finish(
             error: None,
         })
     } else {
-        eprintln!("[WebAuthn] Signup finish failed: {}", response.error);
+        dure_debug!("[WebAuthn] Signup finish failed: {}", response.error);
         Ok(WebAuthnSignupFinishResponse {
             success: false,
             user_id: None,
@@ -234,9 +229,7 @@ pub async fn handle_webauthn_signup_finish(
 pub async fn handle_webauthn_signin_begin(
     req: WebAuthnSigninBeginRequest,
 ) -> Result<WebAuthnSigninBeginResponse> {
-    eprintln!(
-        "[WebAuthn] Signin begin for user: {} (scenario: {})",
-        req.username, req.scenario
+    dure_debug!("[WebAuthn] Signin begin for user: {} (scenario: {})", req.username, req.scenario
     );
 
     let go_req = go_webauthn::SigninBeginRequest {
@@ -255,9 +248,7 @@ pub async fn handle_webauthn_signin_begin(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signin begin successful, session: {}",
-            response.session_id
+        dure_debug!("[WebAuthn] Signin begin successful, session: {}", response.session_id
         );
         Ok(WebAuthnSigninBeginResponse {
             success: true,
@@ -266,7 +257,7 @@ pub async fn handle_webauthn_signin_begin(
             error: None,
         })
     } else {
-        eprintln!("[WebAuthn] Signin begin failed: {}", response.error);
+        dure_debug!("[WebAuthn] Signin begin failed: {}", response.error);
         Ok(WebAuthnSigninBeginResponse {
             success: false,
             session_id: None,
@@ -281,7 +272,7 @@ pub async fn handle_webauthn_signin_begin(
 pub async fn handle_webauthn_signin_finish(
     req: WebAuthnSigninFinishRequest,
 ) -> Result<WebAuthnSigninFinishResponse> {
-    eprintln!("[WebAuthn] Signin finish for session: {}", req.session_id);
+    dure_debug!("[WebAuthn] Signin finish for session: {}", req.session_id);
 
     let go_req = go_webauthn::SigninFinishRequest {
         session_id: req.session_id.clone(),
@@ -299,9 +290,7 @@ pub async fn handle_webauthn_signin_finish(
     let response = rx.await?;
 
     if response.success {
-        eprintln!(
-            "[WebAuthn] Signin finish successful, user: {}",
-            response.user_id
+        dure_debug!("[WebAuthn] Signin finish successful, user: {}", response.user_id
         );
         Ok(WebAuthnSigninFinishResponse {
             success: true,
@@ -310,7 +299,7 @@ pub async fn handle_webauthn_signin_finish(
             error: None,
         })
     } else {
-        eprintln!("[WebAuthn] Signin finish failed: {}", response.error);
+        dure_debug!("[WebAuthn] Signin finish failed: {}", response.error);
         Ok(WebAuthnSigninFinishResponse {
             success: false,
             user_id: None,

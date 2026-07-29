@@ -3,6 +3,7 @@
 //! Handler functions are plain synchronous functions that take a `&Store` and return
 //! `(status_code, json_body)` — no HTTP framework dependency.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
