@@ -3,6 +3,7 @@
 //! Provides SSH connection and server initialization capabilities
 //! Uses russh (pure Rust SSH, no OpenSSL dependency)
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use russh::client::{self, Handle};
 use russh_keys::key::PublicKey;

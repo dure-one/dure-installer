@@ -1,5 +1,6 @@
 //! DNS command implementation
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::db;
 use crate::calc::dns::{RecordType, resolve_dns};
 use crate::storage::models::dns::{cache_dns_records, get_cached_dns_records, init_dns_table};
@@ -26,7 +27,7 @@ pub fn execute_dns(record_type_str: &str, domain: &str) -> Result<()> {
     let records = {
         let cached = get_cached_dns_records(&mut conn, domain, record_type)?;
         if !cached.is_empty() {
-            eprintln!("Using cached results for {domain} {record_type}");
+            dure_info!("Using cached results for {domain} {record_type}");
             cached
         } else {
             // Cache miss, fetch fresh
@@ -52,7 +53,7 @@ fn fetch_and_cache(
     domain: &str,
     record_type: RecordType,
 ) -> Result<Vec<crate::calc::dns::DnsRecord>> {
-    eprintln!("Fetching fresh DNS records for {domain} {record_type}...");
+    dure_info!("Fetching fresh DNS records for {domain} {record_type}...");
     let records = resolve_dns(domain, record_type)?;
 
     if !records.is_empty() {

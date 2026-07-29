@@ -1,5 +1,6 @@
 //! Client tab - Audit | DNS Client | Crypt Codec | Key Mgmt Ops
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 use egui_material3::{MaterialButton, tabs_secondary};
@@ -161,7 +162,7 @@ impl AuditSubTab {
                         ]);
                     }
 
-                    eprintln!("✓ Loaded {} audit records from database", data_rows.len());
+                    dure_info!(" Loaded {} audit records from database", data_rows.len());
 
                     match MaterialSpreadsheet::new("dure_audit_log", columns) {
                         Ok(mut new_spreadsheet) => {
@@ -170,16 +171,16 @@ impl AuditSubTab {
                             new_spreadsheet.set_row_selection_enabled(true);
                             new_spreadsheet.init_with_data(data_rows);
                             self.spreadsheet = Some(new_spreadsheet);
-                            eprintln!("✓ Spreadsheet refreshed with latest data");
+                            dure_info!(" Spreadsheet refreshed with latest data");
                         }
                         Err(e) => {
-                            eprintln!("⚠ Failed to create spreadsheet: {}", e);
+                            dure_warn!(" Failed to create spreadsheet: {}", e);
                             self.load_error = Some(format!("Spreadsheet error: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("⚠ Failed to load audit records: {}", e);
+                    dure_warn!(" Failed to load audit records: {}", e);
                     self.load_error = Some(format!("Failed to load audit records: {e}"));
                 }
             }
@@ -417,16 +418,12 @@ impl DnsClientSubTab {
             // Try cache first
             match get_cached_dns_records(&mut conn, &self.query_domain, record_type) {
                 Ok(cached) if !cached.is_empty() => {
-                    eprintln!(
-                        "✓ Using cached DNS results for {} {}",
-                        self.query_domain, record_type
+                    dure_debug!("✓ Using cached DNS results for {} {}", self.query_domain, record_type
                     );
                 }
                 _ => {
                     // Fetch fresh
-                    eprintln!(
-                        "Fetching fresh DNS records for {} {}...",
-                        self.query_domain, record_type
+                    dure_debug!("Fetching fresh DNS records for {} {}...", self.query_domain, record_type
                     );
                     match resolve_dns(&self.query_domain, record_type) {
                         Ok(records) => {
@@ -436,9 +433,9 @@ impl DnsClientSubTab {
                                         Some(format!("Failed to cache records: {}", e));
                                     return;
                                 }
-                                eprintln!("✓ Cached {} records", records.len());
+                                dure_info!(" Cached {} records", records.len());
                             } else {
-                                eprintln!("⚠ No records found");
+                                dure_warn!(" No records found");
                             }
                         }
                         Err(e) => {
@@ -504,7 +501,7 @@ impl DnsClientSubTab {
                         ]);
                     }
 
-                    eprintln!("✓ Loaded {} DNS cache records", data_rows.len());
+                    dure_info!(" Loaded {} DNS cache records", data_rows.len());
 
                     match MaterialSpreadsheet::new("dure_dns_cache", columns) {
                         Ok(mut new_spreadsheet) => {
@@ -555,7 +552,7 @@ impl DnsClientSubTab {
 
             match clear_expired_dns_cache(&mut conn) {
                 Ok(deleted) => {
-                    eprintln!("✓ Cleared {} expired DNS records", deleted);
+                    dure_info!(" Cleared {} expired DNS records", deleted);
                     self.load_dns_cache();
                 }
                 Err(e) => {
@@ -833,7 +830,7 @@ impl CryptCodecSubTab {
                             // Convert public key to base64 for display
                             self.device_pubkey = Some(crypt::encode_base64(&keys.public_key));
                             self.load_error = None;
-                            eprintln!("✓ Loaded device keys for: {}", keys.device_id);
+                            dure_info!(" Loaded device keys for: {}", keys.device_id);
                         }
                         Ok(None) => {
                             self.load_error = Some(
@@ -884,7 +881,7 @@ impl CryptCodecSubTab {
                         crypt::encode_base64(&encrypted)
                     };
                     self.enc_result = Some(encoded);
-                    eprintln!("✓ Encryption successful");
+                    dure_info!(" Encryption successful");
                 }
                 Err(e) => {
                     self.enc_error = Some(format!("Encryption failed: {}", e));
@@ -949,7 +946,7 @@ impl CryptCodecSubTab {
                 Ok(decrypted) => match String::from_utf8(decrypted) {
                     Ok(plaintext) => {
                         self.dec_result = Some(plaintext);
-                        eprintln!("✓ Decryption successful");
+                        dure_info!(" Decryption successful");
                     }
                     Err(_) => {
                         self.dec_error = Some("Decrypted data is not valid UTF-8 text".to_string());
@@ -1193,7 +1190,7 @@ impl KeyMgmtSubTab {
         self.load_error = None;
         self.operation_message = None;
 
-        eprintln!("✓ Refreshing key management spreadsheet");
+        dure_info!(" Refreshing key management spreadsheet");
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -1246,7 +1243,7 @@ impl KeyMgmtSubTab {
                         ]);
                     }
 
-                    eprintln!("✓ Loaded {} keys from keyring", data_rows.len());
+                    dure_info!(" Loaded {} keys from keyring", data_rows.len());
 
                     // Create spreadsheet
                     let columns = vec![
@@ -1267,7 +1264,7 @@ impl KeyMgmtSubTab {
                             new_spreadsheet.set_row_selection_enabled(true);
                             new_spreadsheet.init_with_data(data_rows);
                             self.spreadsheet = Some(new_spreadsheet);
-                            eprintln!("✓ Spreadsheet refreshed with latest keys");
+                            dure_info!(" Spreadsheet refreshed with latest keys");
                         }
                         Err(e) => {
                             self.load_error = Some(format!("Spreadsheet error: {}", e));
@@ -1326,7 +1323,7 @@ impl KeyMgmtSubTab {
             ) {
                 Ok(()) => {
                     self.operation_message = Some(format!("Added key for '{}'", self.add_domain));
-                    eprintln!("✓ Added key for: {}", self.add_domain);
+                    dure_info!(" Added key for: {}", self.add_domain);
 
                     // Clear form
                     self.add_domain.clear();
@@ -1382,7 +1379,7 @@ impl KeyMgmtSubTab {
                     if deleted {
                         self.operation_message =
                             Some(format!("Deleted key for '{}'", self.del_domain));
-                        eprintln!("✓ Deleted key for: {}", self.del_domain);
+                        dure_info!(" Deleted key for: {}", self.del_domain);
 
                         // Clear form
                         self.del_domain.clear();
@@ -1438,7 +1435,7 @@ impl KeyMgmtSubTab {
             match std::fs::copy(&source_path, output_path) {
                 Ok(_) => {
                     self.operation_message = Some(format!("Saved keyring to '{}'", self.save_path));
-                    eprintln!("✓ Saved keyring to: {}", output_path.display());
+                    dure_info!(" Saved keyring to: {}", output_path.display());
                 }
                 Err(e) => {
                     self.load_error = Some(format!("Failed to save keyring: {}", e));
@@ -1493,7 +1490,7 @@ impl KeyMgmtSubTab {
                 Ok(_) => {
                     self.operation_message =
                         Some(format!("Loaded keyring from '{}'", self.load_path));
-                    eprintln!("✓ Loaded keyring from: {}", input_path.display());
+                    dure_info!(" Loaded keyring from: {}", input_path.display());
 
                     // Clear load path
                     self.load_path.clear();

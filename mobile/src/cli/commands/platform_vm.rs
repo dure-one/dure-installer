@@ -2,6 +2,7 @@
 //!
 //! Example CLI commands demonstrating MVVM pattern for async operations.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::viewmodel::{ViewModel, ViewModelEvent, platform::PlatformEvent};
 use anyhow::Result;
 use std::time::Duration;
@@ -40,7 +41,7 @@ pub async fn create_vm(
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    eprintln!("\n✗ Failed: {}", error);
+                    dure_info!("\n✗ Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}
@@ -83,7 +84,7 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    eprintln!("✗ Failed: {}", error);
+                    dure_error!(" Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}
@@ -118,7 +119,7 @@ pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> 
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    eprintln!("\n✗ Failed: {}", error);
+                    dure_info!("\n✗ Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}

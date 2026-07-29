@@ -1,4 +1,5 @@
 #[cfg(test)]
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::*;
 
 #[test]

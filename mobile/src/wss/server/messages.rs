@@ -3,6 +3,7 @@
 //! These types should eventually be moved to a separate `dure-messages` crate
 //! that can be shared between client and server.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

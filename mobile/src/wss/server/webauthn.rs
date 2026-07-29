@@ -5,6 +5,7 @@
 //!
 //! NOTE: Currently disabled - go_webauthn_client crate not available.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::Result;
 // Disabled: go_webauthn_client crate not available
 // use go_webauthn_client::*;

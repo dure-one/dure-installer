@@ -13,6 +13,7 @@
 //! The build process (`build.wasm.sh`) creates compressed versions of WASM and JS files.
 //! The server automatically selects the best available compression based on client support.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use async_fs as fs;
 use futures::StreamExt;
 use futures::io::AsyncWriteExt;
@@ -25,7 +26,7 @@ use super::https::{HttpRequest, build_http_response};
 
 /// Download and extract dure-wasm static files
 pub async fn download_static_files(dir: &Path) -> io::Result<()> {
-    eprintln!("Downloading static files from GitHub...");
+    dure_debug!("Downloading static files from GitHub...");
 
     fs::create_dir_all(dir).await?;
 
@@ -45,7 +46,7 @@ pub async fn download_static_files(dir: &Path) -> io::Result<()> {
     .join()
     .map_err(|_| io::Error::other("Thread panicked"))??;
 
-    eprintln!("Downloaded to {:?}, extracting...", zip_path);
+    dure_debug!("Downloaded to {:?}, extracting...", zip_path);
 
     let dir_clone = dir.to_path_buf();
     std::thread::spawn(move || -> io::Result<()> {
@@ -89,7 +90,7 @@ pub async fn download_static_files(dir: &Path) -> io::Result<()> {
         fs::remove_dir(&extracted_dir).await?;
     }
 
-    eprintln!("✓ Static files ready at {:?}", dir);
+    dure_info!(" Static files ready at {:?}", dir);
     Ok(())
 }
 
@@ -418,14 +419,12 @@ pub async fn handle_http_get<S: AsyncWriteExt + Unpin>(
             if let Some(encoding) = content_encoding {
                 encoding_str = encoding.to_string();
                 headers.push(("Content-Encoding", &encoding_str));
-                eprintln!(
-                    "Served {} - {} bytes ({} compressed)",
-                    path,
+                dure_debug!("Served {} - {} bytes ({} compressed)", path,
                     content.len(),
                     encoding
                 );
             } else {
-                eprintln!("Served {} - {} bytes", path, content.len());
+                dure_debug!("Served {} - {} bytes", path, content.len());
             }
 
             let response = build_http_response(200, "OK", headers, &content);

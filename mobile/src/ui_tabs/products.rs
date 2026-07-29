@@ -1,5 +1,6 @@
 //! Products tab - Product management
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 
 /// Products tab state

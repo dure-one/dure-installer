@@ -8,6 +8,7 @@
 //! - `DELETE /api/webhook/patterns/{id}` – remove an allow-pattern
 //! - `GET  /api/webhook/logs`            – list recent webhook request logs
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 

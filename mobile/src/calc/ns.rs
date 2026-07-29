@@ -8,6 +8,7 @@
 //!
 //! Supports A, AAAA, TXT, and NS record types.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -576,7 +577,7 @@ impl NsConfig {
                         account.refresh_token = oauth_result.refresh_token;
                     }
                     Err(e) => {
-                        eprintln!("Failed to refresh GCP token for {}: {}", email, e);
+                        dure_info!("Failed to refresh GCP token for {}: {}", email, e);
                         // Continue with old token, might still work
                     }
                 }

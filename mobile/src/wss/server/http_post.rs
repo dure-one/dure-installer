@@ -1,5 +1,6 @@
 //! Webhook POST request handling and todo API POST for the HTTPS/WSS server.
 
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use futures::io::AsyncWriteExt;
 use std::collections::HashMap;
 use std::io;
@@ -128,7 +129,7 @@ async fn handle_webhook_post<S: AsyncWriteExt + Unpin>(
     };
 
     let (status, response_body) = if let Some(pattern) = pattern_match {
-        eprintln!("Webhook matched pattern: {}", pattern);
+        dure_debug!("Webhook matched pattern: {}", pattern);
 
         if logging_enabled {
             let headers_json = headers_to_json(&request.headers);
@@ -144,16 +145,16 @@ async fn handle_webhook_post<S: AsyncWriteExt + Unpin>(
                     &body,
                     &peer_addr.to_string(),
                 ) {
-                    eprintln!("Failed to log webhook: {}", e);
+                    dure_debug!("Failed to log webhook: {}", e);
                 }
             }
 
-            eprintln!("Webhook request logged");
+            dure_debug!("Webhook request logged");
         }
 
         (200, b"{\"status\":\"received\"}".to_vec())
     } else {
-        eprintln!("Webhook path not in allow list: {}", request.path);
+        dure_debug!("Webhook path not in allow list: {}", request.path);
         (404, b"{\"error\":\"not found\"}".to_vec())
     };
 
