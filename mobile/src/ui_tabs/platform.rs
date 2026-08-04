@@ -1202,7 +1202,13 @@ impl PlatformTab {
                                         ui.style_mut().spacing.button_padding =
                                             egui::vec2(6.0, 2.0);
 
-                                        // 0. Refresh
+                                        // Check if any operation in progress
+                                        let operation_in_progress = matches!(
+                                            row_for_actions.operation_state,
+                                            OperationState::InProgress { .. }
+                                        );
+
+                                        // 0. Refresh (always enabled)
                                         if ui
                                             .add(MaterialButton::outlined("Refresh").small())
                                             .on_hover_text("Refresh platform data")
@@ -1216,6 +1222,8 @@ impl PlatformTab {
                                             });
                                         }
 
+                                        // Disable other buttons during operations
+                                        ui.add_enabled_ui(!operation_in_progress, |ui| {
                                         // 1. Add VM
                                         #[cfg(not(any(
                                             target_os = "android",
@@ -1370,6 +1378,7 @@ impl PlatformTab {
                                                 )
                                             });
                                         }
+                                        }); // End add_enabled_ui
                                     });
                                 });
                         })
