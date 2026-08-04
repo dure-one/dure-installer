@@ -850,20 +850,33 @@ impl PlatformTab {
                         self.billing_loading = false;
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
+                        platform_name,
                         whitelisted_ip,
-                        ..
                     }) => {
-                        dure_debug!("✓ Successfully added {} to firewall whitelist", whitelisted_ip
-                        );
-                        // Refresh to show updated status
-                        self.loaded = false;
-                        self.load_error = None;
+                        dure_debug!("✓ Successfully added {} to firewall whitelist", whitelisted_ip);
+
+                        // Incremental update: Find and update specific row
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Completed {
+                                operation: "firewall".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+                            row.firewall_status = format!("✅ Whitelisted ({})", whitelisted_ip);
+                            row.firewall_updated = true;
+                        }
+                        // Note: NO self.loaded = false! Incremental update only
                     }
-                    ViewModelEvent::Platform(PlatformEvent::VMRestarted { vm_name, .. }) => {
-                        dure_info!(" VM {} restarted successfully", vm_name);
-                        // Refresh to show updated status
-                        self.loaded = false;
-                        self.load_error = None;
+                    ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
+                        dure_info!("✓ VM {} restarted successfully", vm_name);
+
+                        // Incremental update
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Completed {
+                                operation: "restart".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+                        }
+                        // Note: NO self.loaded = false!
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRegenerated {
                         vm_name,
@@ -879,28 +892,56 @@ impl PlatformTab {
                         platform_name,
                         vm_count,
                     }) => {
-                        dure_info!(" Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
-                        // Refresh to show imported VMs
+                        dure_info!("✓ Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
+
+                        // Update operation state
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Completed {
+                                operation: "scan".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+                        }
+
+                        // Trigger reload to show imported VMs
                         self.loaded = false;
                         self.load_error = None;
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMCreated {
+                        platform_name,
                         vm_name,
                         external_ip,
-                        ..
                     }) => {
-                        dure_info!(" VM '{}' created successfully with IP {}", vm_name, external_ip);
-                        // Refresh to show updated VM details
+                        dure_info!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+
+                        // Incremental update
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Completed {
+                                operation: "vm".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+                            row.vm_name = Some(vm_name);
+                            row.vm_external_ip = Some(external_ip);
+                            row.vm_created = true;
+                            row.has_vm = true;
+                        }
+                        // Trigger full reload to update config-backed data
                         self.loaded = false;
-                        self.load_error = None;
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMDeleted {
                         platform_name,
                         vm_name,
                     }) => {
-                        dure_info!(" VM {} deleted successfully", vm_name);
+                        dure_info!("✓ VM {} deleted successfully", vm_name);
 
-                        // Remove VM from config
+                        // Update operation state before reload
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Completed {
+                                operation: "delete_vm".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+                        }
+
+                        // Keep config update and reload logic
                         if let Ok((mut app_config, config_path)) = load_config() {
                             if let Some(platform) = app_config
                                 .platforms
@@ -912,7 +953,7 @@ impl PlatformTab {
                                 if let Err(e) = app_config.save(&config_path) {
                                     self.load_error = Some(format!("Failed to save config: {}", e));
                                 } else {
-                                    dure_info!(" Config updated, refreshing spreadsheet");
+                                    dure_info!("✓ Config updated, refreshing table");
                                     self.loaded = false;
                                     self.load_error = None;
                                 }
