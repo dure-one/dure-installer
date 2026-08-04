@@ -704,11 +704,36 @@ impl GcpRestClient {
 
     /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
     pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
-        use crate::{dure_info, dure_debug};
+        use crate::{dure_info};
 
         let rules = self.list_firewall_rules(project_id)?;
         dure_info!("🔍 Checking if IP {} is whitelisted. Found {} firewall rules", ip, rules.len());
 
+        // First check if IAP (Identity-Aware Proxy) is enabled
+        // IAP uses IP range 35.235.240.0/20 for SSH tunneling
+        let has_iap = rules.iter().any(|rule| {
+            let allows_ssh = rule.allowed.iter().any(|a| {
+                a.ip_protocol.to_lowercase() == "tcp"
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
+            });
+
+            if allows_ssh {
+                if let Some(ranges) = &rule.source_ranges {
+                    // Check for IAP IP range (35.235.240.0/20)
+                    return ranges.iter().any(|r| r.starts_with("35.235."));
+                }
+            }
+            false
+        });
+
+        if has_iap {
+            dure_info!("🔍 IAP (Identity-Aware Proxy) is enabled - SSH access via IAP");
+            return Ok(true);
+        }
+
+        // Check direct IP access
         for rule in rules {
             // Check if rule allows SSH (port 22)
             let allows_ssh = rule.allowed.iter().any(|a| {
@@ -719,20 +744,16 @@ impl GcpRestClient {
             });
 
             if allows_ssh {
-                dure_info!("🔍 Rule '{}' allows SSH", rule.name);
                 if let Some(ranges) = &rule.source_ranges {
-                    dure_info!("🔍 Rule '{}' source_ranges: {:?}", rule.name, ranges);
                     if super::ip_in_ranges(ip, ranges) {
                         dure_info!("🔍 IP {} matched in rule '{}' ranges", ip, rule.name);
                         return Ok(true);
                     }
-                } else {
-                    dure_info!("🔍 Rule '{}' has no source_ranges", rule.name);
                 }
             }
         }
 
-        dure_info!("🔍 IP {} not found in any SSH firewall rules", ip);
+        dure_info!("🔍 IP {} not found in any SSH firewall rules and IAP not enabled", ip);
         Ok(false)
     }
 
