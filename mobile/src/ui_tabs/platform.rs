@@ -11,7 +11,7 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
-use crate::ui_components::{StatusGrid, ItemState, ActionMenu, SvgEmoji};
+use crate::ui_components::{StatusGrid, ItemState, ActionMenu, SvgEmoji, EmojiProgressBar};
 
 /// Platform row data for data table
 #[derive(Clone, Debug)]
@@ -330,18 +330,8 @@ fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
 }
 
 /// Format connection progress steps with status indicators
-fn format_steps(row: &PlatformRow) -> String {
-    let gcp = if row.gcp_connected { "✓" } else { "✗" };
-    let proj = if row.project_selected { "✓" } else { "✗" };
-    let vm = if row.vm_created { "✓" } else { "✗" };
-    let firewall = if row.firewall_updated { "✓" } else { "✗" };
-    let ssh = if row.ssh_ready { "✓" } else { "✗" };
-
-    format!(
-        "{} GCP Connected → {} Project Created → {} VM Created → {} Firewall Rules Updated → {} SSH Connected",
-        gcp, proj, vm, firewall, ssh
-    )
-}
+// REMOVED: format_steps() - replaced by EmojiProgressBar component
+// The visual progress is now shown using emoji indicators via EmojiProgressBar::from_platform_row()
 
 /// Compute firewall whitelist status for a platform
 ///
@@ -1123,7 +1113,11 @@ impl PlatformTab {
                 table = table.row(move |r| {
                     r.cell(&row_for_cells.project_id)
                         .cell(&row_for_cells.platform_type)
-                        .cell(&format_steps(&row_for_cells))
+                        .widget_cell(move |ui| {
+                            let progress = EmojiProgressBar::from_platform_row(&row_for_cells)
+                                .compact(true);
+                            progress.show(ui);
+                        })
                         .widget_cell(move |ui| {
                             egui::ScrollArea::horizontal()
                                 .id_salt(format!("operations_scroll_{}", idx))
