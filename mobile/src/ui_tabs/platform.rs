@@ -1328,6 +1328,14 @@ impl PlatformTab {
                 if let Some(platform_name) = ui.data(|d| {
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))
                 }) {
+                    // Optimistic update: Set InProgress immediately
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        row.operation_state = OperationState::InProgress {
+                            operation: "Updating firewall".to_string(),
+                            started_at: chrono::Utc::now().timestamp(),
+                        };
+                    }
+
                     self.update_firewall(platform_name, vm.as_deref_mut());
                     ui.data_mut(|d| {
                         d.remove::<String>(egui::Id::new("platform_action_update_firewall"))
@@ -1337,6 +1345,14 @@ impl PlatformTab {
                 if let Some(platform_name) = ui.data(|d| {
                     d.get_temp::<String>(egui::Id::new("platform_action_scan_vms"))
                 }) {
+                    // Optimistic update
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        row.operation_state = OperationState::InProgress {
+                            operation: "Scanning VMs".to_string(),
+                            started_at: chrono::Utc::now().timestamp(),
+                        };
+                    }
+
                     self.scan_vms(platform_name, vm.as_deref_mut());
                     ui.data_mut(|d| {
                         d.remove::<String>(egui::Id::new("platform_action_scan_vms"))
@@ -1348,6 +1364,14 @@ impl PlatformTab {
                         "platform_action_delete_vm",
                     ))
                 }) {
+                    // Optimistic update
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        row.operation_state = OperationState::InProgress {
+                            operation: format!("Deleting VM {}", vm_name),
+                            started_at: chrono::Utc::now().timestamp(),
+                        };
+                    }
+
                     self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
                     ui.data_mut(|d| {
                         d.remove::<(String, String, String)>(egui::Id::new(
@@ -1381,6 +1405,14 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_restart_vm")))
                 {
+                    // Optimistic update
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        row.operation_state = OperationState::InProgress {
+                            operation: "Restarting VM".to_string(),
+                            started_at: chrono::Utc::now().timestamp(),
+                        };
+                    }
+
                     // Find platform and get vm_name and zone
                     if let Ok((app_config, _)) = load_config() {
                         if let Some(platform) = app_config
@@ -1390,7 +1422,7 @@ impl PlatformTab {
                         {
                             if let Some(vm_config) = platform.vms.first() {
                                 self.restart_vm(
-                                    platform_name,
+                                    platform_name.clone(),
                                     vm_config.name.clone(),
                                     vm_config.zone.clone(),
                                     vm.as_deref_mut(),
