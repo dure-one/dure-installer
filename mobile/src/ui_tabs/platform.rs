@@ -1016,6 +1016,57 @@ impl PlatformTab {
                             self.load_error = Some(format!("Failed to delete VM: {}", error));
                         }
                     }
+                    ViewModelEvent::Platform(PlatformEvent::RefreshCompleted {
+                        platform_name,
+                        vm_status,
+                        firewall_status,
+                        ssh_status,
+                    }) => {
+                        dure_info!("✓ Refresh completed for {}", platform_name);
+
+                        // Find and update the row
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            // Update VM status
+                            row.vm_created = vm_status.exists;
+                            row.vm_name = vm_status.name;
+                            row.vm_external_ip = vm_status.external_ip;
+                            row.has_vm = vm_status.exists;
+                            if let Some(zone) = vm_status.zone {
+                                row.vm_zone = Some(zone);
+                            }
+
+                            // Update firewall status
+                            row.firewall_updated = firewall_status.whitelisted;
+                            if let Some(current_ip) = firewall_status.current_ip {
+                                if firewall_status.whitelisted {
+                                    row.firewall_status = format!("✅ Whitelisted ({})", current_ip);
+                                } else {
+                                    row.firewall_status = format!("✗ Not whitelisted ({})", current_ip);
+                                }
+                            } else {
+                                row.firewall_status = "? Status unknown".to_string();
+                            }
+
+                            // Update SSH status
+                            row.ssh_ready = ssh_status.connected;
+                            if ssh_status.connected {
+                                row.ssh_status = "✓ Ready".to_string();
+                            } else if let Some(error) = &ssh_status.error {
+                                row.ssh_status = format!("✗ {}", error);
+                            } else {
+                                row.ssh_status = "? Unknown".to_string();
+                            }
+
+                            // Clear operation state (refresh complete)
+                            row.operation_state = OperationState::Completed {
+                                operation: "refresh".to_string(),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            };
+
+                            // Update last refresh time
+                            row.last_refresh_time = Some(chrono::Utc::now().timestamp());
+                        }
+                    }
                     ViewModelEvent::Platform(PlatformEvent::OperationFailed {
                         platform_name,
                         operation,
