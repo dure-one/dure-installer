@@ -11,6 +11,30 @@ pub struct VmInfo {
     pub status: String,
 }
 
+/// VM existence and network status
+#[derive(Debug, Clone)]
+pub struct VmStatus {
+    pub exists: bool,
+    pub name: Option<String>,
+    pub zone: Option<String>,
+    pub external_ip: Option<String>,
+    pub status: Option<String>, // "RUNNING", "STOPPED", etc.
+}
+
+/// Firewall whitelist status
+#[derive(Debug, Clone)]
+pub struct FirewallStatus {
+    pub whitelisted: bool,
+    pub current_ip: Option<String>,
+}
+
+/// SSH connectivity status
+#[derive(Debug, Clone)]
+pub struct SshStatus {
+    pub connected: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub enum PlatformEvent {
     // OAuth Events
@@ -81,6 +105,14 @@ pub enum PlatformEvent {
     BillingFetched {
         platform_name: String,
         records: Vec<BillingRecord>,
+    },
+
+    /// Refresh completed with comprehensive status
+    RefreshCompleted {
+        platform_name: String,
+        vm_status: VmStatus,
+        firewall_status: FirewallStatus,
+        ssh_status: SshStatus,
     },
 
     // Progress & Errors
