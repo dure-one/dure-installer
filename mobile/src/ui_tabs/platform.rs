@@ -13,40 +13,40 @@ use crate::ui_dlg::platform_gcp::GcpWizard;
 
 /// Platform row data for data table
 #[derive(Clone, Debug)]
-struct PlatformRow {
+pub struct PlatformRow {
     // Identity (CHANGED: project_id replaces platform_name)
-    project_id: String,              // GCP project ID (platform identifier)
-    project_display_name: String,    // Display name (may differ from ID)
-    platform_type: String,           // "GCP"
+    pub project_id: String,              // GCP project ID (platform identifier)
+    pub project_display_name: String,    // Display name (may differ from ID)
+    pub platform_type: String,           // "GCP"
 
     // Connection state flags (for Steps column)
-    gcp_connected: bool,    // Has OAuth access token
-    project_selected: bool, // Has gcp_selected_project_id
-    vm_created: bool,       // vms.len() > 0
-    firewall_updated: bool, // Current IP is whitelisted
-    ssh_ready: bool,        // VM has external_ip.is_some()
+    pub gcp_connected: bool,    // Has OAuth access token
+    pub project_selected: bool, // Has gcp_selected_project_id
+    pub vm_created: bool,       // vms.len() > 0
+    pub firewall_updated: bool, // Current IP is whitelisted
+    pub ssh_ready: bool,        // VM has external_ip.is_some()
 
     // Drawer content data
-    email: Option<String>,      // Connected Google account
-    total_project_count: usize, // Cached from config (not 0!)
-    selected_project_id: Option<String>,
-    vm_name: Option<String>,            // First VM name
-    vm_external_ip: Option<String>,     // First VM external IP (from cache or VM)
-    ssh_private_key: Option<String>,    // SSH private key from KeePass
-    ssh_public_key: Option<String>,     // Derived SSH public key for verification
-    ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
-    firewall_status: String,            // Cached from config
-    ssh_status: String,                 // "✓ Ready" or "? No external IP"
+    pub email: Option<String>,      // Connected Google account
+    pub total_project_count: usize, // Cached from config (not 0!)
+    pub selected_project_id: Option<String>,
+    pub vm_name: Option<String>,            // First VM name
+    pub vm_external_ip: Option<String>,     // First VM external IP (from cache or VM)
+    pub ssh_private_key: Option<String>,    // SSH private key from KeePass
+    pub ssh_public_key: Option<String>,     // Derived SSH public key for verification
+    pub ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
+    pub firewall_status: String,            // Cached from config
+    pub ssh_status: String,                 // "✓ Ready" or "? No external IP"
 
     // NEW: Status cache metadata
-    last_refresh_time: Option<i64>,     // For staleness indicator
+    pub last_refresh_time: Option<i64>,     // For staleness indicator
 
     // Operation state tracking (for visual feedback)
-    operation_state: OperationState,
+    pub operation_state: OperationState,
 
     // Action button state
-    has_vm: bool,            // Enable/disable VM operation buttons
-    vm_zone: Option<String>, // For VM operations (delete, restart, regen)
+    pub has_vm: bool,            // Enable/disable VM operation buttons
+    pub vm_zone: Option<String>, // For VM operations (delete, restart, regen)
 }
 
 /// Actions that can be triggered from platform table rows
