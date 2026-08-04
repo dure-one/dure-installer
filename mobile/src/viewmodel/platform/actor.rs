@@ -1237,10 +1237,21 @@ impl PlatformActor {
         // Create GCP client
         let client = crate::api::gcp::GcpRestClient::new(access_token);
 
-        // Check if current IP is whitelisted
+        // Check if IAP is enabled first
+        let iap_enabled = client.is_iap_enabled(project_id).unwrap_or(false);
+
+        if iap_enabled {
+            dure_info!("🔍 Firewall check result: Access via IAP (Identity-Aware Proxy)");
+            return FirewallStatus {
+                whitelisted: true,
+                current_ip: Some("IAP".to_string()),
+            };
+        }
+
+        // Check if current IP is whitelisted (direct access)
         match client.check_ip_whitelisted(project_id, &current_ip) {
             Ok(whitelisted) => {
-                dure_info!("🔍 Firewall check result: whitelisted = {}", whitelisted);
+                dure_info!("🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
                 FirewallStatus {
                     whitelisted,
                     current_ip: Some(current_ip),
