@@ -11,6 +11,8 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
+use crate::ui_components::{StatusGrid, ItemState, ActionMenu, SvgEmoji};
+
 /// Platform row data for data table
 #[derive(Clone, Debug)]
 pub struct PlatformRow {
@@ -727,106 +729,117 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     ui.add_space(8.0);
 
-    // Level 1: Email + project count (from cache!)
+    let mut grid = StatusGrid::new();
+
+    // Connection info
     if let Some(email) = &row.email {
-        ui.label(format!(
-            "{} ({} projects in account)",
-            email, row.total_project_count
-        ));
+        grid.add_item(
+            SvgEmoji::Email,
+            "Email",
+            format!("{} ({} projects)", email, row.total_project_count),
+            None,
+        );
     } else {
-        ui.label("Not connected");
+        grid.add_item(SvgEmoji::Email, "Email", "Not connected", None);
     }
 
-    // Level 2: Selected project (show both display name and ID)
+    // Project info
     if let Some(project_id) = &row.selected_project_id {
-        ui.label(format!("  └─ Project: {} ({})", row.project_display_name, project_id));
+        grid.add_item(SvgEmoji::Project, "Project", project_id, None);
 
-        // NEW: Show staleness indicator
+        // Refresh staleness
         if let Some(last_refresh) = row.last_refresh_time {
             let elapsed = chrono::Utc::now().timestamp() - last_refresh;
-            let time_str = if elapsed < 60 {
-                "just now".to_string()
+            let (time_str, state) = if elapsed < 60 {
+                ("just now".to_string(), None)
             } else if elapsed < 3600 {
-                format!("{} min ago", elapsed / 60)
+                (format!("{} min ago", elapsed / 60), None)
             } else if elapsed < 86400 {
-                format!("{} hours ago", elapsed / 3600)
+                (format!("{} hours ago", elapsed / 3600), Some(ItemState::Warning))
             } else {
-                format!("{} days ago", elapsed / 86400)
+                (format!("{} days ago", elapsed / 86400), Some(ItemState::Warning))
             };
-            ui.label(format!("        • Last refreshed: {}", time_str));
-        } else {
-            ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "        • Status never refreshed");
+            grid.add_item(SvgEmoji::Clock, "Refreshed", time_str, state);
         }
 
-        // Level 3: VM details
+        // VM details
         if let Some(vm_name) = &row.vm_name {
-            let vm_display = if let Some(external_ip) = &row.vm_external_ip {
-                format!("     └─ VM: {}({})", vm_name, external_ip)
-            } else {
-                format!("     └─ VM: {} (no external IP)", vm_name)
+            grid.add_item(SvgEmoji::VM, "VM", vm_name, None);
+
+            // IP address
+            grid.add_item(
+                SvgEmoji::Network,
+                "IP",
+                row.vm_external_ip
+                    .as_deref()
+                    .unwrap_or("⚠ No external IP"),
+                if row.vm_external_ip.is_none() {
+                    Some(ItemState::Warning)
+                } else {
+                    None
+                },
+            );
+
+            // Firewall status (check operation state)
+            let (firewall_value, firewall_state) = match &row.operation_state {
+                OperationState::InProgress { operation, .. }
+                    if operation.to_lowercase().contains("firewall") =>
+                {
+                    ("Updating...".to_string(), Some(ItemState::InProgress))
+                }
+                OperationState::Failed { operation, error, .. }
+                    if operation.to_lowercase().contains("firewall") =>
+                {
+                    (error.clone(), Some(ItemState::Error))
+                }
+                _ => (row.firewall_status.clone(), None),
             };
-            ui.label(vm_display);
-            ui.label(format!("        • Firewall: {}", row.firewall_status));
-            ui.label(format!("        • SSH: {}", row.ssh_status));
+            grid.add_item(SvgEmoji::Firewall, "Firewall", firewall_value, firewall_state);
 
-            // Show derived public key for verification
-            // if let Some(public_key) = &row.ssh_public_key {
-            //     ui.add_space(4.0);
-            //     ui.label("        • Public Key (from keyring):");
-            //     egui::ScrollArea::horizontal()
-            //         .id_salt(format!("pubkey_{}", vm_name))
-            //         .max_width(ui.available_width() - 32.0)
-            //         .show(ui, |ui| {
-            //             ui.add(
-            //                 egui::TextEdit::singleline(&mut public_key.as_str())
-            //                     .font(egui::TextStyle::Monospace)
-            //                     .desired_width(f32::INFINITY)
-            //             );
-            //         });
-            //     ui.label("          (Compare this with /root/.ssh/authorized_keys on VM)");
-            // }
-
-            // Show SSH connection command if we have the key and external IP
-            if let (Some(external_ip), Some(ssh_key)) = (&row.vm_external_ip, &row.ssh_private_key)
-            {
-                ui.add_space(4.0);
-                ui.label("        • SSH Connect:");
-
-                // Create temp file, set permissions, connect, then cleanup
-                let ssh_command = format!(
-                    "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
-                    ssh_key.trim(),
-                    external_ip
-                );
-
-                // Show in a scrollable, selectable text area
-                egui::ScrollArea::horizontal()
-                    .id_salt(format!("ssh_cmd_{}", vm_name))
-                    .max_width(ui.available_width() - 32.0)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut ssh_command.as_str())
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(3)
-                                .interactive(true),
-                        );
-                    });
-
-                ui.add_space(2.0);
-                ui.label("          (Copy and paste into terminal - key auto-deletes after use)");
-            } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
-                ui.add_space(4.0);
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 152, 0),
-                    "        ⚠ SSH key not found in keyring",
-                );
-            }
+            // SSH status
+            grid.add_item(SvgEmoji::Key, "SSH", &row.ssh_status, None);
         } else {
-            ui.label("     └─ No VM created");
+            grid.add_item(SvgEmoji::VM, "VM", "— No VM created", None);
         }
     } else {
-        ui.label("  └─ No project selected");
+        grid.add_item(SvgEmoji::Project, "Project", "— No project selected", None);
+    }
+
+    grid.show(ui);
+
+    // SSH action menu (if available)
+    if let (Some(external_ip), Some(private_key)) =
+        (&row.vm_external_ip, &row.ssh_private_key)
+    {
+        ui.add_space(8.0);
+
+        let ssh_command = format!(
+            "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
+            private_key.trim(),
+            external_ip
+        );
+
+        let mut menu = ActionMenu::new("📋 SSH").with_icon(SvgEmoji::Terminal);
+        menu.add_action("Copy SSH Command");
+        menu.add_action("Copy Private Key");
+        menu.add_action("Copy IP Address");
+
+        if let Some(action_idx) = menu.show(ui) {
+            let text_to_copy = match action_idx {
+                0 => &ssh_command,
+                1 => private_key,
+                2 => external_ip,
+                _ => return,
+            };
+
+            ui.ctx().copy_text(text_to_copy.to_string());
+        }
+    } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
+        ui.add_space(8.0);
+        ui.colored_label(
+            egui::Color32::from_rgb(255, 152, 0),
+            "⚠ SSH key not found in keyring",
+        );
     }
 }
 
