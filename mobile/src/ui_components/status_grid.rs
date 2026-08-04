@@ -65,6 +65,9 @@ impl StatusGrid {
         let available_width = ui.available_width();
         let columns = self.calculate_columns(available_width);
 
+        // Get theme text color for proper visibility
+        let text_color = ui.style().visuals.text_color();
+
         // Use egui Grid for layout
         egui::Grid::new("status_grid")
             .num_columns(columns * 3) // emoji + label + value per column
@@ -72,12 +75,12 @@ impl StatusGrid {
             .show(ui, |ui| {
                 for (idx, item) in self.items.iter().enumerate() {
                     // Emoji (use Unicode for now, SVG in next iteration)
-                    ui.label(item.emoji.to_unicode());
+                    ui.label(egui::RichText::new(item.emoji.to_unicode()).color(text_color));
 
-                    // Label
-                    ui.label(egui::RichText::new(&item.label).strong());
+                    // Label with theme color
+                    ui.label(egui::RichText::new(&item.label).strong().color(text_color));
 
-                    // Value with state color
+                    // Value with state color (or theme color if no state)
                     let value_text = match item.state {
                         Some(ItemState::InProgress) => {
                             egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 152, 0))
@@ -91,7 +94,7 @@ impl StatusGrid {
                         Some(ItemState::Warning) => {
                             egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 193, 7))
                         }
-                        None => egui::RichText::new(&item.value),
+                        None => egui::RichText::new(&item.value).color(text_color),
                     };
                     ui.label(value_text);
 
