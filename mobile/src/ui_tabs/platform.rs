@@ -41,6 +41,9 @@ struct PlatformRow {
     // NEW: Status cache metadata
     last_refresh_time: Option<i64>,     // For staleness indicator
 
+    // Operation state tracking (for visual feedback)
+    operation_state: OperationState,
+
     // Action button state
     has_vm: bool,            // Enable/disable VM operation buttons
     vm_zone: Option<String>, // For VM operations (delete, restart, regen)
@@ -60,6 +63,31 @@ enum PlatformAction {
     RestartVM(String),      // project_id
     DeletePlatform(String), // project_id
     Refresh(String),        // NEW: project_id for manual refresh
+}
+
+/// Operation state for visual feedback with timestamps
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationState {
+    Idle,
+    InProgress {
+        operation: String,
+        started_at: i64,
+    },
+    Completed {
+        operation: String,
+        completed_at: i64,
+    },
+    Failed {
+        operation: String,
+        error: String,
+        failed_at: i64,
+    },
+}
+
+impl Default for OperationState {
+    fn default() -> Self {
+        Self::Idle
+    }
 }
 
 /// Platform tab state
@@ -844,6 +872,15 @@ impl PlatformTab {
                         self.loaded = false;
                         self.load_error = None;
                     }
+                    ViewModelEvent::Platform(PlatformEvent::VMsScanned {
+                        platform_name,
+                        vm_count,
+                    }) => {
+                        dure_info!(" Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
+                        // Refresh to show imported VMs
+                        self.loaded = false;
+                        self.load_error = None;
+                    }
                     ViewModelEvent::Platform(PlatformEvent::VMCreated {
                         vm_name,
                         external_ip,
@@ -1120,6 +1157,23 @@ impl PlatformTab {
                                             });
                                         }
 
+                                        // 1.5. Scan VMs
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected,
+                                                MaterialButton::outlined("Scan VMs").small(),
+                                            )
+                                            .on_hover_text("Scan and import existing VMs from GCP")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_scan_vms"),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
+                                        }
+
                                         // 2. Firewall
                                         if ui
                                             .add_enabled(
@@ -1270,6 +1324,15 @@ impl PlatformTab {
                     self.update_firewall(platform_name, vm.as_deref_mut());
                     ui.data_mut(|d| {
                         d.remove::<String>(egui::Id::new("platform_action_update_firewall"))
+                    });
+                }
+
+                if let Some(platform_name) = ui.data(|d| {
+                    d.get_temp::<String>(egui::Id::new("platform_action_scan_vms"))
+                }) {
+                    self.scan_vms(platform_name, vm.as_deref_mut());
+                    ui.data_mut(|d| {
+                        d.remove::<String>(egui::Id::new("platform_action_scan_vms"))
                     });
                 }
 
@@ -1529,6 +1592,9 @@ impl PlatformTab {
 
                             // NEW: Cache metadata
                             last_refresh_time: platform.last_status_refresh,
+
+                            // Operation state tracking
+                            operation_state: OperationState::Idle,
 
                             // Action button state
                             has_vm: !platform.vms.is_empty(),
@@ -2122,23 +2188,52 @@ impl PlatformTab {
     ) {
         use crate::api::gcp::get_current_ip;
 
+        dure_info!(" Firewall update requested for '{}'", platform_name);
+
         // ViewModel-based implementation
         if let Some(vm) = vm {
             // Get current IP
             let current_ip = match get_current_ip() {
-                Ok(ip) => ip,
+                Ok(ip) => {
+                    dure_info!(" Current IP detected: {}", ip);
+                    ip
+                },
                 Err(e) => {
-                    dure_debug!("Failed to get current IP: {}", e);
+                    dure_error!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
                     return;
                 }
             };
 
             // Send command to ViewModel
-            if let Err(e) = vm.update_firewall(platform_name, current_ip) {
+            if let Err(e) = vm.update_firewall(platform_name.clone(), current_ip.clone()) {
+                dure_error!("Failed to send firewall update command: {}", e);
                 self.load_error = Some(format!("Failed to start firewall update: {}", e));
+            } else {
+                dure_info!(" Firewall update command sent successfully");
             }
             // Note: UI will be updated by event processing when FirewallUpdated event arrives
+        } else {
+            // Fallback: no ViewModel available
+            dure_error!("ViewModel not available for firewall update");
+            self.load_error = Some("ViewModel not available".to_string());
+        }
+    }
+
+    fn scan_vms(
+        &mut self,
+        platform_name: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        // ViewModel-based implementation
+        if let Some(vm) = vm {
+            dure_info!(" Scanning VMs for platform '{}'...", platform_name);
+
+            // Send command to ViewModel
+            if let Err(e) = vm.scan_existing_vms(platform_name) {
+                self.load_error = Some(format!("Failed to start VM scan: {}", e));
+            }
+            // Note: UI will be updated when VMsScanned event arrives
         } else {
             // Fallback: no ViewModel available
             self.load_error = Some("ViewModel not available".to_string());
