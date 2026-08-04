@@ -1013,6 +1013,22 @@ impl PlatformTab {
                             self.load_error = Some(format!("Failed to delete VM: {}", error));
                         }
                     }
+                    ViewModelEvent::Platform(PlatformEvent::OperationFailed {
+                        platform_name,
+                        operation,
+                        error,
+                    }) => {
+                        dure_error!("✗ Operation '{}' failed for {}: {}", operation, platform_name, error);
+
+                        // Update row to show error state
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Failed {
+                                operation: operation.clone(),
+                                error: error.clone(),
+                                failed_at: chrono::Utc::now().timestamp(),
+                            };
+                        }
+                    }
                     _ => {}
                 }
             }
