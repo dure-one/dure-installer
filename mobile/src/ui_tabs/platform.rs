@@ -103,6 +103,8 @@ pub struct PlatformTab {
     loaded: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_error_dialog: bool,
 
     // Add dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -222,6 +224,7 @@ impl Default for PlatformTab {
             rows: Vec::new(),
             loaded: false,
             load_error: None,
+            show_error_dialog: false,
             show_add_dialog: false,
             add_platform_type: "gcp".to_string(),
             add_platform_oauth_url: None,
@@ -1135,14 +1138,16 @@ impl PlatformTab {
             self.load_rows();
         }
 
+        // Show error in modal dialog instead of replacing UI
         if let Some(error) = &self.load_error {
-            ui.colored_label(
-                egui::Color32::from_rgb(255, 0, 0),
-                format!("Error: {}", error),
-            );
-        } else if self.rows.is_empty() {
+            if !self.show_error_dialog {
+                self.show_error_dialog = true;
+            }
+        }
+
+        if self.rows.is_empty() && self.load_error.is_none() {
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
-        } else {
+        } else if !self.rows.is_empty() {
             // Calculate responsive column widths
             // Reserve space for borders, padding, and scrollbar
             let available_width = ui.available_width() - 40.0;
@@ -1571,6 +1576,11 @@ impl PlatformTab {
         // Delete VM dialog
         if self.show_delete_vm_dialog {
             self.render_delete_vm_dialog(ui.ctx(), vm.as_deref_mut());
+        }
+
+        // Error dialog
+        if self.show_error_dialog {
+            self.render_error_dialog(ui.ctx());
         }
 
         // Billing dialog
@@ -2506,6 +2516,37 @@ impl PlatformTab {
         if !open {
             self.show_delete_vm_dialog = false;
             self.delete_vm_confirming = false;
+        }
+    }
+
+    fn render_error_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(error) = self.load_error.clone() {
+            let mut open = self.show_error_dialog;
+
+            egui::Window::new("⚠ Error")
+                .open(&mut open)
+                .resizable(false)
+                .collapsible(false)
+                .show(ctx, |ui| {
+                    ui.add_space(8.0);
+                    ui.colored_label(
+                        egui::Color32::from_rgb(244, 67, 54),
+                        &error,
+                    );
+                    ui.add_space(12.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.add(MaterialButton::filled("OK")).clicked() {
+                            self.show_error_dialog = false;
+                            self.load_error = None;
+                        }
+                    });
+                });
+
+            if !open {
+                self.show_error_dialog = false;
+                self.load_error = None;
+            }
         }
     }
 

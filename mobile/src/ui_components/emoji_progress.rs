@@ -55,11 +55,12 @@ impl EmojiProgressBar {
 
     pub fn show(&self, ui: &mut egui::Ui) -> egui::Response {
         if self.compact {
-            // Inline: emoji → emoji → emoji
+            // Inline: emoji → emoji → emoji (with labels on hover)
             ui.horizontal(|ui| {
                 for (idx, step) in self.steps.iter().enumerate() {
                     let emoji = self.emoji_for_state(step.state);
-                    ui.label(emoji.to_unicode());
+                    ui.label(emoji.to_unicode())
+                        .on_hover_text(&step.label);
 
                     // Arrow between steps (except last)
                     if idx < self.steps.len() - 1 {
