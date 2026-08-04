@@ -1453,11 +1453,29 @@ impl PlatformTab {
             if let Some(platform_name) =
                 ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_refresh")))
             {
-                self.loaded = false;
+                // Optimistic update: Show "Refreshing..." state
+                if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                    row.operation_state = OperationState::InProgress {
+                        operation: "Refreshing".to_string(),
+                        started_at: chrono::Utc::now().timestamp(),
+                    };
+                }
 
-                // Trigger SSH connection test for this platform
-                #[cfg(not(target_arch = "wasm32"))]
-                self.execute_test_connection(platform_name.clone());
+                // Send RefreshPlatform command to ViewModel
+                if let Some(ref vm) = vm {
+                    if let Err(e) = vm.refresh_platform(platform_name.clone()) {
+                        dure_error!("Failed to send refresh command: {}", e);
+                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                            row.operation_state = OperationState::Failed {
+                                operation: "refresh".to_string(),
+                                error: format!("Failed to start refresh: {}", e),
+                                failed_at: chrono::Utc::now().timestamp(),
+                            };
+                        }
+                    } else {
+                        dure_info!(" Refresh command sent successfully");
+                    }
+                }
 
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_refresh")));
             }
