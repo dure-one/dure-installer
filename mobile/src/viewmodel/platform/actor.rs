@@ -1221,7 +1221,10 @@ impl PlatformActor {
 
         // Get current external IP
         let current_ip = match crate::api::gcp::get_current_ip() {
-            Ok(ip) => ip,
+            Ok(ip) => {
+                dure_info!("🔍 Firewall check: Client's current IP = {}", ip);
+                ip
+            },
             Err(e) => {
                 dure_warn!("Failed to get current IP: {}", e);
                 return FirewallStatus {
@@ -1236,9 +1239,12 @@ impl PlatformActor {
 
         // Check if current IP is whitelisted
         match client.check_ip_whitelisted(project_id, &current_ip) {
-            Ok(whitelisted) => FirewallStatus {
-                whitelisted,
-                current_ip: Some(current_ip),
+            Ok(whitelisted) => {
+                dure_info!("🔍 Firewall check result: whitelisted = {}", whitelisted);
+                FirewallStatus {
+                    whitelisted,
+                    current_ip: Some(current_ip),
+                }
             },
             Err(e) => {
                 dure_error!("Failed to check firewall: {}", e);
@@ -1260,7 +1266,10 @@ impl PlatformActor {
         let (external_ip, keyring_domain) = match platform.vms.first() {
             Some(vm) => {
                 let ip = match &vm.external_ip {
-                    Some(ip) => ip.clone(),
+                    Some(ip) => {
+                        dure_info!("🔍 SSH test: VM's external IP = {}", ip);
+                        ip.clone()
+                    },
                     None => {
                         return SshStatus {
                             connected: false,
@@ -1304,13 +1313,19 @@ impl PlatformActor {
             })
             .await
             {
-                Ok(_) => SshStatus {
-                    connected: true,
-                    error: None,
+                Ok(_) => {
+                    dure_info!("🔍 SSH test result: connected = true");
+                    SshStatus {
+                        connected: true,
+                        error: None,
+                    }
                 },
-                Err(e) => SshStatus {
-                    connected: false,
-                    error: Some(format!("Connection failed: {}", e)),
+                Err(e) => {
+                    dure_info!("🔍 SSH test result: connected = false, error = {}", e);
+                    SshStatus {
+                        connected: false,
+                        error: Some(format!("Connection failed: {}", e)),
+                    }
                 },
             }
         }

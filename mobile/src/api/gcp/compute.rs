@@ -110,6 +110,20 @@ pub struct InstanceList {
     pub items: Vec<Instance>,
 }
 
+/// Aggregated instance list response (all zones)
+#[derive(Debug, Deserialize)]
+pub struct AggregatedInstanceList {
+    #[serde(default)]
+    pub items: std::collections::HashMap<String, ZoneInstances>,
+}
+
+/// Instances in a specific zone (for aggregated response)
+#[derive(Debug, Deserialize)]
+pub struct ZoneInstances {
+    #[serde(default)]
+    pub instances: Vec<Instance>,
+}
+
 // ============================================================================
 // Firewall Types
 // ============================================================================
@@ -451,7 +465,7 @@ impl GcpRestClient {
         Ok(operation)
     }
 
-    /// List VM instances
+    /// List VM instances in a specific zone
     ///
     /// API: GET /projects/{project}/zones/{zone}/instances
     pub fn list_instances(&self, project_id: &str, zone: &str) -> Result<InstanceList> {
@@ -463,6 +477,29 @@ impl GcpRestClient {
         let response = self.get(&url)?;
         let list: InstanceList = response.into_json()?;
         Ok(list)
+    }
+
+    /// List VM instances across ALL zones (aggregated)
+    ///
+    /// Much faster than calling list_instances for each zone individually.
+    /// API: GET /projects/{project}/aggregated/instances
+    pub fn list_instances_aggregated(&self, project_id: &str) -> Result<Vec<Instance>> {
+        let url = format!(
+            "{}/projects/{}/aggregated/instances",
+            GCP_COMPUTE_API_BASE, project_id
+        );
+
+        let response = self.get(&url)?;
+        let list: AggregatedInstanceList = response.into_json()?;
+
+        // Flatten the HashMap<zone, instances> into a single Vec<Instance>
+        let all_instances: Vec<Instance> = list
+            .items
+            .into_values()
+            .flat_map(|zone_instances| zone_instances.instances)
+            .collect();
+
+        Ok(all_instances)
     }
 
     /// Get VM instance details
@@ -667,7 +704,10 @@ impl GcpRestClient {
 
     /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
     pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
+        use crate::{dure_info, dure_debug};
+
         let rules = self.list_firewall_rules(project_id)?;
+        dure_info!("🔍 Checking if IP {} is whitelisted. Found {} firewall rules", ip, rules.len());
 
         for rule in rules {
             // Check if rule allows SSH (port 22)
@@ -679,14 +719,20 @@ impl GcpRestClient {
             });
 
             if allows_ssh {
+                dure_debug!("🔍 Rule '{}' allows SSH", rule.name);
                 if let Some(ranges) = &rule.source_ranges {
+                    dure_debug!("🔍 Rule '{}' source_ranges: {:?}", rule.name, ranges);
                     if super::ip_in_ranges(ip, ranges) {
+                        dure_info!("🔍 IP {} matched in rule '{}' ranges", ip, rule.name);
                         return Ok(true);
                     }
+                } else {
+                    dure_debug!("🔍 Rule '{}' has no source_ranges", rule.name);
                 }
             }
         }
 
+        dure_info!("🔍 IP {} not found in any SSH firewall rules", ip);
         Ok(false)
     }
 
