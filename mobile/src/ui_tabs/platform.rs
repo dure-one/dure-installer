@@ -1060,6 +1060,23 @@ impl PlatformTab {
             }
         }
 
+        // Auto-clear Completed/Failed operation states
+        let now = chrono::Utc::now().timestamp();
+        for row in &mut self.rows {
+            match &row.operation_state {
+                OperationState::Completed { completed_at, .. } if now - completed_at > 3 => {
+                    row.operation_state = OperationState::Idle;
+                }
+                OperationState::Failed { failed_at, .. } if now - failed_at > 10 => {
+                    row.operation_state = OperationState::Idle;
+                }
+                _ => {}
+            }
+        }
+
+        // Request repaint to update UI when states auto-clear
+        ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+
         ui.heading("Cloud Platforms");
         ui.add_space(4.0);
         ui.label(
