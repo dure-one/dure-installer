@@ -719,15 +719,15 @@ impl GcpRestClient {
             });
 
             if allows_ssh {
-                dure_debug!("🔍 Rule '{}' allows SSH", rule.name);
+                dure_info!("🔍 Rule '{}' allows SSH", rule.name);
                 if let Some(ranges) = &rule.source_ranges {
-                    dure_debug!("🔍 Rule '{}' source_ranges: {:?}", rule.name, ranges);
+                    dure_info!("🔍 Rule '{}' source_ranges: {:?}", rule.name, ranges);
                     if super::ip_in_ranges(ip, ranges) {
                         dure_info!("🔍 IP {} matched in rule '{}' ranges", ip, rule.name);
                         return Ok(true);
                     }
                 } else {
-                    dure_debug!("🔍 Rule '{}' has no source_ranges", rule.name);
+                    dure_info!("🔍 Rule '{}' has no source_ranges", rule.name);
                 }
             }
         }
