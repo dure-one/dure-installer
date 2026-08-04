@@ -66,6 +66,10 @@ pub enum PlatformEvent {
         vm_name: String,
         message: String,
     },
+    VMsScanned {
+        platform_name: String,
+        vm_count: usize,
+    },
 
     // Firewall Events
     FirewallUpdated {
@@ -87,6 +91,13 @@ pub enum PlatformEvent {
     },
     Error {
         operation: String,
+        error: String,
+    },
+
+    /// Operation failed with error
+    OperationFailed {
+        platform_name: String,
+        operation: String,    // "firewall", "restart", etc.
         error: String,
     },
 }
