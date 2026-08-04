@@ -703,6 +703,28 @@ impl GcpRestClient {
     }
 
     /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
+    /// Check if IAP (Identity-Aware Proxy) is enabled for SSH
+    pub fn is_iap_enabled(&self, project_id: &str) -> Result<bool> {
+        let rules = self.list_firewall_rules(project_id)?;
+
+        Ok(rules.iter().any(|rule| {
+            let allows_ssh = rule.allowed.iter().any(|a| {
+                a.ip_protocol.to_lowercase() == "tcp"
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
+            });
+
+            if allows_ssh {
+                if let Some(ranges) = &rule.source_ranges {
+                    // Check for IAP IP range (35.235.240.0/20)
+                    return ranges.iter().any(|r| r.starts_with("35.235."));
+                }
+            }
+            false
+        }))
+    }
+
     pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
         use crate::{dure_info};
 
