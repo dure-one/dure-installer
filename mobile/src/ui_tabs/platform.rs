@@ -1275,7 +1275,7 @@ impl PlatformTab {
                 .allow_selection(false)
                 .allow_drawer(true)
                 .auto_row_height(true)      // Enable dynamic row heights
-                .min_row_height(52.0)       // Maintain MD3 minimum height
+                .min_row_height(70.0)       // Maintain MD3 minimum height
                 .column("Project", 150.0 * width_ratio, false)
                 .column("Type", 80.0 * width_ratio, false)
                 .column("Steps", 250.0 * width_ratio, false)
@@ -1295,7 +1295,25 @@ impl PlatformTab {
                             progress.show(ui);
                         })
                         .widget_cell(move |ui| {
-                            // Remove ScrollArea to allow dynamic row height
+                            // Calculate needed height for button wrapping
+                            let column_width = 260.0 * width_ratio;
+                            let button_width = 90.0; // Approximate width including spacing
+                            let button_height = 32.0; // Button height + vertical spacing
+
+                            // Count buttons (platform-dependent)
+                            let button_count = if cfg!(any(target_os = "android", target_arch = "wasm32")) {
+                                6 // Mobile/WASM: Refresh, Scan VMs, Firewall, Restart, Del VM, Delete
+                            } else {
+                                8 // Desktop: + Add VM, Billing
+                            };
+
+                            let buttons_per_row = (column_width / button_width).floor().max(1.0);
+                            let needed_rows = (button_count as f32 / buttons_per_row).ceil();
+                            let needed_height = needed_rows * button_height + 8.0; // Extra padding
+
+                            // Set minimum height before rendering
+                            ui.set_min_height(needed_height);
+
                             ui.horizontal_wrapped(|ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
                                 ui.spacing_mut().item_spacing.y = 2.0; // Add vertical spacing for wrapped rows
@@ -1308,182 +1326,182 @@ impl PlatformTab {
                                     OperationState::InProgress { .. }
                                 );
 
-                                        // 0. Refresh (always enabled)
-                                        if ui
-                                            .add(MaterialButton::outlined("Refresh").small())
-                                            .on_hover_text("Refresh platform data")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_refresh"),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
+                                // 0. Refresh (always enabled)
+                                if ui
+                                    .add(MaterialButton::outlined("Refresh").small())
+                                    .on_hover_text("Refresh platform data")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_refresh"),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
 
-                                        // Disable other buttons during operations
-                                        ui.add_enabled_ui(!operation_in_progress, |ui| {
-                                        // 1. Add VM
-                                        #[cfg(not(any(
-                                            target_os = "android",
-                                            target_arch = "wasm32"
-                                        )))]
-                                        if ui
-                                            .add_enabled(
-                                                !row_for_actions.has_vm
-                                                    && row_for_actions.project_selected,
-                                                MaterialButton::outlined("Add VM").small(),
-                                            )
-                                            .on_hover_text("Add VM")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_add_vm"),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
+                                // Disable other buttons during operations
+                                ui.add_enabled_ui(!operation_in_progress, |ui| {
+                                // 1. Add VM
+                                #[cfg(not(any(
+                                    target_os = "android",
+                                    target_arch = "wasm32"
+                                )))]
+                                if ui
+                                    .add_enabled(
+                                        !row_for_actions.has_vm
+                                            && row_for_actions.project_selected,
+                                        MaterialButton::outlined("Add VM").small(),
+                                    )
+                                    .on_hover_text("Add VM")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_add_vm"),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
 
-                                        // 1.5. Scan VMs
-                                        if ui
-                                            .add_enabled(
-                                                row_for_actions.project_selected,
-                                                MaterialButton::outlined("Scan VMs").small(),
-                                            )
-                                            .on_hover_text("Scan and import existing VMs from GCP")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_scan_vms"),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
+                                // 1.5. Scan VMs
+                                if ui
+                                    .add_enabled(
+                                        row_for_actions.project_selected,
+                                        MaterialButton::outlined("Scan VMs").small(),
+                                    )
+                                    .on_hover_text("Scan and import existing VMs from GCP")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_scan_vms"),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
 
-                                        // 2. Firewall
-                                        if ui
-                                            .add_enabled(
-                                                row_for_actions.project_selected
-                                                    && !row_for_actions.firewall_updated,
-                                                MaterialButton::outlined("Firewall").small(),
-                                            )
-                                            .on_hover_text("Update Firewall")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new(
-                                                        "platform_action_update_firewall",
-                                                    ),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
+                                // 2. Firewall
+                                if ui
+                                    .add_enabled(
+                                        row_for_actions.project_selected
+                                            && !row_for_actions.firewall_updated,
+                                        MaterialButton::outlined("Firewall").small(),
+                                    )
+                                    .on_hover_text("Update Firewall")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new(
+                                                "platform_action_update_firewall",
+                                            ),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
 
-                                        // 3. Restart
-                                        if ui
-                                            .add_enabled(
-                                                row_for_actions.has_vm,
-                                                MaterialButton::outlined("Restart").small(),
-                                            )
-                                            .on_hover_text("Restart VM")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_restart_vm"),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
+                                // 3. Restart
+                                if ui
+                                    .add_enabled(
+                                        row_for_actions.has_vm,
+                                        MaterialButton::outlined("Restart").small(),
+                                    )
+                                    .on_hover_text("Restart VM")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_restart_vm"),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
 
-                                        // 4. Del VM
-                                        if ui
-                                            .add_enabled(
-                                                row_for_actions.has_vm,
-                                                MaterialButton::outlined("Del VM").small(),
-                                            )
-                                            .on_hover_text("Delete VM")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_delete_vm"),
-                                                    (
-                                                        row_for_actions.project_id.clone(),
-                                                        row_for_actions
-                                                            .vm_name
-                                                            .clone()
-                                                            .unwrap_or_default(),
-                                                        row_for_actions
-                                                            .vm_zone
-                                                            .clone()
-                                                            .unwrap_or_default(),
-                                                    ),
-                                                )
-                                            });
-                                        }
+                                // 4. Del VM
+                                if ui
+                                    .add_enabled(
+                                        row_for_actions.has_vm,
+                                        MaterialButton::outlined("Del VM").small(),
+                                    )
+                                    .on_hover_text("Delete VM")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_delete_vm"),
+                                            (
+                                                row_for_actions.project_id.clone(),
+                                                row_for_actions
+                                                    .vm_name
+                                                    .clone()
+                                                    .unwrap_or_default(),
+                                                row_for_actions
+                                                    .vm_zone
+                                                    .clone()
+                                                    .unwrap_or_default(),
+                                            ),
+                                        )
+                                    });
+                                }
 
-                                        // 5. Regen
-                                        // if ui.add_enabled(row_for_actions.has_vm,
-                                        //     MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
-                                        //     ui.data_mut(|d| d.insert_temp(
-                                        //         egui::Id::new("platform_action_regen_vm"),
-                                        //         row_for_actions.project_id.clone()
-                                        //     ));
-                                        // }
+                                // 5. Regen
+                                // if ui.add_enabled(row_for_actions.has_vm,
+                                //     MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
+                                //     ui.data_mut(|d| d.insert_temp(
+                                //         egui::Id::new("platform_action_regen_vm"),
+                                //         row_for_actions.project_id.clone()
+                                //     ));
+                                // }
 
-                                        // 6. Billing
-                                        #[cfg(not(any(
-                                            target_os = "android",
-                                            target_arch = "wasm32"
-                                        )))]
-                                        if ui
-                                            .add_enabled(
-                                                row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
-                                                MaterialButton::outlined("Billing").small(),
-                                            )
-                                            .on_hover_text("Estimated Billing")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_billing_name"),
-                                                    row_for_actions.project_id.clone(),
-                                                );
-                                                if let Some(project_id) = &row_for_actions.selected_project_id {
-                                                    d.insert_temp(
-                                                        egui::Id::new("platform_action_billing_project"),
-                                                        project_id.clone(),
-                                                    );
-                                                }
-                                            });
+                                // 6. Billing
+                                #[cfg(not(any(
+                                    target_os = "android",
+                                    target_arch = "wasm32"
+                                )))]
+                                if ui
+                                    .add_enabled(
+                                        row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
+                                        MaterialButton::outlined("Billing").small(),
+                                    )
+                                    .on_hover_text("Estimated Billing")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_billing_name"),
+                                            row_for_actions.project_id.clone(),
+                                        );
+                                        if let Some(project_id) = &row_for_actions.selected_project_id {
+                                            d.insert_temp(
+                                                egui::Id::new("platform_action_billing_project"),
+                                                project_id.clone(),
+                                            );
                                         }
+                                    });
+                                }
 
-                                        // 7. Delete
-                                        if ui
-                                            .add(MaterialButton::outlined("Delete").small())
-                                            .on_hover_text("Delete Platform")
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new(
-                                                        "platform_action_delete_platform",
-                                                    ),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
-                                        }); // End add_enabled_ui
-                            }); // End horizontal_wrapped
-                        })
-                        .drawer(move |ui| {
-                            render_drawer_content(ui, &row_for_drawer);
-                        })
+                                // 7. Delete
+                                if ui
+                                    .add(MaterialButton::outlined("Delete").small())
+                                    .on_hover_text("Delete Platform")
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new(
+                                                "platform_action_delete_platform",
+                                            ),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
+                            }); // End add_enabled_ui
+                        }); // End horizontal_wrapped
+                    })
+                    .drawer(move |ui| {
+                        render_drawer_content(ui, &row_for_drawer);
+                    })
                 });
             }
 
