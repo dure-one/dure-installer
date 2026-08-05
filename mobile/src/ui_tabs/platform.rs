@@ -3,6 +3,7 @@
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_material3::{MaterialButton, data_table};
+use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
 use crate::calc::audit;
@@ -11,7 +12,7 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
-use crate::ui_components::{StatusGrid, ItemState, ActionMenu, SvgEmoji, EmojiProgressBar};
+use crate::ui_components::{ActionMenu, SvgEmoji, EmojiProgressBar};
 
 /// Platform row data for data table
 #[derive(Clone, Debug)]
@@ -30,7 +31,7 @@ pub struct PlatformRow {
 
     // Drawer content data
     pub email: Option<String>,      // Connected Google account
-    pub total_project_count: usize, // Cached from config (not 0!)
+    pub total_project_count: Option<usize>, // Cached project count (None = not yet loaded)
     pub selected_project_id: Option<String>,
     pub vm_name: Option<String>,            // First VM name
     pub vm_external_ip: Option<String>,     // First VM external IP (from cache or VM)
@@ -38,7 +39,7 @@ pub struct PlatformRow {
     pub ssh_public_key: Option<String>,     // Derived SSH public key for verification
     pub ssh_keyring_domain: Option<String>, // Keyring domain for SSH key
     pub firewall_status: String,            // Cached from config
-    pub ssh_status: String,                 // "✓ Ready" or "? No external IP"
+    pub ssh_status: String,                 // "✅ Ready" or "? No external IP"
 
     // NEW: Status cache metadata
     pub last_refresh_time: Option<i64>,     // For staleness indicator
@@ -216,6 +217,10 @@ pub struct PlatformTab {
     // Status refresh state (per platform, keyed by project_id)
     #[cfg_attr(feature = "serde", serde(skip))]
     refresh_promises: std::collections::HashMap<String, poll_promise::Promise<Result<(), String>>>,
+
+    // Track platforms that have been auto-refreshed (to prevent infinite loop)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    auto_refreshed_platforms: std::collections::HashSet<String>,
 }
 
 impl Default for PlatformTab {
@@ -268,6 +273,7 @@ impl Default for PlatformTab {
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
+            auto_refreshed_platforms: std::collections::HashSet::new(),
         }
     }
 }
@@ -350,8 +356,8 @@ fn compute_firewall_status(access_token: Option<&str>, project_id: Option<&str>)
 
             match get_current_ip() {
                 Ok(current_ip) => match client.check_ip_whitelisted(project, &current_ip) {
-                    Ok(true) => format!("✓ Whitelisted ({})", current_ip),
-                    Ok(false) => "✗ Not whitelisted".to_string(),
+                    Ok(true) => format!("✅ Whitelisted ({})", current_ip),
+                    Ok(false) => "❌ Not whitelisted".to_string(),
                     Err(_) => "? Status unknown".to_string(),
                 },
                 Err(_) => "? Failed to get IP".to_string(),
@@ -378,12 +384,12 @@ fn compute_ssh_status(
         return match result {
             Ok(conn_result) => {
                 if conn_result.success {
-                    "✓ Connected".to_string()
+                    "✅ Connected".to_string()
                 } else {
-                    format!("✗ {}", conn_result.message)
+                    format!("❌ {}", conn_result.message)
                 }
             }
-            Err(e) => format!("✗ Failed: {}", e),
+            Err(e) => format!("❌ Failed: {}", e),
         };
     }
 
@@ -392,7 +398,7 @@ fn compute_ssh_status(
         if vm.external_ip.is_some() {
             "? Not tested".to_string()
         } else {
-            "✗ No external IP".to_string()
+            "❌ No external IP".to_string()
         }
     } else {
         "No VM".to_string()
@@ -718,87 +724,101 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
     }
 }
 
+/// Format project count for display
+fn format_project_count_display(count: Option<usize>) -> String {
+    match count {
+        None => "—".to_string(),
+        Some(0) => "0 projects".to_string(),
+        Some(1) => "1 project".to_string(),
+        Some(n) => format!("{} projects", n),
+    }
+}
+
 /// Render drawer content showing platform hierarchy
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     ui.add_space(8.0);
 
-    let mut grid = StatusGrid::new();
-
     // Connection info
     if let Some(email) = &row.email {
-        grid.add_item(
-            SvgEmoji::Email,
-            "Email",
-            format!("{} ({} projects)", email, row.total_project_count),
-            None,
-        );
+        let count_display = format_project_count_display(row.total_project_count);
+        EmojiLabel::new(format!("📧 {} ({})", email, count_display)).show(ui);
     } else {
-        grid.add_item(SvgEmoji::Email, "Email", "Not connected", None);
+        EmojiLabel::new("📧 Not connected").show(ui);
     }
+
+    ui.add_space(4.0);
 
     // Project info
     if let Some(project_id) = &row.selected_project_id {
-        grid.add_item(SvgEmoji::Project, "Project", project_id, None);
+        EmojiLabel::new(format!("📁 Project: {}", project_id)).show(ui);
+        ui.add_space(4.0);
 
         // Refresh staleness
         if let Some(last_refresh) = row.last_refresh_time {
             let elapsed = chrono::Utc::now().timestamp() - last_refresh;
-            let (time_str, state) = if elapsed < 60 {
-                ("just now".to_string(), None)
+            let time_text = if elapsed < 60 {
+                "🕐 Refreshed: just now".to_string()
             } else if elapsed < 3600 {
-                (format!("{} min ago", elapsed / 60), None)
+                format!("🕐 Refreshed: {} min ago", elapsed / 60)
             } else if elapsed < 86400 {
-                (format!("{} hours ago", elapsed / 3600), Some(ItemState::Warning))
+                format!("⚠️ Refreshed: {} hours ago", elapsed / 3600)
             } else {
-                (format!("{} days ago", elapsed / 86400), Some(ItemState::Warning))
+                format!("⚠️ Refreshed: {} days ago", elapsed / 86400)
             };
-            grid.add_item(SvgEmoji::Clock, "Refreshed", time_str, state);
+
+            let color = if elapsed < 3600 {
+                ui.style().visuals.text_color()
+            } else {
+                egui::Color32::from_rgb(255, 193, 7) // Warning color
+            };
+
+            EmojiLabel::new(egui::RichText::new(time_text).color(color)).show(ui);
+            ui.add_space(4.0);
         }
 
         // VM details
         if let Some(vm_name) = &row.vm_name {
-            grid.add_item(SvgEmoji::VM, "VM", vm_name, None);
+            EmojiLabel::new(format!("💻 VM: {}", vm_name)).show(ui);
+            ui.add_space(4.0);
 
             // IP address
-            grid.add_item(
-                SvgEmoji::Network,
-                "IP",
-                row.vm_external_ip
-                    .as_deref()
-                    .unwrap_or("⚠ No external IP"),
-                if row.vm_external_ip.is_none() {
-                    Some(ItemState::Warning)
-                } else {
-                    None
-                },
-            );
+            if let Some(ip) = &row.vm_external_ip {
+                EmojiLabel::new(format!("🌐 IP: {}", ip)).show(ui);
+            } else {
+                EmojiLabel::new(
+                    egui::RichText::new("⚠️ IP: No external IP")
+                        .color(egui::Color32::from_rgb(255, 193, 7))
+                ).show(ui);
+            }
+            ui.add_space(4.0);
 
             // Firewall status (check operation state)
-            let (firewall_value, firewall_state) = match &row.operation_state {
+            let firewall_text = match &row.operation_state {
                 OperationState::InProgress { operation, .. }
                     if operation.to_lowercase().contains("firewall") =>
                 {
-                    ("Updating...".to_string(), Some(ItemState::InProgress))
+                    ("🔄 Updating...".to_string(), egui::Color32::from_rgb(255, 152, 0))
                 }
                 OperationState::Failed { operation, error, .. }
                     if operation.to_lowercase().contains("firewall") =>
                 {
-                    (error.clone(), Some(ItemState::Error))
+                    (format!("🔥 {}", error), egui::Color32::from_rgb(244, 67, 54))
                 }
-                _ => (row.firewall_status.clone(), None),
+                _ => (format!("🛡️ {}", row.firewall_status), ui.style().visuals.text_color()),
             };
-            grid.add_item(SvgEmoji::Firewall, "Firewall", firewall_value, firewall_state);
+            EmojiLabel::new(egui::RichText::new(firewall_text.0).color(firewall_text.1)).show(ui);
+            ui.add_space(4.0);
 
             // SSH status
-            grid.add_item(SvgEmoji::Key, "SSH", &row.ssh_status, None);
+            EmojiLabel::new(format!("🔑 SSH: {}", row.ssh_status)).show(ui);
         } else {
-            grid.add_item(SvgEmoji::VM, "VM", "— No VM created", None);
+            EmojiLabel::new("💻 VM: — No VM created").show(ui);
         }
     } else {
-        grid.add_item(SvgEmoji::Project, "Project", "— No project selected", None);
+        EmojiLabel::new("📁 Project: — No project selected").show(ui);
     }
 
-    grid.show(ui);
+    ui.add_space(8.0);
 
     // SSH action menu (if available)
     if let (Some(external_ip), Some(private_key)) =
@@ -829,10 +849,10 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
         }
     } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
         ui.add_space(8.0);
-        ui.colored_label(
-            egui::Color32::from_rgb(255, 152, 0),
-            "⚠ SSH key not found in keyring",
-        );
+        EmojiLabel::new(
+            egui::RichText::new("⚠️ SSH key not found in keyring")
+                .color(egui::Color32::from_rgb(255, 152, 0))
+        ).show(ui);
     }
 }
 
@@ -856,7 +876,7 @@ impl PlatformTab {
                         platform_name,
                         whitelisted_ip,
                     }) => {
-                        dure_debug!("✓ Successfully added {} to firewall whitelist", whitelisted_ip);
+                        dure_debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
 
                         // Incremental update: Find and update specific row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -870,7 +890,7 @@ impl PlatformTab {
                         // Note: NO self.loaded = false! Incremental update only
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
-                        dure_info!("✓ VM {} restarted successfully", vm_name);
+                        dure_info!("✅ VM {} restarted successfully", vm_name);
 
                         // Incremental update
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -895,7 +915,7 @@ impl PlatformTab {
                         platform_name,
                         vm_count,
                     }) => {
-                        dure_info!("✓ Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
+                        dure_info!("✅ Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
 
                         // Update operation state
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -914,7 +934,7 @@ impl PlatformTab {
                         vm_name,
                         external_ip,
                     }) => {
-                        dure_info!("✓ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        dure_info!("✅ VM '{}' created successfully with IP {}", vm_name, external_ip);
 
                         // Incremental update
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -934,7 +954,7 @@ impl PlatformTab {
                         platform_name,
                         vm_name,
                     }) => {
-                        dure_info!("✓ VM {} deleted successfully", vm_name);
+                        dure_info!("✅ VM {} deleted successfully", vm_name);
 
                         // Update operation state before reload
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -956,7 +976,7 @@ impl PlatformTab {
                                 if let Err(e) = app_config.save(&config_path) {
                                     self.load_error = Some(format!("Failed to save config: {}", e));
                                 } else {
-                                    dure_info!("✓ Config updated, refreshing table");
+                                    dure_info!("✅ Config updated, refreshing table");
                                     self.loaded = false;
                                     self.load_error = None;
                                 }
@@ -967,7 +987,7 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        dure_debug!("✓ Projects listed for {}: {} projects", platform_name,
+                        dure_debug!("✅ Projects listed for {}: {} projects", platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -1021,8 +1041,9 @@ impl PlatformTab {
                         vm_status,
                         firewall_status,
                         ssh_status,
+                        project_count,
                     }) => {
-                        dure_info!("✓ Refresh completed for {}", platform_name);
+                        dure_info!("✅ Refresh completed for {}", platform_name);
 
                         // Find and update the row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1041,7 +1062,7 @@ impl PlatformTab {
                                 if firewall_status.whitelisted {
                                     row.firewall_status = format!("✅ Whitelisted ({})", current_ip);
                                 } else {
-                                    row.firewall_status = format!("✗ Not whitelisted ({})", current_ip);
+                                    row.firewall_status = format!("❌ Not whitelisted ({})", current_ip);
                                 }
                             } else {
                                 row.firewall_status = "? Status unknown".to_string();
@@ -1050,12 +1071,15 @@ impl PlatformTab {
                             // Update SSH status
                             row.ssh_ready = ssh_status.connected;
                             if ssh_status.connected {
-                                row.ssh_status = "✓ Ready".to_string();
+                                row.ssh_status = "✅ Ready".to_string();
                             } else if let Some(error) = &ssh_status.error {
-                                row.ssh_status = format!("✗ {}", error);
+                                row.ssh_status = format!("❌ {}", error);
                             } else {
                                 row.ssh_status = "? Unknown".to_string();
                             }
+
+                            // Update project count
+                            row.total_project_count = project_count;
 
                             // Clear operation state (refresh complete)
                             row.operation_state = OperationState::Completed {
@@ -1072,7 +1096,7 @@ impl PlatformTab {
                         operation,
                         error,
                     }) => {
-                        dure_error!("✗ Operation '{}' failed for {}: {}", operation, platform_name, error);
+                        dure_error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
 
                         // Update row to show error state
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1106,10 +1130,10 @@ impl PlatformTab {
                 .rev()
                 .next()
             {
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 100, 100),
-                    format!("⚠ Error in {}: {}", error.operation, error.error),
-                );
+                EmojiLabel::new(
+                    egui::RichText::new(format!("⚠️ Error in {}: {}", error.operation, error.error))
+                        .color(egui::Color32::from_rgb(255, 100, 100))
+                ).show(ui);
                 ui.add_space(4.0);
             }
         }
@@ -1189,6 +1213,26 @@ impl PlatformTab {
             self.load_rows();
         }
 
+        // Auto-trigger refresh for rows with missing project count cache (once per platform)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            for row in &self.rows {
+                if row.total_project_count.is_none()
+                    && !self.auto_refreshed_platforms.contains(&row.project_id)
+                    && !self.refresh_promises.contains_key(&row.project_id)
+                {
+                    if let Some(ref vm) = vm {
+                        if let Ok(_) = vm.refresh_platform(row.project_id.clone()) {
+                            // Mark as auto-refreshed to prevent repeat triggers
+                            self.auto_refreshed_platforms.insert(row.project_id.clone());
+                        } else {
+                            dure_debug!("Auto-refresh failed for {}", row.project_id);
+                        }
+                    }
+                }
+            }
+        }
+
         // Show error in modal dialog instead of replacing UI
         if let Some(error) = &self.load_error {
             if !self.show_error_dialog {
@@ -1230,6 +1274,8 @@ impl PlatformTab {
                 .id(table_id)
                 .allow_selection(false)
                 .allow_drawer(true)
+                .auto_row_height(true)      // Enable dynamic row heights
+                .min_row_height(52.0)       // Maintain MD3 minimum height
                 .column("Project", 150.0 * width_ratio, false)
                 .column("Type", 80.0 * width_ratio, false)
                 .column("Steps", 250.0 * width_ratio, false)
@@ -1249,20 +1295,18 @@ impl PlatformTab {
                             progress.show(ui);
                         })
                         .widget_cell(move |ui| {
-                            egui::ScrollArea::horizontal()
-                                .id_salt(format!("operations_scroll_{}", idx))
-                                .auto_shrink([false, true])
-                                .show(ui, |ui| {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.spacing_mut().item_spacing.x = 2.0;
-                                        ui.style_mut().spacing.button_padding =
-                                            egui::vec2(6.0, 2.0);
+                            // Remove ScrollArea to allow dynamic row height
+                            ui.horizontal_wrapped(|ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                ui.spacing_mut().item_spacing.y = 2.0; // Add vertical spacing for wrapped rows
+                                ui.style_mut().spacing.button_padding =
+                                    egui::vec2(6.0, 2.0);
 
-                                        // Check if any operation in progress
-                                        let operation_in_progress = matches!(
-                                            row_for_actions.operation_state,
-                                            OperationState::InProgress { .. }
-                                        );
+                                // Check if any operation in progress
+                                let operation_in_progress = matches!(
+                                    row_for_actions.operation_state,
+                                    OperationState::InProgress { .. }
+                                );
 
                                         // 0. Refresh (always enabled)
                                         if ui
@@ -1435,8 +1479,7 @@ impl PlatformTab {
                                             });
                                         }
                                         }); // End add_enabled_ui
-                                    });
-                                });
+                            }); // End horizontal_wrapped
                         })
                         .drawer(move |ui| {
                             render_drawer_content(ui, &row_for_drawer);
@@ -1725,8 +1768,8 @@ impl PlatformTab {
                             platform.gcp_selected_project_id.as_deref(),
                         );
 
-                        // firewall_updated is true if IP is whitelisted (status starts with ✓)
-                        let firewall_updated = firewall_status_str.starts_with("✓");
+                        // firewall_updated is true if IP is whitelisted (status starts with ✅)
+                        let firewall_updated = firewall_status_str.starts_with("✅");
 
                         // Compute SSH status from cached results only (no blocking)
                         let project_id_key = platform.gcp_selected_project_id.as_ref()
@@ -1771,8 +1814,8 @@ impl PlatformTab {
                             // Extract drawer data
                             email: platform.gcp_connected_email.clone(),
 
-                            // FIX: Use cached project count (not 0!)
-                            total_project_count: platform.cached_total_project_count.unwrap_or(0),
+                            // Use cached project count (None = not yet loaded, shows "—")
+                            total_project_count: platform.cached_total_project_count,
 
                             selected_project_id: platform.gcp_selected_project_id.clone(),
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
@@ -2024,10 +2067,10 @@ impl PlatformTab {
                     }
 
                     if let Some(email) = &self.add_platform_connected_email {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(72, 187, 120),
-                            format!("✓ Connected as: {}", email),
-                        );
+                        EmojiLabel::new(
+                            egui::RichText::new(format!("✅ Connected as: {}", email))
+                                .color(egui::Color32::from_rgb(72, 187, 120))
+                        ).show(ui);
 
                         ui.add_space(8.0);
 
@@ -2071,10 +2114,10 @@ impl PlatformTab {
                             ui.add_space(4.0);
                             ui.text_edit_singleline(&mut self.add_platform_new_project_id);
                             ui.add_space(4.0);
-                            ui.colored_label(
-                                egui::Color32::GRAY,
-                                "ⓘ Project ID must be 6-30 characters, lowercase letters, digits, hyphens",
-                            );
+                            EmojiLabel::new(
+                                egui::RichText::new("ℹ️ Project ID must be 6-30 characters, lowercase letters, digits, hyphens")
+                                    .color(egui::Color32::GRAY)
+                            ).show(ui);
                         } else {
                             // Select existing project UI
                             ui.label(format!(
@@ -2117,7 +2160,7 @@ impl PlatformTab {
                         ui.add_space(4.0);
                         ui.colored_label(
                             egui::Color32::GRAY,
-                            "⚠ Connection required for GCP platforms",
+                            "⚠️ Connection required for GCP platforms",
                         );
 
                         // Show OAuth URL if available
@@ -2175,12 +2218,12 @@ impl PlatformTab {
                         if self.add_platform_type == "gcp"
                             && self.add_platform_connected_email.is_none()
                         {
-                            ui.label("⚠ Connect to Google Cloud first");
+                            ui.label("⚠️ Connect to Google Cloud first");
                         } else if self.add_platform_type == "gcp" {
                             if self.add_platform_create_new {
-                                ui.label("⚠ Enter project ID");
+                                ui.label("⚠️ Enter project ID");
                             } else {
-                                ui.label("⚠ Select a project");
+                                ui.label("⚠️ Select a project");
                             }
                         }
                     }
@@ -2494,7 +2537,7 @@ impl PlatformTab {
             .show(ctx, |ui| {
                 if self.delete_vm_confirming {
                     // Confirmation step
-                    ui.heading("⚠ Confirm Deletion");
+                    ui.heading("⚠️ Confirm Deletion");
                     ui.add_space(8.0);
 
                     if let Some(idx) = self.delete_vm_selected {
@@ -2576,7 +2619,7 @@ impl PlatformTab {
                         });
 
                         if !can_delete {
-                            ui.label("⚠ Select a VM");
+                            ui.label("⚠️ Select a VM");
                         }
                     });
                 }
@@ -2592,7 +2635,7 @@ impl PlatformTab {
         if let Some(error) = self.load_error.clone() {
             let mut open = self.show_error_dialog;
 
-            egui::Window::new("⚠ Error")
+            egui::Window::new("⚠️ Error")
                 .open(&mut open)
                 .resizable(false)
                 .collapsible(false)
@@ -2883,9 +2926,9 @@ impl PlatformTab {
                         Ok(whitelisted) => {
                             platform.cached_firewall_status = Some(
                                 if whitelisted {
-                                    format!("✓ Whitelisted ({})", current_ip)
+                                    format!("✅ Whitelisted ({})", current_ip)
                                 } else {
-                                    "✗ Not whitelisted".to_string()
+                                    "❌ Not whitelisted".to_string()
                                 }
                             );
                         }
@@ -2959,7 +3002,7 @@ impl PlatformTab {
             .resizable(false)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.heading("⚠ Confirm Platform Deletion");
+                ui.heading("⚠️ Confirm Platform Deletion");
                 ui.add_space(8.0);
 
                 ui.label(format!(
@@ -2972,7 +3015,7 @@ impl PlatformTab {
                     ui.colored_label(
                         egui::Color32::from_rgb(245, 101, 101),
                         format!(
-                            "⚠ This will also remove {} VM(s) from config!",
+                            "⚠️ This will also remove {} VM(s) from config!",
                             self.delete_platform_vm_count
                         ),
                     );
@@ -3340,7 +3383,7 @@ impl PlatformTab {
                     if is_table_not_found {
                         ui.colored_label(
                             egui::Color32::from_rgb(255, 152, 0),
-                            "⚠ Billing Export Not Configured",
+                            "⚠️ Billing Export Not Configured",
                         );
                         ui.add_space(4.0);
                         ui.label("BigQuery billing export table does not exist yet.");
@@ -3504,5 +3547,49 @@ mod tests {
         let state = PlatformTab::default();
         assert!(!state.delete_platform_delete_vms);
         assert!(!state.delete_platform_delete_project);
+    }
+
+    #[test]
+    fn test_format_project_count_display_with_none() {
+        // When project count is not yet loaded, should show "—"
+        assert_eq!(format_project_count_display(None), "—");
+    }
+
+    #[test]
+    fn test_format_project_count_display_with_zero() {
+        // When project count is 0, should show "0 projects"
+        assert_eq!(format_project_count_display(Some(0)), "0 projects");
+    }
+
+    #[test]
+    fn test_format_project_count_display_with_one() {
+        // When project count is 1, should show "1 project" (singular)
+        assert_eq!(format_project_count_display(Some(1)), "1 project");
+    }
+
+    #[test]
+    fn test_format_project_count_display_with_many() {
+        // When project count is >1, should show "N projects" (plural)
+        assert_eq!(format_project_count_display(Some(5)), "5 projects");
+    }
+
+    #[test]
+    fn test_auto_refresh_tracking() {
+        // Verify auto-refresh tracking prevents duplicate refreshes
+        let mut tab = PlatformTab::default();
+        let project_id = "test-project".to_string();
+
+        // Initially empty
+        assert!(!tab.auto_refreshed_platforms.contains(&project_id));
+
+        // Mark as auto-refreshed
+        tab.auto_refreshed_platforms.insert(project_id.clone());
+
+        // Should now contain the project
+        assert!(tab.auto_refreshed_platforms.contains(&project_id));
+
+        // Attempting to insert again should not cause issues
+        tab.auto_refreshed_platforms.insert(project_id.clone());
+        assert_eq!(tab.auto_refreshed_platforms.len(), 1);
     }
 }
