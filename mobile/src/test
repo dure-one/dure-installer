@@ -1,0 +1,25 @@
+#!/bin/bash
+clear
+echo "=============================="
+echo "      SYSTEM INFORMATION      "
+echo "=============================="
+
+echo -e "\n[+] IP Address:"
+ip -br address || hostname -I
+
+echo -e "\n[+] IP(EXT) Address:"
+curl icanhazip.com
+
+echo -e "\n[+] CPU Usage:"
+top -bn1 | grep "Cpu(s)"
+
+echo -e "\n[+] Memory and Swap Usage:"
+free -h
+
+echo -e "\n[+] Disk Space Usage:"
+df -h /
+
+echo -e "\n[+] Top 5 Memory-Consuming Processes:"
+ps -eo pid,comm,%mem,%cpu --sort=-%mem | head -n 6
+
+echo "=============================="
