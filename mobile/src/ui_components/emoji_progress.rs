@@ -44,23 +44,22 @@ impl EmojiProgressBar {
         self
     }
 
-    fn emoji_for_state(&self, state: ProgressState) -> SvgEmoji {
+    fn emoji_for_state(&self, state: ProgressState) -> &str {
         match state {
-            ProgressState::Completed => SvgEmoji::Checkmark,
-            ProgressState::InProgress => SvgEmoji::Progress,
-            ProgressState::Pending => SvgEmoji::Circle,
-            ProgressState::Failed => SvgEmoji::Cross,
+            ProgressState::Completed => "✅",
+            ProgressState::InProgress => SvgEmoji::Progress.to_unicode(),
+            ProgressState::Pending => SvgEmoji::Circle.to_unicode(),
+            ProgressState::Failed => SvgEmoji::Cross.to_unicode(),
         }
     }
 
     pub fn show(&self, ui: &mut egui::Ui) -> egui::Response {
         if self.compact {
-            // Inline: emoji → emoji → emoji (with labels on hover)
-            ui.horizontal(|ui| {
+            // Inline with wrapping: emoji label → emoji label (wraps to next line if needed)
+            ui.horizontal_wrapped(|ui| {
                 for (idx, step) in self.steps.iter().enumerate() {
                     let emoji = self.emoji_for_state(step.state);
-                    ui.label(emoji.to_unicode())
-                        .on_hover_text(&step.label);
+                    ui.label(format!("{} {}", emoji, step.label));
 
                     // Arrow between steps (except last)
                     if idx < self.steps.len() - 1 {
@@ -75,7 +74,7 @@ impl EmojiProgressBar {
                 for step in &self.steps {
                     ui.horizontal(|ui| {
                         let emoji = self.emoji_for_state(step.state);
-                        ui.label(emoji.to_unicode());
+                        ui.label(emoji);
                         ui.label(&step.label);
                     });
                 }
@@ -180,10 +179,11 @@ mod tests {
     #[test]
     fn test_emoji_mapping() {
         let bar = EmojiProgressBar::new();
-        assert_eq!(bar.emoji_for_state(ProgressState::Completed), SvgEmoji::Checkmark);
-        assert_eq!(bar.emoji_for_state(ProgressState::InProgress), SvgEmoji::Progress);
-        assert_eq!(bar.emoji_for_state(ProgressState::Pending), SvgEmoji::Circle);
-        assert_eq!(bar.emoji_for_state(ProgressState::Failed), SvgEmoji::Cross);
+        // ✅ used directly instead of SvgEmoji::Checkmark for consistency
+        assert_eq!(bar.emoji_for_state(ProgressState::Completed), "✅");
+        assert_eq!(bar.emoji_for_state(ProgressState::InProgress), SvgEmoji::Progress.to_unicode());
+        assert_eq!(bar.emoji_for_state(ProgressState::Pending), SvgEmoji::Circle.to_unicode());
+        assert_eq!(bar.emoji_for_state(ProgressState::Failed), SvgEmoji::Cross.to_unicode());
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
             ssh_ready: true,
             operation_state: OperationState::Idle,
             email: None,
-            total_project_count: 0,
+            total_project_count: None,
             selected_project_id: None,
             vm_name: None,
             vm_external_ip: None,
@@ -241,7 +241,7 @@ mod tests {
                 started_at: 0,
             },
             email: None,
-            total_project_count: 0,
+            total_project_count: None,
             selected_project_id: None,
             vm_name: None,
             vm_external_ip: None,

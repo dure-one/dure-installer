@@ -705,77 +705,74 @@ impl GcpRestClient {
     /// Check if an IP is whitelisted for SSH (port 22) in firewall rules
     /// Check if IAP (Identity-Aware Proxy) is enabled for SSH
     pub fn is_iap_enabled(&self, project_id: &str) -> Result<bool> {
-        let rules = self.list_firewall_rules(project_id)?;
+        use crate::dure_info;
 
-        Ok(rules.iter().any(|rule| {
+        let rules = self.list_firewall_rules(project_id)?;
+        dure_info!("🔍 IAP check: Examining {} firewall rules", rules.len());
+
+        let iap_enabled = rules.iter().any(|rule| {
             let allows_ssh = rule.allowed.iter().any(|a| {
-                a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports
-                        .as_ref()
-                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
+                let proto = a.ip_protocol.to_lowercase();
+                (proto == "tcp" && a.ports.as_ref().map_or(false, |ports| ports.iter().any(|p| p == "22")))
+                    || proto == "all"
             });
 
             if allows_ssh {
+                let proto_desc = rule.allowed.iter()
+                    .map(|a| a.ip_protocol.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                dure_info!("🔍 IAP check: Rule '{}' allows SSH (protocol: {})", rule.name, proto_desc);
+
                 if let Some(ranges) = &rule.source_ranges {
-                    // Check for IAP IP range (35.235.240.0/20)
-                    return ranges.iter().any(|r| r.starts_with("35.235."));
+                    dure_info!("🔍 IAP check: Rule '{}' has {} source ranges: {:?}",
+                        rule.name, ranges.len(), ranges);
+
+                    let has_iap_range = ranges.iter().any(|r| r.starts_with("35.235."));
+                    if has_iap_range {
+                        dure_info!("🔍 IAP check: ✅ Rule '{}' has IAP range (35.235.*)", rule.name);
+                    }
+                    return has_iap_range;
+                } else {
+                    dure_info!("🔍 IAP check: Rule '{}' has no source_ranges", rule.name);
                 }
             }
             false
-        }))
+        });
+
+        dure_info!("🔍 IAP check result: {}", if iap_enabled { "ENABLED" } else { "NOT ENABLED" });
+        Ok(iap_enabled)
     }
 
     pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
         use crate::{dure_info};
 
         let rules = self.list_firewall_rules(project_id)?;
-        dure_info!("🔍 Checking if IP {} is whitelisted. Found {} firewall rules", ip, rules.len());
+        dure_info!("🔍 Checking if IP {} is whitelisted for DIRECT access. Found {} firewall rules", ip, rules.len());
 
-        // First check if IAP (Identity-Aware Proxy) is enabled
-        // IAP uses IP range 35.235.240.0/20 for SSH tunneling
-        let has_iap = rules.iter().any(|rule| {
-            let allows_ssh = rule.allowed.iter().any(|a| {
-                a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports
-                        .as_ref()
-                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
-            });
-
-            if allows_ssh {
-                if let Some(ranges) = &rule.source_ranges {
-                    // Check for IAP IP range (35.235.240.0/20)
-                    return ranges.iter().any(|r| r.starts_with("35.235."));
-                }
-            }
-            false
-        });
-
-        if has_iap {
-            dure_info!("🔍 IAP (Identity-Aware Proxy) is enabled - SSH access via IAP");
-            return Ok(true);
-        }
-
-        // Check direct IP access
+        // Check ONLY for direct IP access (not IAP)
+        // IAP detection is handled separately by is_iap_enabled()
         for rule in rules {
-            // Check if rule allows SSH (port 22)
+            // Check if rule allows SSH (tcp:22 or protocol:all)
             let allows_ssh = rule.allowed.iter().any(|a| {
-                a.ip_protocol.to_lowercase() == "tcp"
-                    && a.ports
-                        .as_ref()
-                        .map_or(false, |ports| ports.iter().any(|p| p == "22"))
+                let proto = a.ip_protocol.to_lowercase();
+                (proto == "tcp" && a.ports.as_ref().map_or(false, |ports| ports.iter().any(|p| p == "22")))
+                    || proto == "all"
             });
 
             if allows_ssh {
                 if let Some(ranges) = &rule.source_ranges {
                     if super::ip_in_ranges(ip, ranges) {
-                        dure_info!("🔍 IP {} matched in rule '{}' ranges", ip, rule.name);
+                        dure_info!("🔍 IP {} matched in rule '{}' with protocol {}",
+                            ip, rule.name,
+                            rule.allowed.iter().map(|a| &a.ip_protocol).next().unwrap_or(&"unknown".to_string()));
                         return Ok(true);
                     }
                 }
             }
         }
 
-        dure_info!("🔍 IP {} not found in any SSH firewall rules and IAP not enabled", ip);
+        dure_info!("🔍 IP {} not found in any SSH firewall rules for direct access", ip);
         Ok(false)
     }
 

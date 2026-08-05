@@ -113,6 +113,7 @@ pub enum PlatformEvent {
         vm_status: VmStatus,
         firewall_status: FirewallStatus,
         ssh_status: SshStatus,
+        project_count: Option<usize>, // Total number of GCP projects accessible
     },
 
     // Progress & Errors

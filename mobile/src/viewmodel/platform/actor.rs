@@ -1094,12 +1094,16 @@ impl PlatformActor {
             // Step 3: Test SSH connection
             let ssh_status = self.test_ssh_connection(&platform).await;
 
+            // Step 4: Fetch project count and cache to config
+            let project_count = self.fetch_and_cache_project_count(&platform_name, &platform).await;
+
             // Send RefreshCompleted event
             self.send_event(PlatformEvent::RefreshCompleted {
                 platform_name: platform_name.clone(),
                 vm_status,
                 firewall_status,
                 ssh_status,
+                project_count,
             })
             .await;
 
@@ -1237,16 +1241,8 @@ impl PlatformActor {
         // Create GCP client
         let client = crate::api::gcp::GcpRestClient::new(access_token);
 
-        // Check if IAP is enabled first
-        let iap_enabled = client.is_iap_enabled(project_id).unwrap_or(false);
-
-        if iap_enabled {
-            dure_info!("🔍 Firewall check result: Access via IAP (Identity-Aware Proxy)");
-            return FirewallStatus {
-                whitelisted: true,
-                current_ip: Some("IAP".to_string()),
-            };
-        }
+        // Check ONLY direct IP access (ignore IAP - this app uses direct SSH)
+        dure_info!("🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
 
         // Check if current IP is whitelisted (direct access)
         match client.check_ip_whitelisted(project_id, &current_ip) {
@@ -1348,6 +1344,64 @@ impl PlatformActor {
                 error: Some("SSH test not supported on WASM".to_string()),
             }
         }
+    }
+
+    async fn fetch_and_cache_project_count(
+        &self,
+        platform_name: &str,
+        platform: &crate::config::CloudPlatformConfig,
+    ) -> Option<usize> {
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                dure_warn!("No valid access token for project count fetch");
+                return None;
+            }
+        };
+
+        // Fetch project list from GCP
+        let project_count = match runtime::unblock(move || {
+            let client = crate::api::gcp::GcpRestClient::new(access_token);
+            client.list_projects(None)
+        })
+        .await
+        {
+            Ok(project_list) => {
+                let count = project_list.projects.len();
+                dure_info!("🔍 Fetched project count: {}", count);
+                Some(count)
+            }
+            Err(e) => {
+                dure_warn!("Failed to fetch project count: {}", e);
+                None
+            }
+        };
+
+        // Cache to config if we got a count
+        if let Some(count) = project_count {
+            let platform_name = platform_name.to_string();
+            let _ = runtime::unblock(move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut config = crate::config::AppConfig::load_or_default(&config_path);
+
+                if let Some(platform) = config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                {
+                    platform.cached_total_project_count = Some(count);
+                    platform.last_status_refresh = Some(chrono::Utc::now().timestamp());
+                    config.save(&config_path)?;
+                    dure_info!("✅ Cached project count: {}", count);
+                }
+
+                Ok(())
+            })
+            .await;
+        }
+
+        project_count
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {

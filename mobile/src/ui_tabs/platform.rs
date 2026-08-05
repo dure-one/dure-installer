@@ -354,10 +354,11 @@ fn compute_firewall_status(access_token: Option<&str>, project_id: Option<&str>)
 
             let client = GcpRestClient::new(token.to_string());
 
+            // Check ONLY direct IP access (ignore IAP - this app uses direct SSH)
             match get_current_ip() {
                 Ok(current_ip) => match client.check_ip_whitelisted(project, &current_ip) {
                     Ok(true) => format!("✅ Whitelisted ({})", current_ip),
-                    Ok(false) => "❌ Not whitelisted".to_string(),
+                    Ok(false) => format!("❌ Not whitelisted ({})", current_ip),
                     Err(_) => "? Status unknown".to_string(),
                 },
                 Err(_) => "? Failed to get IP".to_string(),
@@ -804,7 +805,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
                 {
                     (format!("🔥 {}", error), egui::Color32::from_rgb(244, 67, 54))
                 }
-                _ => (format!("🛡️ {}", row.firewall_status), ui.style().visuals.text_color()),
+                _ => (format!("🔥 {}", row.firewall_status), ui.style().visuals.text_color()),
             };
             EmojiLabel::new(egui::RichText::new(firewall_text.0).color(firewall_text.1)).show(ui);
             ui.add_space(4.0);
@@ -832,7 +833,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
             external_ip
         );
 
-        let mut menu = ActionMenu::new("📋 SSH").with_icon(SvgEmoji::Terminal);
+        let mut menu = ActionMenu::new("💻SSH");
         menu.add_action("Copy SSH Command");
         menu.add_action("Copy Private Key");
         menu.add_action("Copy IP Address");
@@ -1044,6 +1045,8 @@ impl PlatformTab {
                         project_count,
                     }) => {
                         dure_info!("✅ Refresh completed for {}", platform_name);
+                        dure_info!("🔍 RefreshCompleted event: firewall_status.whitelisted = {}", firewall_status.whitelisted);
+                        dure_info!("🔍 RefreshCompleted event: firewall_status.current_ip = {:?}", firewall_status.current_ip);
 
                         // Find and update the row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1060,11 +1063,14 @@ impl PlatformTab {
                             row.firewall_updated = firewall_status.whitelisted;
                             if let Some(current_ip) = firewall_status.current_ip {
                                 if firewall_status.whitelisted {
+                                    dure_info!("🔍 Setting row.firewall_status = '✅ Whitelisted ({})'", current_ip);
                                     row.firewall_status = format!("✅ Whitelisted ({})", current_ip);
                                 } else {
+                                    dure_info!("🔍 Setting row.firewall_status = '❌ Not whitelisted ({})'", current_ip);
                                     row.firewall_status = format!("❌ Not whitelisted ({})", current_ip);
                                 }
                             } else {
+                                dure_info!("🔍 Setting row.firewall_status = '? Status unknown'");
                                 row.firewall_status = "? Status unknown".to_string();
                             }
 
@@ -1520,6 +1526,25 @@ impl PlatformTab {
                         operation: "Refreshing".to_string(),
                         started_at: chrono::Utc::now().timestamp(),
                     };
+                }
+
+                // Refresh access token if expired (before making API calls)
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if let Ok((mut app_config, config_path)) = load_config() {
+                        if let Some((platform_idx, _)) = app_config
+                            .platforms
+                            .iter()
+                            .enumerate()
+                            .find(|(_, p)| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                        {
+                            // Check/refresh token (this will log "Access token refreshed" if needed)
+                            if let Err(e) = self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
+                                dure_warn!("Failed to refresh access token: {}", e);
+                                // Continue anyway - the API call might still work or will fail with proper error
+                            }
+                        }
+                    }
                 }
 
                 // Send RefreshPlatform command to ViewModel
