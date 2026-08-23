@@ -80,7 +80,7 @@ For development or customization:
 
 ```bash
 # Clone the repository
-git clone https://github.com/nikescar/dure.git
+git clone https://github.com/dure-one/dure-installer.git
 cd dure
 
 # Build for desktop (debug)
@@ -367,7 +367,7 @@ source ~/.bashrc
 
 - **Documentation**: [docs/INDEX.md](./INDEX.md)
 - **Troubleshooting**: [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
-- **Issues**: [GitHub Issues](https://github.com/nikescar/dure/issues)
+- **Issues**: [GitHub Issues](https://github.com/dure-one/dure-installer/issues)
 
 ---
 

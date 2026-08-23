@@ -389,7 +389,7 @@ git push origin feature/my-feature
 
 ## Help
 
-- **Issues**: https://github.com/nikescar/dure/issues
+- **Issues**: https://github.com/dure-one/dure-installer/issues
 - **Discussions**: GitHub Discussions (if enabled)
 - **Code of Conduct**: [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md)
 - **Security**: [SECURITY.md](../SECURITY.md)

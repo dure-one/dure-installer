@@ -3,8 +3,8 @@ Categories:
   - Money
   - Internet
 License: MIT or Apache 2.0
-SourceCode: https://github.com/nikescar/dure
-IssueTracker: https://github.com/nikescar/dure/issues
+SourceCode: https://github.com/dure-one/dure-installer
+IssueTracker: https://github.com/dure-one/dure-installer/issues
 
 AutoName: Dure
 Description: |-
@@ -38,7 +38,7 @@ Description: |-
   * WASM (Guest & Store Front only)
 
 RepoType: git
-Repo: https://github.com/nikescar/dure.git
+Repo: https://github.com/dure-one/dure-installer.git
 
 Builds:
   - versionName: 0.0.8

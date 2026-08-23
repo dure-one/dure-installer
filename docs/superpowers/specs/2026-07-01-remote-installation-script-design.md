@@ -64,8 +64,8 @@ A rustup-style remote installation script (`install.sh`) that enables one-comman
 
 2. **GitHub API:**
    - Embedded GitHub token for API authentication
-   - Stable mode: `GET /repos/nikescar/dure/releases/latest`
-   - Dev mode: `GET /repos/nikescar/dure/actions/artifacts`
+   - Stable mode: `GET /repos/dure-one/dure-installer/releases/latest`
+   - Dev mode: `GET /repos/dure-one/dure-installer/actions/artifacts`
 
 3. **Deployment:**
    - Single file: `/home/wj/work/dure/install.sh`
@@ -112,7 +112,7 @@ install.sh (single file, ~500-700 lines)
 1. main()
 2. ├── get_architecture() → x86_64-unknown-linux-gnu
 3. ├── Query GitHub Releases API
-4. │   GET https://api.github.com/repos/nikescar/dure/releases/latest
+4. │   GET https://api.github.com/repos/dure-one/dure-installer/releases/latest
 5. │   └── Parse: download URLs for binary + .sha256
 6. ├── downloader(binary_url, /tmp/dure-XXXXX/dure-desktop-linux)
 7. ├── downloader(checksum_url, /tmp/dure-XXXXX/dure-desktop-linux.sha256)
@@ -131,7 +131,7 @@ install.sh (single file, ~500-700 lines)
 1. main()
 2. ├── get_architecture() → x86_64-unknown-linux-gnu
 3. ├── Query GitHub Artifacts API
-4. │   GET https://api.github.com/repos/nikescar/dure/actions/artifacts
+4. │   GET https://api.github.com/repos/dure-one/dure-installer/actions/artifacts
 5. │   └── Filter: name="dure-desktop-linux", sort by created_at, pick latest
 6. ├── downloader(artifact.archive_download_url, /tmp/dure-XXXXX/artifact.zip)
 7. ├── unzip artifact.zip → dure-desktop
@@ -792,4 +792,4 @@ Not in initial scope, but consider for future iterations:
 - **GitHub Releases API:** https://docs.github.com/en/rest/releases/releases
 - **GitHub Artifacts API:** https://docs.github.com/en/rest/actions/artifacts
 - **POSIX shell scripting:** IEEE Std 1003.1
-- **Dure repository:** https://github.com/nikescar/dure
+- **Dure repository:** https://github.com/dure-one/dure-installer
