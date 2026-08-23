@@ -884,7 +884,7 @@ If you're still stuck:
    ```
 
 4. **Report issues:**
-   - GitHub Issues: https://github.com/nikescar/dure/issues
+   - GitHub Issues: https://github.com/dure-one/dure-installer/issues
    - Include: dure version, OS, relevant logs
 
 ---

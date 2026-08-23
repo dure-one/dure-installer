@@ -409,5 +409,5 @@ git push origin main
 ## Contact
 
 Issues or questions:
-- GitHub: https://github.com/nikescar/dure/issues
+- GitHub: https://github.com/dure-one/dure-installer/issues
 - Email: nikescar@gmail.com

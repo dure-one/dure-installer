@@ -165,7 +165,7 @@ GitHub Actions workflows for CI/CD.
 ### Initial Setup
 ```bash
 # Clone repository
-git clone https://github.com/nikescar/dure.git
+git clone https://github.com/dure-one/dure-installer.git
 cd dure
 
 # Build desktop version
@@ -274,7 +274,7 @@ When asked to work on Dure:
 
 ## Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/nikescar/dure/issues)
+- **Issues**: [GitHub Issues](https://github.com/dure-one/dure-installer/issues)
 - **Code of Conduct**: See CODE_OF_CONDUCT.md
 - **Security**: See SECURITY.md
 - **Contributing**: See CREDITS.md

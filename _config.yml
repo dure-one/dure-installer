@@ -2,13 +2,13 @@
 # Site settings
 title: dure
 description: Distributed e-commerce client and hosting solution for small shop owners.
-issue_link: "https://github.com/nikescar/dure/issues"
-edit_path: "https://github.com/nikescar/dure/edit/main/:path"
+issue_link: "https://github.com/dure-one/dure-installer/issues"
+edit_path: "https://github.com/dure-one/dure-installer/edit/main/:path"
 lang: en
 site_favicon: './mobile/favicon.ico'
 site_author: Woojae, Park
-repo_url: 'https://github.com/nikescar/dure'
-site_url: 'https://dure.one/'
+repo_url: 'https://github.com/dure-one/dure-installer'
+site_url: 'https://app-dure-installer.pages.dev/'
 
 # 404 page redirection rules - for github site repo, ex. {id}.github.io
 404_subsite_urls:
@@ -50,7 +50,7 @@ include:
 theme_upstream: 'https://github.com/nikescar/mdx-sitegen-solidbase'
 theme_config:
   social_links:
-    gitHub: 'https://github.com/nikescar/dure'
+    gitHub: 'https://github.com/dure-one/dure-installer'
   nav:
     Readme: /readme
   sidebar:
@@ -78,5 +78,5 @@ theme_config:
 # 2. Generate a Cloudflare Pages token and save it as CLOUDFLARE_PAGES_TOKEN secret in your GitHub repository
 deployment: # https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/#generate-an-api-token
   provider: 'cloudflare-pages'
-  project: 'dure'
+  project: 'dure-installer'
   cloudflare_pages_token: ${{ secrets.CLOUDFLARE_PAGES_TOKEN }}

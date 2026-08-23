@@ -752,7 +752,7 @@ Dual-licensed under MIT OR Apache-2.0. See LICENSE-MIT and LICENSE-Apache-2.0.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=nikescar/dure&type=date&legend=top-left)](https://www.star-history.com/)
+[![Star History Chart](https://api.star-history.com/image?repos=dure-one/dure-installer&type=date&legend=top-left)](https://www.star-history.com/)
 
 --- 
 
