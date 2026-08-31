@@ -84,11 +84,6 @@ Today's e-commerce solutions are server-centric, which makes them attractive tar
 | Platform | Hosting | Config File | ⬜ Plan | ⬜ Plan | - |
 | SSH | Hosting | Config File | ⬜ Plan | ⬜ Plan | - |
 | DNS Cloud | Hosting | Config File | ⬜ Plan | ⬜ Plan | - |
-| **SSH/Server Operations** | | | | | |
-| ACME(lego) | SSH | DB Secured | 🔍 Test | ⬜ Plan | - |
-| NFTABLES | SSH | DB Secured | 🔍 Test | ⬜ Plan | - |
-| WSS(TUNGSTENITE) | SSH | DB Secured | 🔍 Test | ⬜ Plan | - |
-| Hosting | SSH | DB Secured | ✏️ Ing | ⬜ Plan | - |
 | **SITE Operations** | | | | | |
 | Auth | Site | Keystore | ✏️ Ing | ⬜ Plan | ⬜ Plan |
 | Directory(Member) | Site | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
@@ -101,7 +96,6 @@ Today's e-commerce solutions are server-centric, which makes them attractive tar
 | Channel | Site | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
 | Messages | Channel | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
 | Event | Channel | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
-| Webhook | Channel | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
 | Reaction | Messages | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
 | Direct Messages | Member | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
 | Threads | Channel | DB | ⬜ Plan | ⬜ Plan | ⬜ Plan |
@@ -111,17 +105,6 @@ Today's e-commerce solutions are server-centric, which makes them attractive tar
 
 - Clients Type : CLI, GUI, WASM, MCP
 - Server Type : GCP(Fully Automatic), Cafe24(SSH only), Firebase(RealtimeDB), Supabase
-
-#### Start Service
-```bash
-# Create configuration file
-
-# Run configuration Check
-dure hosting check
-
-# Run Initiating Process
-dure hosting init
-```
 
 #### Start TRAY/GUI Guest Client (Desktop/Android/WASM)
 ```bash
@@ -194,19 +177,14 @@ Hosting -- Site   -- Member -- Role
          |         |          |- Thread
          |         |          |- Poll
          |         |          |- Event
-         |         |          |- Webhook
          |         |- Product - Review
          |         |- Order - Payment
          |         |- Auth
          |- DNS(DOH) Client/Cloud API
-         |- ACME(SSL Registration)
-         |- IPTABLES(SSH Port Control)
-         |- TUNGSTENITE(WSS/HTTPS)
          |- VM/SSH CLIENT(ssh2-rs)
          |- Audit
 
-CLIENT -- TUNGSTENITE(WSS/HTTPS)
-(desktop)|- ATTESTATION(sigstore)
+CLIENT -- ATTESTATION(sigstore)
 (android)|- ENCDEC(X25519+ChaCha20)
 (+wasm)  |- KEYMGMT(LOGIN,SSL,MSG)
          |- Audit
