@@ -73,6 +73,85 @@ pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectio
     })
 }
 
+/// Simple SSH connection test with explicit parameters
+///
+/// # Arguments
+/// * `ip` - The IP address or hostname to connect to
+/// * `private_key_pem` - SSH private key in PEM format
+/// * `port` - SSH port (typically 22)
+/// * `timeout_ms` - Connection timeout in milliseconds
+///
+/// # Returns
+/// * `Ok(())` if connection succeeds
+/// * `Err` with error details if connection fails
+pub async fn test_connection_simple(
+    ip: &str,
+    private_key_pem: &str,
+    port: u16,
+    timeout_ms: u64,
+) -> Result<()> {
+    let addr = format!("{}:{}", ip, port);
+
+    // Resolve address
+    let socket_addr = addr
+        .to_socket_addrs()
+        .context(format!("Failed to resolve address: {}", addr))?
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("No address found for {}", addr))?;
+
+    // Parse private key
+    let key_pair = russh_keys::decode_secret_key(private_key_pem, None)
+        .context("Failed to parse SSH private key")?;
+
+    // Connect with timeout
+    let config = client::Config::default();
+    let config = Arc::new(config);
+    let sh = Client;
+
+    // Create connection future
+    let connect_future = client::connect(config, socket_addr, sh);
+
+    // Apply timeout
+    let mut session = smol::future::or(
+        async {
+            smol::Timer::after(std::time::Duration::from_millis(timeout_ms)).await;
+            Err(anyhow::anyhow!("Connection timeout after {}ms", timeout_ms))
+        },
+        async { connect_future.await },
+    )
+    .await?;
+
+    // Authenticate with private key (try common usernames)
+    let usernames = ["root", "debian", "ubuntu", "admin"];
+    let mut last_error = None;
+
+    for username in &usernames {
+        match session
+            .authenticate_publickey(*username, Arc::new(key_pair.clone()))
+            .await
+        {
+            Ok(_) => {
+                // Authentication successful, disconnect and return
+                session
+                    .disconnect(russh::Disconnect::ByApplication, "", "")
+                    .await?;
+                return Ok(());
+            }
+            Err(e) => {
+                last_error = Some(e);
+                continue;
+            }
+        }
+    }
+
+    // All authentication attempts failed
+    if let Some(err) = last_error {
+        anyhow::bail!("Authentication failed for all usernames: {}", err);
+    } else {
+        anyhow::bail!("Authentication failed for all usernames");
+    }
+}
+
 /// Execute SSH command on remote host
 pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Result<String> {
     let (username, hostname) = parse_ssh_host(&host_config.host)?;

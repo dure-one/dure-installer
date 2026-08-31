@@ -42,6 +42,9 @@ pub enum PlatformCommand {
     ListVMs {
         platform_name: String,
     },
+    ScanExistingVMs {
+        platform_name: String,
+    },
     CreateVM {
         platform_name: String,
         vm_name: String,
@@ -76,6 +79,11 @@ pub enum PlatformCommand {
         project_id: String,
         dataset: String,
         table: String,
+    },
+
+    // Refresh Operation
+    RefreshPlatform {
+        platform_name: String,
     },
 
     // Refresh all platform data

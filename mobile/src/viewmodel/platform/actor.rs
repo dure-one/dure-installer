@@ -44,6 +44,7 @@ impl PlatformActor {
 
         let result = match cmd {
             PlatformCommand::ListVMs { platform_name } => self.list_vms(platform_name).await,
+            PlatformCommand::ScanExistingVMs { platform_name } => self.scan_existing_vms(platform_name).await,
             PlatformCommand::CreateVM {
                 platform_name,
                 vm_name,
@@ -115,6 +116,9 @@ impl PlatformActor {
                 platform_name,
                 delete_options,
             } => self.delete_platform(platform_name, delete_options).await,
+            PlatformCommand::RefreshPlatform { platform_name } => {
+                self.refresh_platform(platform_name).await
+            }
             _ => {
                 // Unimplemented commands
                 Err(anyhow::anyhow!("Command not implemented: {:?}", cmd))
@@ -233,6 +237,115 @@ impl PlatformActor {
         self.send_event(PlatformEvent::VMsListed {
             platform_name,
             vms: vm_infos,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn scan_existing_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
+        self.send_progress("scan_existing_vms", 0.1, "Checking authentication...")
+            .await;
+
+        // Get valid access token (refreshes if expired)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
+        self.send_progress("scan_existing_vms", 0.2, "Loading platform config...")
+            .await;
+
+        // Load platform config
+        let (config_path, project_id) = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<(std::path::PathBuf, String)> {
+                let (platform, config_path) = Self::load_platform_config(&platform_name)?;
+                let project_id = platform
+                    .gcp_selected_project_id
+                    .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+                Ok((config_path, project_id))
+            }
+        })
+        .await?;
+
+        self.send_progress("scan_existing_vms", 0.5, "Scanning VMs from all zones...")
+            .await;
+
+        // List instances from ALL zones in one API call (fast!)
+        let all_instances = runtime::unblock({
+            let project_id = project_id.clone();
+            let access_token = access_token.clone();
+            move || -> anyhow::Result<Vec<crate::api::gcp::compute::Instance>> {
+                let client = GcpRestClient::new(access_token);
+                client.list_instances_aggregated(&project_id)
+            }
+        })
+        .await?;
+
+        self.send_progress("scan_existing_vms", 0.7, "Converting VM data...")
+            .await;
+
+        // Convert to VmInstance and save to config
+        let vm_count = runtime::unblock({
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<usize> {
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Find the platform
+                let platform = app_config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+
+                // Clear existing VMs
+                platform.vms.clear();
+
+                // Convert GCP Instances to VmInstance
+                for instance in all_instances {
+                    // Extract zone name from full zone URL
+                    let zone = instance.zone.split('/').last().unwrap_or(&instance.zone).to_string();
+
+                    // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
+                    let region = zone.rsplitn(2, '-').nth(1).unwrap_or(&zone).to_string();
+
+                    // Extract machine type from full URL
+                    let machine_type = instance.machine_type.split('/').last().unwrap_or(&instance.machine_type).to_string();
+
+                    let vm = crate::config::VmInstance {
+                        name: instance.name.clone(),
+                        instance_id: instance.id.clone(),
+                        zone: zone.clone(),
+                        gcp_region: region,
+                        machine_type,
+                        status: instance.status.clone(),
+                        external_ip: instance.external_ip(),
+                        internal_ip: instance.internal_ip(),
+                        gcp_project_id: project_id.clone(),
+                        gcp_billing_account: None, // Not available from instance data
+                        created_at: chrono::Utc::now().timestamp(),
+                        ssh_key_name: Some(format!("gcp.{}.{}", platform_name, instance.name)),
+                    };
+
+                    platform.vms.push(vm);
+                }
+
+                let vm_count = platform.vms.len();
+
+                // Save config
+                app_config.save(&config_path)?;
+
+                dure_info!("Scanned and saved {} VMs to config", vm_count);
+
+                Ok(vm_count)
+            }
+        })
+        .await?;
+
+        self.send_progress("scan_existing_vms", 1.0, &format!("Scanned {} VMs", vm_count))
+            .await;
+
+        self.send_event(PlatformEvent::VMsScanned {
+            platform_name,
+            vm_count,
         })
         .await;
 
@@ -722,11 +835,35 @@ impl PlatformActor {
         platform_name: String,
         delete_options: crate::viewmodel::platform::DeleteOptions,
     ) -> anyhow::Result<()> {
-        self.send_progress("delete_platform", 0.2, "Checking authentication...")
-            .await;
+        // Only get access token if we need to delete cloud resources
+        let needs_cloud_access = delete_options.delete_vms || delete_options.delete_project;
 
-        // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        let access_token = if needs_cloud_access {
+            self.send_progress("delete_platform", 0.2, "Checking authentication...")
+                .await;
+
+            // Get valid access token (refreshes if expired)
+            match Self::get_valid_access_token(&platform_name).await {
+                Ok((token, _)) => Some(token),
+                Err(e) => {
+                    // If token refresh fails (e.g., expired refresh token), we can still
+                    // delete the local config, but can't delete cloud resources
+                    if needs_cloud_access {
+                        return Err(anyhow::anyhow!(
+                            "Cannot delete cloud resources without valid authentication.\n\
+                             Your tokens have expired. To delete VMs/project from GCP:\n\
+                             1. Reconnect your Google account first\n\
+                             2. Then delete the platform\n\n\
+                             Or uncheck 'Delete VMs' and 'Delete Project' to only remove local config.\n\n\
+                             Error: {}", e
+                        ));
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         self.send_progress("delete_platform", 0.25, "Preparing deletion...")
             .await;
@@ -759,11 +896,14 @@ impl PlatformActor {
             self.send_progress("delete_platform", 0.5, "Deleting VMs from GCP...")
                 .await;
 
+            let token = access_token.as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Access token required but not available"))?;
+
             for vm in &vms {
                 let vm_name = vm.name.clone();
                 let vm_name_for_error = vm_name.clone();
                 let zone = vm.zone.clone();
-                let token = access_token.clone();
+                let token = token.clone();
                 let proj_id = project_id.clone();
 
                 runtime::unblock(move || -> anyhow::Result<()> {
@@ -783,7 +923,9 @@ impl PlatformActor {
             self.send_progress("delete_platform", 0.75, "Deleting GCP project...")
                 .await;
 
-            let token = access_token.clone();
+            let token = access_token.as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Access token required but not available"))?;
+            let token = token.clone();
             let proj_id = project_id.clone();
 
             runtime::unblock(move || -> anyhow::Result<()> {
@@ -879,28 +1021,387 @@ impl PlatformActor {
                     let oauth_handler = crate::api::gcp::oauth::OAuthHandler::default();
 
                     // Refresh the token
-                    let oauth_result = crate::api::gcp::oauth::refresh_access_token(
+                    match crate::api::gcp::oauth::refresh_access_token(
                         oauth_handler.client_id(),
                         oauth_handler.client_secret(),
                         refresh_token,
-                    )?;
+                    ) {
+                        Ok(oauth_result) => {
+                            // Update platform config with new token
+                            platform.gcp_oauth_access_token = Some(oauth_result.access_token.clone());
+                            platform.gcp_oauth_token_expiry = Some(oauth_result.expires_at as i64);
+                            // Keep the existing refresh token (it doesn't change)
 
-                    // Update platform config with new token
-                    platform.gcp_oauth_access_token = Some(oauth_result.access_token.clone());
-                    platform.gcp_oauth_token_expiry = Some(oauth_result.expires_at as i64);
-                    // Keep the existing refresh token (it doesn't change)
+                            // Save config
+                            config.save(&config_path)?;
 
-                    // Save config
-                    config.save(&config_path)?;
+                            dure_info!("Access token refreshed successfully");
+                            Ok((oauth_result.access_token, config_path))
+                        }
+                        Err(e) => {
+                            // Check if the error is due to expired/revoked refresh token
+                            let error_msg = e.to_string();
+                            if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
+                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
 
-                    dure_info!("Access token refreshed successfully");
-                    Ok((oauth_result.access_token, config_path))
+                                // Clear the invalid tokens
+                                platform.gcp_oauth_access_token = None;
+                                platform.gcp_oauth_refresh_token = None;
+                                platform.gcp_oauth_token_expiry = None;
+
+                                // Save config with cleared tokens
+                                config.save(&config_path)?;
+
+                                return Err(anyhow::anyhow!(
+                                    "Your Google Cloud authentication has expired. Please reconnect your Google account:\n\
+                                     1. Click the 'Connect' button in the Platform tab\n\
+                                     2. Sign in with Google again\n\
+                                     3. Grant permissions to Dure\n\n\
+                                     This happens when refresh tokens expire after 6 months of inactivity or are revoked."
+                                ));
+                            }
+
+                            // Other refresh errors - propagate as-is
+                            Err(e)
+                        }
+                    }
                 } else {
                     Ok((access_token.clone(), config_path))
                 }
             }
         })
         .await
+    }
+
+    async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
+        dure_info!("🔄 Refreshing platform: {}", platform_name);
+
+        // Load platform config
+        #[cfg(not(target_arch = "wasm32"))]
+        let (platform, _) = Self::load_platform_config(&platform_name)?;
+
+        #[cfg(target_arch = "wasm32")]
+        return Err(anyhow::anyhow!("Refresh not supported on WASM"));
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Step 1: Check VM status
+            let vm_status = self.check_vm_status(&platform).await;
+
+            // Step 2: Check firewall status
+            let firewall_status = self.check_firewall_status(&platform).await;
+
+            // Step 3: Test SSH connection
+            let ssh_status = self.test_ssh_connection(&platform).await;
+
+            // Step 4: Fetch project count and cache to config
+            let project_count = self.fetch_and_cache_project_count(&platform_name, &platform).await;
+
+            // Send RefreshCompleted event
+            self.send_event(PlatformEvent::RefreshCompleted {
+                platform_name: platform_name.clone(),
+                vm_status,
+                firewall_status,
+                ssh_status,
+                project_count,
+            })
+            .await;
+
+            Ok(())
+        }
+    }
+
+    async fn check_vm_status(
+        &self,
+        platform: &crate::config::CloudPlatformConfig,
+    ) -> super::VmStatus {
+        use super::VmStatus;
+
+        // Get project ID
+        let project_id = match &platform.gcp_selected_project_id {
+            Some(id) => id,
+            None => {
+                return VmStatus {
+                    exists: false,
+                    name: None,
+                    zone: None,
+                    external_ip: None,
+                    status: None,
+                };
+            }
+        };
+
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                dure_warn!("No valid access token for VM check");
+                return VmStatus {
+                    exists: false,
+                    name: None,
+                    zone: None,
+                    external_ip: None,
+                    status: None,
+                };
+            }
+        };
+
+        // Create GCP client
+        let client = crate::api::gcp::GcpRestClient::new(access_token);
+
+        // List VMs (use aggregated to check all zones)
+        match client.list_instances_aggregated(project_id) {
+            Ok(instances) => {
+                if let Some(vm) = instances.first() {
+                    // Extract external IP from network interfaces
+                    let external_ip = vm
+                        .network_interfaces
+                        .first()
+                        .and_then(|ni| ni.access_configs.first())
+                        .and_then(|ac| ac.nat_ip.clone());
+
+                    // Extract zone from full zone path (e.g., "zones/us-central1-a" -> "us-central1-a")
+                    let zone = vm.zone.split('/').last().map(|s| s.to_string());
+
+                    VmStatus {
+                        exists: true,
+                        name: Some(vm.name.clone()),
+                        zone,
+                        external_ip,
+                        status: Some(vm.status.clone()),
+                    }
+                } else {
+                    // No VMs found
+                    VmStatus {
+                        exists: false,
+                        name: None,
+                        zone: None,
+                        external_ip: None,
+                        status: None,
+                    }
+                }
+            }
+            Err(e) => {
+                dure_error!("Failed to list VMs: {}", e);
+                VmStatus {
+                    exists: false,
+                    name: None,
+                    zone: None,
+                    external_ip: None,
+                    status: None,
+                }
+            }
+        }
+    }
+
+    async fn check_firewall_status(
+        &self,
+        platform: &crate::config::CloudPlatformConfig,
+    ) -> super::FirewallStatus {
+        use super::FirewallStatus;
+
+        // Get project ID
+        let project_id = match &platform.gcp_selected_project_id {
+            Some(id) => id,
+            None => {
+                return FirewallStatus {
+                    whitelisted: false,
+                    current_ip: None,
+                };
+            }
+        };
+
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                dure_warn!("No valid access token for firewall check");
+                return FirewallStatus {
+                    whitelisted: false,
+                    current_ip: None,
+                };
+            }
+        };
+
+        // Get current external IP
+        let current_ip = match crate::api::gcp::get_current_ip() {
+            Ok(ip) => {
+                dure_info!("🔍 Firewall check: Client's current IP = {}", ip);
+                ip
+            },
+            Err(e) => {
+                dure_warn!("Failed to get current IP: {}", e);
+                return FirewallStatus {
+                    whitelisted: false,
+                    current_ip: None,
+                };
+            }
+        };
+
+        // Create GCP client
+        let client = crate::api::gcp::GcpRestClient::new(access_token);
+
+        // Check ONLY direct IP access (ignore IAP - this app uses direct SSH)
+        dure_info!("🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
+
+        // Check if current IP is whitelisted (direct access)
+        match client.check_ip_whitelisted(project_id, &current_ip) {
+            Ok(whitelisted) => {
+                dure_info!("🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
+                FirewallStatus {
+                    whitelisted,
+                    current_ip: Some(current_ip),
+                }
+            },
+            Err(e) => {
+                dure_error!("Failed to check firewall: {}", e);
+                FirewallStatus {
+                    whitelisted: false,
+                    current_ip: Some(current_ip),
+                }
+            }
+        }
+    }
+
+    async fn test_ssh_connection(
+        &self,
+        platform: &crate::config::CloudPlatformConfig,
+    ) -> super::SshStatus {
+        use super::SshStatus;
+
+        // Get VM info
+        let (external_ip, keyring_domain) = match platform.vms.first() {
+            Some(vm) => {
+                let ip = match &vm.external_ip {
+                    Some(ip) => {
+                        dure_info!("🔍 SSH test: VM's external IP = {}", ip);
+                        ip.clone()
+                    },
+                    None => {
+                        return SshStatus {
+                            connected: false,
+                            error: Some("No external IP configured".to_string()),
+                        };
+                    }
+                };
+                (ip, vm.ssh_key_name.clone())
+            }
+            None => {
+                return SshStatus {
+                    connected: false,
+                    error: Some("No VM configured".to_string()),
+                };
+            }
+        };
+
+        // Test SSH connection
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Build SSH host config
+            let host_config = crate::config::SshHostConfig {
+                host: format!("root@{}", external_ip),
+                password: None,
+                private_key_path: None,
+                keyring_domain,
+                port: 22,
+                initialized: false,
+                last_status: None,
+                platform_name: None,
+                docker_containers: Vec::new(),
+                ansible_roles: Vec::new(),
+                dure_wss_config: None,
+            };
+
+            // Run test connection
+            match runtime::unblock(move || {
+                smol::block_on(async {
+                    async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await
+                })
+            })
+            .await
+            {
+                Ok(_) => {
+                    dure_info!("🔍 SSH test result: connected = true");
+                    SshStatus {
+                        connected: true,
+                        error: None,
+                    }
+                },
+                Err(e) => {
+                    dure_info!("🔍 SSH test result: connected = false, error = {}", e);
+                    SshStatus {
+                        connected: false,
+                        error: Some(format!("Connection failed: {}", e)),
+                    }
+                },
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            SshStatus {
+                connected: false,
+                error: Some("SSH test not supported on WASM".to_string()),
+            }
+        }
+    }
+
+    async fn fetch_and_cache_project_count(
+        &self,
+        platform_name: &str,
+        platform: &crate::config::CloudPlatformConfig,
+    ) -> Option<usize> {
+        // Get access token
+        let access_token = match &platform.gcp_oauth_access_token {
+            Some(token) => token.clone(),
+            None => {
+                dure_warn!("No valid access token for project count fetch");
+                return None;
+            }
+        };
+
+        // Fetch project list from GCP
+        let project_count = match runtime::unblock(move || {
+            let client = crate::api::gcp::GcpRestClient::new(access_token);
+            client.list_projects(None)
+        })
+        .await
+        {
+            Ok(project_list) => {
+                let count = project_list.projects.len();
+                dure_info!("🔍 Fetched project count: {}", count);
+                Some(count)
+            }
+            Err(e) => {
+                dure_warn!("Failed to fetch project count: {}", e);
+                None
+            }
+        };
+
+        // Cache to config if we got a count
+        if let Some(count) = project_count {
+            let platform_name = platform_name.to_string();
+            let _ = runtime::unblock(move || -> anyhow::Result<()> {
+                let config_path = Self::get_config_path()?;
+                let mut config = crate::config::AppConfig::load_or_default(&config_path);
+
+                if let Some(platform) = config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                {
+                    platform.cached_total_project_count = Some(count);
+                    platform.last_status_refresh = Some(chrono::Utc::now().timestamp());
+                    config.save(&config_path)?;
+                    dure_info!("✅ Cached project count: {}", count);
+                }
+
+                Ok(())
+            })
+            .await;
+        }
+
+        project_count
     }
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
