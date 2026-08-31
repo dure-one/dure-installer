@@ -28,7 +28,7 @@ use dure::dure::DureApp;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
 #[cfg(not(target_arch = "wasm32"))]
-use dure::{dure_info, dure_error};
+use dure::{dure_info, dure_error, dure_warn};
 
 // Embedded Material theme data
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
