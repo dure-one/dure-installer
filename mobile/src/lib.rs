@@ -63,9 +63,6 @@ pub mod install_stt;
     not(target_os = "openbsd")
 ))]
 pub mod tray;
-// WSS server/client (HTTPS + WebSocket Secure)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-pub mod wss;
 // HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
 // TODO: Re-enable when HTTP server implementation is available
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
