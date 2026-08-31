@@ -21,6 +21,8 @@ pub mod storage;
 
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
+#[cfg(feature = "gui")]
+pub mod ui_components;
 
 // Desktop-only modules (minimal implementations for CLI)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -63,9 +65,6 @@ pub mod install_stt;
     not(target_os = "openbsd")
 ))]
 pub mod tray;
-// WSS server/client (HTTPS + WebSocket Secure)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-pub mod wss;
 // HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
 // TODO: Re-enable when HTTP server implementation is available
 // #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
