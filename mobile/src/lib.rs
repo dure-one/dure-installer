@@ -21,6 +21,8 @@ pub mod storage;
 
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
+#[cfg(feature = "gui")]
+pub mod ui_components;
 
 // Desktop-only modules (minimal implementations for CLI)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]

@@ -9,4 +9,4 @@ mod tests;
 
 pub use actor::PlatformActor;
 pub use commands::{DeleteOptions, PlatformCommand};
-pub use events::{PlatformEvent, VmInfo};
+pub use events::{PlatformEvent, VmInfo, VmStatus, FirewallStatus, SshStatus};
