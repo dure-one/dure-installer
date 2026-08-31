@@ -69,7 +69,7 @@ The Dure project is compliant with F-Droid inclusion policy:
 - Proper application ID: pe.nikescar.dure
 
 ### ✅ Source Code
-- Publicly available on GitHub: https://github.com/nikescar/dure
+- Publicly available on GitHub: https://github.com/dure-one/dure-installer
 - Maintained and up-to-date
 - Clear version tags recommended for releases
 
