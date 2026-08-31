@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["dure contributors"]
 description = "Windows installation utilities for Dure (COM-based shortcut creation)"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/nikescar/dure"
+repository = "https://github.com/dure-one/dure-installer"
 
 [lints.rust]
 unsafe_code = "allow" # Required for Windows COM APIs

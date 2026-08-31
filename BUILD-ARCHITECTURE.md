@@ -55,7 +55,7 @@ matrix:
 
 ### Linux (any distro)
 ```bash
-curl -sSL https://raw.githubusercontent.com/nikescar/dure/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/dure-one/dure-installer/main/install.sh | sh
 ```
 
 ### macOS / Windows

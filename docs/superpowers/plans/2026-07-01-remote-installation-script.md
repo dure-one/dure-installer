@@ -17,7 +17,7 @@
 - Install to `~/.local/bin` (no sudo required)
 - Verbose output by default, controllable via `DURE_QUIET=1`
 - Embedded GitHub token: `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`
-- Repository: `nikescar/dure`
+- Repository: `dure-one/dure-installer`
 
 ---
 
@@ -1250,7 +1250,7 @@ Expected:
 
 - [ ] **Step 9: Wait for deployment and test remote installation**
 
-Wait for GitHub Actions to complete (check https://github.com/nikescar/dure/actions)
+Wait for GitHub Actions to complete (check https://github.com/dure-one/dure-installer/actions)
 
 Once deployed, test remote installation:
 ```bash

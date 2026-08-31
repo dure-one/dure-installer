@@ -51,7 +51,7 @@ edition = "2021"
 authors = ["dure contributors"]
 description = "Rust FFI bindings for winhttpd - Windows HTTP server for static content"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/nikescar/dure"
+repository = "https://github.com/dure-one/dure-installer"
 
 [lints.rust]
 unsafe_code = "allow" # Required for FFI bindings
