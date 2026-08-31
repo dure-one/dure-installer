@@ -28,33 +28,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<PlatformCommands>,
     },
-    /// Hosting management (domain, DNS, VM, service)
-    Hosting {
-        #[command(subcommand)]
-        command: HostingCommands,
-    },
-
-    // ==================== Server Control Commands ====================
-    /// ACME SSL certificate management
-    Acme {
-        #[command(subcommand)]
-        command: AcmeCommands,
-    },
-    /// NFTables firewall management (SSH whitelist)
-    Nft {
-        #[command(subcommand)]
-        command: NftCommands,
-    },
-    /// WebSocket Secure (WSS) server management
-    Wss {
-        #[command(subcommand)]
-        command: WssCommands,
-    },
-    /// Webhook management and monitoring
-    Webhook {
-        #[command(subcommand)]
-        command: WebhookCommands,
-    },
 
     // ==================== Client Commands ====================
     /// DNS lookup with caching (A, AAAA, TXT records)
@@ -140,29 +113,6 @@ pub enum DnsCommands {
 }
 
 #[derive(Subcommand)]
-pub enum AcmeCommands {
-    /// Install acme.sh to the system
-    Install,
-    /// Check acme.sh installation and sync certificate status with the database
-    Status,
-    /// Issue a new SSL certificate
-    Issue {
-        /// Domain names to include in the certificate
-        domains: Vec<String>,
-    },
-    /// Renew an existing certificate
-    Renew {
-        /// Domain to renew
-        domain: String,
-        /// Force renewal even if not needed
-        #[arg(long)]
-        force: bool,
-    },
-    /// List all managed certificates
-    List,
-}
-
-#[derive(Subcommand)]
 pub enum NsCommands {
     /// List all registered domains and their records
     Status {
@@ -205,114 +155,6 @@ pub enum NsCommands {
         domain: String,
         /// Record value to remove
         value: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum NftCommands {
-    /// Show current nftables ruleset
-    Show,
-    /// Add an IP to SSH whitelist
-    Whitelist {
-        /// IP address to whitelist
-        ip: String,
-        /// Optional description for the IP
-        #[arg(long)]
-        description: Option<String>,
-    },
-    /// Remove an IP from SSH whitelist
-    Remove {
-        /// IP address to remove
-        ip: String,
-    },
-    /// List all whitelisted IPs
-    List,
-}
-
-#[derive(Subcommand)]
-pub enum WssCommands {
-    /// Show WebSocket server status
-    Status {
-        /// Domain name (optional, shows all if not provided)
-        domain: Option<String>,
-    },
-    /// Start HTTPS/WSS server
-    Server {
-        /// Domain name
-        domain: String,
-        /// Bind address (default: 0.0.0.0:443)
-        #[arg(long)]
-        addr: Option<String>,
-        /// Skip downloading static files
-        #[arg(long)]
-        no_download: bool,
-        /// Stats interval in seconds (default: 60)
-        #[arg(long)]
-        stats_interval: Option<u64>,
-    },
-    /// Test client for HTTPS/WSS
-    Client {
-        /// Server URL (https:// or wss://)
-        url: String,
-        /// Client mode: ws, get, or post (default: ws)
-        #[arg(long, short)]
-        mode: Option<String>,
-        /// Request path (default: /)
-        #[arg(long, short)]
-        path: Option<String>,
-        /// POST request body (default: {"test":"data"})
-        #[arg(long, short)]
-        body: Option<String>,
-        /// Skip TLS certificate verification (for self-signed certs)
-        #[arg(long, short = 'k')]
-        insecure: bool,
-    },
-    /// Stop WebSocket server
-    Stop {
-        /// Domain name
-        domain: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum WebhookCommands {
-    /// Show webhook configuration status
-    Status {},
-    /// Enable webhook request logging
-    EnableLogging {},
-    /// Disable webhook request logging
-    DisableLogging {},
-    /// Add webhook allow pattern
-    AddPattern {
-        /// Pattern to add (e.g., /webhook/*, /api/*, *)
-        pattern: String,
-    },
-    /// List webhook allow patterns
-    ListPatterns {},
-    /// Delete webhook allow pattern
-    DeletePattern {
-        /// Pattern ID to delete
-        id: i64,
-    },
-    /// List recent webhook requests
-    ListRequests {
-        /// Maximum number of requests to show (default: 10)
-        #[arg(long)]
-        limit: Option<usize>,
-        /// Filter by pattern
-        #[arg(long)]
-        pattern: Option<String>,
-    },
-    /// List sessions
-    ListSessions {
-        /// Filter by session type (http, wss, or all)
-        #[arg(long)]
-        session_type: Option<String>,
-    },
-    /// Clean up old data
-    Cleanup {
-        /// Maximum age in seconds (default: 86400 = 24 hours)
-        max_age: Option<u64>,
     },
 }
 
@@ -387,73 +229,6 @@ pub enum KeyCommands {
         /// Domain/URL of the key to delete
         domain: String,
     },
-}
-
-#[derive(Subcommand)]
-pub enum HostingCommands {
-    /// Check hosting configuration and status
-    Check {
-        /// Domain name (optional, checks all if not provided)
-        domain: Option<String>,
-    },
-    /// Initialize hosting (domain registration, DNS, VM, service)
-    Init {
-        /// Domain name
-        domain: String,
-        /// DNS provider (porkbun, cloudflare, duckdns, gcp_clouddns)
-        #[arg(long)]
-        dns_provider: String,
-        /// DNS provider API token
-        #[arg(long)]
-        dns_token: Option<String>,
-        /// VM provider (gcp, cafe24vps, none)
-        #[arg(long)]
-        vm_provider: Option<String>,
-        /// VM provider API token
-        #[arg(long)]
-        vm_token: Option<String>,
-        /// Domain registrar (porkbun, cloudflare)
-        #[arg(long)]
-        registrar: Option<String>,
-        /// Registrar API token
-        #[arg(long)]
-        registrar_token: Option<String>,
-    },
-    /// Show hosting details and configurations
-    Show {
-        /// Domain name (optional, shows all if not provided)
-        domain: Option<String>,
-    },
-    /// Select hosting for operations
-    Select {
-        /// Domain name
-        domain: String,
-    },
-    /// Deselect hosting from operations
-    Deselect {
-        /// Domain name
-        domain: String,
-    },
-    /// Close hosting (block with iptables)
-    Close {
-        /// Domain name
-        domain: String,
-    },
-    /// Reopen hosting (unblock with iptables)
-    Reopen {
-        /// Domain name
-        domain: String,
-    },
-    /// Delete hosting (and optionally VM)
-    Delete {
-        /// Domain name
-        domain: String,
-        /// Force deletion of VM instance
-        #[arg(long)]
-        force: bool,
-    },
-    /// List all hostings
-    List,
 }
 
 #[derive(Subcommand)]
@@ -533,23 +308,6 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 commands::dns::execute_dns_bastion(&ip)?;
             }
         },
-        Commands::Acme { command } => match command {
-            AcmeCommands::Install => {
-                commands::acme::execute_acme_install()?;
-            }
-            AcmeCommands::Status => {
-                commands::acme::execute_acme_status()?;
-            }
-            AcmeCommands::Issue { domains } => {
-                commands::acme::execute_acme_issue(domains)?;
-            }
-            AcmeCommands::Renew { domain, force } => {
-                commands::acme::execute_acme_renew(domain, force)?;
-            }
-            AcmeCommands::List => {
-                commands::acme::execute_acme_list()?;
-            }
-        },
         Commands::Ns { command } => match command {
             NsCommands::Status { domain } => {
                 commands::ns::execute_ns_status(&domain)?;
@@ -578,74 +336,6 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 value,
             } => {
                 commands::ns::execute_ns_remove(&record_type, &domain, &value)?;
-            }
-        },
-        Commands::Nft { command } => match command {
-            NftCommands::Show => {
-                commands::nft::execute_nft_show()?;
-            }
-            NftCommands::Whitelist { ip, description } => {
-                commands::nft::execute_nft_whitelist(ip, description)?;
-            }
-            NftCommands::Remove { ip } => {
-                commands::nft::execute_nft_remove(ip)?;
-            }
-            NftCommands::List => {
-                commands::nft::execute_nft_list()?;
-            }
-        },
-        Commands::Wss { command } => match command {
-            WssCommands::Status { domain } => {
-                commands::wss::execute_wss_status(domain)?;
-            }
-            WssCommands::Server {
-                domain,
-                addr,
-                no_download,
-                stats_interval,
-            } => {
-                commands::wss::execute_wss_server(domain, addr, no_download, stats_interval)?;
-            }
-            WssCommands::Client {
-                url,
-                mode,
-                path,
-                body,
-                insecure,
-            } => {
-                commands::wss::execute_wss_client(url, mode, path, body, insecure)?;
-            }
-            WssCommands::Stop { domain } => {
-                commands::wss::execute_wss_stop(domain)?;
-            }
-        },
-        Commands::Webhook { command } => match command {
-            WebhookCommands::Status {} => {
-                commands::webhook::execute_webhook_status()?;
-            }
-            WebhookCommands::EnableLogging {} => {
-                commands::webhook::execute_webhook_enable_logging()?;
-            }
-            WebhookCommands::DisableLogging {} => {
-                commands::webhook::execute_webhook_disable_logging()?;
-            }
-            WebhookCommands::AddPattern { pattern } => {
-                commands::webhook::execute_webhook_add_pattern(pattern)?;
-            }
-            WebhookCommands::ListPatterns {} => {
-                commands::webhook::execute_webhook_list_patterns()?;
-            }
-            WebhookCommands::DeletePattern { id } => {
-                commands::webhook::execute_webhook_delete_pattern(id)?;
-            }
-            WebhookCommands::ListRequests { limit, pattern } => {
-                commands::webhook::execute_webhook_list_requests(limit, pattern)?;
-            }
-            WebhookCommands::ListSessions { session_type } => {
-                commands::webhook::execute_webhook_list_sessions(session_type)?;
-            }
-            WebhookCommands::Cleanup { max_age } => {
-                commands::webhook::execute_webhook_cleanup(max_age)?;
             }
         },
         Commands::Crypt { command } => match command {
@@ -689,51 +379,6 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             }
             KeyCommands::Del { domain } => {
                 commands::keyring::execute_key_del(domain.clone())?;
-            }
-        },
-        Commands::Hosting { command } => match command {
-            HostingCommands::Check { domain } => {
-                commands::hosting::execute_hosting_check(domain)?;
-            }
-            HostingCommands::Init {
-                domain,
-                dns_provider,
-                dns_token,
-                vm_provider,
-                vm_token,
-                registrar,
-                registrar_token,
-            } => {
-                commands::hosting::execute_hosting_init(
-                    domain,
-                    dns_provider,
-                    dns_token,
-                    vm_provider,
-                    vm_token,
-                    registrar,
-                    registrar_token,
-                )?;
-            }
-            HostingCommands::Show { domain } => {
-                commands::hosting::execute_hosting_show(domain)?;
-            }
-            HostingCommands::Select { domain } => {
-                commands::hosting::execute_hosting_select(domain)?;
-            }
-            HostingCommands::Deselect { domain } => {
-                commands::hosting::execute_hosting_deselect(domain)?;
-            }
-            HostingCommands::Close { domain } => {
-                commands::hosting::execute_hosting_close(domain)?;
-            }
-            HostingCommands::Reopen { domain } => {
-                commands::hosting::execute_hosting_reopen(domain)?;
-            }
-            HostingCommands::Delete { domain, force } => {
-                commands::hosting::execute_hosting_delete(domain, force)?;
-            }
-            HostingCommands::List => {
-                commands::hosting::execute_hosting_list()?;
             }
         },
         Commands::Platform { command } => match command {
@@ -793,11 +438,7 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             let categories = vec![
                 (
                     "Hosting Control Commands",
-                    vec!["ns", "platform", "hosting"],
-                ),
-                (
-                    "Server Control Commands",
-                    vec!["acme", "nft", "wss", "webhook"],
+                    vec!["ns", "platform"],
                 ),
                 ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
                 (

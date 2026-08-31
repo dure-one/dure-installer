@@ -1945,11 +1945,145 @@ impl SshActor {
         Ok(())
     }
 
+    fn get_event_description(event: &SshEvent) -> String {
+        match event {
+            SshEvent::HostAdded { name } => format!("HostAdded({})", name),
+            SshEvent::HostDeleted { name } => format!("HostDeleted({})", name),
+            SshEvent::HostsListed { hosts } => format!("HostsListed({} hosts)", hosts.len()),
+            SshEvent::ConnectionTested { name, success, .. } => {
+                format!("ConnectionTested({}, success={})", name, success)
+            }
+            SshEvent::HostInitialized { name, success } => {
+                format!("HostInitialized({}, success={})", name, success)
+            }
+            SshEvent::DockerImagePulled { host_name, image } => {
+                format!("DockerImagePulled({}, {})", host_name, image)
+            }
+            SshEvent::DockerContainerStarted { host_name, container_name } => {
+                format!("DockerContainerStarted({}, {})", host_name, container_name)
+            }
+            SshEvent::DockerContainerStopped { host_name, container_name } => {
+                format!("DockerContainerStopped({}, {})", host_name, container_name)
+            }
+            SshEvent::DockerContainersListed { host_name, containers } => {
+                format!("DockerContainersListed({}, {} containers)", host_name, containers.len())
+            }
+            SshEvent::PortOpened { host_name, port, protocol } => {
+                format!("PortOpened({}, {}:{})", host_name, port, protocol)
+            }
+            SshEvent::PortClosed { host_name, port, protocol } => {
+                format!("PortClosed({}, {}:{})", host_name, port, protocol)
+            }
+            SshEvent::PortsListed { host_name, open_ports } => {
+                format!("PortsListed({}, {} ports)", host_name, open_ports.len())
+            }
+            SshEvent::DockerDaemonInstallRequired { host_name } => {
+                format!("DockerDaemonInstallRequired({})", host_name)
+            }
+            SshEvent::DockerDaemonInstalled { host_name } => {
+                format!("DockerDaemonInstalled({})", host_name)
+            }
+            SshEvent::DockerImageInstalled { host_name, container_name } => {
+                format!("DockerImageInstalled({}, {})", host_name, container_name)
+            }
+            SshEvent::DockerContainerRemoved { host_name, container_name } => {
+                format!("DockerContainerRemoved({}, {})", host_name, container_name)
+            }
+            SshEvent::DockerContainersListedNew { host_name, containers } => {
+                format!("DockerContainersListedNew({}, {} containers)", host_name, containers.len())
+            }
+            SshEvent::AnsibleRoleValidated { role, .. } => {
+                format!("AnsibleRoleValidated({})", role)
+            }
+            SshEvent::AnsibleDaemonInstallRequired { host_name } => {
+                format!("AnsibleDaemonInstallRequired({})", host_name)
+            }
+            SshEvent::AnsibleDaemonInstalled { host_name } => {
+                format!("AnsibleDaemonInstalled({})", host_name)
+            }
+            SshEvent::AnsibleRoleInstalled { host_name, instance_name } => {
+                format!("AnsibleRoleInstalled({}, {})", host_name, instance_name)
+            }
+            SshEvent::AnsibleRoleRemoved { host_name, instance_name } => {
+                format!("AnsibleRoleRemoved({}, {})", host_name, instance_name)
+            }
+            SshEvent::AnsibleRolesListed { host_name, roles } => {
+                format!("AnsibleRolesListed({}, {} roles)", host_name, roles.len())
+            }
+            SshEvent::DureWssServiceInstalled { host_name, domain } => {
+                format!("DureWssServiceInstalled({}, {})", host_name, domain)
+            }
+            SshEvent::DureWssStarted { host_name } => {
+                format!("DureWssStarted({})", host_name)
+            }
+            SshEvent::DureWssStopped { host_name } => {
+                format!("DureWssStopped({})", host_name)
+            }
+            SshEvent::DureWssUninstalled { host_name } => {
+                format!("DureWssUninstalled({})", host_name)
+            }
+            SshEvent::DureWssDeployed { host_name, domain, .. } => {
+                format!("DureWssDeployed({}, {})", host_name, domain)
+            }
+            SshEvent::LinuxStatusRetrieved { name, .. } => {
+                format!("LinuxStatusRetrieved({})", name)
+            }
+            SshEvent::DockerInstalled { name } => {
+                format!("DockerInstalled({})", name)
+            }
+            SshEvent::DockerStatusRetrieved { name, installed, running } => {
+                format!("DockerStatusRetrieved({}, installed={}, running={})", name, installed, running)
+            }
+            SshEvent::DockerUninstalled { name } => {
+                format!("DockerUninstalled({})", name)
+            }
+            SshEvent::AnsibleInstalled { name } => {
+                format!("AnsibleInstalled({})", name)
+            }
+            SshEvent::AnsibleStatusRetrieved { name, installed } => {
+                format!("AnsibleStatusRetrieved({}, installed={})", name, installed)
+            }
+            SshEvent::AnsibleUninstalled { name } => {
+                format!("AnsibleUninstalled({})", name)
+            }
+            SshEvent::DureWssInstalled { name } => {
+                format!("DureWssInstalled({})", name)
+            }
+            SshEvent::DureWssStatusRetrieved { name, installed } => {
+                format!("DureWssStatusRetrieved({}, installed={})", name, installed)
+            }
+            SshEvent::HostHealthChecked { name, is_alive, latency_ms } => {
+                if let Some(ms) = latency_ms {
+                    format!("HostHealthChecked({}, alive={}, latency={}ms)", name, is_alive, ms)
+                } else {
+                    format!("HostHealthChecked({}, alive={})", name, is_alive)
+                }
+            }
+            SshEvent::DockerImageInspected { image, tag, .. } => {
+                format!("DockerImageInspected({}:{})", image, tag)
+            }
+            SshEvent::DockerContainersRemoved { host_name, removed, failed } => {
+                format!("DockerContainersRemoved({}, removed={}, failed={})",
+                    host_name, removed.len(), failed.len())
+            }
+            SshEvent::ServiceError { name, service, operation, .. } => {
+                format!("ServiceError({}, service={}, op={})", name, service, operation)
+            }
+            SshEvent::Progress { operation, progress, .. } => {
+                format!("Progress({}, {:.0}%)", operation, progress * 100.0)
+            }
+            SshEvent::Error { operation, .. } => {
+                format!("Error({})", operation)
+            }
+        }
+    }
+
     async fn send_event(&self, event: SshEvent) {
-        dure_debug!(" SSH Actor: Sending event: {:?}", event);
+        let event_desc = Self::get_event_description(&event);
+        dure_debug!(" SSH Actor: Sending event: {}", event_desc);
         match self.event_tx.send(ViewModelEvent::Ssh(event.clone())).await {
-            Ok(_) => dure_info!(" SSH Actor: Event sent successfully"),
-            Err(e) => dure_warn!(" SSH Actor: Failed to send event: {}", e),
+            Ok(_) => dure_info!(" SSH Actor: {}", event_desc),
+            Err(e) => dure_warn!(" SSH Actor: Failed to send event ({}): {}", event_desc, e),
         }
     }
 

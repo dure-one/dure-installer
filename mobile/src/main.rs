@@ -30,6 +30,16 @@ use std::io::IsTerminal;
 #[cfg(not(target_arch = "wasm32"))]
 use dure::{dure_info, dure_error};
 
+// Embedded Material theme data
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_GREEN: &str = include_str!("../resources/material-theme-green.json");
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblue.json");
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
+
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
     // Parse command-line arguments FIRST to check for explicit mode flags and log configuration
@@ -339,11 +349,27 @@ fn run_gui_mode() -> Result<()> {
 
             // Load Material3 theme system
             use egui_material3::theme::{
-                load_fonts, load_themes, setup_local_fonts_from_bytes, setup_local_theme,
+                load_fonts, load_theme_from_json_str, load_themes, setup_local_fonts_from_bytes,
             };
+            use rand::seq::SliceRandom;
 
-            // Setup theme from file FIRST (before fonts)
-            setup_local_theme(Some("resources/material-theme-lightblue.json"));
+            // Randomly select a Material theme
+            let themes = [
+                ("green", THEME_GREEN),
+                ("lightblue", THEME_LIGHTBLUE),
+                ("lightpink", THEME_LIGHTPINK),
+                ("yellow", THEME_YELLOW),
+            ];
+            let (theme_name, theme_json) = themes
+                .choose(&mut rand::thread_rng())
+                .unwrap_or(&("lightblue", THEME_LIGHTBLUE));
+
+            dure_info!("Randomly selected Material theme: {}", theme_name);
+
+            // Load the selected theme from JSON string
+            if let Err(e) = load_theme_from_json_str(theme_json) {
+                dure_error!("Failed to load theme '{}': {}", theme_name, e);
+            }
 
             // Prepare local fonts including Material Symbols (using include_bytes!)
             setup_local_fonts_from_bytes(

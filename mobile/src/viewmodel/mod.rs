@@ -351,6 +351,12 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn refresh_platform(&self, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::RefreshPlatform { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn list_projects(&self, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::ListProjects { platform_name })
@@ -412,6 +418,12 @@ impl ViewModel {
                 platform_name,
                 delete_options,
             })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn scan_existing_vms(&self, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::ScanExistingVMs { platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
