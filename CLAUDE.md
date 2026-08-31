@@ -46,9 +46,8 @@ Business logic controller layer (API → calc → DB → UI):
 - **`dns.rs`** - DNS record management logic
 - **`gcp.rs`** / **`gcp_rest.rs`** - Google Cloud Platform integrations
 - **`platform.rs`** / **`platform_gcp.rs`** - Cloud platform management
-- **`hosting.rs`** / **`hosting_gcp.rs`** - Web hosting deployment logic
-- **`lego.rs`** - ACME/Let's Encrypt certificate management
-- **`nft.rs`** - nftables firewall rule management
+- **`acme.rs`** - DNS provider utilities (internal only, no CLI exposure)
+- **`hosting_gcp.rs`** - GCP VM regeneration utilities (internal only, no CLI exposure)
 - **`ns.rs`** - Nameserver configuration
 - **`site.rs`** - Static site generation
 - **`keyring.rs`** - Secure key storage
@@ -74,16 +73,6 @@ Business logic controller layer (API → calc → DB → UI):
 - **`ns_cloudflare.rs`** - Cloudflare DNS API
 - **`ns_gcp.rs`** - GCP Cloud DNS API (re-export of `gcp/dns.rs`)
 - Additional DNS providers: DuckDNS (`ns_duckdns.rs`), Porkbun (`ns_porkbun.rs`)
-
-#### Real-Time Communication (`mobile/src/wss/`)
-- **`server/`** - WebSocket Secure server (HTTPS + WSS)
-  - `mod.rs` - Server initialization and connection handling
-  - `tls.rs` - TLS certificate management
-  - `ws.rs` - WebSocket protocol handler
-  - `https.rs` - HTTPS request handler
-  - `http_get.rs` / `http_post.rs` - HTTP endpoint handlers
-  - `webauthn.rs` - WebAuthn authentication
-- **`client.rs`** - WebSocket client for store/guest frontends
 
 #### User Interface (`mobile/src/` - feature-gated with `gui`)
 - **`dure.rs`** - Main eframe application (cross-platform GUI)
@@ -143,18 +132,9 @@ Dure implements a **federated e-commerce model** where independent shop servers 
 
 ### Standard Installation
 
-```
-┌─────────────────────────────────┐
-│ GCP Debian VM                   │
-│  ┌───────────────────────────┐  │
-│  │ Dure WSS Service          │  │
-│  │ Ports: 80, 443 (HTTPS/WSS)│  │
-│  │ Backend: SQLite           │  │
-│  └───────────────────────────┘  │
-└─────────────────────────────────┘
-```
+**Note:** The WSS server implementation has been removed from this project. The sections below describe the intended distributed e-commerce architecture, but server deployment is no longer implemented via CLI commands.
 
-**Deployment Characteristics:**
+**Deployment Characteristics (Intended Architecture):**
 - **Single-instance** - One VM per shop, SQLite backend
 - **TLS** - Automatic ACME certificates (Let's Encrypt)
 - **Scale** - Optimized for small shops (100s-1000s of products)
@@ -224,7 +204,9 @@ Dure implements a **federated e-commerce model** where independent shop servers 
 * Create feature branch only with superpower plans
 
 
-### Security Model
+### Security Model (Intended Architecture)
+
+**Note:** WSS server implementation removed from this project.
 
 - **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
 - **Site-to-Site**: DNS TXT public key verification (ed25519 signatures)
@@ -263,19 +245,11 @@ All function exists for both EGUI and CLI.
 ### 4. SSH Host Management (ssh)
 - Automatically added host from Platform Management
 - Docker Management (Add/Del docker host from dockerhub)
-- Port Management (Port open/close management with nft)
 - Ansible Management (Add/Del ansible roles from ansiblegalaxy)
 - System Hardener (using Jangbi project)
-- Dure WSS Service Management (Add/Del dure install)
 - Automatic key Management
 
-### 5. Hosting Management (hosting)
-- DNS management (octodns)
-- ACME License Management (lego)
-- Dure Chat Server WSS Server(including webhook for PG) Hosting (dure)
-- Dure Webserver Webhook Service for PG (Portone, KakaoPay)
-
-### 6. Store Management (EGUI/CLI, WSS Client)
+### 5. Store Management (EGUI/CLI)
 - Promotions
 - Products
 - Orders
@@ -283,7 +257,7 @@ All function exists for both EGUI and CLI.
 - Accounts
 - Dure (shared listings/shipments with other stores)
 
-### 7. Guest Front (WASM, WSS Client)
+### 6. Guest Front (WASM)
 - Minimum guest identity for customers
 - Product listings
 - Shopping cart
