@@ -1295,12 +1295,12 @@ impl PlatformTab {
                 table = table.row(move |r| {
                     r.cell(&row_for_cells.project_id)
                         .cell(&row_for_cells.platform_type)
-                        .widget_cell(move |ui| {
+                        .cell_widget(move |ui| {
                             let progress = EmojiProgressBar::from_platform_row(&row_for_cells)
                                 .compact(true);
                             progress.show(ui);
                         })
-                        .widget_cell(move |ui| {
+                        .cell_widget(move |ui| {
                             // Calculate needed height for button wrapping
                             let column_width = 260.0 * width_ratio;
                             let button_width = 90.0; // Approximate width including spacing

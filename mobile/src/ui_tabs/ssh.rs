@@ -992,7 +992,7 @@ impl SshTab {
                 r.cell(&format!("{}:{}", row_for_cells.host, row_for_cells.port))
                     .cell(&format_platform(&row_for_cells))
                     .cell(&format_status(&row_for_cells))
-                    .widget_cell(move |ui| {
+                    .cell_widget(move |ui| {
                         render_operations(ui, &row_for_ops, idx);
                     })
                     .drawer(move |ui| {

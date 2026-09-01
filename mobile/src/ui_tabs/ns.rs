@@ -305,7 +305,7 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
                 r.cell(&record_for_delete.name)
                  .cell(&record_for_delete.record_type.as_str().to_uppercase())
                  .cell(&record_for_delete.value)
-                 .widget_cell(move |ui| {
+                 .cell_widget(move |ui| {
                      if ui.add(MaterialButton::outlined("🗑").small())
                          .on_hover_text("Delete record")
                          .clicked()
@@ -367,7 +367,7 @@ fn render_domains_table(
         table = table.row(move |r| {
             r.cell(&row_for_cells.domain)
              .cell(&row_for_cells.provider_display)
-             .widget_cell(move |ui| {
+             .cell_widget(move |ui| {
                  render_domain_operations(ui, &row_for_ops, idx);
              })
              .drawer(move |ui| {
@@ -377,7 +377,7 @@ fn render_domains_table(
     }
 
     egui::ScrollArea::vertical()
-        .id_source("ns_domains_table_scroll")
+        .id_salt("ns_domains_table_scroll")
         .show(ui, |ui| {
             table.show(ui);
         });
@@ -1168,7 +1168,7 @@ impl NsTab {
             ui.add_space(8.0);
             ui.label("Progress:");
             egui::ScrollArea::vertical()
-                .id_source("ns_progress_log_scroll")
+                .id_salt("ns_progress_log_scroll")
                 .max_height(150.0)
                 .show(ui, |ui| {
                     for line in &self.progress_log {
