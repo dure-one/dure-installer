@@ -128,103 +128,99 @@ Business logic controller layer (API → calc → DB → UI):
 
 ## Distributed E-Commerce Architecture
 
-Dure implements a **federated e-commerce model** where independent shop servers can partner to share product catalogs while maintaining full control over their own data and operations.
+Dure provides a **directory-based e-commerce model** where shop owners deploy their own mycart instances and register with the dure.one directory service for discoverability.
 
-### Standard Installation
-
-**Note:** The WSS server implementation has been removed from this project. The sections below describe the intended distributed e-commerce architecture, but server deployment is no longer implemented via CLI commands.
-
-**Deployment Characteristics (Intended Architecture):**
-- **Single-instance** - One VM per shop, SQLite backend
-- **TLS** - Automatic ACME certificates (Let's Encrypt)
-- **Scale** - Optimized for small shops (100s-1000s of products)
-
-### Federation Model
+### Architecture Overview
 
 ```
-                    ┌─────────────────┐
-                    │ Chief Registry  │
-                    │ (Group Manager) │
-                    └────────┬────────┘
+                    ┌──────────────────┐
+                    │  dure.one        │
+                    │  Directory       │
+                    │  Service         │
+                    └────────┬─────────┘
                              │
               ┌──────────────┼──────────────┐
               │              │              │
         ┌─────▼────┐   ┌────▼─────┐  ┌────▼─────┐
-        │ Shop A   │   │ Shop B   │  │ Shop C   │
-        │ (Owner)  │   │ (Partner)│  │ (Partner)│
+        │ mycart A │   │ mycart B │  │ mycart C │
+        │ (Owner)  │   │ (Owner)  │  │ (Owner)  │
         └──────────┘   └──────────┘  └──────────┘
 ```
 
-**Four Roles:**
+**Key Components:**
 
-| Role | Authority | Scope |
-|------|-----------|-------|
-| **Dure Chief** | Group owner | Manages membership, sets policies (return/shipping standards) |
-| **Shop Owner** | Server owner | Full control over own products, orders, guests |
-| **Partner Shop** | Other shop owner | Product metadata visible to partners |
-| **Guest** | Customer | Per-shop authentication, isolated profiles |
+| Component | Purpose | Details |
+|-----------|---------|---------|
+| **dure.one** | Shop directory service | Central registry for shop discovery |
+| **mycart** | Individual shop backend | Owner-controlled e-commerce API |
+| **dure-responder** | Auto-assigned identifier | Unique number for each mycart instance |
+| **dure-sijang** | Shop discovery flow | Browse dure.one → visit mycart website |
 
-### Key Features
+### How It Works
 
-**Product Federation:**
-- Partner shops share product **metadata** (ID, name, options)
-- Full product data stays on origin server
-- Browse partner products locally, checkout redirects to partner
+1. **Shop Registration**: mycart owners register their shop on dure.one directory service
+2. **Discovery**: Guests browse dure.one to find shops
+3. **Shopping**: Each mycart has its own:
+   - **dure-responder (auto) number** - Unique identifier
+   - **mycart API endpoint** - Independent backend service
+   - **Website** - Shop-specific storefront
+4. **Data Ownership**: Each shop maintains complete control over products, orders, and customer data
 
-**Data Ownership:**
-- Orders always created on **partner's server** (no local copy)
-- Guest data **never shared** between shops
-- Each shop owns: products (full), orders (full), guests (full)
-- Partner products cached as **metadata only**
+### mycart Deployment Options
 
-**Authentication:**
-- **Site-to-Site**: DNS TXT records with ed25519 public keys
-- **Site-to-Guest**: OAuth (Kakao/Naver/Google), per-shop sessions
-- **Payment**: Direct webhooks (Portone/KakaoPay) to shop server
+**Current Development Status**: 
+- ✅ **GCP VM** - In development
+- ✅ **Supabase + GCP VM** - In development
+- 🔜 **Supabase + BYOS (cloudflared)** - Planned
+- 🔜 **Firebase + Firestore** - Planned
 
-**Privacy by Design:**
-- No cross-shop guest identity
-- No session federation
-- Orders owned by product's shop only
-- SQLite local-only (no replication)
+#### Deployment Types Feature Matrix
 
-### Example: Cross-Shop Purchase Flow
+| Feature | Firebase + Firestore | Supabase + GCP VM | Supabase + BYOS (cloudflared) | GCP VM | Others |
+|---------|---------------------|-------------------|------------------------------|---------|--------|
+| **Backend (API providers)** | GCP Cloud Functions | mycart backend | mycart backend | mycart backend | swagger.json |
+| **Auth Base** | Firebase Auth | Go Fiber JWT | Go Fiber JWT | Go Fiber JWT | Admin auth only |
+| **Auth Method** | Google login | Email + password | Email + password | Email + password | Admin auth only |
+| **Frontend** | Firebase Hosting | nginx | nginx | nginx | Svelte5 SvelteKit2 |
+| **CDN** | Firebase Hosting | Cloud CDN | Orange Cloud (CDN) | Cloud CDN | - |
+| **Backup/Restore** | Firebase scheduled backup | Supabase backup | Supabase backup | SQLite files | - |
+| **Contents Security** | Firebase security rules | JWT permission | JWT permission | JWT permission | - |
+| **DDoS Mitigation** | Firebase | fail2jail-rs | fail2jail-rs | fail2jail-rs | XMPP integration |
+| **XMPP Service** | - | - | Prosody | Prosody | XMPP integration |
+| **Service Healthcheck Provider** | - | - | - | - | - |
+| **XMPP Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **SMS Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Kakotalk Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Telegram Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Jurisdiction** | Seoul | Seoul + Seoul | Seoul | Seoul | - |
 
-```
-1. Guest browses Shop A → sees Shop A + Shop B products (metadata)
-2. Guest clicks Shop B product → Shop A fetches full details from Shop B
-3. Guest adds to cart, checkout → Shop A redirects to Shop B
-4. Guest places order → Order created on Shop B's server
-5. Payment → Webhook goes directly to Shop B
-6. Shop A never stores the order (only optional tracking reference)
-```
+**BYOS**: Bring Your Own Server (self-hosted behind Cloudflare Tunnel)
+
+### Deployment Characteristics
+
+**Common Features:**
+- **TLS**: Automatic ACME certificates (Let's Encrypt)
+- **Scale**: Optimized for small shops (100s-1000s of products)
+- **Payment**: Portone, KakaoPay integration
+- **Authentication**: OAuth 2.0 (Kakao/Naver/Google) or Email/Password
+
+**GCP VM Deployment:**
+- Single VM instance per shop
+- SQLite or PostgreSQL backend
+- Go Fiber API server
+- nginx frontend
+- fail2jail-rs for DDoS protection
+- Optional Prosody XMPP service
+
+**Supabase + GCP VM:**
+- Supabase for auth and database
+- GCP VM for additional services
+- Automated backup via Supabase
+- JWT-based permission system
 
 ### Claude Usage Habits
 * Use Inline Execution in claude pro plan, Use Subagent Driven Execution in claude max plan
 * Create feature branch only with superpower plans
-
-
-### Security Model (Intended Architecture)
-
-**Note:** WSS server implementation removed from this project.
-
-- **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
-- **Site-to-Site**: DNS TXT public key verification (ed25519 signatures)
-- **Site-to-Guest**: OAuth 2.0, HTTP-only cookies, CSRF protection
-- **Payment**: HMAC webhook verification, timestamp validation, idempotency
-- **Trust**: Chief-mediated group membership, no shared secrets
-
-### Reference Documentation
-
-For complete architectural specification, see:
-**[Distributed Architecture Design Spec](./docs/superpowers/specs/2026-07-04-dure-distributed-architecture-design.md)**
-
-Includes:
-- Detailed layer diagrams (infrastructure, federation, auth, application)
-- Complete database schema (aligned with AsyncAPI messages)
-- End-to-end data flows
-- Security analysis
-- Implementation phases
 
 ## Core Features
 
