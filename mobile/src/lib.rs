@@ -25,7 +25,6 @@ pub mod ui_dlg;
 pub mod ui_components;
 
 // Desktop-only modules (minimal implementations for CLI)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod config;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod config_migration;
@@ -125,11 +124,11 @@ impl Config {
             for dir in [&config_dir, &cache_dir, &tmp_dir, &data_dir] {
                 match fs::create_dir_all(dir) {
                     Ok(()) => dure_info!("Successfully created directory: {:?}", dir),
-                    Err(e) => dure_error!("Failed to create directory: {:?} - Error: {}", dir, e),
+                    Err(e) => log::error!("Failed to create directory: {:?} - Error: {}", dir, e),
                 }
             }
 
-            let app_config = config::AppConfig::default();
+            let app_config = config::AppConfig::default_android();
 
             Ok(Config {
                 config_dir: config_dir.clone(),

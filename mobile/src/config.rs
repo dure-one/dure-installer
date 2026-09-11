@@ -330,6 +330,12 @@ impl AppConfig {
     pub fn load_or_default(_path: &PathBuf) -> Self {
         Self::default()
     }
+
+    /// Android-specific defaults (no filesystem access for config.yml)
+    #[cfg(target_os = "android")]
+    pub fn default_android() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(test)]
