@@ -13,7 +13,6 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::calc::acme::{
     DnsProvider, DnsProviderType, set_a_record, set_aaaa_record, set_txt_record,
 };
