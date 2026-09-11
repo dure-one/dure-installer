@@ -2,23 +2,13 @@
 
 pub mod ehttp_cache;
 
+// Desktop-only (X11 desktop environment detection)
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod desktop;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// Platform-independent HTTP APIs
 pub mod gcp;
-
-// Nameserver API modules
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ns_cloudflare;
-
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ns_duckdns;
-
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ns_gcp;
-
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod ns_porkbun;
