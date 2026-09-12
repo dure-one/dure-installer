@@ -19,6 +19,10 @@ pub mod logging;
 pub mod site;
 pub mod storage;
 
+// Android-specific modules
+#[cfg(target_os = "android")]
+pub mod android;
+
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
 #[cfg(feature = "gui")]
@@ -59,7 +63,7 @@ pub mod install;
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod install_stt;
 #[cfg(all(
-    feature = "gui",
+    feature = "tray-icon",
     not(any(target_os = "android", target_arch = "wasm32")),
     not(target_os = "openbsd")
 ))]
@@ -128,14 +132,11 @@ impl Config {
                 }
             }
 
-            let app_config = config::AppConfig::default_android();
-
             Ok(Config {
                 config_dir: config_dir.clone(),
                 cache_dir,
                 tmp_dir,
                 data_dir,
-                app_config,
             })
         }
 
