@@ -5,10 +5,9 @@ use eframe::egui;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::calc::audit;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::calc::ns::{NsConfig, RecordType, apply_record};
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
@@ -386,12 +385,24 @@ fn render_domains_table(
     ns_tab.process_action_triggers(ui, vm);
 }
 
-/// Get config file path
-#[cfg(not(target_arch = "wasm32"))]
+/// Get config file path (Desktop)
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 fn get_config_path() -> Result<PathBuf, String> {
     let proj_dirs = ProjectDirs::from("com", "dure", "dure")
         .ok_or_else(|| "Failed to get project directories".to_string())?;
     Ok(proj_dirs.config_dir().join("config.yml"))
+}
+
+/// Get config file path (Android)
+#[cfg(target_os = "android")]
+fn get_config_path() -> Result<PathBuf, String> {
+    Ok(PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+}
+
+/// Get config file path (WASM)
+#[cfg(target_arch = "wasm32")]
+fn get_config_path() -> Result<PathBuf, String> {
+    Ok(PathBuf::from(".dure/config.yml"))
 }
 
 /// Parse Porkbun credentials from combined token format
@@ -2495,7 +2506,7 @@ impl NsTab {
                     // Save config to persist refreshed token
                     if provider.starts_with("gcloud:") {
                         if let Err(e) = save_ns_config(&config) {
-                            dure_debug!("Warning: Failed to save refreshed token: {}", e);
+                            log::debug!("Warning: Failed to save refreshed token: {}", e);
                         }
                     }
 

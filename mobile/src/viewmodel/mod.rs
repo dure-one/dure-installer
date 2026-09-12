@@ -171,7 +171,6 @@ impl ViewModel {
         use wasm_bindgen_futures::spawn_local;
 
         let (platform_tx, platform_rx) = smol::channel::unbounded();
-        let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
@@ -184,8 +183,7 @@ impl ViewModel {
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
-            // SSH disabled in WASM (no native SSH in browser)
-            drop(ssh_rx);
+            // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
             // Run actors concurrently
             futures::join!(platform_actor.run(), ns_actor.run(), wss_actor.run(),);
@@ -193,7 +191,7 @@ impl ViewModel {
 
         Self {
             platform_tx,
-            ssh_tx,
+            // ssh_tx gated out for WASM builds
             ns_tx,
             wss_tx,
             event_rx,
@@ -210,13 +208,13 @@ impl ViewModel {
         let mut events = Vec::new();
 
         while let Ok(event) = self.event_rx.try_recv() {
-            dure_debug!(" ViewModel: Received event: {:?}", event);
+            log::debug!(" ViewModel: Received event: {:?}", event);
             self.apply_event(&event, Some(ctx));
             events.push(event);
         }
 
         if !events.is_empty() {
-            dure_debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
+            log::debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
             );
             ctx.request_repaint();
         }
@@ -427,7 +425,7 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    // SSH commands
+    // SSH commands (desktop-only: Android/WASM don't support SSH operations)
     pub fn add_ssh_host(
         &self,
         name: String,
