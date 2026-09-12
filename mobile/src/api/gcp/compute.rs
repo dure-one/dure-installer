@@ -800,18 +800,18 @@ impl GcpRestClient {
                     GCP_COMPUTE_API_BASE, project_id, rule.name
                 );
 
-                dure_debug!(
+                log::debug!(
                     "Updating firewall rule '{}' with IP: {}",
                     rule.name, ip
                 );
-                dure_debug!("PATCH URL: {}", url);
-                dure_debug!("Body: {}", body.to_string());
+                log::debug!("PATCH URL: {}", url);
+                log::debug!("Body: {}", body.to_string());
 
                 let response = self.patch(&url, &body.to_string())?;
                 let response_text = response.into_string().unwrap_or_default();
-                dure_debug!("Response: {}", response_text);
+                log::debug!("Response: {}", response_text);
             } else {
-                dure_debug!("IP {} already in firewall rule '{}'", ip, rule.name);
+                log::debug!("IP {} already in firewall rule '{}'", ip, rule.name);
             }
         } else {
             // Create new SSH rule
@@ -831,16 +831,16 @@ impl GcpRestClient {
                 GCP_COMPUTE_API_BASE, project_id
             );
 
-            dure_debug!(
+            log::debug!(
                 "Creating new firewall rule 'allow-ssh-dure' with IP: {}",
                 ip
             );
-            dure_debug!("POST URL: {}", url);
-            dure_debug!("Body: {}", body.to_string());
+            log::debug!("POST URL: {}", url);
+            log::debug!("Body: {}", body.to_string());
 
             let response = self.post(&url, &body.to_string())?;
             let response_text = response.into_string().unwrap_or_default();
-            dure_debug!("Response: {}", response_text);
+            log::debug!("Response: {}", response_text);
         }
 
         Ok(())
@@ -885,7 +885,7 @@ impl GcpRestClient {
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Debian images: {}", e);
-                dure_warn!("{}", err_msg);
+                log::warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }
@@ -898,7 +898,7 @@ impl GcpRestClient {
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Ubuntu images: {}", e);
-                dure_warn!("{}", err_msg);
+                log::warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }

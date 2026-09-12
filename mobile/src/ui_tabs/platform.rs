@@ -570,14 +570,14 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
     // Try to interpret as OpenSSH format first
     if let Ok(key_str) = String::from_utf8(raw_bytes.to_vec()) {
         if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-            dure_debug!("Extracting public key from OpenSSH format");
+            log::debug!("Extracting public key from OpenSSH format");
             return extract_pubkey_from_openssh(&key_str);
         }
     }
 
     // Otherwise, treat as raw 32-byte Ed25519 key
     if raw_bytes.len() != 32 {
-        dure_debug!(
+        log::debug!(
             "Key is neither OpenSSH format nor raw 32 bytes (length: {})",
             raw_bytes.len()
         );
@@ -610,41 +610,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
 
     let domain = match keyring_domain.as_ref() {
         Some(d) => {
-            dure_debug!("Loading SSH key for domain: {}", d);
+            log::debug!("Loading SSH key for domain: {}", d);
             d
         }
         None => {
-            dure_debug!("No keyring domain provided");
+            log::debug!("No keyring domain provided");
             return (None, None);
         }
     };
 
     let kdbx_path = match keyring::get_default_kdbx_path() {
         Ok(p) => {
-            dure_debug!("KeePass DB path: {}", p.display());
+            log::debug!("KeePass DB path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kdbx path: {}", e);
+            log::debug!("Failed to get kdbx path: {}", e);
             return (None, None);
         }
     };
     let kpkey_path = match keyring::get_default_kpkey_path() {
         Ok(p) => {
-            dure_debug!("KPKey path: {}", p.display());
+            log::debug!("KPKey path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kpkey path: {}", e);
+            log::debug!("Failed to get kpkey path: {}", e);
             return (None, None);
         }
     };
 
     let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
         Ok(k) => {
-            dure_debug!("Found {} keys in keyring", k.len());
+            log::debug!("Found {} keys in keyring", k.len());
             for key in &k {
-                dure_debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
+                log::debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
                     key.ssh_key.is_some()
                 );
@@ -652,7 +652,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
             k
         }
         Err(e) => {
-            dure_debug!("Failed to list keys: {}", e);
+            log::debug!("Failed to list keys: {}", e);
             return (None, None);
         }
     };
@@ -660,41 +660,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
         Some(e) => {
-            dure_debug!("Found matching key entry");
+            log::debug!("Found matching key entry");
             e
         }
         None => {
-            dure_debug!("No key found for domain: {}", domain);
+            log::debug!("No key found for domain: {}", domain);
             return (None, None);
         }
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        dure_debug!("SSH key bytes length: {}", ssh_key_bytes.len());
+        log::debug!("SSH key bytes length: {}", ssh_key_bytes.len());
 
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
         if let Some(ref pk) = public_key {
-            dure_debug!("Derived public key: {}", pk);
+            log::debug!("Derived public key: {}", pk);
         } else {
-            dure_debug!("Failed to derive public key");
+            log::debug!("Failed to derive public key");
         }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                dure_debug!("Key already in OpenSSH format");
+                log::debug!("Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
 
         // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
-        dure_debug!("Converting raw bytes to OpenSSH format");
+        log::debug!("Converting raw bytes to OpenSSH format");
         let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
         (private_key, public_key)
     } else {
-        dure_debug!("Key entry has no SSH key attachment");
+        log::debug!("Key entry has no SSH key attachment");
         (None, None)
     }
 }
@@ -716,7 +716,7 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
         match client.list_projects(None) {
             Ok(list) => list.projects.len(),
             Err(e) => {
-                dure_debug!("Failed to fetch project count: {}", e);
+                log::debug!("Failed to fetch project count: {}", e);
                 0
             }
         }
@@ -877,7 +877,7 @@ impl PlatformTab {
                         platform_name,
                         whitelisted_ip,
                     }) => {
-                        dure_debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
+                        log::debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
 
                         // Incremental update: Find and update specific row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -988,7 +988,7 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        dure_debug!("✅ Projects listed for {}: {} projects", platform_name,
+                        log::debug!("✅ Projects listed for {}: {} projects", platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -1102,7 +1102,7 @@ impl PlatformTab {
                         operation,
                         error,
                     }) => {
-                        dure_error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
+                        log::error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
 
                         // Update row to show error state
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1196,7 +1196,7 @@ impl PlatformTab {
                             self.loaded = false;
                         }
                         Err(e) => {
-                            dure_debug!("Refresh failed for {}: {}", project_id, e);
+                            log::debug!("Refresh failed for {}: {}", project_id, e);
                         }
                     }
                     completed_refreshes.push(project_id.clone());
@@ -1232,7 +1232,7 @@ impl PlatformTab {
                             // Mark as auto-refreshed to prevent repeat triggers
                             self.auto_refreshed_platforms.insert(row.project_id.clone());
                         } else {
-                            dure_debug!("Auto-refresh failed for {}", row.project_id);
+                            log::debug!("Auto-refresh failed for {}", row.project_id);
                         }
                     }
                 }
@@ -1540,7 +1540,7 @@ impl PlatformTab {
                         {
                             // Check/refresh token (this will log "Access token refreshed" if needed)
                             if let Err(e) = self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
-                                dure_warn!("Failed to refresh access token: {}", e);
+                                log::warn!("Failed to refresh access token: {}", e);
                                 // Continue anyway - the API call might still work or will fail with proper error
                             }
                         }
@@ -1550,7 +1550,7 @@ impl PlatformTab {
                 // Send RefreshPlatform command to ViewModel
                 if let Some(ref vm) = vm {
                     if let Err(e) = vm.refresh_platform(platform_name.clone()) {
-                        dure_error!("Failed to send refresh command: {}", e);
+                        log::error!("Failed to send refresh command: {}", e);
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Failed {
                                 operation: "refresh".to_string(),
@@ -1793,7 +1793,7 @@ impl PlatformTab {
                                 Ok(token) => Some(token),
                                 Err(e) => {
                                     let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
-                                    dure_debug!("Failed to get valid access token for project '{}': {}", project_id, e
+                                    log::debug!("Failed to get valid access token for project '{}': {}", project_id, e
                                     );
                                     None
                                 }
@@ -2134,7 +2134,7 @@ impl PlatformTab {
                                             .collect();
                                     }
                                     Err(e) => {
-                                        dure_debug!("Failed to fetch projects: {}", e);
+                                        log::debug!("Failed to fetch projects: {}", e);
                                     }
                                 }
                             }
@@ -2486,7 +2486,7 @@ impl PlatformTab {
                     ip
                 },
                 Err(e) => {
-                    dure_error!("Failed to get current IP: {}", e);
+                    log::error!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
                     return;
                 }
@@ -2494,7 +2494,7 @@ impl PlatformTab {
 
             // Send command to ViewModel
             if let Err(e) = vm.update_firewall(platform_name.clone(), current_ip.clone()) {
-                dure_error!("Failed to send firewall update command: {}", e);
+                log::error!("Failed to send firewall update command: {}", e);
                 self.load_error = Some(format!("Failed to start firewall update: {}", e));
             } else {
                 dure_info!(" Firewall update command sent successfully");
@@ -2502,7 +2502,7 @@ impl PlatformTab {
             // Note: UI will be updated by event processing when FirewallUpdated event arrives
         } else {
             // Fallback: no ViewModel available
-            dure_error!("ViewModel not available for firewall update");
+            log::error!("ViewModel not available for firewall update");
             self.load_error = Some("ViewModel not available".to_string());
         }
     }
@@ -2742,7 +2742,7 @@ impl PlatformTab {
                                 dure_info!(" Audit record created: ID {}", audit_id);
                             }
                             Err(e) => {
-                                dure_warn!(" Failed to record audit event: {}", e);
+                                log::warn!(" Failed to record audit event: {}", e);
                             }
                         }
                     }
@@ -2788,7 +2788,7 @@ impl PlatformTab {
         }
 
         // Token expired, refresh it
-        dure_debug!("Access token expired, refreshing...");
+        log::debug!("Access token expired, refreshing...");
 
         use crate::api::gcp::oauth::{self, OAuthHandler};
 
@@ -2957,7 +2957,7 @@ impl PlatformTab {
                         }
                     }
                     Err(e) => {
-                        dure_debug!("Failed to fetch VM status: {}", e);
+                        log::debug!("Failed to fetch VM status: {}", e);
                     }
                 }
             }
@@ -2976,12 +2976,12 @@ impl PlatformTab {
                             );
                         }
                         Err(e) => {
-                            dure_debug!("Failed to check firewall: {}", e);
+                            log::debug!("Failed to check firewall: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    dure_debug!("Failed to get current IP: {}", e);
+                    log::debug!("Failed to get current IP: {}", e);
                 }
             }
 
@@ -2991,7 +2991,7 @@ impl PlatformTab {
                     platform.cached_total_project_count = Some(list.projects.len());
                 }
                 Err(e) => {
-                    dure_debug!("Failed to fetch project count: {}", e);
+                    log::debug!("Failed to fetch project count: {}", e);
                 }
             }
 
@@ -3259,7 +3259,7 @@ impl PlatformTab {
                     self.add_platform_connected_email = Some(display);
                 }
                 Err(e) => {
-                    dure_debug!("Failed to fetch user info: {}", e);
+                    log::debug!("Failed to fetch user info: {}", e);
                     self.add_platform_connected_email = Some("Connected Account".to_string());
                 }
             }

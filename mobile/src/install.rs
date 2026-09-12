@@ -6,7 +6,6 @@
 //! - Checking for updates
 //! - Downloading and applying updates
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::install_stt::{GitHubRelease, InstallPaths, InstallResult, InstallStatus, UpdateInfo};
 use std::env;
 use std::fs;
@@ -26,10 +25,10 @@ fn get_versioned_app_name() -> String {
 fn move_to_trash<P: AsRef<Path>>(path: P) -> Result<(), String> {
     let path = path.as_ref();
 
-    dure_debug!("Moving to trash: {}", path.display());
+    log::debug!("Moving to trash: {}", path.display());
 
     if !path.exists() {
-        dure_debug!("Path does not exist, nothing to move");
+        log::debug!("Path does not exist, nothing to move");
         return Ok(()); // Nothing to move
     }
 
@@ -41,17 +40,17 @@ fn move_to_trash<P: AsRef<Path>>(path: P) -> Result<(), String> {
     {
         trash::delete(path).map_err(|e| {
             let err_msg = format!("Failed to move to trash: {}", e);
-            dure_error!("{}", err_msg);
+            log::error!("{}", err_msg);
             err_msg
         })?;
 
-        dure_debug!("Successfully moved to trash");
+        log::debug!("Successfully moved to trash");
     }
 
     #[cfg(any(target_os = "android", target_arch = "wasm32"))]
     {
         // On Android/WASM, just delete the file
-        dure_debug!("Platform does not support trash, deleting file directly");
+        log::debug!("Platform does not support trash, deleting file directly");
         if path.is_dir() {
             fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {}", e))?;
         } else {
@@ -74,14 +73,14 @@ fn cleanup_old_installations(
         get_versioned_app_name()
     };
 
-    dure_info!(
+    log::info!(
         "Cleaning up old installations, keeping: {}",
         version_to_keep
     );
 
     // Clean up old binaries in bin_dir
     if paths.bin_dir.exists() {
-        dure_debug!("Scanning bin directory: {}", paths.bin_dir.display());
+        log::debug!("Scanning bin directory: {}", paths.bin_dir.display());
         if let Ok(entries) = fs::read_dir(&paths.bin_dir) {
             let mut removed_count = 0;
             for entry in entries.flatten() {
@@ -101,39 +100,39 @@ fn cleanup_old_installations(
                     && !name_str.contains("-bin"); // Don't remove the -bin helper on macOS
 
                 if is_old_binary {
-                    dure_info!("Moving old binary to trash: {}", path.display());
+                    log::info!("Moving old binary to trash: {}", path.display());
                     match move_to_trash(&path) {
                         Ok(_) => {
                             removed_count += 1;
-                            dure_debug!("Successfully removed: {}", name_str);
+                            log::debug!("Successfully removed: {}", name_str);
                         }
-                        Err(e) => dure_warn!("Failed to remove old binary {}: {}", name_str, e),
+                        Err(e) => log::warn!("Failed to remove old binary {}: {}", name_str, e),
                     }
                 }
             }
             if removed_count > 0 {
-                dure_info!("Removed {} old binary(ies)", removed_count);
+                log::info!("Removed {} old binary(ies)", removed_count);
             } else {
-                dure_debug!("No old binaries found to remove");
+                log::debug!("No old binaries found to remove");
             }
         } else {
-            dure_warn!("Could not read bin directory");
+            log::warn!("Could not read bin directory");
         }
     } else {
-        dure_debug!("Bin directory does not exist: {}", paths.bin_dir.display());
+        log::debug!("Bin directory does not exist: {}", paths.bin_dir.display());
     }
 
     // Clean up old shortcuts
     #[cfg(not(target_os = "macos"))]
     {
-        dure_debug!("Cleaning up old shortcuts...");
+        log::debug!("Cleaning up old shortcuts...");
         let mut shortcuts_removed = 0;
 
         // Clean start menu shortcuts
         if let Some(ref start_menu) = paths.start_menu_entry {
             if let Some(parent) = start_menu.parent() {
                 if parent.exists() {
-                    dure_debug!("Scanning start menu directory: {}", parent.display());
+                    log::debug!("Scanning start menu directory: {}", parent.display());
                     if let Ok(entries) = fs::read_dir(parent) {
                         for entry in entries.flatten() {
                             let path = entry.path();
@@ -150,17 +149,17 @@ fn cleanup_old_installations(
                             let is_old_shortcut = false;
 
                             if is_old_shortcut && path != *start_menu {
-                                dure_info!(
+                                log::info!(
                                     "Moving old start menu shortcut to trash: {}",
                                     path.display()
                                 );
                                 match move_to_trash(&path) {
                                     Ok(_) => {
                                         shortcuts_removed += 1;
-                                        dure_debug!("Successfully removed shortcut: {}", name_str);
+                                        log::debug!("Successfully removed shortcut: {}", name_str);
                                     }
                                     Err(e) => {
-                                        dure_warn!("Failed to remove shortcut {}: {}", name_str, e)
+                                        log::warn!("Failed to remove shortcut {}: {}", name_str, e)
                                     }
                                 }
                             }
@@ -174,7 +173,7 @@ fn cleanup_old_installations(
         if let Some(ref desktop) = paths.desktop_shortcut {
             if let Some(parent) = desktop.parent() {
                 if parent.exists() {
-                    dure_debug!("Scanning desktop directory: {}", parent.display());
+                    log::debug!("Scanning desktop directory: {}", parent.display());
                     if let Ok(entries) = fs::read_dir(parent) {
                         for entry in entries.flatten() {
                             let path = entry.path();
@@ -191,17 +190,17 @@ fn cleanup_old_installations(
                             let is_old_shortcut = false;
 
                             if is_old_shortcut && path != *desktop {
-                                dure_info!(
+                                log::info!(
                                     "Moving old desktop shortcut to trash: {}",
                                     path.display()
                                 );
                                 match move_to_trash(&path) {
                                     Ok(_) => {
                                         shortcuts_removed += 1;
-                                        dure_debug!("Successfully removed shortcut: {}", name_str);
+                                        log::debug!("Successfully removed shortcut: {}", name_str);
                                     }
                                     Err(e) => {
-                                        dure_warn!("Failed to remove shortcut {}: {}", name_str, e)
+                                        log::warn!("Failed to remove shortcut {}: {}", name_str, e)
                                     }
                                 }
                             }
@@ -212,16 +211,16 @@ fn cleanup_old_installations(
         }
 
         if shortcuts_removed > 0 {
-            dure_info!("Removed {} old shortcut(s)", shortcuts_removed);
+            log::info!("Removed {} old shortcut(s)", shortcuts_removed);
         } else {
-            dure_debug!("No old shortcuts found to remove");
+            log::debug!("No old shortcuts found to remove");
         }
     }
 
     // Clean up old macOS app bundles
     #[cfg(target_os = "macos")]
     {
-        dure_debug!("Cleaning up old macOS app bundles...");
+        log::debug!("Cleaning up old macOS app bundles...");
         if paths.bin_dir.exists() {
             if let Ok(entries) = fs::read_dir(&paths.bin_dir) {
                 let mut removed_count = 0;
@@ -235,28 +234,28 @@ fn cleanup_old_installations(
                         && !name_str.starts_with(&version_to_keep);
 
                     if is_old_app {
-                        dure_info!("Moving old app bundle to trash: {}", path.display());
+                        log::info!("Moving old app bundle to trash: {}", path.display());
                         match move_to_trash(&path) {
                             Ok(_) => {
                                 removed_count += 1;
-                                dure_debug!("Successfully removed: {}", name_str);
+                                log::debug!("Successfully removed: {}", name_str);
                             }
                             Err(e) => {
-                                dure_warn!("Failed to remove old app bundle {}: {}", name_str, e)
+                                log::warn!("Failed to remove old app bundle {}: {}", name_str, e)
                             }
                         }
                     }
                 }
                 if removed_count > 0 {
-                    dure_info!("Removed {} old app bundle(s)", removed_count);
+                    log::info!("Removed {} old app bundle(s)", removed_count);
                 } else {
-                    dure_debug!("No old app bundles found to remove");
+                    log::debug!("No old app bundles found to remove");
                 }
             }
         }
     }
 
-    dure_info!("Cleanup completed");
+    log::info!("Cleanup completed");
     Ok(())
 }
 
@@ -332,8 +331,8 @@ pub fn get_install_paths() -> InstallPaths {
 pub fn check_install() -> InstallStatus {
     let paths = get_install_paths();
 
-    dure_debug!("Checking installation status...");
-    dure_debug!("  bin_dir: {}", paths.bin_dir.display());
+    log::debug!("Checking installation status...");
+    log::debug!("  bin_dir: {}", paths.bin_dir.display());
 
     #[cfg(target_os = "linux")]
     {
@@ -350,7 +349,7 @@ pub fn check_install() -> InstallStatus {
                             let is_dure = name_str.starts_with(&format!("{}-", APP_NAME))
                                 && !name_str.contains("-bin"); // Exclude helper binaries
                             if is_dure {
-                                dure_debug!("  Found binary: {}", name_str);
+                                log::debug!("  Found binary: {}", name_str);
                             }
                             is_dure
                         })
@@ -363,12 +362,12 @@ pub fn check_install() -> InstallStatus {
 
         let desktop_file_exists = paths.start_menu_entry.as_ref().is_some_and(|p| {
             let exists = p.exists();
-            dure_debug!("  Desktop file exists: {} ({})", exists, p.display());
+            log::debug!("  Desktop file exists: {} ({})", exists, p.display());
             exists
         });
 
         if has_binary && desktop_file_exists {
-            dure_info!("Installation detected (Linux)");
+            log::info!("Installation detected (Linux)");
             return InstallStatus::Installed;
         }
     }
@@ -388,7 +387,7 @@ pub fn check_install() -> InstallStatus {
                             let is_dure = name_str.starts_with(&format!("{}-", APP_NAME))
                                 && name_str.ends_with(".app");
                             if is_dure {
-                                dure_debug!("  Found app bundle: {}", name_str);
+                                log::debug!("  Found app bundle: {}", name_str);
                             }
                             is_dure
                         })
@@ -400,7 +399,7 @@ pub fn check_install() -> InstallStatus {
         };
 
         if has_app {
-            dure_info!("Installation detected (macOS)");
+            log::info!("Installation detected (macOS)");
             return InstallStatus::Installed;
         }
     }
@@ -410,16 +409,16 @@ pub fn check_install() -> InstallStatus {
         // Check shortcuts and registry first (these are the definitive indicators)
         let has_shortcut = paths.start_menu_entry.as_ref().is_some_and(|p| {
             let exists = p.exists();
-            dure_debug!("  Start menu shortcut exists: {} ({})", exists, p.display());
+            log::debug!("  Start menu shortcut exists: {} ({})", exists, p.display());
             exists
         });
 
         let has_registry = check_windows_registry(&paths);
-        dure_debug!("  Registry entry exists: {}", has_registry);
+        log::debug!("  Registry entry exists: {}", has_registry);
 
         // If shortcuts or registry exist, definitely installed
         if has_shortcut || has_registry {
-            dure_info!("Installation detected (Windows) - shortcuts/registry exist");
+            log::info!("Installation detected (Windows) - shortcuts/registry exist");
             return InstallStatus::Installed;
         }
 
@@ -438,7 +437,7 @@ pub fn check_install() -> InstallStatus {
                             let is_dure = name_str.starts_with(&format!("{}-", APP_NAME))
                                 && name_str.ends_with(".exe");
                             if is_dure {
-                                dure_debug!("  Found binary: {}", name_str);
+                                log::debug!("  Found binary: {}", name_str);
                             }
                             is_dure
                         })
@@ -452,19 +451,19 @@ pub fn check_install() -> InstallStatus {
         // Only consider installed if we have shortcuts/registry
         // Binary alone (without shortcuts/registry) means uninstall is in progress
         if has_binary && !has_shortcut && !has_registry {
-            dure_info!(
+            log::info!(
                 "Binary exists but shortcuts/registry removed - considered uninstalled (cleanup pending)"
             );
             return InstallStatus::NotInstalled;
         }
 
         if has_binary {
-            dure_info!("Installation detected (Windows) - binary exists");
+            log::info!("Installation detected (Windows) - binary exists");
             return InstallStatus::Installed;
         }
     }
 
-    dure_info!("No installation detected");
+    log::info!("No installation detected");
     InstallStatus::NotInstalled
 }
 
@@ -537,47 +536,47 @@ pub fn do_install() -> InstallResult {
 
 #[cfg(target_os = "linux")]
 fn install_linux(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String, String> {
-    dure_info!("Starting Linux installation...");
-    dure_info!("Current exe: {}", current_exe.display());
-    dure_info!("Target directory: {}", paths.bin_dir.display());
+    log::info!("Starting Linux installation...");
+    log::info!("Current exe: {}", current_exe.display());
+    log::info!("Target directory: {}", paths.bin_dir.display());
 
     // Clean up old installations
-    dure_info!("Cleaning up old installations...");
+    log::info!("Cleaning up old installations...");
     cleanup_old_installations(paths, None)?;
 
     let binary_dest = paths.bin_dir.join(get_versioned_app_name());
-    dure_info!("Installing to: {}", binary_dest.display());
+    log::info!("Installing to: {}", binary_dest.display());
 
     // Copy binary
-    dure_info!("Copying binary...");
+    log::info!("Copying binary...");
     fs::copy(current_exe, &binary_dest).map_err(|e| format!("Failed to copy binary: {}", e))?;
-    dure_info!("Binary copied successfully");
+    log::info!("Binary copied successfully");
 
     // Make executable
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        dure_info!("Setting executable permissions (0755)...");
+        log::info!("Setting executable permissions (0755)...");
         let mut perms = fs::metadata(&binary_dest)
             .map_err(|e| format!("Failed to get permissions: {}", e))?
             .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&binary_dest, perms)
             .map_err(|e| format!("Failed to set permissions: {}", e))?;
-        dure_debug!("Permissions set successfully");
+        log::debug!("Permissions set successfully");
     }
 
     // Create applications directory if needed
     if let Some(ref start_menu) = paths.start_menu_entry {
         if let Some(parent) = start_menu.parent() {
-            dure_info!("Creating applications directory: {}", parent.display());
+            log::info!("Creating applications directory: {}", parent.display());
             fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create applications directory: {}", e))?;
         }
     }
 
     // Create .desktop file for applications menu
-    dure_info!("Creating .desktop files...");
+    log::info!("Creating .desktop files...");
     let desktop_content = format!(
         r#"[Desktop Entry]
 Name=Dure {}
@@ -595,24 +594,24 @@ Keywords=ecommerce;store;shop;dure;
     );
 
     if let Some(ref start_menu) = paths.start_menu_entry {
-        dure_info!("Creating applications menu entry: {}", start_menu.display());
+        log::info!("Creating applications menu entry: {}", start_menu.display());
         fs::write(start_menu, &desktop_content)
             .map_err(|e| format!("Failed to create .desktop file: {}", e))?;
-        dure_debug!("Applications menu entry created");
+        log::debug!("Applications menu entry created");
     }
 
     // Optionally create desktop shortcut
     if let Some(ref desktop) = paths.desktop_shortcut {
         if desktop.parent().is_some_and(|p| p.exists()) {
-            dure_info!("Creating desktop shortcut: {}", desktop.display());
+            log::info!("Creating desktop shortcut: {}", desktop.display());
             match fs::write(desktop, &desktop_content) {
-                Ok(_) => dure_debug!("Desktop shortcut created"),
-                Err(e) => dure_warn!("Failed to create desktop shortcut (non-critical): {}", e),
+                Ok(_) => log::debug!("Desktop shortcut created"),
+                Err(e) => log::warn!("Failed to create desktop shortcut (non-critical): {}", e),
             }
         }
     }
 
-    dure_info!("Installation completed successfully");
+    log::info!("Installation completed successfully");
     Ok(format!(
         "Successfully installed to {}",
         binary_dest.display()
@@ -713,30 +712,30 @@ exec "$DIR/{}-bin" --tray "$@"
 
 #[cfg(target_os = "windows")]
 fn install_windows(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String, String> {
-    dure_info!("Starting Windows installation...");
-    dure_info!("Current exe: {}", current_exe.display());
-    dure_info!("Target directory: {}", paths.bin_dir.display());
+    log::info!("Starting Windows installation...");
+    log::info!("Current exe: {}", current_exe.display());
+    log::info!("Target directory: {}", paths.bin_dir.display());
 
     // Clean up old installations
-    dure_info!("Cleaning up old installations...");
+    log::info!("Cleaning up old installations...");
     cleanup_old_installations(paths, None)?;
 
     let binary_dest = paths
         .bin_dir
         .join(format!("{}.exe", get_versioned_app_name()));
-    dure_info!("Installing to: {}", binary_dest.display());
+    log::info!("Installing to: {}", binary_dest.display());
 
     // Copy binary
-    dure_info!("Copying binary...");
+    log::info!("Copying binary...");
     fs::copy(current_exe, &binary_dest).map_err(|e| format!("Failed to copy binary: {}", e))?;
-    dure_info!("Binary copied successfully");
+    log::info!("Binary copied successfully");
 
     // Add uninstall registry entry
     if let Some(ref key) = paths.uninstall_key {
         use std::os::windows::process::CommandExt;
         use std::process::Command;
 
-        dure_info!("Adding registry entries for uninstaller...");
+        log::info!("Adding registry entries for uninstaller...");
 
         // Calculate estimated size in KB
         let estimated_size = fs::metadata(&binary_dest)
@@ -772,7 +771,7 @@ fn install_windows(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String
         const CREATE_NO_WINDOW: u32 = 0x08000000;
 
         for (i, (value_name, value_type, value_data)) in reg_entries.iter().enumerate() {
-            dure_debug!(
+            log::debug!(
                 "Adding registry entry {}/{}: {} = {} ({})",
                 i + 1,
                 reg_entries.len(),
@@ -792,46 +791,46 @@ fn install_windows(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String
             match output {
                 Ok(out) => {
                     if !out.status.success() {
-                        dure_warn!(
+                        log::warn!(
                             "Registry command failed (non-critical) for {}: {}",
                             value_name,
                             String::from_utf8_lossy(&out.stderr)
                         );
                     } else {
-                        dure_debug!("Registry entry '{}' added successfully", value_name);
+                        log::debug!("Registry entry '{}' added successfully", value_name);
                     }
                 }
-                Err(e) => dure_warn!(
+                Err(e) => log::warn!(
                     "Failed to run registry command for {} (non-critical): {}",
                     value_name,
                     e
                 ),
             }
         }
-        dure_info!("Registry entries added");
+        log::info!("Registry entries added");
     }
 
     // Create Start Menu shortcut
     if let Some(ref start_menu) = paths.start_menu_entry {
-        dure_info!("Creating Start Menu shortcut: {}", start_menu.display());
+        log::info!("Creating Start Menu shortcut: {}", start_menu.display());
         if let Some(parent) = start_menu.parent() {
-            dure_debug!("Creating Start Menu directory: {}", parent.display());
+            log::debug!("Creating Start Menu directory: {}", parent.display());
             let _ = fs::create_dir_all(parent);
         }
         create_windows_shortcut(&binary_dest, start_menu)?;
-        dure_info!("Start Menu shortcut created successfully");
+        log::info!("Start Menu shortcut created successfully");
     }
 
     // Create Desktop shortcut
     if let Some(ref desktop) = paths.desktop_shortcut {
-        dure_info!("Creating Desktop shortcut: {}", desktop.display());
+        log::info!("Creating Desktop shortcut: {}", desktop.display());
         match create_windows_shortcut(&binary_dest, desktop) {
-            Ok(_) => dure_info!("Desktop shortcut created successfully"),
-            Err(e) => dure_warn!("Failed to create desktop shortcut (non-critical): {}", e),
+            Ok(_) => log::info!("Desktop shortcut created successfully"),
+            Err(e) => log::warn!("Failed to create desktop shortcut (non-critical): {}", e),
         }
     }
 
-    dure_info!("Installation completed successfully");
+    log::info!("Installation completed successfully");
     Ok(format!(
         "Successfully installed to {}",
         binary_dest.display()
@@ -943,44 +942,16 @@ fn uninstall_windows(paths: &InstallPaths) -> Result<String, String> {
             .output();
     }
 
-    // Remove binary and installation directory
-    if binary_path.exists() {
-        // On Windows, we can't delete a running executable, so schedule deletion on reboot
-        // or use a helper batch script
-        let batch_script = paths.bin_dir.join("uninstall.bat");
-        let script_content = format!(
-            r#"@echo off
-:retry
-del "{}" > nul 2>&1
-if exist "{}" (
-    timeout /t 1 /nobreak > nul
-    goto retry
-)
-rmdir /s /q "{}"
-del "%~f0"
-"#,
-            binary_path.display(),
-            binary_path.display(),
-            paths.bin_dir.display()
-        );
+    // Note: On Windows, we cannot delete the running executable
+    // Shortcuts and registry entries have been removed above
+    // User can manually delete the binary folder if desired after closing the application
 
-        fs::write(&batch_script, script_content)
-            .map_err(|e| format!("Failed to create uninstall script: {}", e))?;
-
-        Command::new("cmd")
-            .args([
-                "/C",
-                "start",
-                "/min",
-                "",
-                &batch_script.display().to_string(),
-            ])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| format!("Failed to run uninstall script: {}", e))?;
-    }
-
-    Ok("Uninstallation initiated. The application will be fully removed after exit.".to_string())
+    Ok(format!(
+        "Uninstallation completed. Shortcuts and registry entries removed.\n\
+         The application binary remains at: {}\n\
+         You may manually delete this folder after closing the application if desired.",
+        paths.bin_dir.display()
+    ))
 }
 
 /// Check for updates from GitHub releases
@@ -990,7 +961,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
         GITHUB_REPO
     );
 
-    dure_info!("Checking for updates from: {}", url);
+    log::info!("Checking for updates from: {}", url);
 
     let response = ureq::get(&url)
         .timeout(std::time::Duration::from_secs(30))
@@ -1009,7 +980,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     // Construct direct download URL based on platform and architecture
     let download_url = get_platform_download_url().ok_or_else(|| {
-        dure_error!(
+        log::error!(
             "No compatible release for platform {} arch {}",
             std::env::consts::OS,
             std::env::consts::ARCH
@@ -1019,7 +990,7 @@ pub fn check_update() -> Result<UpdateInfo, String> {
 
     let available = is_newer_version(&current_version, &latest_version);
 
-    dure_info!(
+    log::info!(
         "Update check: current={}, latest={}, available={}, url={}",
         current_version,
         latest_version,
@@ -1044,7 +1015,7 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
     let current_parts = parse_version(current);
     let latest_parts = parse_version(latest);
 
-    dure_debug!(
+    log::debug!(
         "Version comparison: current={} ({:?}) vs latest={} ({:?})",
         current,
         current_parts,
@@ -1054,16 +1025,16 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
 
     for (c, l) in current_parts.iter().zip(latest_parts.iter()) {
         if l > c {
-            dure_info!("Update available: {} > {}", latest, current);
+            log::info!("Update available: {} > {}", latest, current);
             return true;
         } else if c > l {
-            dure_info!("Current version is newer: {} > {}", current, latest);
+            log::info!("Current version is newer: {} > {}", current, latest);
             return false;
         }
     }
 
     let result = latest_parts.len() > current_parts.len();
-    dure_info!("Version comparison result: {} (length check)", result);
+    log::info!("Version comparison result: {} (length check)", result);
     result
 }
 
@@ -1072,7 +1043,7 @@ fn get_platform_download_url() -> Option<String> {
     let target_arch = std::env::consts::ARCH; // "x86_64", "aarch64", etc.
     let target_os = std::env::consts::OS;
 
-    dure_debug!(
+    log::debug!(
         "Constructing download URL for OS: {}, Architecture: {}",
         target_os,
         target_arch
@@ -1100,7 +1071,7 @@ fn get_platform_download_url() -> Option<String> {
 
         // Unsupported platform
         (os, arch) => {
-            dure_warn!("Unsupported platform: {} {}", os, arch);
+            log::warn!("Unsupported platform: {} {}", os, arch);
             return None;
         }
     };
@@ -1110,28 +1081,28 @@ fn get_platform_download_url() -> Option<String> {
         GITHUB_REPO, filename
     );
 
-    dure_info!("Constructed download URL: {}", download_url);
+    log::info!("Constructed download URL: {}", download_url);
     Some(download_url)
 }
 
 /// Download and apply update
 pub fn do_update(download_url: &str, latest_version: &str, tmp_dir: &PathBuf) -> InstallResult {
-    dure_info!("=== Starting update process ===");
-    dure_info!("Download URL: {}", download_url);
-    dure_info!("Target version: {}", latest_version);
-    dure_info!("Temp directory: {}", tmp_dir.display());
+    log::info!("=== Starting update process ===");
+    log::info!("Download URL: {}", download_url);
+    log::info!("Target version: {}", latest_version);
+    log::info!("Temp directory: {}", tmp_dir.display());
 
     let paths = get_install_paths();
 
     // Download the update
-    dure_info!("Step 1: Downloading update...");
+    log::info!("Step 1: Downloading update...");
     let downloaded_file = match download_update(download_url, tmp_dir) {
         Ok(path) => {
-            dure_info!("Download completed: {}", path.display());
+            log::info!("Download completed: {}", path.display());
             path
         }
         Err(e) => {
-            dure_error!("Download failed: {}", e);
+            log::error!("Download failed: {}", e);
             return InstallResult::Error(format!("Download failed: {}", e));
         }
     };
@@ -1142,37 +1113,37 @@ pub fn do_update(download_url: &str, latest_version: &str, tmp_dir: &PathBuf) ->
         .extension()
         .is_some_and(|ext| ext == "gz" || ext == "tar")
     {
-        dure_info!(
+        log::info!(
             "Step 2: Extracting tar.gz archive: {}",
             downloaded_file.display()
         );
         match extract_tar_gz(&downloaded_file, tmp_dir) {
             Ok(path) => {
-                dure_info!("Extraction successful, binary at: {}", path.display());
+                log::info!("Extraction successful, binary at: {}", path.display());
                 path
             }
             Err(e) => {
-                dure_error!("Extraction failed: {}", e);
+                log::error!("Extraction failed: {}", e);
                 return InstallResult::Error(format!("Extraction failed: {}", e));
             }
         }
     } else if downloaded_file.extension().is_some_and(|ext| ext == "zip") {
-        dure_info!(
+        log::info!(
             "Step 2: Extracting zip archive: {}",
             downloaded_file.display()
         );
         match extract_zip(&downloaded_file, tmp_dir) {
             Ok(path) => {
-                dure_info!("Extraction successful, binary at: {}", path.display());
+                log::info!("Extraction successful, binary at: {}", path.display());
                 path
             }
             Err(e) => {
-                dure_error!("Extraction failed: {}", e);
+                log::error!("Extraction failed: {}", e);
                 return InstallResult::Error(format!("Extraction failed: {}", e));
             }
         }
     } else {
-        dure_info!(
+        log::info!(
             "Step 2: No extraction needed, using downloaded file directly: {}",
             downloaded_file.display()
         );
@@ -1183,15 +1154,15 @@ pub fn do_update(download_url: &str, latest_version: &str, tmp_dir: &PathBuf) ->
     let binary_path = downloaded_file;
 
     // Replace current binary
-    dure_info!("Step 3: Installing new binary...");
+    log::info!("Step 3: Installing new binary...");
     match replace_binary(&binary_path, &paths, Some(latest_version)) {
         Ok(msg) => {
-            dure_info!("=== Update completed successfully ===");
+            log::info!("=== Update completed successfully ===");
             InstallResult::Success(msg)
         }
         Err(e) => {
-            dure_error!("=== Update failed ===");
-            dure_error!("Error: {}", e);
+            log::error!("=== Update failed ===");
+            log::error!("Error: {}", e);
             InstallResult::Error(e)
         }
     }
@@ -1204,8 +1175,8 @@ fn download_update(url: &str, tmp_dir: &PathBuf) -> Result<PathBuf, String> {
     // Create tmp directory if it doesn't exist
     fs::create_dir_all(tmp_dir).map_err(|e| format!("Failed to create tmp directory: {}", e))?;
 
-    dure_info!("Starting download from: {}", url);
-    dure_info!("Download destination: {}", dest_path.display());
+    log::info!("Starting download from: {}", url);
+    log::info!("Download destination: {}", dest_path.display());
 
     // Use ureq with streaming to handle large files
     let response = ureq::get(url)
@@ -1225,7 +1196,7 @@ fn download_update(url: &str, tmp_dir: &PathBuf) -> Result<PathBuf, String> {
         .and_then(|s| s.parse::<u64>().ok());
 
     if let Some(size) = content_length {
-        dure_info!(
+        log::info!(
             "Download size: {} bytes ({:.2} MB)",
             size,
             size as f64 / 1024.0 / 1024.0
@@ -1240,7 +1211,7 @@ fn download_update(url: &str, tmp_dir: &PathBuf) -> Result<PathBuf, String> {
     let bytes_written =
         io::copy(&mut reader, &mut file).map_err(|e| format!("Failed to write file: {}", e))?;
 
-    dure_info!("Download completed: {} bytes written", bytes_written);
+    log::info!("Download completed: {} bytes written", bytes_written);
 
     // Verify file size if content-length was provided
     if let Some(expected_size) = content_length {
@@ -1296,7 +1267,7 @@ fn find_binary_in_dir(dir: &PathBuf) -> Result<PathBuf, String> {
     #[cfg(not(target_os = "windows"))]
     let binary_name = APP_NAME;
 
-    dure_info!(
+    log::info!(
         "Searching for binary '{}' in directory: {}",
         binary_name,
         dir.display()
@@ -1305,15 +1276,15 @@ fn find_binary_in_dir(dir: &PathBuf) -> Result<PathBuf, String> {
     for entry in walkdir(dir).flatten() {
         let file_name_os = entry.file_name();
         let file_name = file_name_os.to_string_lossy();
-        dure_debug!("Checking file: {}", file_name);
+        log::debug!("Checking file: {}", file_name);
         if file_name == binary_name {
             let found_path = entry.path().to_path_buf();
-            dure_info!("Found binary at: {}", found_path.display());
+            log::info!("Found binary at: {}", found_path.display());
             return Ok(found_path);
         }
     }
 
-    dure_error!("Binary '{}' not found in archive", binary_name);
+    log::error!("Binary '{}' not found in archive", binary_name);
     Err(format!("Binary '{}' not found in archive", binary_name))
 }
 
@@ -1355,24 +1326,24 @@ fn replace_binary(
     paths: &InstallPaths,
     version: Option<&str>,
 ) -> Result<String, String> {
-    dure_info!("=== Starting binary replacement ===");
-    dure_debug!("Source binary: {}", new_binary.display());
-    dure_debug!("Install paths bin_dir: {}", paths.bin_dir.display());
+    log::info!("=== Starting binary replacement ===");
+    log::debug!("Source binary: {}", new_binary.display());
+    log::debug!("Install paths bin_dir: {}", paths.bin_dir.display());
 
     // Check if source binary exists
     if !new_binary.exists() {
         let err = format!("Source binary does not exist: {}", new_binary.display());
-        dure_error!("{}", err);
+        log::error!("{}", err);
         return Err(err);
     }
 
     // Always install to the standard installation directory (e.g., ~/.local/bin on Linux)
     // Use versioned naming - use provided version (for updates) or current version (for installs)
     let versioned_name = if let Some(ver) = version {
-        dure_info!("Installing version: {}", ver);
+        log::info!("Installing version: {}", ver);
         format!("{}-{}", APP_NAME, ver)
     } else {
-        dure_info!("Installing current version: {}", CURRENT_VERSION);
+        log::info!("Installing current version: {}", CURRENT_VERSION);
         get_versioned_app_name()
     };
 
@@ -1381,18 +1352,18 @@ fn replace_binary(
     #[cfg(not(target_os = "windows"))]
     let dest = paths.bin_dir.join(versioned_name);
 
-    dure_info!("Target installation path: {}", dest.display());
+    log::info!("Target installation path: {}", dest.display());
 
     // Ensure bin directory exists
     if let Some(parent) = dest.parent() {
         if !parent.exists() {
-            dure_info!("Creating bin directory: {}", parent.display());
+            log::info!("Creating bin directory: {}", parent.display());
             fs::create_dir_all(parent).map_err(|e| {
-                dure_error!("Failed to create bin directory: {}", e);
+                log::error!("Failed to create bin directory: {}", e);
                 format!("Failed to create bin directory: {}", e)
             })?;
         } else {
-            dure_debug!("Bin directory already exists");
+            log::debug!("Bin directory already exists");
         }
     }
 
@@ -1404,81 +1375,81 @@ fn replace_binary(
         #[cfg(not(target_os = "windows"))]
         let backup = dest.with_extension("old");
 
-        dure_info!("Existing binary found, backing up to: {}", backup.display());
+        log::info!("Existing binary found, backing up to: {}", backup.display());
         fs::rename(&dest, &backup).map_err(|e| {
-            dure_error!("Failed to backup existing binary: {}", e);
+            log::error!("Failed to backup existing binary: {}", e);
             format!("Failed to backup existing binary: {}", e)
         })?;
-        dure_debug!("Backup completed");
+        log::debug!("Backup completed");
     } else {
-        dure_debug!("No existing binary to backup");
+        log::debug!("No existing binary to backup");
     }
 
-    dure_info!("Copying new binary to destination...");
+    log::info!("Copying new binary to destination...");
     fs::copy(new_binary, &dest).map_err(|e| {
-        dure_error!("Failed to copy new binary: {}", e);
+        log::error!("Failed to copy new binary: {}", e);
         format!("Failed to copy new binary: {}", e)
     })?;
-    dure_info!("Binary copied successfully");
+    log::info!("Binary copied successfully");
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        dure_info!("Setting executable permissions (0755)...");
+        log::info!("Setting executable permissions (0755)...");
         let mut perms = fs::metadata(&dest)
             .map_err(|e| {
-                dure_error!("Failed to get permissions: {}", e);
+                log::error!("Failed to get permissions: {}", e);
                 format!("Failed to get permissions: {}", e)
             })?
             .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&dest, perms).map_err(|e| {
-            dure_error!("Failed to set permissions: {}", e);
+            log::error!("Failed to set permissions: {}", e);
             format!("Failed to set permissions: {}", e)
         })?;
-        dure_debug!("Permissions set successfully");
+        log::debug!("Permissions set successfully");
     }
 
     // Clean up old installations if we're installing a specific version (i.e., during update)
     if let Some(ver) = version {
-        dure_info!("Performing post-installation cleanup for version: {}", ver);
+        log::info!("Performing post-installation cleanup for version: {}", ver);
 
-        dure_info!("Cleaning up old installations...");
+        log::info!("Cleaning up old installations...");
         match cleanup_old_installations(paths, Some(ver)) {
-            Ok(_) => dure_debug!("Old installations cleaned up successfully"),
-            Err(e) => dure_warn!("Failed to clean up old installations (non-critical): {}", e),
+            Ok(_) => log::debug!("Old installations cleaned up successfully"),
+            Err(e) => log::warn!("Failed to clean up old installations (non-critical): {}", e),
         }
 
         // Update shortcuts to point to new binary
         #[cfg(target_os = "windows")]
         {
-            dure_info!("Updating Windows shortcuts...");
+            log::info!("Updating Windows shortcuts...");
 
             if let Some(ref start_menu) = paths.start_menu_entry {
-                dure_info!("Updating Start Menu shortcut: {}", start_menu.display());
+                log::info!("Updating Start Menu shortcut: {}", start_menu.display());
                 match create_windows_shortcut(&dest, start_menu) {
-                    Ok(_) => dure_info!("Start Menu shortcut updated successfully"),
+                    Ok(_) => log::info!("Start Menu shortcut updated successfully"),
                     Err(e) => {
-                        dure_error!("Failed to update Start Menu shortcut: {}", e);
+                        log::error!("Failed to update Start Menu shortcut: {}", e);
                         return Err(format!("Failed to update Start Menu shortcut: {}", e));
                     }
                 }
             }
 
             if let Some(ref desktop) = paths.desktop_shortcut {
-                dure_info!("Updating Desktop shortcut: {}", desktop.display());
+                log::info!("Updating Desktop shortcut: {}", desktop.display());
                 match create_windows_shortcut(&dest, desktop) {
-                    Ok(_) => dure_info!("Desktop shortcut updated successfully"),
-                    Err(e) => dure_warn!("Failed to update Desktop shortcut (non-critical): {}", e),
+                    Ok(_) => log::info!("Desktop shortcut updated successfully"),
+                    Err(e) => log::warn!("Failed to update Desktop shortcut (non-critical): {}", e),
                 }
             }
 
-            dure_info!("Shortcuts updated successfully");
+            log::info!("Shortcuts updated successfully");
         }
 
         #[cfg(target_os = "linux")]
         {
-            dure_info!("Updating Linux .desktop files...");
+            log::info!("Updating Linux .desktop files...");
             let desktop_content = format!(
                 r#"[Desktop Entry]
 Name=Dure {}
@@ -1496,29 +1467,29 @@ Keywords=ecommerce;store;shop;dure;business;
             );
 
             if let Some(ref start_menu) = paths.start_menu_entry {
-                dure_info!("Updating applications menu entry: {}", start_menu.display());
+                log::info!("Updating applications menu entry: {}", start_menu.display());
                 match fs::write(start_menu, &desktop_content) {
-                    Ok(_) => dure_debug!("Applications menu entry updated"),
-                    Err(e) => dure_warn!("Failed to update applications menu entry: {}", e),
+                    Ok(_) => log::debug!("Applications menu entry updated"),
+                    Err(e) => log::warn!("Failed to update applications menu entry: {}", e),
                 }
             }
 
             if let Some(ref desktop) = paths.desktop_shortcut {
                 if desktop.parent().is_some_and(|p| p.exists()) {
-                    dure_info!("Updating desktop entry: {}", desktop.display());
+                    log::info!("Updating desktop entry: {}", desktop.display());
                     match fs::write(desktop, &desktop_content) {
-                        Ok(_) => dure_debug!("Desktop entry updated"),
-                        Err(e) => dure_warn!("Failed to update desktop entry: {}", e),
+                        Ok(_) => log::debug!("Desktop entry updated"),
+                        Err(e) => log::warn!("Failed to update desktop entry: {}", e),
                     }
                 }
             }
 
-            dure_info!(".desktop files updated successfully");
+            log::info!(".desktop files updated successfully");
         }
     }
 
-    dure_info!("=== Binary replacement completed successfully ===");
-    dure_info!("Installed to: {}", dest.display());
+    log::info!("=== Binary replacement completed successfully ===");
+    log::info!("Installed to: {}", dest.display());
     Ok("Successfully updated to new version. Please restart the application.".to_string())
 }
 

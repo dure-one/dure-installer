@@ -134,7 +134,7 @@ impl PorkbunClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        dure_debug!(
+        log::debug!(
             "Porkbun DNS records response: {}",
             if body.len() > 500 {
                 &body[..500]
@@ -171,13 +171,13 @@ impl PorkbunClient {
     ) -> Result<()> {
         let url = format!("{}/dns/create/{}", API_BASE, domain);
 
-        dure_debug!("DEBUG Porkbun create_record:");
-        dure_debug!("  URL: {}", url);
-        dure_debug!("  Domain: {}", domain);
-        dure_debug!("  Subdomain: {}", subdomain);
-        dure_debug!("  Type: {}", record_type);
-        dure_debug!("  Content: {}", content);
-        dure_debug!("  TTL: {:?}", ttl);
+        log::debug!("DEBUG Porkbun create_record:");
+        log::debug!("  URL: {}", url);
+        log::debug!("  Domain: {}", domain);
+        log::debug!("  Subdomain: {}", subdomain);
+        log::debug!("  Type: {}", record_type);
+        log::debug!("  Content: {}", content);
+        log::debug!("  TTL: {:?}", ttl);
 
         let request = DnsRecordRequest {
             apikey: self.api_key.clone(),
@@ -189,7 +189,7 @@ impl PorkbunClient {
             prio: None,
         };
 
-        dure_debug!(
+        log::debug!(
             "  Request JSON: {}",
             serde_json::to_string(&request).unwrap_or_default()
         );
@@ -203,8 +203,8 @@ impl PorkbunClient {
                 let error_body = resp
                     .into_string()
                     .unwrap_or_else(|_| "Could not read error body".to_string());
-                dure_debug!("  ❌ HTTP {} error", code);
-                dure_debug!("  Error response: {}", error_body);
+                log::debug!("  ❌ HTTP {} error", code);
+                log::debug!("  Error response: {}", error_body);
                 return Err(anyhow::anyhow!(
                     "Failed to create DNS record: HTTP {} - {}",
                     code,
@@ -212,7 +212,7 @@ impl PorkbunClient {
                 ));
             }
             Err(e) => {
-                dure_debug!("  ❌ HTTP request failed: {:?}", e);
+                log::debug!("  ❌ HTTP request failed: {:?}", e);
                 return Err(anyhow::anyhow!("Failed to create DNS record: {:?}", e));
             }
         };
@@ -221,18 +221,18 @@ impl PorkbunClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        dure_debug!("  Response: {}", body);
+        log::debug!("  Response: {}", body);
 
         let result: ApiResponse =
             serde_json::from_str(&body).context("Failed to parse create response")?;
 
         if result.status != "SUCCESS" {
             let msg = result.message.unwrap_or_else(|| result.status.clone());
-            dure_debug!("  ❌ API returned error: {}", msg);
+            log::debug!("  ❌ API returned error: {}", msg);
             anyhow::bail!("Failed to create record: {}", msg);
         }
 
-        dure_debug!("  ✓ API returned SUCCESS");
+        log::debug!("  ✓ API returned SUCCESS");
         Ok(())
     }
 
@@ -253,13 +253,13 @@ impl PorkbunClient {
             subdomain
         );
 
-        dure_debug!("DEBUG Porkbun update_record:");
-        dure_debug!("  URL: {}", url);
-        dure_debug!("  Domain: {}", domain);
-        dure_debug!("  Subdomain: {}", subdomain);
-        dure_debug!("  Type: {}", record_type);
-        dure_debug!("  Content: {}", content);
-        dure_debug!("  TTL: {:?}", ttl);
+        log::debug!("DEBUG Porkbun update_record:");
+        log::debug!("  URL: {}", url);
+        log::debug!("  Domain: {}", domain);
+        log::debug!("  Subdomain: {}", subdomain);
+        log::debug!("  Type: {}", record_type);
+        log::debug!("  Content: {}", content);
+        log::debug!("  TTL: {:?}", ttl);
 
         let request = DnsRecordRequest {
             apikey: self.api_key.clone(),
@@ -271,7 +271,7 @@ impl PorkbunClient {
             prio: None,
         };
 
-        dure_debug!(
+        log::debug!(
             "  Request JSON: {}",
             serde_json::to_string(&request).unwrap_or_default()
         );
@@ -285,18 +285,18 @@ impl PorkbunClient {
             .into_string()
             .context("Failed to read response body")?;
 
-        dure_debug!("  Response: {}", body);
+        log::debug!("  Response: {}", body);
 
         let result: ApiResponse =
             serde_json::from_str(&body).context("Failed to parse update response")?;
 
         if result.status != "SUCCESS" {
             let msg = result.message.unwrap_or_else(|| result.status.clone());
-            dure_debug!("  ❌ API returned error: {}", msg);
+            log::debug!("  ❌ API returned error: {}", msg);
             anyhow::bail!("Failed to update record: {}", msg);
         }
 
-        dure_debug!("  ✓ API returned SUCCESS");
+        log::debug!("  ✓ API returned SUCCESS");
         Ok(())
     }
 

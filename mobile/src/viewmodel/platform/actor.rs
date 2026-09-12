@@ -28,7 +28,7 @@ impl PlatformActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        dure_error!("PlatformActor command failed: {}", e);
+                        log::error!("PlatformActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -132,12 +132,24 @@ impl PlatformActor {
         Ok(())
     }
 
-    /// Helper to get config file path
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Helper to get config file path (Desktop)
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<PathBuf> {
         let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
             .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
         Ok(proj_dirs.config_dir().join("config.yml"))
+    }
+
+    /// Helper to get config file path (Android)
+    #[cfg(target_os = "android")]
+    fn get_config_path() -> anyhow::Result<PathBuf> {
+        Ok(PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+    }
+
+    /// Helper to get config file path (WASM)
+    #[cfg(target_arch = "wasm32")]
+    fn get_config_path() -> anyhow::Result<PathBuf> {
+        Ok(PathBuf::from(".dure/config.yml"))
     }
 
     /// Helper to load platform config by name
@@ -212,7 +224,7 @@ impl PlatformActor {
                 for zone in zones {
                     match client.list_instances(&project_id, &zone) {
                         Ok(list) => all_vms.extend(list.items),
-                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
+                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
                     }
                 }
                 Ok(all_vms)
@@ -1042,7 +1054,7 @@ impl PlatformActor {
                             // Check if the error is due to expired/revoked refresh token
                             let error_msg = e.to_string();
                             if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
-                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
+                                log::error!("Refresh token has expired or been revoked. Clearing tokens...");
 
                                 // Clear the invalid tokens
                                 platform.gcp_oauth_access_token = None;
@@ -1135,7 +1147,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for VM check");
+                log::warn!("No valid access token for VM check");
                 return VmStatus {
                     exists: false,
                     name: None,
@@ -1182,7 +1194,7 @@ impl PlatformActor {
                 }
             }
             Err(e) => {
-                dure_error!("Failed to list VMs: {}", e);
+                log::error!("Failed to list VMs: {}", e);
                 VmStatus {
                     exists: false,
                     name: None,
@@ -1215,7 +1227,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for firewall check");
+                log::warn!("No valid access token for firewall check");
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1230,7 +1242,7 @@ impl PlatformActor {
                 ip
             },
             Err(e) => {
-                dure_warn!("Failed to get current IP: {}", e);
+                log::warn!("Failed to get current IP: {}", e);
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1254,7 +1266,7 @@ impl PlatformActor {
                 }
             },
             Err(e) => {
-                dure_error!("Failed to check firewall: {}", e);
+                log::error!("Failed to check firewall: {}", e);
                 FirewallStatus {
                     whitelisted: false,
                     current_ip: Some(current_ip),
@@ -1355,7 +1367,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for project count fetch");
+                log::warn!("No valid access token for project count fetch");
                 return None;
             }
         };
@@ -1373,7 +1385,7 @@ impl PlatformActor {
                 Some(count)
             }
             Err(e) => {
-                dure_warn!("Failed to fetch project count: {}", e);
+                log::warn!("Failed to fetch project count: {}", e);
                 None
             }
         };

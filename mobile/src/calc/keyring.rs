@@ -27,7 +27,7 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use anyhow::{Context, Result};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use directories::ProjectDirs;
 use keepass::{
     Database, DatabaseKey,
@@ -55,12 +55,18 @@ pub struct KeyEntry {
     pub ssh_key: Option<Vec<u8>>, // Binary SSH private key
 }
 
-/// Get the default config directory for dure
-#[cfg(not(target_arch = "wasm32"))]
+/// Get the default config directory for dure (desktop)
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 fn get_config_dir() -> Result<PathBuf> {
     ProjectDirs::from("com", "dure", "dure")
         .map(|proj_dirs| proj_dirs.config_dir().to_path_buf())
         .context("Failed to determine config directory")
+}
+
+/// Get the default config directory for dure (Android)
+#[cfg(target_os = "android")]
+fn get_config_dir() -> Result<PathBuf> {
+    Ok(PathBuf::from("/data/data/pe.nikescar.dure/files"))
 }
 
 /// WASM builds do not have native project directories, so keep path generation local.

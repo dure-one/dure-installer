@@ -1,6 +1,8 @@
 // Android InputMethodManager integration for showing/hiding soft keyboard
 // Reference: https://developer.android.com/reference/android/view/inputmethod/InputMethodManager
 
+#![allow(unsafe_code)]
+
 #[cfg(target_os = "android")]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::{JObject, JValue};
@@ -149,9 +151,9 @@ pub fn show_soft_input() -> std::io::Result<()> {
     })?;
 
     if success {
-        dure_debug!("Soft keyboard shown successfully");
+        log::debug!("Soft keyboard shown successfully");
     } else {
-        dure_warn!("showSoftInput returned false");
+        log::warn!("showSoftInput returned false");
     }
 
     Ok(())
@@ -317,9 +319,9 @@ pub fn hide_soft_input() -> std::io::Result<()> {
     })?;
 
     if success {
-        dure_debug!("Soft keyboard hidden successfully");
+        log::debug!("Soft keyboard hidden successfully");
     } else {
-        dure_debug!("hideSoftInputFromWindow returned false (keyboard may not be showing)");
+        log::debug!("hideSoftInputFromWindow returned false (keyboard may not be showing)");
     }
 
     Ok(())
@@ -420,7 +422,7 @@ pub fn toggle_soft_input() -> std::io::Result<()> {
         )
     })?;
 
-    dure_debug!("Toggled soft keyboard");
+    log::debug!("Toggled soft keyboard");
     Ok(())
 }
 

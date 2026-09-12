@@ -8,6 +8,8 @@
 
 // reference
 // https://developer.android.com/reference/android/util/Log
+
+#![allow(unsafe_code)]
 // static int 	d(String tag, String msg)
 // static int 	e(String tag, String msg)
 // static int 	i(String tag, String msg)

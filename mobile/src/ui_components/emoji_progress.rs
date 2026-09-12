@@ -84,6 +84,7 @@ impl EmojiProgressBar {
     }
 
     /// Create progress bar from PlatformRow state
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub fn from_platform_row(row: &crate::ui_tabs::platform::PlatformRow) -> Self {
         let mut bar = Self::new();
 
