@@ -8,10 +8,10 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["gui", "spreadsheet", "serde"]
-# Serialization support (enabled by default for state persistence)
-serde = []
-# GUI support (egui/eframe) - disable for headless server builds
+default = ["serde"]
+desktop = []
+serde = ["dep:serde", "dep:serde_json"]
+# GUI support - disable with --no-default-features for headless builds
 gui = [
     "dep:egui",
     "dep:eframe",
@@ -20,11 +20,7 @@ gui = [
     "dep:egui-material3",
     "dep:egui-i18n",
     "dep:image",
-    "dep:tao",
-    "dep:tray-icon",
-    "dep:gtk",
 ]
-# UI features (requires gui feature)
 spreadsheet = ["gui", "egui-material3?/spreadsheet"]
 # GCP integration (disabled by default until dependencies are available)
 gcp = []
@@ -40,32 +36,26 @@ name = "dure-desktop"
 path = "src/main.rs"
 
 [dependencies]
-# Core dependencies
-log = { version = "0.4", default-features = false }
-anyhow = "1.0"
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0", features = ["std"] }
-chrono = { version = "0.4", features = ["serde"] }
+# Core dependencies (shared via workspace)
+log = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+chrono = { workspace = true }
 
-# UI framework (optional - disable with --no-default-features for headless builds)
-egui = { version = "0.33", default-features = false, features = ["default_fonts"], optional = true }
-eframe = { version = "0.33", default-features = false, features = [
-    "default_fonts",
-    "glow",
-    "persistence",
-    "android-native-activity",
-], optional = true }
-egui_extras = { version = "0.33", default-features = false, features = ["image", "svg", "default", "all_loaders"], optional = true }
+# UI framework (optional - workspace managed)
+egui = { workspace = true, optional = true }
+eframe = { workspace = true, optional = true }
+egui_extras = { workspace = true, optional = true }
 egui-twemoji = { version = "0.8.0", optional = true }
-egui-material3 = { git = "https://github.com/nikescar/egui-material3/", default-features = false, features = ["spreadsheet", "svg_solar"], optional = true }
-# egui-material3 = { path = "../reference/egui-material3", default-features = false, features = ["spreadsheet"], optional = true }
+egui-material3 = { workspace = true, optional = true }
 
 # i18n
 egui-i18n = { version = "0.2", features = ["fluent"], default-features = false, optional = true }
 sys-locale = "0.3"
 
 # HTTP for cross-platform image downloads
-ehttp = "0.5.0"
+ehttp = { workspace = true }
 webbrowser = { version = "1.2", default-features = false }
 
 # Utilities
@@ -77,8 +67,8 @@ poll-promise = "0.3.0"
 bincode = "1.3"
 md5 = "0.7"
 
-# Async runtime
-smol = "2.0"
+# Async runtime (workspace managed)
+smol = { workspace = true }
 
 # Cryptography
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
@@ -96,64 +86,73 @@ ws = { path = "../crates/ws" }
 # YAML parsing (still needed for other purposes)
 serde_yaml = "0.9"
 
+# SSH support for remote server management (pure Rust, no OpenSSL, works on all platforms)
+russh = "0.45"
+russh-keys = "0.45"
+async-trait = "0.1"
+shellexpand = "3.1"
+
 # Desktop-only dependencies (all desktop platforms including OpenBSD)
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
-tao = { version = "0.33", optional = true }
+# System integration (desktop-only)
 trash = "5.2"
-num_cpus = "1.17"
-dashmap = "6.1"
-env_logger = { version = "0.11", default-features = false }
-directories = "5.0"
+directories = { workspace = true }
 opener = "0.7"
 dirs = "5.0"
 hostname = "0.4"
+urlencoding = "2.1"
+
+# Archive handling
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 tar = "0.4"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
-ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
+
+# HTTP client (workspace managed)
+ureq = { workspace = true }
+
 # CLI dependencies
 clap = { version = "4.6", features = ["derive"] }
+
 # Diesel ORM for database operations
-diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = "2.3"
-# libsqlite3-hotbundle provides bundled SQLite3MultipleCiphers with encryption support
-libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+
+# Bundled SQLite for desktop builds
+libsqlite3-sys = { version = "0.36", features = ["bundled"] }
 dotenvy = "0.15"
+
 # Smol async runtime ecosystem
-smol = "2.0"
 async-executor = "1.13"
 async-io = "2.4"
 async-net = "2.0"
-async-fs = "2.1"  # Async filesystem operations
-futures-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }  # rustls-based TLS for futures-based runtimes
-async-lock = "3.4"  # Async synchronization primitives for smol
-async-compat = "0.2"  # Compatibility layer for tokio futures in smol runtime
-# OpenAPI / Swagger UI
-utoipa = { version="5.4.0", features = ["macros"] }
-utoipa-swagger-ui = { version="9.0.2", features = ["vendored"] }
-# WebSocket support with smol (using async-std runtime compatibility)
+async-fs = "2.1"
+futures-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+async-lock = "3.4"
+async-compat = "0.2"
+
+# WebSocket support with smol
 async-tungstenite = { version = "0.28", features = ["async-std-runtime"] }
 futures = "0.3"
+
+# TLS/Crypto
 rcgen = "0.13"
-# Keep rustls ecosystem
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 rustls-pemfile = "2"
 rustls-native-certs = "0.8"
 url = "2.5"
-# SSH support for remote server management (pure Rust, no OpenSSL)
-russh = "0.45"
-russh-keys = "0.45"
-async-trait = "0.1"  # Required for russh Handler trait
-shellexpand = "3.1"
-# WebAuthn server-side support
-# - Linux/Windows/macOS: go-webauthn (pure Rust + Go, no OpenSSL)
-# - OpenBSD: webauthn-rs (requires OpenSSL, but monoio/rust2go don't support OpenBSD)
+
+# WebAuthn server-side support (desktop-only, Android has it in platform-specific section)
 uuid = { version = "1.11", features = ["v4", "serde"] }
-urlencoding = "2.1"
+
+# CPU count for parallelism
+num_cpus = "1.17"
+dashmap = "6.1"
+env_logger = { version = "0.11", default-features = false }
 
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
 tray-icon = { version = "0.18", default-features = false, optional = true }
+tao = { version = "0.33", optional = true }
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]
@@ -162,13 +161,24 @@ jni = { version = "0.21", default-features = false }
 android_logger = { version = "0.15", default-features = false }
 android-activity = { version = "0.6", default-features = false, features = ["native-activity"] }
 ndk-sys = { version = "0.6.0", default-features = false }
-eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow","android-native-activity"] }
+eframe = { workspace = true, features = ["android-native-activity"] }
 num_cpus = "1.17"
 dashmap = "6.1"
-ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
-diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = "2.3"
-libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle" }
+ureq = { workspace = true }
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+libsqlite3-sys = { version = "0.36", features = ["bundled"] }
+urlencoding = "2.1"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Async runtime (needed for SSH, WebSocket, etc)
+async-executor = "1.13"
+async-io = "2.4"
+async-net = "2.0"
+async-fs = "2.1"
+async-lock = "3.4"
+async-compat = "0.2"
+futures = "0.3"
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -182,17 +192,17 @@ windows = { version = "0.58", features = [
     "Win32_System_Com",
     "Win32_Foundation",
 ] }
-eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow"] }
+eframe = { workspace = true }
 
 # macOS-specific dependencies
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-foundation = { version = "0.3", features = ["CFRunLoop"] }
-eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow"] }
+eframe = { workspace = true }
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18", optional = true }
-eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow","x11", "wayland"], optional = true }
+eframe = { workspace = true, features = ["x11", "wayland"], optional = true }
 
 # WASM-specific dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -206,8 +216,8 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["Window", "Navigator", "PublicKeyCredential", "PublicKeyCredentialCreationOptions", "CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "Document", "WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent", "BinaryType"] }
 getrandom = { version = "0.2", features = ["js"] }
 uuid = { version = "1.11", features = ["v4", "js"] }
-diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
-diesel_migrations = "2.3"
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
 sqlite-wasm-vfs = "0.2.0"
 sqlite-wasm-rs = "0.5.2"
 serde-wasm-bindgen = "0.6"
