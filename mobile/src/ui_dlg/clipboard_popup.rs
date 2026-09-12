@@ -48,7 +48,7 @@ pub fn show_clipboard_popup(_ui: &egui::Ui, response: &Response, text: &mut Stri
 
                 #[cfg(target_os = "android")]
                 {
-                    let _ = crate::android_clipboard::set_text(&copy_text);
+                    let _ = crate::android::clipboard::set_text(&copy_text);
                 }
                 #[cfg(not(target_os = "android"))]
                 {
@@ -58,14 +58,14 @@ pub fn show_clipboard_popup(_ui: &egui::Ui, response: &Response, text: &mut Stri
             }
 
             #[cfg(target_os = "android")]
-            let has_clip = crate::android_clipboard::has_text().unwrap_or(false);
+            let has_clip = crate::android::clipboard::has_text().unwrap_or(false);
             #[cfg(not(target_os = "android"))]
             let has_clip = false;
 
             if has_clip && ui.button(tr!("clipboard-paste")).clicked() {
                 #[cfg(target_os = "android")]
                 {
-                    if let Ok(Some(clip)) = crate::android_clipboard::get_text() {
+                    if let Ok(Some(clip)) = crate::android::clipboard::get_text() {
                         if let Some(state) = egui::TextEdit::load_state(ui.ctx(), response.id) {
                             if let Some(range) = state.cursor.char_range() {
                                 let start = range.primary.index.min(range.secondary.index);

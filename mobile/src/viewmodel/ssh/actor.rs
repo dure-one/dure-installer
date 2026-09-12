@@ -83,6 +83,7 @@ impl SshActor {
         Ok(())
     }
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn save_docker_container(
         &self,
         host_name: &str,
@@ -99,6 +100,7 @@ impl SshActor {
         Ok(())
     }
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn save_ansible_role(
         &self,
         host_name: &str,
@@ -268,6 +270,24 @@ impl SshActor {
             } => self.deploy_dure_wss(host_name, domain, acme_email).await,
             SshCommand::GetLinuxStatus { name } => self.get_linux_status(name).await,
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            SshCommand::InstallDockerImage {
+                host_name,
+                container_name,
+                image,
+                tag,
+                ports,
+                env,
+            } => {
+                return self.handle_install_docker_image(host_name, container_name, image, tag, ports, env).await;
+            }
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            SshCommand::RemoveDockerContainer {
+                host_name,
+                container_name,
+            } => {
+                return self.handle_remove_docker_container(host_name, container_name).await;
+            }
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             SshCommand::InstallDocker { name } => self.install_docker(name).await,
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             SshCommand::GetDockerStatus { name } => self.get_docker_status(name).await,
@@ -282,24 +302,6 @@ impl SshActor {
             SshCommand::CheckHostHealth { name, timeout_secs } => {
                 self.handle_check_host_health(name, timeout_secs).await;
                 Ok(())
-            }
-
-            // Docker Lifecycle Commands
-            SshCommand::InstallDockerImage {
-                host_name,
-                container_name,
-                image,
-                tag,
-                ports,
-                env,
-            } => {
-                return self.handle_install_docker_image(host_name, container_name, image, tag, ports, env).await;
-            }
-            SshCommand::RemoveDockerContainer {
-                host_name,
-                container_name,
-            } => {
-                return self.handle_remove_docker_container(host_name, container_name).await;
             }
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             SshCommand::ListDockerContainers { host_name } => {
@@ -381,6 +383,7 @@ impl SshActor {
 
                 return Ok(());
             }
+            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             SshCommand::RemoveDockerContainers { host_name, container_names } => {
                 log::debug!(" SSH Actor: remove_docker_containers called for '{}'", host_name);
                 log::debug!("  Containers to remove: {:?}", container_names);
@@ -475,6 +478,11 @@ impl SshActor {
             }
             SshCommand::UninstallDureWss { host_name } => {
                 return self.handle_uninstall_dure_wss(host_name).await;
+            }
+            // Catch-all for cfg-gated commands on Android/WASM
+            #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+            _ => {
+                Err(anyhow::anyhow!("Command not available on this platform"))
             }
         };
 
@@ -591,12 +599,24 @@ impl SshActor {
         Ok(())
     }
 
-    /// Helper to get config file path
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Helper to get config file path (Desktop)
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
         let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
             .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
         Ok(proj_dirs.config_dir().join("config.yml"))
+    }
+
+    /// Helper to get config file path (Android)
+    #[cfg(target_os = "android")]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        Ok(std::path::PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+    }
+
+    /// Helper to get config file path (WASM)
+    #[cfg(target_arch = "wasm32")]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        Ok(std::path::PathBuf::from(".dure/config.yml"))
     }
 
     async fn test_connection(&mut self, name: String) -> anyhow::Result<()> {
@@ -1318,6 +1338,7 @@ impl SshActor {
 
     // Docker Lifecycle Handlers
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     async fn handle_install_docker_image(
         &self,
         host_name: String,
@@ -1431,6 +1452,7 @@ impl SshActor {
         Ok(())
     }
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     async fn handle_remove_docker_container(
         &self,
         host_name: String,

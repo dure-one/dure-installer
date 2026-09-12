@@ -102,7 +102,7 @@ fn download_attestations_native(
         }
         Err(ureq::Error::Status(code, _)) => {
             if code == 404 {
-                dure_warn!("No attestations found (404)");
+                log::warn!("No attestations found (404)");
                 Ok(Vec::new())
             } else {
                 Err(VerificationError::HttpError(format!(
@@ -123,7 +123,7 @@ fn download_attestations_native(
 fn download_attestations_wasm(api_url: &str) -> Result<Vec<AttestationBundle>, VerificationError> {
     // For WASM, we need to use ehttp which is async-compatible with egui
     // This is a simplified version - in practice, you'd want to handle this asynchronously
-    dure_warn!("WASM attestation download not fully implemented - returning empty list");
+    log::warn!("WASM attestation download not fully implemented - returning empty list");
     Ok(Vec::new())
 }
 

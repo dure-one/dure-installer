@@ -2,24 +2,21 @@
 //!
 //! Initializes the eframe app with Android-specific services injected
 
+// Allow unsafe code for FFI entry point (android_main with #[no_mangle])
+#![allow(unsafe_code)]
+
 use android_activity::AndroidApp;
 use eframe::NativeOptions;
-use std::sync::Arc;
 
-use crate::dure::{DureApp, WallpaperSetter};
-
-/// Android background image setter service (legacy compatibility)
-struct AndroidWallpaperService;
-
-impl WallpaperSetter for AndroidWallpaperService {
-    fn set_wallpaper_from_bytes(&self, bytes: &[u8]) -> std::io::Result<bool> {
-        // Delegate to android_wallpaper module (legacy feature)
-        crate::android_wallpaper::set_wallpaper_from_bytes(bytes)
-    }
-}
+use crate::dure::DureApp;
+use crate::{dure_info, dure_debug, dure_warn, dure_error};
 
 /// Android entry point
-#[no_mangle]
+///
+/// # Safety
+/// This function is called by the Android system and must have a stable ABI,
+/// hence the use of `no_mangle`. The function is safe to call from Android.
+#[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     // Initialize Android logger
     android_logger::init_once(
@@ -32,15 +29,12 @@ pub fn android_main(app: AndroidApp) {
 
     // Initialize application configuration and database
     let config = crate::Config::new().unwrap_or_else(|e| {
-        dure_error!("Failed to initialize application config: {}", e);
+        log::error!("Failed to initialize application config: {}", e);
         std::panic::panic_any("Failed to initialize config");
     });
     let db_path = config.data_dir.join("dure.db");
     crate::calc::db::set_db_path(db_path.to_string_lossy().to_string());
     dure_info!("Database path set to: {}", db_path.display());
-
-    // Initialize background image bridge (legacy feature)
-    crate::android_wallpaper::init_wallpaper_bridge();
 
     // Set up panic handler
     std::panic::set_hook(Box::new(|panic_info| {
@@ -57,7 +51,7 @@ pub fn android_main(app: AndroidApp) {
         };
 
         if is_expected_window_panic {
-            dure_warn!(
+            log::warn!(
                 "Expected window destruction during activity lifecycle change: {}",
                 panic_info
             );
@@ -66,9 +60,9 @@ pub fn android_main(app: AndroidApp) {
         }
 
         // For other panics, log as errors
-        dure_error!("PANIC: {}", panic_info);
+        log::error!("PANIC: {}", panic_info);
         if let Some(location) = panic_info.location() {
-            dure_error!("Location: {}:{}", location.file(), location.line());
+            log::error!("Location: {}:{}", location.file(), location.line());
         }
     }));
 
@@ -133,13 +127,10 @@ pub fn android_main(app: AndroidApp) {
 
             // Initialize i18n with Auto language detection
             if let Err(e) = crate::i18n::init_i18n("Auto") {
-                dure_error!("Failed to initialize i18n: {}", e);
+                log::error!("Failed to initialize i18n: {}", e);
             }
 
-            let mut app = DureApp::default();
-
-            // Inject Android background image setter (legacy feature)
-            app.set_wallpaper_setter(Arc::new(AndroidWallpaperService));
+            let app = DureApp::default();
 
             dure_info!("DureApp initialized with Android services");
 
@@ -150,7 +141,7 @@ pub fn android_main(app: AndroidApp) {
             dure_info!("DureApp exited successfully");
         }
         Err(e) => {
-            dure_error!("DureApp failed: {}", e);
+            log::error!("DureApp failed: {}", e);
         }
     }
 }

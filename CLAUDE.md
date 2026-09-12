@@ -2,14 +2,30 @@
 
 ## Project Overview
 
-**Dure** is a distributed e-commerce client and hosting solution built with Rust and egui. It enables small shop owners to run e-commerce operations without traditional centralized server infrastructure.
+**Dure Installer** is the infrastructure management and deployment tool for the Dure distributed e-commerce platform. It enables small shop owners to deploy, configure, and manage their own mycart backend instances on cloud infrastructure.
+
+### Project Roles
+
+**This project (dure-installer)** - Infrastructure management tool for shop owners:
+- Full e-commerce backend management
+- Cloud platform management (GCP VMs, billing)
+- DNS/nameserver configuration
+- SSH host management
+- Infrastructure automation
+- Available on: Desktop, Android, WASM
+
+**Separate project (dure-sijang)** - Customer shopping app (out of scope):
+- Product browsing
+- Shopping cart
+- Checkout/payment
+- Order tracking
 
 ### Key Characteristics
 
 - **Language**: Rust (nightly toolchain required)
 - **UI Framework**: egui + eframe (Material3 design)
-- **Architecture**: Multi-platform (Desktop, Mobile, WASM)
-- **Purpose**: Distributed e-commerce for small shop owners
+- **Architecture**: Multi-platform (Desktop, Android, WASM)
+- **Purpose**: Deploy and manage distributed e-commerce infrastructure
 - **License**: Dual MIT/Apache-2.0
 
 ## Project Structure

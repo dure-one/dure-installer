@@ -1,6 +1,8 @@
 // Android Activity launcher for opening system settings and apps via JNI
 // Provides functions to launch specific Android settings screens and apps.
 
+#![allow(unsafe_code)]
+
 #[cfg(target_os = "android")]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;
@@ -12,7 +14,7 @@ use ndk_context;
 #[cfg(target_os = "android")]
 pub fn open_build_number_settings() {
     if let Err(e) = open_build_number_settings_inner() {
-        dure_error!("Failed to open build number settings: {}", e);
+        log::error!("Failed to open build number settings: {}", e);
     }
 }
 
@@ -74,7 +76,7 @@ fn open_build_number_settings_inner() -> Result<(), Box<dyn std::error::Error>> 
 #[cfg(target_os = "android")]
 pub fn open_wireless_debugging_settings() {
     if let Err(e) = open_wireless_debugging_settings_inner() {
-        dure_error!("Failed to open wireless debugging settings: {}", e);
+        log::error!("Failed to open wireless debugging settings: {}", e);
     }
 }
 
@@ -121,7 +123,7 @@ fn open_wireless_debugging_settings_inner() -> Result<(), Box<dyn std::error::Er
         Ok(_) => {}
         Err(_) => {
             env.exception_clear()?;
-            dure_warn!("Failed to open developer settings");
+            log::warn!("Failed to open developer settings");
         }
     }
 
@@ -132,7 +134,7 @@ fn open_wireless_debugging_settings_inner() -> Result<(), Box<dyn std::error::Er
 #[cfg(target_os = "android")]
 pub fn open_android_vending(package_name: &str) {
     if let Err(e) = open_android_vending_inner(package_name) {
-        dure_error!("Failed to open Google Play Store: {}", e);
+        log::error!("Failed to open Google Play Store: {}", e);
     }
 }
 
@@ -214,7 +216,7 @@ fn open_android_vending_inner(package_name: &str) -> Result<(), Box<dyn std::err
 #[cfg(target_os = "android")]
 pub fn open_setup_page() {
     if let Err(e) = open_setup_page_inner() {
-        dure_error!("Failed to open setup page: {}", e);
+        log::error!("Failed to open setup page: {}", e);
     }
 }
 
@@ -258,20 +260,20 @@ fn open_setup_page_inner() -> Result<(), Box<dyn std::error::Error>> {
 // Non-Android stub implementations
 #[cfg(not(target_os = "android"))]
 pub fn open_build_number_settings() {
-    dure_debug!("open_build_number_settings is only available on Android");
+    log::debug!("open_build_number_settings is only available on Android");
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_wireless_debugging_settings() {
-    dure_debug!("open_wireless_debugging_settings is only available on Android");
+    log::debug!("open_wireless_debugging_settings is only available on Android");
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_android_vending(package_name: &str) {
-    dure_debug!("open_android_vending({}) is only available on Android", package_name);
+    log::debug!("open_android_vending({}) is only available on Android", package_name);
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn open_setup_page() {
-    dure_debug!("open_setup_page is only available on Android");
+    log::debug!("open_setup_page is only available on Android");
 }

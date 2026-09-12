@@ -25,7 +25,7 @@ impl NsActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        dure_error!("NsActor command failed: {}", e);
+                        log::error!("NsActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -64,8 +64,16 @@ impl NsActor {
                 value,
                 ttl,
             } => {
-                self.add_record(provider_name, domain, record_type, name, value, ttl)
-                    .await
+                #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                {
+                    self.add_record(provider_name, domain, record_type, name, value, ttl)
+                        .await
+                }
+                #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+                {
+                    let _ = (provider_name, domain, record_type, name, value, ttl);
+                    Err(anyhow::anyhow!("DNS record management not available on this platform"))
+                }
             }
             NsCommand::DeleteRecord {
                 provider_name,
@@ -244,10 +252,7 @@ impl NsActor {
             move || -> anyhow::Result<Vec<DnsProvider>> {
                 use crate::calc::ns::NsConfig;
 
-                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
-                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
-                    .config_dir()
-                    .join("config.yml");
+                let config_path = Self::get_config_path()?;
 
                 let yaml = std::fs::read_to_string(&config_path)?;
                 let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -348,6 +353,7 @@ impl NsActor {
         ))
     }
 
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     async fn add_record(
         &mut self,
         provider_name: String,
@@ -371,10 +377,7 @@ impl NsActor {
                 use crate::calc::ns::{DnsRecord, NsConfig, RecordType, apply_record};
 
                 // Load config to get api_token
-                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
-                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
-                    .config_dir()
-                    .join("config.yml");
+                let config_path = Self::get_config_path()?;
 
                 let yaml = std::fs::read_to_string(&config_path)?;
                 let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -446,10 +449,7 @@ impl NsActor {
                 use crate::calc::ns::NsConfig;
 
                 // Load config to get API token and provider type
-                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
-                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
-                    .config_dir()
-                    .join("config.yml");
+                let config_path = Self::get_config_path()?;
 
                 let yaml = std::fs::read_to_string(&config_path)?;
                 let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -510,10 +510,7 @@ impl NsActor {
             move || -> anyhow::Result<Vec<DnsRecord>> {
                 use crate::calc::ns::NsConfig;
 
-                let config_path = directories::ProjectDirs::from("com", "dure", "dure")
-                    .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?
-                    .config_dir()
-                    .join("config.yml");
+                let config_path = Self::get_config_path()?;
 
                 let yaml = std::fs::read_to_string(&config_path)?;
                 let full_config: serde_yaml::Value = serde_yaml::from_str(&yaml)?;
@@ -581,5 +578,25 @@ impl NsActor {
                 error: format!("{:#}", error),
             }))
             .await;
+    }
+
+    /// Helper to get config file path (Desktop)
+    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        let proj_dirs = directories::ProjectDirs::from("com", "dure", "dure")
+            .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
+        Ok(proj_dirs.config_dir().join("config.yml"))
+    }
+
+    /// Helper to get config file path (Android)
+    #[cfg(target_os = "android")]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        Ok(std::path::PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+    }
+
+    /// Helper to get config file path (WASM)
+    #[cfg(target_arch = "wasm32")]
+    fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
+        Ok(std::path::PathBuf::from(".dure/config.yml"))
     }
 }
