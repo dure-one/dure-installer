@@ -20,8 +20,12 @@ gui = [
     "dep:egui-material3",
     "dep:egui-i18n",
     "dep:image",
+    "spreadsheet",
 ]
 spreadsheet = ["gui", "egui-material3?/spreadsheet"]
+# System tray support (desktop only, not Android/WASM/OpenBSD)
+tray-icon = ["gui", "dep:tray-icon", "tao"]
+tao = ["dep:tao"]
 # GCP integration (disabled by default until dependencies are available)
 gcp = []
 # Database backend features
