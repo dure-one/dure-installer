@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Divider color for split pane - opaque gray (must be opaque, not transparent) -->
+    <color name="divider_color">#FF808080</color>
+
+    <!-- Additional colors can be added here as needed -->
+</resources>
