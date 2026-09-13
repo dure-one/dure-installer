@@ -72,6 +72,7 @@ pub fn android_main(app: AndroidApp) {
         ..Default::default()
     };
 
+    log::info!("🔥 CALLING eframe::run_native");
     match eframe::run_native(
         "Dure",
         options,
@@ -132,16 +133,18 @@ pub fn android_main(app: AndroidApp) {
 
             let app = DureApp::default();
 
-            dure_info!("DureApp initialized with Android services");
+            log::info!("🔥 DureApp initialized with Android services");
+            log::info!("🔥 About to return app to eframe");
 
             Ok(Box::new(app))
         }),
     ) {
         Ok(_) => {
-            dure_info!("DureApp exited successfully");
+            log::info!("🔥 eframe::run_native RETURNED OK");
         }
         Err(e) => {
-            log::error!("DureApp failed: {}", e);
+            log::error!("🔥 eframe::run_native RETURNED ERROR: {}", e);
         }
     }
+    log::info!("🔥 android_main EXITING");
 }

@@ -267,8 +267,11 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        info!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
+            info!("🔥 Initializing ViewModel");
             self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
         }
 
@@ -329,6 +332,8 @@ impl eframe::App for DureApp {
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
+        info!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
 
@@ -363,14 +368,14 @@ impl DureApp {
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                // .tab(tr!("tab-client"))
-                // .tab(tr!("tab-roles"))
-                // .tab(tr!("tab-members"))
-                // .tab(tr!("tab-channel"))
-                // .tab(tr!("tab-dm"))
-                // .tab(tr!("tab-products"))
-                // .tab(tr!("tab-orders"))
-                // .tab(tr!("tab-email")),
+                .tab(tr!("tab-client"))
+                .tab(tr!("tab-roles"))
+                .tab(tr!("tab-members"))
+                .tab(tr!("tab-channel"))
+                .tab(tr!("tab-dm"))
+                .tab(tr!("tab-products"))
+                .tab(tr!("tab-orders"))
+                .tab(tr!("tab-email")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -395,13 +400,14 @@ impl DureApp {
         #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         {
             self.active_tab = match self.scrolling_selected {
-                // 0 => Tab::Client,
-                // 1 => Tab::Members,
-                // 2 => Tab::Channel,
-                // 3 => Tab::DM,
-                // 4 => Tab::Products,
-                // 5 => Tab::Orders,
-                // 6 => Tab::Email,
+                0 => Tab::Client,
+                1 => Tab::Roles,
+                2 => Tab::Members,
+                3 => Tab::Channel,
+                4 => Tab::DM,
+                5 => Tab::Products,
+                6 => Tab::Orders,
+                7 => Tab::Email,
                 _ => Tab::Client,
             };
         }
@@ -409,8 +415,13 @@ impl DureApp {
         ui.add_space(10.0);
 
         // Render active tab content
+        info!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            // Tab::Client => self.tab_client.ui(ui),
+            Tab::Client => {
+                info!("🔥 CLIENT TAB RENDERING");
+                self.tab_client.ui(ui);
+                info!("🔥 CLIENT TAB DONE");
+            },
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
@@ -420,12 +431,12 @@ impl DureApp {
             #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
             Tab::Roles => self.tab_roles.ui(ui),
-            // Tab::Members => self.tab_members.ui(ui),
-            // Tab::Channel => self.tab_channel.ui(ui),
-            // Tab::DM => self.tab_dm.ui(ui),
-            // Tab::Products => self.tab_products.ui(ui),
-            // Tab::Orders => self.tab_orders.ui(ui),
-            // Tab::Email => self.tab_email.ui(ui),
+            Tab::Members => self.tab_members.ui(ui),
+            Tab::Channel => self.tab_channel.ui(ui),
+            Tab::DM => self.tab_dm.ui(ui),
+            Tab::Products => self.tab_products.ui(ui),
+            Tab::Orders => self.tab_orders.ui(ui),
+            Tab::Email => self.tab_email.ui(ui),
             _ => {},
         }
     }
