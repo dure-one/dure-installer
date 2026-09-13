@@ -11,7 +11,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/dure_installer"
         android:label="Dure-Installer"
-        android:roundIcon="@mipmap/dure-installer"
+        android:roundIcon="@mipmap/dure_installer"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
