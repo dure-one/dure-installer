@@ -66,7 +66,7 @@ fn get_config_dir() -> Result<PathBuf> {
 /// Get the default config directory for dure (Android)
 #[cfg(target_os = "android")]
 fn get_config_dir() -> Result<PathBuf> {
-    Ok(PathBuf::from("/data/data/pe.nikescar.dure/files"))
+    Ok(PathBuf::from("/data/data/app.dure.installer/files"))
 }
 
 /// WASM builds do not have native project directories, so keep path generation local.

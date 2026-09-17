@@ -520,7 +520,7 @@ sudo snap install dure
 Android builds are automatically published to Google Play Store after successful desktop builds.
 
 ### Package Names
-- **Android**: `pe.nikescar.dure`
+- **Android**: `app.dure.installer`
 - **Snap**: `dure`
 
 ## Configuration

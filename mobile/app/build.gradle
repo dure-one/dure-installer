@@ -9,7 +9,7 @@ android {
     def appVersionCode = System.getenv("APPLICATION_VERSION_CODE") ?: "1"
     def appVersionName = System.getenv("APPLICATION_VERSION_NAME") ?: "1.0.0"
     defaultConfig {
-        applicationId "pe.nikescar.dure"
+        applicationId "app.dure.installer"
         minSdk 24
         targetSdk 36
         versionCode appVersionCode.toInteger()
@@ -109,12 +109,29 @@ android {
         checkReleaseBuilds false
     }
 
-    
-    namespace 'pe.nikescar.dure'
+
+    namespace 'app.dure.installer'
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
 }
 
 dependencies {
+    implementation 'androidx.annotation:annotation:1.3.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.core:core:1.13.1'
+
+    // Force consistent Kotlin stdlib version
+    constraints {
+        implementation('org.jetbrains.kotlin:kotlin-stdlib:1.8.22')
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22')
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22')
+    }
 }
 
 // Disable all lint tasks to work around current lint crashes in build environment.

@@ -112,8 +112,8 @@ impl Config {
         #[cfg(target_os = "android")]
         {
             // Android-specific paths
-            let config_dir = PathBuf::from("/data/data/pe.nikescar.dure/files");
-            let cache_dir = PathBuf::from("/data/data/pe.nikescar.dure/cache");
+            let config_dir = PathBuf::from("/data/data/app.dure.installer/files");
+            let cache_dir = PathBuf::from("/data/data/app.dure.installer/cache");
 
             dure_info!(
                 "Android config paths - config_dir: {:?}, cache_dir: {:?}",
