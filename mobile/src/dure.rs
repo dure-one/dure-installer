@@ -112,25 +112,13 @@ pub struct DureApp {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub viewmodel: Option<ViewModel>,
 
-    // Tabs state
+    // Tabs state (infrastructure management only)
     pub active_tab: crate::ui_tabs::Tab,
     pub scrolling_selected: usize,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_platform: crate::ui_tabs::platform::PlatformTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_ns: crate::ui_tabs::ns::NsTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_site: crate::ui_tabs::site::SiteTab,
-    pub tab_roles: crate::ui_tabs::roles::RolesTab,
-    pub tab_members: crate::ui_tabs::members::MembersTab,
-    pub tab_channel: crate::ui_tabs::channel::ChannelTab,
-    pub tab_dm: crate::ui_tabs::dm::DMTab,
-    pub tab_products: crate::ui_tabs::products::ProductsTab,
-    pub tab_orders: crate::ui_tabs::orders::OrdersTab,
-    pub tab_email: crate::ui_tabs::email::EmailTab,
-    pub tab_client: crate::ui_tabs::client::ClientTab,
 }
 
 impl Default for DureApp {
@@ -239,28 +227,13 @@ impl Default for DureApp {
             square_corners,
             ehttp_cache,
             viewmodel: None,
-            // Tabs
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            // Tabs (infrastructure management only)
             active_tab: crate::ui_tabs::Tab::Platform,
-            #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-            active_tab: crate::ui_tabs::Tab::Client,
             scrolling_selected: 0,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_platform: crate::ui_tabs::platform::PlatformTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_ns: crate::ui_tabs::ns::NsTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_site: crate::ui_tabs::site::SiteTab::default(),
-            tab_roles: crate::ui_tabs::roles::RolesTab::default(),
-            tab_members: crate::ui_tabs::members::MembersTab::default(),
-            tab_channel: crate::ui_tabs::channel::ChannelTab::default(),
-            tab_dm: crate::ui_tabs::dm::DMTab::default(),
-            tab_products: crate::ui_tabs::products::ProductsTab::default(),
-            tab_orders: crate::ui_tabs::orders::OrdersTab::default(),
-            tab_email: crate::ui_tabs::email::EmailTab::default(),
-            tab_client: crate::ui_tabs::client::ClientTab::default(),
         }
     }
 }
@@ -417,27 +390,10 @@ impl DureApp {
         // Render active tab content
         info!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            Tab::Client => {
-                info!("🔥 CLIENT TAB RENDERING");
-                self.tab_client.ui(ui);
-                info!("🔥 CLIENT TAB DONE");
-            },
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
-            Tab::Roles => self.tab_roles.ui(ui),
-            Tab::Members => self.tab_members.ui(ui),
-            Tab::Channel => self.tab_channel.ui(ui),
-            Tab::DM => self.tab_dm.ui(ui),
-            Tab::Products => self.tab_products.ui(ui),
-            Tab::Orders => self.tab_orders.ui(ui),
-            Tab::Email => self.tab_email.ui(ui),
-            _ => {},
         }
     }
 
