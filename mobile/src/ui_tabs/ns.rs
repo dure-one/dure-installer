@@ -396,7 +396,7 @@ fn get_config_path() -> Result<PathBuf, String> {
 /// Get config file path (Android)
 #[cfg(target_os = "android")]
 fn get_config_path() -> Result<PathBuf, String> {
-    Ok(PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+    Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
 }
 
 /// Get config file path (WASM)

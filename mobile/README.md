@@ -93,9 +93,9 @@ https://www.testerscommunity.com/app-details/LOZEF4vnbuI4DQdaRfs1
 * Google Play Console Pulishing Overview
 https://play.google.com/console/u/1/developers/8469971848379081167/app/4976079442462544107/publishing
 ```
-- android test link : https://play.google.com/store/apps/details?id=pe.nikescar.dure
+- android test link : https://play.google.com/store/apps/details?id=app.dure.installer
 - additional test invitation link : https://play.google.com/apps/internaltest/4700175684927727957
-- join on the web link : https://play.google.com/apps/testing/pe.nikescar.dure
+- join on the web link : https://play.google.com/apps/testing/app.dure.installer
 - youtube instructions : https://www.youtube.com/shorts/OuPw-hi4-c4
 - setup guide : https://dure.pages.dev/docs/setup
 - other instructions : https://dure.pages.dev/docs/usage
@@ -110,8 +110,8 @@ docs : https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/publi
 ### Submit app to Fdroid
 1. fork fdroid data repository in gitlab (https://gitlab.com/fdroid/fdroiddata)
 2. clone forked repository (git clone https://gitlab.com/nikescar/fdroiddata)
-3. make branch with new package name (git checkout -b pe.nikescar.dure)
-4. add fdoid metadata (../deploy/fdroid/pe.nikescar.dure.yml)
+3. make branch with new package name (git checkout -b app.dure.installer)
+4. add fdoid metadata (../deploy/fdroid/app.dure.installer.yml)
 5. commit and push it to gitlab (git commit -a -m 'initial commit' && git push origin)
 6. make PR to check build pipeline. (make sure PR Contents uses fdroid templates)
 
@@ -119,7 +119,7 @@ docs : https://f-droid.org/en/docs/
 
 ### Publish to Flathub(Flatpak)
 1. fork flathub data repository(https://github.com/flathub/flathub) in github. uncheck clone "only master branch". 
-2. clone "new-pr" branch(git clone https://github.com/nikescar/flathub -b new-pr) from the fork. and move to app name(pe.nikescar.dure) branch (git checkout -b pe.nikescar.dure)
+2. clone "new-pr" branch(git clone https://github.com/nikescar/flathub -b new-pr) from the fork. and move to app name(app.dure.installer) branch (git checkout -b app.dure.installer)
 3. copy files from the directory (../deploy/flatpak/*) and edit properly.
 4. commit and make PR against flathub/flathub(new-pr branch) repository.
 5. pass the test.

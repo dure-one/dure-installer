@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>pe.nikescar.dure</id>
+  <id>app.dure.installer</id>
   <metadata_license>MIT</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Dure</name>
@@ -47,7 +47,7 @@
   <url type="homepage">https://github.com/nikescar/dure</url>
   <url type="bugtracker">https://github.com/nikescar/dure/issues</url>
   <url type="vcs-browser">https://github.com/nikescar/dure</url>
-  <launchable type="desktop-id">pe.nikescar.dure.desktop</launchable>
+  <launchable type="desktop-id">app.dure.installer.desktop</launchable>
   <provides>
     <binary>dure</binary>
   </provides>

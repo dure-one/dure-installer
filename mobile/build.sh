@@ -248,8 +248,8 @@ fi
 # adb commands
 # adb devices
 # adb install app/bulid/outputs/apk/release/app-release.apk
-# adb uninstall pe.nikescar.dure
-# adb shell am start -n pe.nikescar.dure/.MainActivity
+# adb uninstall app.dure.installer
+# adb shell am start -n app.dure.installer/.MainActivity
 
 # logcat commands
 # adb logcat -c

@@ -39,7 +39,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-          packageName: pe.nikescar.dure
+          packageName: app.dure.installer
           releaseFiles: ./artifacts/dure-all.aab
           track: production # alpha/beta/production
           status: completed

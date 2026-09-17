@@ -143,7 +143,7 @@ impl PlatformActor {
     /// Helper to get config file path (Android)
     #[cfg(target_os = "android")]
     fn get_config_path() -> anyhow::Result<PathBuf> {
-        Ok(PathBuf::from("/data/data/pe.nikescar.dure/files/config.yml"))
+        Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
     }
 
     /// Helper to get config file path (WASM)

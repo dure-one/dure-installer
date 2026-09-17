@@ -1,4 +1,4 @@
-app-id: pe.nikescar.dure
+app-id: app.dure.installer
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
@@ -30,15 +30,15 @@ modules:
     buildsystem: simple
     build-commands:
       - install -Dm755 dure /app/bin/dure
-      - install -Dm644 pe.nikescar.dure.desktop /app/share/applications/pe.nikescar.dure.desktop
-      - install -Dm644 pe.nikescar.dure.metainfo.xml /app/share/metainfo/pe.nikescar.dure.metainfo.xml
-      - install -Dm644 logo.png /app/share/icons/hicolor/256x256/apps/pe.nikescar.dure.png
+      - install -Dm644 app.dure.installer.desktop /app/share/applications/app.dure.installer.desktop
+      - install -Dm644 app.dure.installer.metainfo.xml /app/share/metainfo/app.dure.installer.metainfo.xml
+      - install -Dm644 logo.png /app/share/icons/hicolor/256x256/apps/app.dure.installer.png
     sources:
       - type: file
         path: ../../artifacts/dure
       - type: file
-        path: pe.nikescar.dure.desktop
+        path: app.dure.installer.desktop
       - type: file
-        path: pe.nikescar.dure.metainfo.xml
+        path: app.dure.installer.metainfo.xml
       - type: file
         path: ../../fastlane/metadata/android/en-US/images/icon.png

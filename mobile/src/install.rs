@@ -682,7 +682,7 @@ exec "$DIR/{}-bin" --tray "$@"
     <key>CFBundleExecutable</key>
     <string>{}</string>
     <key>CFBundleIdentifier</key>
-    <string>pe.nikescar.dure</string>
+    <string>app.dure.installer</string>
     <key>CFBundleName</key>
     <string>Dure {}</string>
     <key>CFBundlePackageType</key>
