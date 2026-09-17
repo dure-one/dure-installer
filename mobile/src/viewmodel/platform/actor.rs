@@ -133,9 +133,9 @@ impl PlatformActor {
     }
 
     /// Helper to get config file path (Desktop)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<PathBuf> {
-        let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+        let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
             .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
         Ok(proj_dirs.config_dir().join("config.yml"))
     }
@@ -1088,15 +1088,11 @@ impl PlatformActor {
     async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
         dure_info!("🔄 Refreshing platform: {}", platform_name);
 
-        // Load platform config
-        #[cfg(not(target_arch = "wasm32"))]
-        let (platform, _) = Self::load_platform_config(&platform_name)?;
-
-        #[cfg(target_arch = "wasm32")]
-        return Err(anyhow::anyhow!("Refresh not supported on WASM"));
-
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
+            // Load platform config
+            let (platform, _) = Self::load_platform_config(&platform_name)?;
+
             // Step 1: Check VM status
             let vm_status = self.check_vm_status(&platform).await;
 
@@ -1120,6 +1116,11 @@ impl PlatformActor {
             .await;
 
             Ok(())
+        }
+
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+        {
+            Err(anyhow::anyhow!("Refresh not supported on this platform"))
         }
     }
 
@@ -1307,7 +1308,7 @@ impl PlatformActor {
         };
 
         // Test SSH connection
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
@@ -1349,11 +1350,11 @@ impl PlatformActor {
             }
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         {
             SshStatus {
                 connected: false,
-                error: Some("SSH test not supported on WASM".to_string()),
+                error: Some("SSH test not supported on this platform".to_string()),
             }
         }
     }

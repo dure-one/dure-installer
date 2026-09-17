@@ -1377,7 +1377,7 @@ impl GcpWizard {
     /// Get config file path
     #[cfg(not(target_arch = "wasm32"))]
     fn get_config_path(&self) -> Result<std::path::PathBuf, String> {
-        directories::ProjectDirs::from("pe", "nikescar", "dure")
+        directories::ProjectDirs::from("app", "dure", "installer")
             .map(|proj_dirs| proj_dirs.config_dir().join("config.yml"))
             .ok_or_else(|| "Failed to get config directory".to_string())
     }

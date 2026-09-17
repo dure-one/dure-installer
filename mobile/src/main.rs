@@ -184,7 +184,7 @@ fn main() -> Result<()> {
     if has_cli_command {
         // CLI mode (arguments provided)
         log::info!("Running in CLI mode (arguments detected)");
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         dure::cli::run_cli_mode()?;
     } else if force_gui {
         #[cfg(feature = "gui")]
@@ -262,7 +262,7 @@ fn main() -> Result<()> {
         // Terminal mode - run CLI interface
         log::info!("Running in CLI mode (terminal detected)");
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         dure::cli::run_cli_mode()?;
     } else {
         #[cfg(all(
@@ -324,7 +324,7 @@ fn main() -> Result<()> {
             log::warn!("No terminal detected and GUI not compiled in - falling back to CLI mode");
             eprintln!("Warning: Running in CLI mode (GUI not available)");
             eprintln!("For GUI support, rebuild with: cargo build --features gui");
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             dure::cli::run_cli_mode()?;
         }
     }

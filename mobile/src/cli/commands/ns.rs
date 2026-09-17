@@ -4,17 +4,17 @@
 use crate::calc::audit;
 use crate::calc::ns::{NsConfig, RecordType};
 use anyhow::{Context, Result};
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::calc::ns::apply_record;
 
 /// Get the path to config.yml (Desktop)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 fn get_config_path() -> Result<PathBuf> {
-    let proj_dirs = ProjectDirs::from("com", "dure", "dure")
+    let proj_dirs = ProjectDirs::from("app", "dure", "installer")
         .ok_or_else(|| anyhow::anyhow!("Failed to determine config directory"))?;
     Ok(proj_dirs.config_dir().join("config.yml"))
 }
@@ -294,7 +294,7 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
     );
 
     // Apply to DNS provider if requested
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     if apply {
         log::info!("");
         log::info!("Applying to DNS provider...");

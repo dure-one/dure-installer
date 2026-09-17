@@ -64,7 +64,7 @@ impl NsActor {
                 value,
                 ttl,
             } => {
-                #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
                 {
                     self.add_record(provider_name, domain, record_type, name, value, ttl)
                         .await
@@ -353,7 +353,7 @@ impl NsActor {
         ))
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn add_record(
         &mut self,
         provider_name: String,
@@ -581,9 +581,9 @@ impl NsActor {
     }
 
     /// Helper to get config file path (Desktop)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
-        let proj_dirs = directories::ProjectDirs::from("com", "dure", "dure")
+        let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
             .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
         Ok(proj_dirs.config_dir().join("config.yml"))
     }

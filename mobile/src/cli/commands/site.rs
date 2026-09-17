@@ -88,7 +88,7 @@ mod tests {
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     #[test]
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn test_site_commands() {
         // Setup unique test database
         let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);

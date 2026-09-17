@@ -9,7 +9,7 @@ use crate::api::gcp::bigquery::BillingRecord;
 use crate::calc::audit;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
 use crate::ui_components::{ActionMenu, SvgEmoji, EmojiProgressBar};
@@ -139,12 +139,12 @@ pub struct PlatformTab {
     init_progress_log: Vec<String>,
 
     // GCP wizard
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "serde", serde(skip))]
     gcp_wizard: Option<GcpWizard>,
 
     // Track if wizard was open in previous frame (to detect closure)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "serde", serde(skip))]
     wizard_was_open: bool,
 
@@ -243,9 +243,9 @@ impl Default for PlatformTab {
             init_in_progress: false,
             init_platform_name: None,
             init_progress_log: Vec::new(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             gcp_wizard: None,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             wizard_was_open: false,
             platform_summaries: std::collections::HashMap::new(),
             show_delete_vm_dialog: false,
@@ -281,7 +281,7 @@ impl Default for PlatformTab {
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
 fn get_config_path() -> Result<std::path::PathBuf, String> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+    let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
         .ok_or_else(|| "Failed to get project directories".to_string())?;
     Ok(proj_dirs.config_dir().join("config.yml"))
 }
@@ -1566,7 +1566,7 @@ impl PlatformTab {
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_refresh")));
             }
 
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             {
                 if let Some(platform_name) = ui.data(|d| {
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))
@@ -1723,7 +1723,7 @@ impl PlatformTab {
         }
 
         // Select Project dialog
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         if self.show_select_project_dialog {
             self.render_select_project_dialog(ui.ctx(), vm.as_deref_mut());
         }
@@ -1749,7 +1749,7 @@ impl PlatformTab {
         }
 
         // GCP wizard dialog
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             let wizard_is_open = self.gcp_wizard.is_some();
 
@@ -2360,7 +2360,7 @@ impl PlatformTab {
             });
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn show_gcp_wizard(&mut self, platform_name: String) {
         // Try to load config and find platform with OAuth + project
         let mut wizard = if let Ok((app_config, _)) = load_config() {
@@ -2404,7 +2404,7 @@ impl PlatformTab {
         self.gcp_wizard = Some(wizard);
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn restart_vm(
         &mut self,
         platform_name: String,
@@ -2425,7 +2425,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn regenerate_vm(
         &mut self,
         platform_name: String,
@@ -2467,7 +2467,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn update_firewall(
         &mut self,
         platform_name: String,
@@ -2527,7 +2527,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn show_select_project_dialog(
         &mut self,
         platform_name: String,
@@ -3114,7 +3114,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn render_select_project_dialog(
         &mut self,
         ctx: &egui::Context,
@@ -3187,7 +3187,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn execute_select_project(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {

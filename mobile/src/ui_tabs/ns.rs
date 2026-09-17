@@ -6,8 +6,8 @@ use egui_material3::MaterialButton;
 use poll_promise::Promise;
 
 use crate::calc::audit;
-use crate::calc::ns::{NsConfig, RecordType, apply_record};
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+use crate::calc::ns::{NsConfig, RecordType};
+#[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
@@ -178,7 +178,6 @@ struct DomainRowData {
     records: Vec<crate::calc::ns::DnsRecord>,
 }
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 fn build_domain_rows(config: &crate::calc::ns::NsConfig) -> Vec<DomainRowData> {
     let mut rows = Vec::new();
 
@@ -218,11 +217,6 @@ fn build_domain_rows(config: &crate::calc::ns::NsConfig) -> Vec<DomainRowData> {
 
     rows.sort_by(|a, b| a.domain.cmp(&b.domain));
     rows
-}
-
-#[cfg(any(target_os = "android", target_arch = "wasm32"))]
-fn build_domain_rows(_config: &crate::calc::ns::NsConfig) -> Vec<DomainRowData> {
-    Vec::new()
 }
 
 /// Calculate width ratio with clamping to prevent extreme scaling
@@ -386,9 +380,9 @@ fn render_domains_table(
 }
 
 /// Get config file path (Desktop)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 fn get_config_path() -> Result<PathBuf, String> {
-    let proj_dirs = ProjectDirs::from("com", "dure", "dure")
+    let proj_dirs = ProjectDirs::from("app", "dure", "installer")
         .ok_or_else(|| "Failed to get project directories".to_string())?;
     Ok(proj_dirs.config_dir().join("config.yml"))
 }
@@ -399,7 +393,7 @@ fn get_config_path() -> Result<PathBuf, String> {
     Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
 }
 
-/// Get config file path (WASM)
+/// Get config file path (WASM uses browser storage path)
 #[cfg(target_arch = "wasm32")]
 fn get_config_path() -> Result<PathBuf, String> {
     Ok(PathBuf::from(".dure/config.yml"))
@@ -407,7 +401,7 @@ fn get_config_path() -> Result<PathBuf, String> {
 
 /// Parse Porkbun credentials from combined token format
 /// Format: "apikey::secretkey"
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_porkbun_credentials(token: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = token.split("::").collect();
     if parts.len() == 2 {
@@ -418,7 +412,7 @@ fn parse_porkbun_credentials(token: &str) -> Option<(String, String)> {
 }
 
 /// Load NS config from YAML
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn load_ns_config() -> Result<NsConfig, String> {
     let config_path = get_config_path()?;
 
@@ -442,7 +436,7 @@ fn load_ns_config() -> Result<NsConfig, String> {
 }
 
 /// Save NS config to YAML
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn save_ns_config(ns_config: &NsConfig) -> Result<(), String> {
     let config_path = get_config_path()?;
 
@@ -475,7 +469,7 @@ fn save_ns_config(ns_config: &NsConfig) -> Result<(), String> {
 }
 
 /// Add GCP account to config
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn add_gcp_account_to_config(
     oauth: &crate::api::gcp::oauth::OAuthResult,
     email: &str,
@@ -504,7 +498,7 @@ fn add_gcp_account_to_config(
 }
 
 /// Execute add provider in blocking mode (for background thread)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<String>, String> {
     use crate::api::{ns_cloudflare, ns_porkbun};
     use crate::calc::ns::{NsConfig, RecordType};
@@ -936,7 +930,7 @@ impl NsTab {
                         self.add_progress(format!("✓ Record added (ID: {})", record_id));
 
                         // Update config
-                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         if let Ok(mut config) = load_ns_config() {
                             // Note: Record details already in config from UI,
                             // this event confirms API succeeded
@@ -955,7 +949,7 @@ impl NsTab {
                         ));
 
                         // Save domains to config
-                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         {
                             if let Ok(mut config) = load_ns_config() {
                                 let api_token = if name == "porkbun" {
@@ -1011,7 +1005,7 @@ impl NsTab {
                         self.add_progress(format!("✓ Deleted record: {}", record_id));
 
                         // Remove record from config
-                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         {
                             // Parse record_id as "name:type"
                             let parts: Vec<&str> = record_id.split(':').collect();
@@ -1049,7 +1043,7 @@ impl NsTab {
                         self.add_progress(format!("✓ Deleted domain: {}", domain));
 
                         // Remove domain from config
-                        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         {
                             if let Ok(mut config) = load_ns_config() {
                                 let _ = config.remove_domain(&provider_name, &domain);
@@ -1263,7 +1257,7 @@ impl NsTab {
     fn load_data(&mut self) {
         self.load_error = None;
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             match load_ns_config() {
                 Ok(config) => {
@@ -1353,7 +1347,7 @@ impl NsTab {
                     ui.add_space(8.0);
 
                     // Check for OAuth promise result
-                    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+                    #[cfg(not(target_arch = "wasm32"))]
                     {
                         if let Some(promise) = &self.add_gcp_oauth_promise {
                             if let Some(result) = promise.ready() {
@@ -1808,7 +1802,7 @@ impl NsTab {
 
     /// Start add nameserver provider in background (non-blocking)
     fn start_add_provider_background(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             let provider = self.add_provider_type.clone();
 
@@ -1938,7 +1932,7 @@ impl NsTab {
 
     /// Execute add nameserver provider (fetches domains from provider API)
     fn execute_add_provider(&mut self) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::api::{ns_cloudflare, ns_porkbun};
 
@@ -2399,7 +2393,7 @@ impl NsTab {
 
     /// Execute add domain manually
     fn execute_add_domain_manual(&mut self) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::dns;
 
@@ -2784,7 +2778,7 @@ impl NsTab {
 
     /// Refresh domains and records from API
     fn refresh_from_api(&mut self) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::api::{ns_cloudflare, ns_porkbun};
             use crate::calc::dns;
@@ -3176,7 +3170,7 @@ impl NsTab {
         domain: &str,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             // Find which provider has this domain
             let provider = if let Some((ref p, _)) = self.selected_domain {
@@ -3215,7 +3209,7 @@ impl NsTab {
 
     /// Execute add record
     fn execute_add_record(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             let name = self.add_record_name.trim().to_string();
             let value = self.add_record_value.trim().to_string();
@@ -3362,7 +3356,7 @@ impl NsTab {
         _value: &str,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             let (provider, domain) = if let Some((ref p, ref d)) = self.selected_domain {
                 (p.clone(), d.clone())
@@ -3397,7 +3391,7 @@ impl NsTab {
 
     /// Show nameservers for a domain
     fn show_nameservers(&mut self, provider: &str, domain: &str) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::dns;
 
@@ -3629,7 +3623,7 @@ impl NsTab {
     }
 
     /// Start GCP OAuth flow
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn start_gcp_oauth(&mut self) {
         use crate::api::gcp::oauth::OAuthHandler;
         use poll_promise::Promise;
@@ -3645,7 +3639,7 @@ impl NsTab {
     }
 
     /// Fetch connected email from OAuth result
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn fetch_gcp_connected_email(&mut self) {
         if let Some(oauth) = self.add_gcp_oauth_result.clone() {
             use crate::api::gcp::GcpRestClient;
@@ -3676,7 +3670,7 @@ impl NsTab {
     }
 
     /// Load GCP projects list
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn load_gcp_projects(&mut self) {
         if self.add_gcp_projects_loaded {
             return;
@@ -3726,7 +3720,7 @@ mod ns_table_tests {
 
     #[test]
     fn test_domain_row_data_from_empty_config() {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::ns::NsConfig;
             let config = NsConfig::default();
@@ -3737,7 +3731,7 @@ mod ns_table_tests {
 
     #[test]
     fn test_domain_with_no_records() {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::ns::NsConfig;
             let mut config = NsConfig::default();
@@ -3758,7 +3752,7 @@ mod ns_table_tests {
 
     #[test]
     fn test_domain_with_multiple_records() {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::ns::{NsConfig, DnsRecord, RecordType};
             let mut config = NsConfig::default();
@@ -3791,7 +3785,7 @@ mod ns_table_tests {
 
     #[test]
     fn test_gcp_provider_display_format() {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::ns::{NsConfig, GcpAccount};
             let mut config = NsConfig::default();

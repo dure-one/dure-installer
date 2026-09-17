@@ -298,7 +298,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub ssh_hosts: Vec<SshHostConfig>,
     #[serde(default)]
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub ns: crate::calc::ns::NsConfig,
 }
 

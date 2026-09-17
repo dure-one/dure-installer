@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 
 // Core modules
@@ -30,9 +30,9 @@ pub mod ui_components;
 
 // Desktop-only modules (minimal implementations for CLI)
 pub mod config;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod config_migration;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod error;
 
 /// No-op macro replacing egui's demo github file link widget.
@@ -56,11 +56,11 @@ pub mod ui_tabs;
 pub mod viewmodel;
 
 // Desktop-only modules
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod cli;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod install;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod install_stt;
 #[cfg(all(
     feature = "tray-icon",
@@ -70,19 +70,19 @@ pub mod install_stt;
 pub mod tray;
 // HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
 // TODO: Re-enable when HTTP server implementation is available
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod http_server;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod attestation;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod validation;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod sync;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod mcp;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod output;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod log_capture;
 
 // Platform-specific entry points
@@ -103,7 +103,7 @@ pub struct Config {
     pub cache_dir: PathBuf,
     pub tmp_dir: PathBuf,
     pub data_dir: PathBuf,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub app_config: config::AppConfig,
 }
 
@@ -132,11 +132,16 @@ impl Config {
                 }
             }
 
+            // Load configuration
+            let config_file = config_dir.join("config.yml");
+            let app_config = config::AppConfig::load_or_default(&config_file);
+
             Ok(Config {
                 config_dir: config_dir.clone(),
                 cache_dir,
                 tmp_dir,
                 data_dir,
+                app_config,
             })
         }
 
@@ -153,10 +158,10 @@ impl Config {
             })
         }
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Desktop platforms (Linux, Windows, macOS)
-            let proj_dirs = ProjectDirs::from("pe", "nikescar", "dure")
+            let proj_dirs = ProjectDirs::from("app", "dure", "installer")
                 .context("Failed to get project directories")?;
 
             let config_dir = proj_dirs.config_dir().to_path_buf();

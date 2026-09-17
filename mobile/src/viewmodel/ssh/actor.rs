@@ -4,10 +4,10 @@ use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
 use crate::viewmodel::{ViewModelEvent, runtime};
 use crate::calc::dure_wss;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::calc::{docker, ansible};
 use crate::config::{DureWssConfig, SshHostConfig};
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
 use smol::channel::{Receiver, Sender};
 
@@ -83,7 +83,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn save_docker_container(
         &self,
         host_name: &str,
@@ -100,7 +100,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn save_ansible_role(
         &self,
         host_name: &str,
@@ -269,7 +269,7 @@ impl SshActor {
                 acme_email,
             } => self.deploy_dure_wss(host_name, domain, acme_email).await,
             SshCommand::GetLinuxStatus { name } => self.get_linux_status(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallDockerImage {
                 host_name,
                 container_name,
@@ -280,30 +280,30 @@ impl SshActor {
             } => {
                 return self.handle_install_docker_image(host_name, container_name, image, tag, ports, env).await;
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveDockerContainer {
                 host_name,
                 container_name,
             } => {
                 return self.handle_remove_docker_container(host_name, container_name).await;
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallDocker { name } => self.install_docker(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::GetDockerStatus { name } => self.get_docker_status(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::UninstallDocker { name } => self.uninstall_docker(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallAnsible { name } => self.install_ansible(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::GetAnsibleStatus { name } => self.get_ansible_status(name).await,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::UninstallAnsible { name } => self.uninstall_ansible(name).await,
             SshCommand::CheckHostHealth { name, timeout_secs } => {
                 self.handle_check_host_health(name, timeout_secs).await;
                 Ok(())
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::ListDockerContainers { host_name } => {
                 return self.handle_list_docker_containers(host_name).await;
             }
@@ -383,7 +383,7 @@ impl SshActor {
 
                 return Ok(());
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveDockerContainers { host_name, container_names } => {
                 log::debug!(" SSH Actor: remove_docker_containers called for '{}'", host_name);
                 log::debug!("  Containers to remove: {:?}", container_names);
@@ -431,11 +431,11 @@ impl SshActor {
             }
 
             // Ansible Lifecycle Commands
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::ValidateAnsibleRole { role } => {
                 return self.handle_validate_ansible_role(role).await;
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallAnsibleRole {
                 host_name,
                 instance_name,
@@ -445,14 +445,14 @@ impl SshActor {
             } => {
                 return self.handle_install_ansible_role(host_name, instance_name, galaxy_name, variables, ports).await;
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveAnsibleRole {
                 host_name,
                 instance_name,
             } => {
                 return self.handle_remove_ansible_role(host_name, instance_name).await;
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::ListAnsibleRoles { host_name } => {
                 return self.handle_list_ansible_roles(host_name).await;
             }
@@ -600,9 +600,9 @@ impl SshActor {
     }
 
     /// Helper to get config file path (Desktop)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
-        let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+        let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
             .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
         Ok(proj_dirs.config_dir().join("config.yml"))
     }
@@ -1181,7 +1181,7 @@ impl SshActor {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn install_ansible(&mut self, name: String) -> anyhow::Result<()> {
         log::debug!(" SSH Actor: install_ansible called for '{}'", name);
         self.send_progress("install_ansible", 0.1, "Loading host configuration...")
@@ -1233,7 +1233,7 @@ impl SshActor {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn get_ansible_status(&mut self, name: String) -> anyhow::Result<()> {
         log::debug!(" SSH Actor: get_ansible_status called for '{}'", name);
         self.send_progress("get_ansible_status", 0.1, "Loading host configuration...")
@@ -1272,7 +1272,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn uninstall_ansible(&mut self, name: String) -> anyhow::Result<()> {
         log::debug!(" SSH Actor: uninstall_ansible called for '{}'", name);
         self.send_progress("uninstall_ansible", 0.1, "Loading host configuration...")
@@ -1338,7 +1338,7 @@ impl SshActor {
 
     // Docker Lifecycle Handlers
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_install_docker_image(
         &self,
         host_name: String,
@@ -1452,7 +1452,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_remove_docker_container(
         &self,
         host_name: String,
@@ -1507,7 +1507,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_list_docker_containers(&self, host_name: String) -> anyhow::Result<()> {
         let host_config = match self.load_host_config(&host_name) {
             Ok(cfg) => cfg,
@@ -1543,7 +1543,7 @@ impl SshActor {
 
     // Ansible Lifecycle Handlers
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_validate_ansible_role(&self, role: String) -> anyhow::Result<()> {
         self.send_event(SshEvent::Progress {
             operation: "ValidateAnsibleRole".to_string(),
@@ -1573,7 +1573,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_install_ansible_role(
         &self,
         host_name: String,
@@ -1686,7 +1686,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_remove_ansible_role(
         &self,
         host_name: String,
@@ -1759,7 +1759,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn handle_list_ansible_roles(&self, host_name: String) -> anyhow::Result<()> {
         let host_config = match self.load_host_config(&host_name) {
             Ok(cfg) => cfg,
@@ -2034,11 +2034,11 @@ impl SshActor {
             SshEvent::DockerContainerRemoved { host_name, container_name } => {
                 format!("DockerContainerRemoved({}, {})", host_name, container_name)
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             SshEvent::DockerContainersListedNew { host_name, containers } => {
                 format!("DockerContainersListedNew({}, {} containers)", host_name, containers.len())
             }
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             SshEvent::AnsibleRoleValidated { role, .. } => {
                 format!("AnsibleRoleValidated({})", role)
             }

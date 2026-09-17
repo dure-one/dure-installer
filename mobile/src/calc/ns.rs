@@ -661,7 +661,7 @@ impl NsConfig {
 }
 
 /// Apply DNS record to actual DNS provider
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn apply_record(
     provider_name: &str,
     api_token: &str,
@@ -699,7 +699,7 @@ pub fn apply_record(
 }
 
 /// Apply all records for a domain to the DNS provider
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn apply_all_records(
     provider_name: &str,
     api_token: &str,
