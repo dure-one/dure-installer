@@ -5,7 +5,7 @@
 //! - Android: Mobile-specific UI integrations
 //! - WASM: Browser-based integrations
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use std::process::Command;
 

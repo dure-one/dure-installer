@@ -36,7 +36,7 @@ fn move_to_trash<P: AsRef<Path>>(path: P) -> Result<(), String> {
     // - Windows: Uses IFileOperation COM interface (Recycle Bin)
     // - macOS: Uses FSMoveObjectToTrashSync (Finder Trash)
     // - Linux: Uses freedesktop.org Trash specification
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     {
         trash::delete(path).map_err(|e| {
             let err_msg = format!("Failed to move to trash: {}", e);
@@ -1108,7 +1108,7 @@ pub fn do_update(download_url: &str, latest_version: &str, tmp_dir: &PathBuf) ->
     };
 
     // Extract if archive
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     let binary_path = if downloaded_file
         .extension()
         .is_some_and(|ext| ext == "gz" || ext == "tar")
@@ -1226,7 +1226,7 @@ fn download_update(url: &str, tmp_dir: &PathBuf) -> Result<PathBuf, String> {
     Ok(dest_path)
 }
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn extract_tar_gz(archive_path: &PathBuf, dest_dir: &PathBuf) -> Result<PathBuf, String> {
     use flate2::read::GzDecoder;
     use tar::Archive;
@@ -1245,7 +1245,7 @@ fn extract_tar_gz(archive_path: &PathBuf, dest_dir: &PathBuf) -> Result<PathBuf,
     find_binary_in_dir(dest_dir)
 }
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn extract_zip(archive_path: &PathBuf, dest_dir: &PathBuf) -> Result<PathBuf, String> {
     let file =
         fs::File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;

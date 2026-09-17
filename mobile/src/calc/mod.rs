@@ -5,9 +5,9 @@ pub mod audit;
 pub mod crypt;
 pub mod db;
 pub mod dns;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod docker;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ansible;
 pub mod dure_wss;
 pub mod gcp;

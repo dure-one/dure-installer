@@ -9,7 +9,7 @@ pub mod update;
 pub mod update_stt;
 // pub mod window;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod platform_gcp;
 
 pub use about_stt::*;

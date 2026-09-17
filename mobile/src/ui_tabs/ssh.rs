@@ -186,7 +186,7 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_instance_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     ansible_metadata: Option<crate::calc::ansible::AnsibleRoleMetadata>,
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_ports: Vec<String>,
@@ -322,7 +322,7 @@ impl Default for SshTab {
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
 fn get_config_path() -> Result<std::path::PathBuf, String> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+    let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
         .ok_or_else(|| "Failed to get project directories".to_string())?;
     Ok(proj_dirs.config_dir().join("config.yml"))
 }

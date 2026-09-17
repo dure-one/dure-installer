@@ -48,7 +48,7 @@ pub enum SshSubcommand {
 
 /// Get config file path
 fn get_config_path() -> Result<PathBuf> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
+    let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
         .context("Failed to get project directories")?;
     Ok(proj_dirs.config_dir().join("config.yml"))
 }

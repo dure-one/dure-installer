@@ -278,7 +278,7 @@ pub enum SshCommands {
 }
 
 /// Run CLI mode - parse and execute CLI commands
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_cli_mode() -> anyhow::Result<()> {
     let cli = Cli::parse();
 

@@ -33,7 +33,7 @@ impl SiteConfig {
 
 /// List all configured sites
 pub fn list_sites() -> Result<Vec<SiteConfig>> {
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
         use crate::calc::db;
         use crate::storage::models::site;
@@ -61,7 +61,7 @@ pub fn list_sites() -> Result<Vec<SiteConfig>> {
 
 /// Add a new site
 pub fn add_site(domain: String, public_key: String) -> Result<()> {
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
         use crate::calc::db;
         use crate::storage::models::site;
@@ -88,7 +88,7 @@ pub fn add_site(domain: String, public_key: String) -> Result<()> {
 
 /// Delete a site
 pub fn delete_site(domain: &str) -> Result<()> {
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
         use crate::calc::db;
         use crate::storage::models::site;
@@ -112,7 +112,7 @@ pub fn delete_site(domain: &str) -> Result<()> {
 
 /// Update site status
 pub fn update_site_status(domain: &str, status: &str) -> Result<()> {
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
         use crate::calc::db;
         use crate::storage::models::site;
@@ -133,7 +133,7 @@ pub fn update_site_status(domain: &str, status: &str) -> Result<()> {
 
 /// Get site by domain
 pub fn get_site(domain: &str) -> Result<Option<SiteConfig>> {
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     {
         use crate::calc::db;
         use crate::storage::models::site;
@@ -165,7 +165,7 @@ mod tests {
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     #[test]
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn test_site_operations() {
         // Setup unique test database
         let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);

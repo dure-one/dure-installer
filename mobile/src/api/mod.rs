@@ -3,7 +3,7 @@
 pub mod ehttp_cache;
 
 // Desktop-only (X11 desktop environment detection)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod desktop;
 
 // Platform-independent HTTP APIs

@@ -96,12 +96,10 @@ russh-keys = "0.45"
 async-trait = "0.1"
 shellexpand = "3.1"
 
-# Desktop-only dependencies (all desktop platforms including OpenBSD)
-[target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
-# System integration (desktop-only)
-trash = "5.2"
+# Desktop and Android dependencies (excludes WASM only)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# System integration
 directories = { workspace = true }
-opener = "0.7"
 dirs = "5.0"
 hostname = "0.4"
 urlencoding = "2.1"
@@ -153,8 +151,13 @@ num_cpus = "1.17"
 dashmap = "6.1"
 env_logger = { version = "0.11", default-features = false }
 
+# Desktop-only dependencies (platform-specific GUI integration)
+[target.'cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))'.dependencies]
+trash = "5.2"
+opener = "0.7"
+
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
-[target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]
+[target.'cfg(all(not(target_os = "android"), not(target_arch = "wasm32"), not(target_os = "openbsd")))'.dependencies]
 tray-icon = { version = "0.18", default-features = false, optional = true }
 tao = { version = "0.33", optional = true }
 
