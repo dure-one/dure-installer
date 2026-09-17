@@ -23,7 +23,7 @@ on:
 env:
   RUST_VERSION: nightly
   BIN_NAME: "dure-desktop"
-  PACKAGE_NAME: "mobile"
+  PACKAGE_NAME: "dure"
 
 jobs:
   build:
