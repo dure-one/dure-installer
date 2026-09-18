@@ -21,6 +21,7 @@ use std::collections::{HashMap, VecDeque};
 pub struct ViewModel {
     // Actor communication channels
     platform_tx: Sender<platform::PlatformCommand>,
+    drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
     wss_tx: Sender<wss::WssCommand>,
@@ -86,6 +87,7 @@ impl ViewModel {
     #[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
     pub fn new(ctx: egui::Context) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
@@ -98,12 +100,14 @@ impl ViewModel {
 
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
+                smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
@@ -115,6 +119,7 @@ impl ViewModel {
 
         Self {
             platform_tx,
+            drawer_tx,
             ssh_tx,
             ns_tx,
             wss_tx,
@@ -129,6 +134,7 @@ impl ViewModel {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new_headless() -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
@@ -139,11 +145,13 @@ impl ViewModel {
                 dure_info!("ViewModel runtime started (headless)");
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 smol::spawn(platform_actor.run()).detach();
+                smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
@@ -154,6 +162,7 @@ impl ViewModel {
 
         Self {
             platform_tx,
+            drawer_tx,
             ssh_tx,
             ns_tx,
             wss_tx,
@@ -171,6 +180,7 @@ impl ViewModel {
         use wasm_bindgen_futures::spawn_local;
 
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
@@ -180,17 +190,24 @@ impl ViewModel {
             dure_info!("ViewModel runtime started (WASM)");
 
             let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+            let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
             // Run actors concurrently
-            futures::join!(platform_actor.run(), ns_actor.run(), wss_actor.run(),);
+            futures::join!(
+                platform_actor.run(),
+                drawer_actor.run(),
+                ns_actor.run(),
+                wss_actor.run(),
+            );
         });
 
         Self {
             platform_tx,
+            drawer_tx,
             // ssh_tx gated out for WASM builds
             ns_tx,
             wss_tx,
@@ -422,6 +439,13 @@ impl ViewModel {
     pub fn scan_existing_vms(&self, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::ScanExistingVMs { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // Drawer commands
+    pub fn send_drawer_command(&self, cmd: platform::DrawerCommand) -> anyhow::Result<()> {
+        self.drawer_tx
+            .send_blocking(cmd)
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

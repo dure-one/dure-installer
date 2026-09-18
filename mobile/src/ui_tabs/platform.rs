@@ -221,6 +221,10 @@ pub struct PlatformTab {
     // Track platforms that have been auto-refreshed (to prevent infinite loop)
     #[cfg_attr(feature = "serde", serde(skip))]
     auto_refreshed_platforms: std::collections::HashSet<String>,
+
+    // Drawer state (for platform details drawer with tabs)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    drawer_state: crate::viewmodel::platform::DrawerState,
 }
 
 impl Default for PlatformTab {
@@ -274,6 +278,7 @@ impl Default for PlatformTab {
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
             auto_refreshed_platforms: std::collections::HashSet::new(),
+            drawer_state: crate::viewmodel::platform::DrawerState::new(),
         }
     }
 }
@@ -735,123 +740,23 @@ fn format_project_count_display(count: Option<usize>) -> String {
 
 /// Render drawer content showing platform hierarchy
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
-    ui.add_space(8.0);
+    use crate::ui_tabs::platform_drawer;
+    use crate::viewmodel::platform::DrawerState;
 
-    // Connection info
-    if let Some(email) = &row.email {
-        let count_display = format_project_count_display(row.total_project_count);
-        EmojiLabel::new(format!("📧 {} ({})", email, count_display)).show(ui);
-    } else {
-        EmojiLabel::new("📧 Not connected").show(ui);
-    }
-
-    ui.add_space(4.0);
-
-    // Project info
+    // Create a temporary drawer state
+    // TODO: This should come from PlatformTab.drawer_state with proper state management
+    let mut drawer_state = DrawerState::new();
     if let Some(project_id) = &row.selected_project_id {
-        EmojiLabel::new(format!("📁 Project: {}", project_id)).show(ui);
-        ui.add_space(4.0);
-
-        // Refresh staleness
-        if let Some(last_refresh) = row.last_refresh_time {
-            let elapsed = chrono::Utc::now().timestamp() - last_refresh;
-            let time_text = if elapsed < 60 {
-                "🕐 Refreshed: just now".to_string()
-            } else if elapsed < 3600 {
-                format!("🕐 Refreshed: {} min ago", elapsed / 60)
-            } else if elapsed < 86400 {
-                format!("⚠️ Refreshed: {} hours ago", elapsed / 3600)
-            } else {
-                format!("⚠️ Refreshed: {} days ago", elapsed / 86400)
-            };
-
-            let color = if elapsed < 3600 {
-                ui.style().visuals.text_color()
-            } else {
-                egui::Color32::from_rgb(255, 193, 7) // Warning color
-            };
-
-            EmojiLabel::new(egui::RichText::new(time_text).color(color)).show(ui);
-            ui.add_space(4.0);
-        }
-
-        // VM details
-        if let Some(vm_name) = &row.vm_name {
-            EmojiLabel::new(format!("💻 VM: {}", vm_name)).show(ui);
-            ui.add_space(4.0);
-
-            // IP address
-            if let Some(ip) = &row.vm_external_ip {
-                EmojiLabel::new(format!("🌐 IP: {}", ip)).show(ui);
-            } else {
-                EmojiLabel::new(
-                    egui::RichText::new("⚠️ IP: No external IP")
-                        .color(egui::Color32::from_rgb(255, 193, 7))
-                ).show(ui);
-            }
-            ui.add_space(4.0);
-
-            // Firewall status (check operation state)
-            let firewall_text = match &row.operation_state {
-                OperationState::InProgress { operation, .. }
-                    if operation.to_lowercase().contains("firewall") =>
-                {
-                    ("🔄 Updating...".to_string(), egui::Color32::from_rgb(255, 152, 0))
-                }
-                OperationState::Failed { operation, error, .. }
-                    if operation.to_lowercase().contains("firewall") =>
-                {
-                    (format!("🔥 {}", error), egui::Color32::from_rgb(244, 67, 54))
-                }
-                _ => (format!("🔥 {}", row.firewall_status), ui.style().visuals.text_color()),
-            };
-            EmojiLabel::new(egui::RichText::new(firewall_text.0).color(firewall_text.1)).show(ui);
-            ui.add_space(4.0);
-
-            // SSH status
-            EmojiLabel::new(format!("🔑 SSH: {}", row.ssh_status)).show(ui);
-        } else {
-            EmojiLabel::new("💻 VM: — No VM created").show(ui);
-        }
-    } else {
-        EmojiLabel::new("📁 Project: — No project selected").show(ui);
+        drawer_state.set_project(project_id);
     }
 
-    ui.add_space(8.0);
+    let mut tab_switch: Option<crate::viewmodel::platform::DrawerTab> = None;
 
-    // SSH action menu (if available)
-    if let (Some(external_ip), Some(private_key)) =
-        (&row.vm_external_ip, &row.ssh_private_key)
-    {
-        ui.add_space(8.0);
+    platform_drawer::render_drawer(ui, &drawer_state, &mut tab_switch);
 
-        let ssh_command = format!(
-            "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
-            private_key.trim(),
-            external_ip
-        );
-
-        let mut menu = ActionMenu::new("💻SSH");
-        menu.add_action("Copy SSH Command");
-        menu.add_action("Copy Private Key");
-        menu.add_action("Copy IP Address");
-
-        if let Some(action_idx) = menu.show(ui) {
-            let text_to_copy = match action_idx {
-                0 => &ssh_command,
-                1 => private_key,
-                2 => external_ip,
-                _ => return,
-            };
-
-            ui.ctx().copy_text(text_to_copy.to_string());
-        }
-    } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
-        ui.add_space(8.0);
-        EmojiLabel::new(
-            egui::RichText::new("⚠️ SSH key not found in keyring")
-                .color(egui::Color32::from_rgb(255, 152, 0))
-        ).show(ui);
+    // TODO: Handle tab_switch by sending DrawerCommand to ViewModel
+    if let Some(_new_tab) = tab_switch {
+        // Future: vm.send_drawer_command(DrawerCommand::SwitchTab { tab: new_tab })?;
     }
 }
 
