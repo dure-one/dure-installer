@@ -7,28 +7,32 @@ platform:
 
 # Cloud Platforms (GCP, Firebase, Supabase)
 # Manage with: dure platform add/del/init/status
-platforms:
-  # Example GCP (Google Cloud Platform) configuration
-  - name: "my-gcp"
-    platform_type: "gcp"
-    api_token: ""  # OAuth access token (auto-set by 'dure platform init')
-    service_account_json: ""  # Path to service account JSON file
+# Start with empty list - add platforms using GUI or CLI
+platforms: []
 
-  # Example Firebase configuration
-  # - name: "my-firebase"
-  #   platform_type: "firebase"
-  #   firebase_project_id: ""  # Firebase project ID
-  #   firebase_api_key: ""  # Firebase Web API key
-  #   api_token: ""  # Firebase service account token
-  #   service_account_json: ""  # Path to service account JSON file
-
-  # Example Supabase configuration
-  # - name: "my-supabase"
-  #   platform_type: "supabase"
-  #   supabase_project_ref: ""  # Project reference ID
-  #   supabase_api_url: ""  # API URL (e.g., https://abc123.supabase.co)
-  #   supabase_anon_key: ""  # Anonymous/public key
-  #   api_token: ""  # Service role key (for admin operations)
+# Example platform configurations (uncomment and customize as needed):
+#
+# # GCP (Google Cloud Platform)
+# - name: "my-gcp"
+#   platform_type: "gcp"
+#   api_token: ""  # OAuth access token (auto-set by 'dure platform init')
+#   service_account_json: ""  # Path to service account JSON file
+#
+# # Firebase
+# - name: "my-firebase"
+#   platform_type: "firebase"
+#   firebase_project_id: ""  # Firebase project ID
+#   firebase_api_key: ""  # Firebase Web API key
+#   api_token: ""  # Firebase service account token
+#   service_account_json: ""  # Path to service account JSON file
+#
+# # Supabase
+# - name: "my-supabase"
+#   platform_type: "supabase"
+#   supabase_project_ref: ""  # Project reference ID
+#   supabase_api_url: ""  # API URL (e.g., https://abc123.supabase.co)
+#   supabase_anon_key: ""  # Anonymous/public key
+#   api_token: ""  # Service role key (for admin operations)
 
 # Domain and SSL certificate configuration
 domain:

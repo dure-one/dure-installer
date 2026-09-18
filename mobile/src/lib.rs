@@ -96,6 +96,42 @@ pub trait ScreenSizeProvider: Send + Sync {
     fn get_screen_size(&self) -> std::io::Result<(i32, i32)>;
 }
 
+/// Get the application config directory (~/.config/dure-installer)
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_app_config_dir() -> Result<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let config_dir = PathBuf::from(home).join(".config").join("dure-installer");
+        Ok(config_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/data/data/app.dure.installer/files"))
+    }
+}
+
+/// Get the application cache directory (~/.cache/dure-installer)
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_app_cache_dir() -> Result<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let cache_dir = PathBuf::from(home).join(".cache").join("dure-installer");
+        Ok(cache_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/data/data/app.dure.installer/cache"))
+    }
+}
+
 /// Application directory paths configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -161,11 +197,8 @@ impl Config {
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Desktop platforms (Linux, Windows, macOS)
-            let proj_dirs = ProjectDirs::from("app", "dure", "installer")
-                .context("Failed to get project directories")?;
-
-            let config_dir = proj_dirs.config_dir().to_path_buf();
-            let cache_dir = proj_dirs.cache_dir().to_path_buf();
+            let config_dir = get_app_config_dir()?;
+            let cache_dir = get_app_cache_dir()?;
 
             let tmp_dir = cache_dir.join("tmp");
             let data_dir = cache_dir.join("data");

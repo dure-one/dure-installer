@@ -382,9 +382,7 @@ fn render_domains_table(
 /// Get config file path (Desktop)
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 fn get_config_path() -> Result<PathBuf, String> {
-    let proj_dirs = ProjectDirs::from("app", "dure", "installer")
-        .ok_or_else(|| "Failed to get project directories".to_string())?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+    Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
 }
 
 /// Get config file path (Android)
