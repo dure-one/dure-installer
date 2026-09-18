@@ -23,12 +23,12 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 use anyhow::Result;
+#[cfg(not(target_arch = "wasm32"))]
+// Logging provided by standard log crate
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 use dure::dure::DureApp;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
-#[cfg(not(target_arch = "wasm32"))]
-use dure::{dure_info, dure_error};
 
 // Embedded Material theme data
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
@@ -105,54 +105,54 @@ fn main() -> Result<()> {
 
     builder.init();
 
-    dure_info!("Dure v{} starting...", env!("CARGO_PKG_VERSION"));
+    log::info!("Dure v{} starting...", env!("CARGO_PKG_VERSION"));
 
     // Initialize application configuration and database
     let config = dure::Config::new().unwrap_or_else(|e| {
-        dure_error!("Failed to initialize application config: {}", e);
+        log::error!("Failed to initialize application config: {}", e);
         std::process::exit(1);
     });
     let db_path = config.data_dir.join("dure.db");
     dure::calc::db::set_db_path(db_path.to_string_lossy().to_string());
-    dure_info!("Database path set to: {}", db_path.display());
+    log::info!("Database path set to: {}", db_path.display());
 
     // Verify binary attestation (if not disabled)
     // if !args.iter().any(|arg| arg == "--skip-attestation") {
     //     match std::env::current_exe() {
     //         Ok(exe_path) => {
-    //             dure_info!("Verifying binary attestation for: {}", exe_path.display());
+    //             log::info!("Verifying binary attestation for: {}", exe_path.display());
     //             match dure::attestation::verify_current_binary(
     //                 exe_path.to_str().unwrap_or(""),
     //                 "nikescar",  // TODO: Replace with actual org name
     //                 "dure",
     //             ) {
     //                 Ok(result) => {
-    //                     dure_info!("✓ Binary attestation verified successfully");
-    //                     dure_info!("  Digest: {}", result.digest);
-    //                     dure_info!("  Repository: {}", result.repository);
-    //                     dure_info!("  Attestations: {}", result.attestation_count);
+    //                     log::info!("✓ Binary attestation verified successfully");
+    //                     log::info!("  Digest: {}", result.digest);
+    //                     log::info!("  Repository: {}", result.repository);
+    //                     log::info!("  Attestations: {}", result.attestation_count);
     //                 }
     //                 Err(e) => {
-    //                     dure_warn!("⚠ Binary attestation verification failed: {}", e);
-    //                     dure_warn!("  This may indicate the binary was not released through official channels");
+    //                     log::warn!("⚠ Binary attestation verification failed: {}", e);
+    //                     log::warn!("  This may indicate the binary was not released through official channels");
     //                     // Continue execution but log the warning
     //                 }
     //             }
     //         }
     //         Err(e) => {
-    //             dure_warn!("Failed to get current executable path: {}", e);
+    //             log::warn!("Failed to get current executable path: {}", e);
     //         }
     //     }
     // }
 
     // Initialize i18n EARLY (before any mode starts)
     if let Err(e) = dure::i18n::init_i18n("Auto") {
-        dure_error!("Failed to initialize i18n: {}", e);
+        log::error!("Failed to initialize i18n: {}", e);
     }
 
     // Initialize global tray event handlers (one-time setup)
     #[cfg(all(
-        feature = "gui",
+        feature = "tray-icon",
         not(any(target_os = "android", target_arch = "wasm32")),
         not(target_os = "openbsd")
     ))]
@@ -169,28 +169,28 @@ fn main() -> Result<()> {
 
     // Handle uninstall mode (desktop only)
     if uninstall {
-        dure_info!("Uninstall mode not implemented yet");
+        log::info!("Uninstall mode not implemented yet");
         println!("Uninstall mode not implemented yet");
         std::process::exit(0);
     }
 
     // Handle silent install mode (desktop only)
     if silent_install {
-        dure_info!("Silent install mode not implemented yet");
+        log::info!("Silent install mode not implemented yet");
         println!("Silent install mode not implemented yet");
         std::process::exit(0);
     }
 
     if has_cli_command {
         // CLI mode (arguments provided)
-        dure_info!("Running in CLI mode (arguments detected)");
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        log::info!("Running in CLI mode (arguments detected)");
+        #[cfg(not(target_arch = "wasm32"))]
         dure::cli::run_cli_mode()?;
     } else if force_gui {
         #[cfg(feature = "gui")]
         {
             // GUI mode (explicitly requested via --gui flag)
-            dure_info!("Running in GUI mode (--gui flag)");
+            log::info!("Running in GUI mode (--gui flag)");
 
             // Hide console window on Windows
             #[cfg(target_os = "windows")]
@@ -206,119 +206,125 @@ fn main() -> Result<()> {
         }
     } else if force_tray {
         #[cfg(all(
-            feature = "gui",
+            feature = "tray-icon",
             not(any(target_os = "android", target_arch = "wasm32")),
             not(target_os = "openbsd")
         ))]
         {
             // Tray mode (explicitly requested via --tray flag)
-            dure_info!("Running in tray mode (--tray flag)");
+            log::info!("Running in tray mode (--tray flag)");
 
             // Hide console window on Windows
             #[cfg(target_os = "windows")]
             windows_installer::hide_console();
 
             // Start tray mode on separate thread
-            dure_info!("*** Starting tray mode on separate thread ***");
+            log::info!("*** Starting tray mode on separate thread ***");
             let tray_handle = dure::tray::run_tray_mode()?;
 
             // Wait for tray actions
             loop {
-                dure_info!("*** Waiting for tray action ***");
+                log::info!("*** Waiting for tray action ***");
                 match tray_handle.recv_action() {
                     Some(dure::tray::TrayExitAction::Quit) => {
-                        dure_info!("*** Received Quit action, exiting application ***");
+                        log::info!("*** Received Quit action, exiting application ***");
                         break;
                     }
                     Some(dure::tray::TrayExitAction::OpenGui) => {
-                        dure_info!("*** Received OpenGui action, opening GUI window ***");
-                        dure_info!("*** (Tray will continue running in background) ***");
+                        log::info!("*** Received OpenGui action, opening GUI window ***");
+                        log::info!("*** (Tray will continue running in background) ***");
                         run_gui_mode()?;
-                        dure_info!("*** GUI closed ***");
+                        log::info!("*** GUI closed ***");
                     }
                     None => {
-                        dure_warn!("*** Tray thread ended unexpectedly ***");
+                        log::warn!("*** Tray thread ended unexpectedly ***");
                         break;
                     }
                 }
             }
 
-            dure_info!("*** Joining tray thread ***");
+            log::info!("*** Joining tray thread ***");
             tray_handle.join()?;
         }
         #[cfg(all(feature = "gui", target_os = "openbsd"))]
         {
             // Tray mode not available on OpenBSD - run GUI mode instead
-            dure_info!("Tray mode not available on OpenBSD (--tray flag), running GUI mode");
+            log::info!("Tray mode not available on OpenBSD (--tray flag), running GUI mode");
             run_gui_mode()?;
         }
-        #[cfg(not(feature = "gui"))]
+        #[cfg(all(not(feature = "tray-icon"), not(target_os = "openbsd")))]
         {
-            eprintln!("Error: GUI/Tray support not compiled in this build.");
-            eprintln!("Rebuild with: cargo build --features gui");
+            eprintln!("Error: Tray support not compiled in this build.");
+            eprintln!("Rebuild with: cargo build --features tray-icon");
             std::process::exit(1);
         }
     } else if std::io::stdout().is_terminal() {
         // Terminal mode - run CLI interface
-        dure_info!("Running in CLI mode (terminal detected)");
+        log::info!("Running in CLI mode (terminal detected)");
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         dure::cli::run_cli_mode()?;
     } else {
         #[cfg(all(
-            feature = "gui",
+            feature = "tray-icon",
             not(any(target_os = "android", target_arch = "wasm32")),
             not(target_os = "openbsd")
         ))]
         {
             // Tray mode (default for double-click on Windows - no terminal, no flags)
-            dure_info!("Running in tray mode (default - no terminal detected)");
+            log::info!("Running in tray mode (default - no terminal detected)");
 
             // Hide console window on Windows
             #[cfg(target_os = "windows")]
             windows_installer::hide_console();
 
             // Start tray mode on separate thread
-            dure_info!("*** Starting tray mode on separate thread ***");
+            log::info!("*** Starting tray mode on separate thread ***");
             let tray_handle = dure::tray::run_tray_mode()?;
 
             // Wait for tray actions
             loop {
-                dure_info!("*** Waiting for tray action ***");
+                log::info!("*** Waiting for tray action ***");
                 match tray_handle.recv_action() {
                     Some(dure::tray::TrayExitAction::Quit) => {
-                        dure_info!("*** Received Quit action, exiting application ***");
+                        log::info!("*** Received Quit action, exiting application ***");
                         break;
                     }
                     Some(dure::tray::TrayExitAction::OpenGui) => {
-                        dure_info!("*** Received OpenGui action, opening GUI window ***");
-                        dure_info!("*** (Tray will continue running in background) ***");
+                        log::info!("*** Received OpenGui action, opening GUI window ***");
+                        log::info!("*** (Tray will continue running in background) ***");
                         run_gui_mode()?;
-                        dure_info!("*** GUI closed ***");
+                        log::info!("*** GUI closed ***");
                     }
                     None => {
-                        dure_warn!("*** Tray thread ended unexpectedly ***");
+                        log::warn!("*** Tray thread ended unexpectedly ***");
                         break;
                     }
                 }
             }
 
-            dure_info!("*** Joining tray thread ***");
+            log::info!("*** Joining tray thread ***");
             tray_handle.join()?;
+        }
+        #[cfg(all(feature = "gui", not(feature = "tray-icon"), not(target_os = "openbsd")))]
+        {
+            // Tray not available but GUI is - run GUI mode instead
+            log::info!("Tray mode not available (no terminal detected), running GUI mode");
+            run_gui_mode()?;
         }
         #[cfg(all(feature = "gui", target_os = "openbsd"))]
         {
             // Tray mode not available on OpenBSD - run GUI mode instead
-            dure_info!("Tray mode not available on OpenBSD, running GUI mode");
+            log::info!("Tray mode not available on OpenBSD, running GUI mode");
             run_gui_mode()?;
         }
         #[cfg(not(feature = "gui"))]
         {
             // No terminal, no GUI - fall back to CLI mode
-            dure_warn!("No terminal detected and GUI not compiled in - falling back to CLI mode");
+            log::warn!("No terminal detected and GUI not compiled in - falling back to CLI mode");
             eprintln!("Warning: Running in CLI mode (GUI not available)");
             eprintln!("For GUI support, rebuild with: cargo build --features gui");
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             dure::cli::run_cli_mode()?;
         }
     }
@@ -345,7 +351,7 @@ fn run_gui_mode() -> Result<()> {
         "Dure",
         options,
         Box::new(|cc| {
-            dure_info!("Creating Dure app instance");
+            log::info!("Creating Dure app instance");
 
             // Load Material3 theme system
             use egui_material3::theme::{
@@ -364,11 +370,11 @@ fn run_gui_mode() -> Result<()> {
                 .choose(&mut rand::thread_rng())
                 .unwrap_or(&("lightblue", THEME_LIGHTBLUE));
 
-            dure_info!("Randomly selected Material theme: {}", theme_name);
+            log::info!("Randomly selected Material theme: {}", theme_name);
 
             // Load the selected theme from JSON string
             if let Err(e) = load_theme_from_json_str(theme_json) {
-                dure_error!("Failed to load theme '{}': {}", theme_name, e);
+                log::error!("Failed to load theme '{}': {}", theme_name, e);
             }
 
             // Prepare local fonts including Material Symbols (using include_bytes!)

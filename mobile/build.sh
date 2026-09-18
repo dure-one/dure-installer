@@ -168,7 +168,7 @@ echo "sdk.dir=$HOME/.android" > local.properties
 if [[ -x "$HOME/.android/cmdline-tools/latest/bin/sdkmanager" ]]; then
     echo "Installing Android SDK packages..."
     # Install SDK components
-    yes | $HOME/.android/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.android "platform-tools" "platforms;android-35" "build-tools;34.0.0"
+    yes | $HOME/.android/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.android "platform-tools" "platforms;android-36" "build-tools;34.0.0"
     # Accept all licenses
     yes | $HOME/.android/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.android --licenses
     echo "Android SDK setup complete."
@@ -200,7 +200,7 @@ export APPLICATION_VERSION_NAME=$(grep -m1 "^version = " ../Cargo.toml | cut -d'
 
 export RUSTFLAGS="-Zlocation-detail=none -Zfmt-debug=none"
 # Build arm64-v8a first to prioritize 64-bit on compatible devices
-cargo ndk -t arm64-v8a -o app/src/main/jniLibs/ build --release --lib || {
+cargo ndk -t arm64-v8a -o app/src/main/jniLibs/ build --release --lib --features gui,spreadsheet || {
     echo "Error: cargo ndk build failed for arm64-v8a"
     exit 1
 }
@@ -213,15 +213,15 @@ cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarc
 # Run additional targets only in GitHub Actions workflow
 if [[ -n "${GITHUB_ACTIONS}" ]] || [[ -n "${CI}" ]]; then
     echo "Running additional architecture builds for CI..."
-    cargo ndk -t armeabi-v7a -o app/src/main/jniLibs/ build --release --lib || {
+    cargo ndk -t armeabi-v7a -o app/src/main/jniLibs/ build --release --lib --features gui,spreadsheet || {
         echo "Error: cargo ndk build failed for armeabi-v7a"
         exit 1
     }
-    cargo ndk -t x86 -o app/src/main/jniLibs/ build --release --lib || {
+    cargo ndk -t x86 -o app/src/main/jniLibs/ build --release --lib --features gui,spreadsheet || {
         echo "Error: cargo ndk build failed for x86"
         exit 1
     }
-    cargo ndk -t x86_64 -o app/src/main/jniLibs/ build --release --lib || {
+    cargo ndk -t x86_64 -o app/src/main/jniLibs/ build --release --lib --features gui,spreadsheet || {
         echo "Error: cargo ndk build failed for x86_64"
         exit 1
     }
@@ -248,8 +248,8 @@ fi
 # adb commands
 # adb devices
 # adb install app/bulid/outputs/apk/release/app-release.apk
-# adb uninstall pe.nikescar.dure
-# adb shell am start -n pe.nikescar.dure/.MainActivity
+# adb uninstall app.dure.installer
+# adb shell am start -n app.dure.installer/.MainActivity
 
 # logcat commands
 # adb logcat -c

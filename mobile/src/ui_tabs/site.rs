@@ -5,9 +5,9 @@ use eframe::egui;
 use egui_material3::MaterialButton;
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::calc::audit;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::calc::site;
 
 /// Site tab state
@@ -167,7 +167,7 @@ impl SiteTab {
         self.rows.clear();
         self.load_error = None;
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             match site::list_sites() {
                 Ok(sites) => {
@@ -311,7 +311,7 @@ impl SiteTab {
             return;
         }
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             match site::add_site(
                 self.add_domain.trim().to_string(),
@@ -338,7 +338,7 @@ impl SiteTab {
     }
 
     fn execute_delete_site(&mut self, domain: String) {
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             match site::delete_site(&domain) {
                 Ok(_) => {

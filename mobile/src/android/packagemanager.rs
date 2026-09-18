@@ -6,6 +6,8 @@
 // getPackageInfo
 // getApplicationIcon
 
+#![allow(unsafe_code)]
+
 #[cfg(target_os = "android")]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;

@@ -84,12 +84,12 @@ pub fn wasm_start() {
                     if let Err(e) = load_theme_from_json_str(include_str!(
                         "../resources/material-theme-lightblue.json"
                     )) {
-                        dure_warn!("Failed to load lightblue theme: {e}");
+                        log::warn!("Failed to load lightblue theme: {e}");
                     }
 
                     // Initialize i18n with Auto language detection
                     if let Err(e) = crate::i18n::init_i18n("Auto") {
-                        dure_error!("Failed to initialize i18n: {}", e);
+                        log::error!("Failed to initialize i18n: {}", e);
                     }
 
                     let app = crate::dure::DureApp::default();

@@ -2,28 +2,61 @@
 resolver = "2"
 members = [
     "mobile",
-    "crates/ws",
     "crates/windows-installer",
+]
+exclude = [
+    "reference/egui_webview",
 ]
 
 [workspace.package]
-edition = "2024"
+edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/dure-one/dure-installer"
-rust-version = "1.85"
-version = "0.0.1"
-readme = "README.md"
+rust-version = "1.81"
+version = "0.0.21"
+versioncode = "0.0.21"
+
+[workspace.dependencies]
+# Core dependencies
+log = { version = "0.4", default-features = false }
+anyhow = "1.0"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0", features = ["std"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
+
+# UI framework
+egui = { version = "0.33", default-features = false, features = ["default_fonts"] }
+eframe = { version = "0.33", default-features = false, features = [
+    "default_fonts",
+    "glow",
+] }
+egui_extras = { version = "0.33", default-features = false, features = ["image", "all_loaders"] }
+egui-material3 = { git = "https://github.com/nikescar/egui-material3/", default-features = false }
+egui-file-dialog = "0.7"
+
+# System directories
+directories = "5.0"
+
+# Database
+diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = "2.3"
+
+# Async runtime
+smol = "2.0"
+
+# HTTP
+ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
+ehttp = "0.5.0"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# Use deny instead of forbid to allow explicit #![allow(unsafe_code)] in Android FFI
+unsafe_code = "deny"
 
-[profile.dev]
-# Fast incremental builds for development
-opt-level = 0
-debug = 2
-lto = false
-incremental = true
-codegen-units = 256
+[patch.crates-io]
+resvg = { git = "https://github.com/nikescar/resvg" }
+usvg = { git = "https://github.com/nikescar/resvg" }
+android-activity = { git = "https://github.com/nikescar/android-activity.git" }
 
 [profile.release]
 lto = true # "fat"
@@ -33,7 +66,11 @@ debug = 0
 strip = "symbols"
 panic = "abort"
 
+[profile.release-with-symbols]
+inherits = "release"
+strip = false
 # Fast development profile - optimized but without slow LTO
+
 [profile.dev-release]
 inherits = "release"
 lto = false           # Disable LTO for faster builds (saves 50%+ compile time)
@@ -41,4 +78,3 @@ codegen-units = 16    # Parallel code generation
 opt-level = 2         # Good optimization without being too slow
 incremental = true    # Enable incremental compilation
 strip = "symbols"     # Still strip symbols to reduce size
-

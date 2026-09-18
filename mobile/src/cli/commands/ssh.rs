@@ -1,6 +1,6 @@
 //! SSH host management CLI commands
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+// Logging provided by standard log crate
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
@@ -48,9 +48,7 @@ pub enum SshSubcommand {
 
 /// Get config file path
 fn get_config_path() -> Result<PathBuf> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
-        .context("Failed to get project directories")?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+    Ok(crate::get_app_config_dir()?.join("config.yml"))
 }
 
 /// Execute SSH status command
@@ -59,29 +57,29 @@ pub fn execute_ssh_status() -> Result<()> {
     let app_config = AppConfig::load_or_default(&config_path);
 
     if app_config.ssh_hosts.is_empty() {
-        dure_info!("No SSH hosts configured.");
-        dure_info!("");
-        dure_info!("Run 'dure ssh add username@hostname' to add a host");
+        log::info!("No SSH hosts configured.");
+        log::info!("");
+        log::info!("Run 'dure ssh add username@hostname' to add a host");
         return Ok(());
     }
 
-    dure_info!("SSH Hosts:");
-    dure_info!("");
+    log::info!("SSH Hosts:");
+    log::info!("");
 
     for (idx, host) in app_config.ssh_hosts.iter().enumerate() {
-        dure_info!("{}. {}", idx + 1, host.host);
-        dure_info!("   Port: {}", host.port);
+        log::info!("{}. {}", idx + 1, host.host);
+        log::info!("   Port: {}", host.port);
 
         if host.private_key_path.is_some() {
-            dure_info!("   Auth: Private key ({})", host.private_key_path.as_ref().unwrap()
+            log::info!("   Auth: Private key ({})", host.private_key_path.as_ref().unwrap()
             );
         } else if host.password.is_some() {
-            dure_info!("   Auth: Password");
+            log::info!("   Auth: Password");
         } else {
-            dure_info!("   Auth: SSH agent");
+            log::info!("   Auth: SSH agent");
         }
 
-        dure_info!("   Initialized: {}", if host.initialized { "Yes" } else { "No" }
+        log::info!("   Initialized: {}", if host.initialized { "Yes" } else { "No" }
         );
 
         // Test connection (russh uses tokio, wrap with async-compat)
@@ -90,17 +88,17 @@ pub fn execute_ssh_status() -> Result<()> {
         {
             Ok(result) => {
                 if result.success {
-                    dure_info!(" Connected");
+                    log::info!(" Connected");
                 } else {
-                    dure_error!(" {}", result.message);
+                    log::error!(" {}", result.message);
                 }
             }
             Err(e) => {
-                dure_error!(" Connection failed: {}", e);
+                log::error!(" Connection failed: {}", e);
             }
         }
 
-        dure_info!("");
+        log::info!("");
     }
 
     Ok(())
@@ -142,20 +140,20 @@ pub fn execute_ssh_add(
     };
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
-    dure_info!("Testing SSH connection to {}...", host);
+    log::info!("Testing SSH connection to {}...", host);
     match smol::block_on(async { async_compat::Compat::new(ssh::test_connection(&ssh_host)).await })
     {
         Ok(result) => {
             if result.success {
-                dure_info!(" Connection successful");
+                log::info!(" Connection successful");
             } else {
-                dure_warn!(" Warning: {}", result.message);
+                log::warn!(" Warning: {}", result.message);
             }
         }
         Err(e) => {
-            dure_error!(" Connection test failed: {}", e);
-            dure_info!("");
-            dure_info!("Host will be added anyway. You can test it later with 'dure ssh status'");
+            log::error!(" Connection test failed: {}", e);
+            log::info!("");
+            log::info!("Host will be added anyway. You can test it later with 'dure ssh status'");
         }
     }
 
@@ -168,7 +166,7 @@ pub fn execute_ssh_add(
     // Record audit event
     let _ = audit::push_cli("system", "cli", "ssh add", &host);
 
-    dure_info!(" SSH host '{}' added successfully", host);
+    log::info!(" SSH host '{}' added successfully", host);
 
     Ok(())
 }
@@ -192,7 +190,7 @@ pub fn execute_ssh_del(host: String) -> Result<()> {
     // Record audit event
     let _ = audit::push_cli("system", "cli", "ssh del", &host);
 
-    dure_info!(" SSH host '{}' deleted successfully", host);
+    log::info!(" SSH host '{}' deleted successfully", host);
 
     Ok(())
 }
@@ -209,8 +207,8 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
         .find(|h| h.host == host)
         .context(format!("SSH host '{}' not found", host))?;
 
-    dure_info!("Initializing SSH host: {}", host);
-    dure_info!("");
+    log::info!("Initializing SSH host: {}", host);
+    log::info!("");
 
     // Run initialization (russh uses tokio, wrap with async-compat)
     let progress_log = smol::block_on(async {
@@ -219,7 +217,7 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
 
     // Print progress
     for line in &progress_log {
-        dure_info!("{}", line);
+        log::info!("{}", line);
     }
 
     // Mark as initialized
@@ -228,8 +226,8 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
     // Save config
     app_config.save(&config_path)?;
 
-    dure_info!("");
-    dure_info!(" SSH host initialization completed");
+    log::info!("");
+    log::info!(" SSH host initialization completed");
 
     Ok(())
 }

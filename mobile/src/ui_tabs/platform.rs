@@ -9,7 +9,7 @@ use crate::api::gcp::bigquery::BillingRecord;
 use crate::calc::audit;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
 use crate::ui_components::{ActionMenu, SvgEmoji, EmojiProgressBar};
@@ -139,12 +139,12 @@ pub struct PlatformTab {
     init_progress_log: Vec<String>,
 
     // GCP wizard
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "serde", serde(skip))]
     gcp_wizard: Option<GcpWizard>,
 
     // Track if wizard was open in previous frame (to detect closure)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[cfg_attr(feature = "serde", serde(skip))]
     wizard_was_open: bool,
 
@@ -221,6 +221,10 @@ pub struct PlatformTab {
     // Track platforms that have been auto-refreshed (to prevent infinite loop)
     #[cfg_attr(feature = "serde", serde(skip))]
     auto_refreshed_platforms: std::collections::HashSet<String>,
+
+    // Drawer state (for platform details drawer with tabs)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    drawer_state: crate::viewmodel::platform::DrawerState,
 }
 
 impl Default for PlatformTab {
@@ -243,9 +247,9 @@ impl Default for PlatformTab {
             init_in_progress: false,
             init_platform_name: None,
             init_progress_log: Vec::new(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             gcp_wizard: None,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             wizard_was_open: false,
             platform_summaries: std::collections::HashMap::new(),
             show_delete_vm_dialog: false,
@@ -274,6 +278,7 @@ impl Default for PlatformTab {
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
             auto_refreshed_platforms: std::collections::HashSet::new(),
+            drawer_state: crate::viewmodel::platform::DrawerState::new(),
         }
     }
 }
@@ -281,9 +286,7 @@ impl Default for PlatformTab {
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
 fn get_config_path() -> Result<std::path::PathBuf, String> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
-        .ok_or_else(|| "Failed to get project directories".to_string())?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+        Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
 }
 
 /// Load application config with V1 to V2 migration
@@ -570,14 +573,14 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
     // Try to interpret as OpenSSH format first
     if let Ok(key_str) = String::from_utf8(raw_bytes.to_vec()) {
         if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-            dure_debug!("Extracting public key from OpenSSH format");
+            log::debug!("Extracting public key from OpenSSH format");
             return extract_pubkey_from_openssh(&key_str);
         }
     }
 
     // Otherwise, treat as raw 32-byte Ed25519 key
     if raw_bytes.len() != 32 {
-        dure_debug!(
+        log::debug!(
             "Key is neither OpenSSH format nor raw 32 bytes (length: {})",
             raw_bytes.len()
         );
@@ -610,41 +613,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
 
     let domain = match keyring_domain.as_ref() {
         Some(d) => {
-            dure_debug!("Loading SSH key for domain: {}", d);
+            log::debug!("Loading SSH key for domain: {}", d);
             d
         }
         None => {
-            dure_debug!("No keyring domain provided");
+            log::debug!("No keyring domain provided");
             return (None, None);
         }
     };
 
     let kdbx_path = match keyring::get_default_kdbx_path() {
         Ok(p) => {
-            dure_debug!("KeePass DB path: {}", p.display());
+            log::debug!("KeePass DB path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kdbx path: {}", e);
+            log::debug!("Failed to get kdbx path: {}", e);
             return (None, None);
         }
     };
     let kpkey_path = match keyring::get_default_kpkey_path() {
         Ok(p) => {
-            dure_debug!("KPKey path: {}", p.display());
+            log::debug!("KPKey path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kpkey path: {}", e);
+            log::debug!("Failed to get kpkey path: {}", e);
             return (None, None);
         }
     };
 
     let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
         Ok(k) => {
-            dure_debug!("Found {} keys in keyring", k.len());
+            log::debug!("Found {} keys in keyring", k.len());
             for key in &k {
-                dure_debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
+                log::debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
                     key.ssh_key.is_some()
                 );
@@ -652,7 +655,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
             k
         }
         Err(e) => {
-            dure_debug!("Failed to list keys: {}", e);
+            log::debug!("Failed to list keys: {}", e);
             return (None, None);
         }
     };
@@ -660,41 +663,41 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
         Some(e) => {
-            dure_debug!("Found matching key entry");
+            log::debug!("Found matching key entry");
             e
         }
         None => {
-            dure_debug!("No key found for domain: {}", domain);
+            log::debug!("No key found for domain: {}", domain);
             return (None, None);
         }
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        dure_debug!("SSH key bytes length: {}", ssh_key_bytes.len());
+        log::debug!("SSH key bytes length: {}", ssh_key_bytes.len());
 
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
         if let Some(ref pk) = public_key {
-            dure_debug!("Derived public key: {}", pk);
+            log::debug!("Derived public key: {}", pk);
         } else {
-            dure_debug!("Failed to derive public key");
+            log::debug!("Failed to derive public key");
         }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                dure_debug!("Key already in OpenSSH format");
+                log::debug!("Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
 
         // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
-        dure_debug!("Converting raw bytes to OpenSSH format");
+        log::debug!("Converting raw bytes to OpenSSH format");
         let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
         (private_key, public_key)
     } else {
-        dure_debug!("Key entry has no SSH key attachment");
+        log::debug!("Key entry has no SSH key attachment");
         (None, None)
     }
 }
@@ -716,7 +719,7 @@ fn fetch_project_count(access_token: Option<&str>) -> usize {
         match client.list_projects(None) {
             Ok(list) => list.projects.len(),
             Err(e) => {
-                dure_debug!("Failed to fetch project count: {}", e);
+                log::debug!("Failed to fetch project count: {}", e);
                 0
             }
         }
@@ -737,123 +740,32 @@ fn format_project_count_display(count: Option<usize>) -> String {
 
 /// Render drawer content showing platform hierarchy
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
-    ui.add_space(8.0);
+    use crate::ui_tabs::platform_drawer;
+    use crate::viewmodel::platform::{DrawerState, DrawerTab};
 
-    // Connection info
-    if let Some(email) = &row.email {
-        let count_display = format_project_count_display(row.total_project_count);
-        EmojiLabel::new(format!("📧 {} ({})", email, count_display)).show(ui);
-    } else {
-        EmojiLabel::new("📧 Not connected").show(ui);
-    }
+    // Create unique ID for this row's drawer state
+    let drawer_id = egui::Id::new("platform_drawer").with(&row.project_id);
 
-    ui.add_space(4.0);
+    // Load active tab from persistent storage (default to Status)
+    let active_tab: DrawerTab = ui.data_mut(|d| {
+        d.get_persisted(drawer_id)
+            .unwrap_or(DrawerTab::Status)
+    });
 
-    // Project info
+    // Create drawer state with persisted tab
+    let mut drawer_state = DrawerState::new();
+    drawer_state.active_tab = active_tab;
     if let Some(project_id) = &row.selected_project_id {
-        EmojiLabel::new(format!("📁 Project: {}", project_id)).show(ui);
-        ui.add_space(4.0);
-
-        // Refresh staleness
-        if let Some(last_refresh) = row.last_refresh_time {
-            let elapsed = chrono::Utc::now().timestamp() - last_refresh;
-            let time_text = if elapsed < 60 {
-                "🕐 Refreshed: just now".to_string()
-            } else if elapsed < 3600 {
-                format!("🕐 Refreshed: {} min ago", elapsed / 60)
-            } else if elapsed < 86400 {
-                format!("⚠️ Refreshed: {} hours ago", elapsed / 3600)
-            } else {
-                format!("⚠️ Refreshed: {} days ago", elapsed / 86400)
-            };
-
-            let color = if elapsed < 3600 {
-                ui.style().visuals.text_color()
-            } else {
-                egui::Color32::from_rgb(255, 193, 7) // Warning color
-            };
-
-            EmojiLabel::new(egui::RichText::new(time_text).color(color)).show(ui);
-            ui.add_space(4.0);
-        }
-
-        // VM details
-        if let Some(vm_name) = &row.vm_name {
-            EmojiLabel::new(format!("💻 VM: {}", vm_name)).show(ui);
-            ui.add_space(4.0);
-
-            // IP address
-            if let Some(ip) = &row.vm_external_ip {
-                EmojiLabel::new(format!("🌐 IP: {}", ip)).show(ui);
-            } else {
-                EmojiLabel::new(
-                    egui::RichText::new("⚠️ IP: No external IP")
-                        .color(egui::Color32::from_rgb(255, 193, 7))
-                ).show(ui);
-            }
-            ui.add_space(4.0);
-
-            // Firewall status (check operation state)
-            let firewall_text = match &row.operation_state {
-                OperationState::InProgress { operation, .. }
-                    if operation.to_lowercase().contains("firewall") =>
-                {
-                    ("🔄 Updating...".to_string(), egui::Color32::from_rgb(255, 152, 0))
-                }
-                OperationState::Failed { operation, error, .. }
-                    if operation.to_lowercase().contains("firewall") =>
-                {
-                    (format!("🔥 {}", error), egui::Color32::from_rgb(244, 67, 54))
-                }
-                _ => (format!("🔥 {}", row.firewall_status), ui.style().visuals.text_color()),
-            };
-            EmojiLabel::new(egui::RichText::new(firewall_text.0).color(firewall_text.1)).show(ui);
-            ui.add_space(4.0);
-
-            // SSH status
-            EmojiLabel::new(format!("🔑 SSH: {}", row.ssh_status)).show(ui);
-        } else {
-            EmojiLabel::new("💻 VM: — No VM created").show(ui);
-        }
-    } else {
-        EmojiLabel::new("📁 Project: — No project selected").show(ui);
+        drawer_state.set_project(project_id);
     }
 
-    ui.add_space(8.0);
+    let mut tab_switch: Option<DrawerTab> = None;
 
-    // SSH action menu (if available)
-    if let (Some(external_ip), Some(private_key)) =
-        (&row.vm_external_ip, &row.ssh_private_key)
-    {
-        ui.add_space(8.0);
+    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch);
 
-        let ssh_command = format!(
-            "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
-            private_key.trim(),
-            external_ip
-        );
-
-        let mut menu = ActionMenu::new("💻SSH");
-        menu.add_action("Copy SSH Command");
-        menu.add_action("Copy Private Key");
-        menu.add_action("Copy IP Address");
-
-        if let Some(action_idx) = menu.show(ui) {
-            let text_to_copy = match action_idx {
-                0 => &ssh_command,
-                1 => private_key,
-                2 => external_ip,
-                _ => return,
-            };
-
-            ui.ctx().copy_text(text_to_copy.to_string());
-        }
-    } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
-        ui.add_space(8.0);
-        EmojiLabel::new(
-            egui::RichText::new("⚠️ SSH key not found in keyring")
-                .color(egui::Color32::from_rgb(255, 152, 0))
-        ).show(ui);
+    // Persist tab switch
+    if let Some(new_tab) = tab_switch {
+        ui.data_mut(|d| d.insert_persisted(drawer_id, new_tab));
     }
 }
 
@@ -877,7 +789,7 @@ impl PlatformTab {
                         platform_name,
                         whitelisted_ip,
                     }) => {
-                        dure_debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
+                        log::debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
 
                         // Incremental update: Find and update specific row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -988,7 +900,7 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        dure_debug!("✅ Projects listed for {}: {} projects", platform_name,
+                        log::debug!("✅ Projects listed for {}: {} projects", platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -1102,7 +1014,7 @@ impl PlatformTab {
                         operation,
                         error,
                     }) => {
-                        dure_error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
+                        log::error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
 
                         // Update row to show error state
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1179,6 +1091,10 @@ impl PlatformTab {
                         .insert(platform_name.clone(), result.clone());
                 }
             }
+            if !completed.is_empty() {
+                // Reload rows to update SSH status and keys in drawer
+                self.loaded = false;
+            }
             for platform_name in completed {
                 self.ssh_test_promises.remove(&platform_name);
             }
@@ -1196,7 +1112,7 @@ impl PlatformTab {
                             self.loaded = false;
                         }
                         Err(e) => {
-                            dure_debug!("Refresh failed for {}: {}", project_id, e);
+                            log::debug!("Refresh failed for {}: {}", project_id, e);
                         }
                     }
                     completed_refreshes.push(project_id.clone());
@@ -1232,7 +1148,7 @@ impl PlatformTab {
                             // Mark as auto-refreshed to prevent repeat triggers
                             self.auto_refreshed_platforms.insert(row.project_id.clone());
                         } else {
-                            dure_debug!("Auto-refresh failed for {}", row.project_id);
+                            log::debug!("Auto-refresh failed for {}", row.project_id);
                         }
                     }
                 }
@@ -1295,12 +1211,12 @@ impl PlatformTab {
                 table = table.row(move |r| {
                     r.cell(&row_for_cells.project_id)
                         .cell(&row_for_cells.platform_type)
-                        .widget_cell(move |ui| {
+                        .cell_widget(move |ui| {
                             let progress = EmojiProgressBar::from_platform_row(&row_for_cells)
                                 .compact(true);
                             progress.show(ui);
                         })
-                        .widget_cell(move |ui| {
+                        .cell_widget(move |ui| {
                             // Calculate needed height for button wrapping
                             let column_width = 260.0 * width_ratio;
                             let button_width = 90.0; // Approximate width including spacing
@@ -1540,7 +1456,7 @@ impl PlatformTab {
                         {
                             // Check/refresh token (this will log "Access token refreshed" if needed)
                             if let Err(e) = self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
-                                dure_warn!("Failed to refresh access token: {}", e);
+                                log::warn!("Failed to refresh access token: {}", e);
                                 // Continue anyway - the API call might still work or will fail with proper error
                             }
                         }
@@ -1550,7 +1466,7 @@ impl PlatformTab {
                 // Send RefreshPlatform command to ViewModel
                 if let Some(ref vm) = vm {
                     if let Err(e) = vm.refresh_platform(platform_name.clone()) {
-                        dure_error!("Failed to send refresh command: {}", e);
+                        log::error!("Failed to send refresh command: {}", e);
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Failed {
                                 operation: "refresh".to_string(),
@@ -1566,7 +1482,7 @@ impl PlatformTab {
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_refresh")));
             }
 
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(not(target_arch = "wasm32"))]
             {
                 if let Some(platform_name) = ui.data(|d| {
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))
@@ -1723,7 +1639,7 @@ impl PlatformTab {
         }
 
         // Select Project dialog
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         if self.show_select_project_dialog {
             self.render_select_project_dialog(ui.ctx(), vm.as_deref_mut());
         }
@@ -1749,7 +1665,7 @@ impl PlatformTab {
         }
 
         // GCP wizard dialog
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         {
             let wizard_is_open = self.gcp_wizard.is_some();
 
@@ -1793,7 +1709,7 @@ impl PlatformTab {
                                 Ok(token) => Some(token),
                                 Err(e) => {
                                     let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
-                                    dure_debug!("Failed to get valid access token for project '{}': {}", project_id, e
+                                    log::debug!("Failed to get valid access token for project '{}': {}", project_id, e
                                     );
                                     None
                                 }
@@ -2134,7 +2050,7 @@ impl PlatformTab {
                                             .collect();
                                     }
                                     Err(e) => {
-                                        dure_debug!("Failed to fetch projects: {}", e);
+                                        log::debug!("Failed to fetch projects: {}", e);
                                     }
                                 }
                             }
@@ -2360,7 +2276,7 @@ impl PlatformTab {
             });
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn show_gcp_wizard(&mut self, platform_name: String) {
         // Try to load config and find platform with OAuth + project
         let mut wizard = if let Ok((app_config, _)) = load_config() {
@@ -2404,7 +2320,7 @@ impl PlatformTab {
         self.gcp_wizard = Some(wizard);
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn restart_vm(
         &mut self,
         platform_name: String,
@@ -2425,7 +2341,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn regenerate_vm(
         &mut self,
         platform_name: String,
@@ -2467,7 +2383,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn update_firewall(
         &mut self,
         platform_name: String,
@@ -2486,7 +2402,7 @@ impl PlatformTab {
                     ip
                 },
                 Err(e) => {
-                    dure_error!("Failed to get current IP: {}", e);
+                    log::error!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
                     return;
                 }
@@ -2494,7 +2410,7 @@ impl PlatformTab {
 
             // Send command to ViewModel
             if let Err(e) = vm.update_firewall(platform_name.clone(), current_ip.clone()) {
-                dure_error!("Failed to send firewall update command: {}", e);
+                log::error!("Failed to send firewall update command: {}", e);
                 self.load_error = Some(format!("Failed to start firewall update: {}", e));
             } else {
                 dure_info!(" Firewall update command sent successfully");
@@ -2502,7 +2418,7 @@ impl PlatformTab {
             // Note: UI will be updated by event processing when FirewallUpdated event arrives
         } else {
             // Fallback: no ViewModel available
-            dure_error!("ViewModel not available for firewall update");
+            log::error!("ViewModel not available for firewall update");
             self.load_error = Some("ViewModel not available".to_string());
         }
     }
@@ -2527,7 +2443,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn show_select_project_dialog(
         &mut self,
         platform_name: String,
@@ -2742,7 +2658,7 @@ impl PlatformTab {
                                 dure_info!(" Audit record created: ID {}", audit_id);
                             }
                             Err(e) => {
-                                dure_warn!(" Failed to record audit event: {}", e);
+                                log::warn!(" Failed to record audit event: {}", e);
                             }
                         }
                     }
@@ -2788,7 +2704,7 @@ impl PlatformTab {
         }
 
         // Token expired, refresh it
-        dure_debug!("Access token expired, refreshing...");
+        log::debug!("Access token expired, refreshing...");
 
         use crate::api::gcp::oauth::{self, OAuthHandler};
 
@@ -2957,7 +2873,7 @@ impl PlatformTab {
                         }
                     }
                     Err(e) => {
-                        dure_debug!("Failed to fetch VM status: {}", e);
+                        log::debug!("Failed to fetch VM status: {}", e);
                     }
                 }
             }
@@ -2976,12 +2892,12 @@ impl PlatformTab {
                             );
                         }
                         Err(e) => {
-                            dure_debug!("Failed to check firewall: {}", e);
+                            log::debug!("Failed to check firewall: {}", e);
                         }
                     }
                 }
                 Err(e) => {
-                    dure_debug!("Failed to get current IP: {}", e);
+                    log::debug!("Failed to get current IP: {}", e);
                 }
             }
 
@@ -2991,7 +2907,7 @@ impl PlatformTab {
                     platform.cached_total_project_count = Some(list.projects.len());
                 }
                 Err(e) => {
-                    dure_debug!("Failed to fetch project count: {}", e);
+                    log::debug!("Failed to fetch project count: {}", e);
                 }
             }
 
@@ -3114,7 +3030,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn render_select_project_dialog(
         &mut self,
         ctx: &egui::Context,
@@ -3187,7 +3103,7 @@ impl PlatformTab {
         }
     }
 
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn execute_select_project(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {
@@ -3259,7 +3175,7 @@ impl PlatformTab {
                     self.add_platform_connected_email = Some(display);
                 }
                 Err(e) => {
-                    dure_debug!("Failed to fetch user info: {}", e);
+                    log::debug!("Failed to fetch user info: {}", e);
                     self.add_platform_connected_email = Some("Connected Account".to_string());
                 }
             }

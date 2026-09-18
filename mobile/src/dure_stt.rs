@@ -1,4 +1,4 @@
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::install_stt::InstallStatus;
 use crate::{Config, Settings};
 use eframe::egui::{Align2, Pos2, Vec2};
@@ -34,13 +34,13 @@ pub struct DureApp {
     pub dlg_about: crate::ui_dlg::DlgAbout,
 
     // Installation status (desktop only)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_status: InstallStatus,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_dialog_open: bool,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_message: String,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_in_progress: bool,
 
     // Update status
@@ -95,13 +95,13 @@ impl Default for DureApp {
             settings: Settings::default(),
             dlg_settings: crate::ui_dlg::DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: InstallStatus::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_dialog_open: false,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_message: String::new(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_in_progress: false,
             update_status: String::new(),
             update_available: false,

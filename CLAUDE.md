@@ -2,14 +2,30 @@
 
 ## Project Overview
 
-**Dure** is a distributed e-commerce client and hosting solution built with Rust and egui. It enables small shop owners to run e-commerce operations without traditional centralized server infrastructure.
+**Dure Installer** is the infrastructure management and deployment tool for the Dure distributed e-commerce platform. It enables small shop owners to deploy, configure, and manage their own mycart backend instances on cloud infrastructure.
+
+### Project Roles
+
+**This project (dure-installer)** - Infrastructure management tool for shop owners:
+- Full e-commerce backend management
+- Cloud platform management (GCP VMs, billing)
+- DNS/nameserver configuration
+- SSH host management
+- Infrastructure automation
+- Available on: Desktop, Android, WASM
+
+**Separate project (dure-sijang)** - Customer shopping app (out of scope):
+- Product browsing
+- Shopping cart
+- Checkout/payment
+- Order tracking
 
 ### Key Characteristics
 
 - **Language**: Rust (nightly toolchain required)
 - **UI Framework**: egui + eframe (Material3 design)
-- **Architecture**: Multi-platform (Desktop, Mobile, WASM)
-- **Purpose**: Distributed e-commerce for small shop owners
+- **Architecture**: Multi-platform (Desktop, Android, WASM)
+- **Purpose**: Deploy and manage distributed e-commerce infrastructure
 - **License**: Dual MIT/Apache-2.0
 
 ## Project Structure
@@ -46,9 +62,8 @@ Business logic controller layer (API → calc → DB → UI):
 - **`dns.rs`** - DNS record management logic
 - **`gcp.rs`** / **`gcp_rest.rs`** - Google Cloud Platform integrations
 - **`platform.rs`** / **`platform_gcp.rs`** - Cloud platform management
-- **`hosting.rs`** / **`hosting_gcp.rs`** - Web hosting deployment logic
-- **`lego.rs`** - ACME/Let's Encrypt certificate management
-- **`nft.rs`** - nftables firewall rule management
+- **`acme.rs`** - DNS provider utilities (internal only, no CLI exposure)
+- **`hosting_gcp.rs`** - GCP VM regeneration utilities (internal only, no CLI exposure)
 - **`ns.rs`** - Nameserver configuration
 - **`site.rs`** - Static site generation
 - **`keyring.rs`** - Secure key storage
@@ -74,16 +89,6 @@ Business logic controller layer (API → calc → DB → UI):
 - **`ns_cloudflare.rs`** - Cloudflare DNS API
 - **`ns_gcp.rs`** - GCP Cloud DNS API (re-export of `gcp/dns.rs`)
 - Additional DNS providers: DuckDNS (`ns_duckdns.rs`), Porkbun (`ns_porkbun.rs`)
-
-#### Real-Time Communication (`mobile/src/wss/`)
-- **`server/`** - WebSocket Secure server (HTTPS + WSS)
-  - `mod.rs` - Server initialization and connection handling
-  - `tls.rs` - TLS certificate management
-  - `ws.rs` - WebSocket protocol handler
-  - `https.rs` - HTTPS request handler
-  - `http_get.rs` / `http_post.rs` - HTTP endpoint handlers
-  - `webauthn.rs` - WebAuthn authentication
-- **`client.rs`** - WebSocket client for store/guest frontends
 
 #### User Interface (`mobile/src/` - feature-gated with `gui`)
 - **`dure.rs`** - Main eframe application (cross-platform GUI)
@@ -139,110 +144,99 @@ Business logic controller layer (API → calc → DB → UI):
 
 ## Distributed E-Commerce Architecture
 
-Dure implements a **federated e-commerce model** where independent shop servers can partner to share product catalogs while maintaining full control over their own data and operations.
+Dure provides a **directory-based e-commerce model** where shop owners deploy their own mycart instances and register with the dure.one directory service for discoverability.
 
-### Standard Installation
-
-```
-┌─────────────────────────────────┐
-│ GCP Debian VM                   │
-│  ┌───────────────────────────┐  │
-│  │ Dure WSS Service          │  │
-│  │ Ports: 80, 443 (HTTPS/WSS)│  │
-│  │ Backend: SQLite           │  │
-│  └───────────────────────────┘  │
-└─────────────────────────────────┘
-```
-
-**Deployment Characteristics:**
-- **Single-instance** - One VM per shop, SQLite backend
-- **TLS** - Automatic ACME certificates (Let's Encrypt)
-- **Scale** - Optimized for small shops (100s-1000s of products)
-
-### Federation Model
+### Architecture Overview
 
 ```
-                    ┌─────────────────┐
-                    │ Chief Registry  │
-                    │ (Group Manager) │
-                    └────────┬────────┘
+                    ┌──────────────────┐
+                    │  dure.one        │
+                    │  Directory       │
+                    │  Service         │
+                    └────────┬─────────┘
                              │
               ┌──────────────┼──────────────┐
               │              │              │
         ┌─────▼────┐   ┌────▼─────┐  ┌────▼─────┐
-        │ Shop A   │   │ Shop B   │  │ Shop C   │
-        │ (Owner)  │   │ (Partner)│  │ (Partner)│
+        │ mycart A │   │ mycart B │  │ mycart C │
+        │ (Owner)  │   │ (Owner)  │  │ (Owner)  │
         └──────────┘   └──────────┘  └──────────┘
 ```
 
-**Four Roles:**
+**Key Components:**
 
-| Role | Authority | Scope |
-|------|-----------|-------|
-| **Dure Chief** | Group owner | Manages membership, sets policies (return/shipping standards) |
-| **Shop Owner** | Server owner | Full control over own products, orders, guests |
-| **Partner Shop** | Other shop owner | Product metadata visible to partners |
-| **Guest** | Customer | Per-shop authentication, isolated profiles |
+| Component | Purpose | Details |
+|-----------|---------|---------|
+| **dure.one** | Shop directory service | Central registry for shop discovery |
+| **mycart** | Individual shop backend | Owner-controlled e-commerce API |
+| **dure-responder** | Auto-assigned identifier | Unique number for each mycart instance |
+| **dure-sijang** | Shop discovery flow | Browse dure.one → visit mycart website |
 
-### Key Features
+### How It Works
 
-**Product Federation:**
-- Partner shops share product **metadata** (ID, name, options)
-- Full product data stays on origin server
-- Browse partner products locally, checkout redirects to partner
+1. **Shop Registration**: mycart owners register their shop on dure.one directory service
+2. **Discovery**: Guests browse dure.one to find shops
+3. **Shopping**: Each mycart has its own:
+   - **dure-responder (auto) number** - Unique identifier
+   - **mycart API endpoint** - Independent backend service
+   - **Website** - Shop-specific storefront
+4. **Data Ownership**: Each shop maintains complete control over products, orders, and customer data
 
-**Data Ownership:**
-- Orders always created on **partner's server** (no local copy)
-- Guest data **never shared** between shops
-- Each shop owns: products (full), orders (full), guests (full)
-- Partner products cached as **metadata only**
+### mycart Deployment Options
 
-**Authentication:**
-- **Site-to-Site**: DNS TXT records with ed25519 public keys
-- **Site-to-Guest**: OAuth (Kakao/Naver/Google), per-shop sessions
-- **Payment**: Direct webhooks (Portone/KakaoPay) to shop server
+**Current Development Status**: 
+- ✅ **GCP VM** - In development
+- ✅ **Supabase + GCP VM** - In development
+- 🔜 **Supabase + BYOS (cloudflared)** - Planned
+- 🔜 **Firebase + Firestore** - Planned
 
-**Privacy by Design:**
-- No cross-shop guest identity
-- No session federation
-- Orders owned by product's shop only
-- SQLite local-only (no replication)
+#### Deployment Types Feature Matrix
 
-### Example: Cross-Shop Purchase Flow
+| Feature | Firebase + Firestore | Supabase + GCP VM | Supabase + BYOS (cloudflared) | GCP VM | Others |
+|---------|---------------------|-------------------|------------------------------|---------|--------|
+| **Backend (API providers)** | GCP Cloud Functions | mycart backend | mycart backend | mycart backend | swagger.json |
+| **Auth Base** | Firebase Auth | Go Fiber JWT | Go Fiber JWT | Go Fiber JWT | Admin auth only |
+| **Auth Method** | Google login | Email + password | Email + password | Email + password | Admin auth only |
+| **Frontend** | Firebase Hosting | nginx | nginx | nginx | Svelte5 SvelteKit2 |
+| **CDN** | Firebase Hosting | Cloud CDN | Orange Cloud (CDN) | Cloud CDN | - |
+| **Backup/Restore** | Firebase scheduled backup | Supabase backup | Supabase backup | SQLite files | - |
+| **Contents Security** | Firebase security rules | JWT permission | JWT permission | JWT permission | - |
+| **DDoS Mitigation** | Firebase | fail2jail-rs | fail2jail-rs | fail2jail-rs | XMPP integration |
+| **XMPP Service** | - | - | Prosody | Prosody | XMPP integration |
+| **Service Healthcheck Provider** | - | - | - | - | - |
+| **XMPP Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **SMS Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Kakotalk Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Telegram Integration** | GCP Cloud Functions | GCP Cloud Functions | Golang | Golang | - |
+| **Jurisdiction** | Seoul | Seoul + Seoul | Seoul | Seoul | - |
 
-```
-1. Guest browses Shop A → sees Shop A + Shop B products (metadata)
-2. Guest clicks Shop B product → Shop A fetches full details from Shop B
-3. Guest adds to cart, checkout → Shop A redirects to Shop B
-4. Guest places order → Order created on Shop B's server
-5. Payment → Webhook goes directly to Shop B
-6. Shop A never stores the order (only optional tracking reference)
-```
+**BYOS**: Bring Your Own Server (self-hosted behind Cloudflare Tunnel)
+
+### Deployment Characteristics
+
+**Common Features:**
+- **TLS**: Automatic ACME certificates (Let's Encrypt)
+- **Scale**: Optimized for small shops (100s-1000s of products)
+- **Payment**: Portone, KakaoPay integration
+- **Authentication**: OAuth 2.0 (Kakao/Naver/Google) or Email/Password
+
+**GCP VM Deployment:**
+- Single VM instance per shop
+- SQLite or PostgreSQL backend
+- Go Fiber API server
+- nginx frontend
+- fail2jail-rs for DDoS protection
+- Optional Prosody XMPP service
+
+**Supabase + GCP VM:**
+- Supabase for auth and database
+- GCP VM for additional services
+- Automated backup via Supabase
+- JWT-based permission system
 
 ### Claude Usage Habits
 * Use Inline Execution in claude pro plan, Use Subagent Driven Execution in claude max plan
 * Create feature branch only with superpower plans
-
-
-### Security Model
-
-- **Transport**: TLS 1.2+ via ACME, WebSocket Secure (WSS)
-- **Site-to-Site**: DNS TXT public key verification (ed25519 signatures)
-- **Site-to-Guest**: OAuth 2.0, HTTP-only cookies, CSRF protection
-- **Payment**: HMAC webhook verification, timestamp validation, idempotency
-- **Trust**: Chief-mediated group membership, no shared secrets
-
-### Reference Documentation
-
-For complete architectural specification, see:
-**[Distributed Architecture Design Spec](./docs/superpowers/specs/2026-07-04-dure-distributed-architecture-design.md)**
-
-Includes:
-- Detailed layer diagrams (infrastructure, federation, auth, application)
-- Complete database schema (aligned with AsyncAPI messages)
-- End-to-end data flows
-- Security analysis
-- Implementation phases
 
 ## Core Features
 
@@ -263,19 +257,11 @@ All function exists for both EGUI and CLI.
 ### 4. SSH Host Management (ssh)
 - Automatically added host from Platform Management
 - Docker Management (Add/Del docker host from dockerhub)
-- Port Management (Port open/close management with nft)
 - Ansible Management (Add/Del ansible roles from ansiblegalaxy)
 - System Hardener (using Jangbi project)
-- Dure WSS Service Management (Add/Del dure install)
 - Automatic key Management
 
-### 5. Hosting Management (hosting)
-- DNS management (octodns)
-- ACME License Management (lego)
-- Dure Chat Server WSS Server(including webhook for PG) Hosting (dure)
-- Dure Webserver Webhook Service for PG (Portone, KakaoPay)
-
-### 6. Store Management (EGUI/CLI, WSS Client)
+### 5. Store Management (EGUI/CLI)
 - Promotions
 - Products
 - Orders
@@ -283,7 +269,7 @@ All function exists for both EGUI and CLI.
 - Accounts
 - Dure (shared listings/shipments with other stores)
 
-### 7. Guest Front (WASM, WSS Client)
+### 6. Guest Front (WASM)
 - Minimum guest identity for customers
 - Product listings
 - Shopping cart
@@ -534,7 +520,7 @@ sudo snap install dure
 Android builds are automatically published to Google Play Store after successful desktop builds.
 
 ### Package Names
-- **Android**: `pe.nikescar.dure`
+- **Android**: `app.dure.installer`
 - **Snap**: `dure`
 
 ## Configuration

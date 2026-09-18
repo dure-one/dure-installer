@@ -3,78 +3,220 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - v*
     branches:
-      - 'linux'
-      - 'macos'
-      - 'windows'
+      - test
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - linux
+          - windows
+          - macos
+          - android
 
 env:
   RUST_VERSION: nightly
+  BIN_NAME: "dure-desktop"
+  PACKAGE_NAME: "dure"
 
 jobs:
-  build-linux:
+  build:
     name: Build - ${{ matrix.platform.name }}
-    runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/linux' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    # By default, runs on Ubuntu, otherwise, override with the desired os
+    runs-on: ${{ matrix.platform.os || 'ubuntu-22.04' }}
     strategy:
       matrix:
+        # Set platforms you want to build your binaries on
         platform:
+          # Linux
           - name: Linux x86_64 Headless
             target: x86_64-unknown-linux-musl
             build-args: "--release --bin dure-desktop --no-default-features"
             rustflags: "-C link-arg=-lm"
+            platform_type: linux
 
           - name: Linux x86_64 GUI
             target: x86_64-unknown-linux-musl
             build-args: "--release --bin dure-desktop"
             rustflags: "-C target-feature=-crt-static -C link-arg=-lm"
+            platform_type: linux
 
           - name: Linux aarch64 Headless
             target: aarch64-unknown-linux-musl
             build-args: "--release --bin dure-desktop --no-default-features"
-            # Repeat libc/libm/libpthread/libdl at tail to fix link ordering:
-            # Rust places libc.a before C build-script archives (sqlite3mc), so
-            # SQLite's refs to strcat/pthread/log/dlerror go unresolved without these.
             rustflags: "-C link-arg=-lm -C link-arg=-lpthread -C link-arg=-ldl -C link-arg=-lc"
+            platform_type: linux
+
+          # Disabled - reduce build time
+          # - name: Linux x86
+          #   target: i686-unknown-linux-musl
+          #   build-args: "--release --bin dure-desktop"
+          #   platform_type: linux
+
+          # Disabled - reduce build time
+          # - name: Linux armv7hf
+          #   target: armv7-unknown-linux-musleabihf
+          #   build-args: "--release --bin dure-desktop"
+          #   platform_type: linux
+
+          # Disabled - reduce build time
+          # - name: Linux armv6
+          #   target: arm-unknown-linux-musleabihf
+          #   build-args: "--release --bin dure-desktop"
+          #   platform_type: linux
+
+          # FreeBSD (disabled)
+          # - name: FreeBSD x86_64
+          #   target: x86_64-unknown-freebsd
+          #   build-args: "--release --bin dure-desktop"
+          #   freebsd_version: "14.2"
+          #   platform_type: freebsd
+
+          # Android
+          - name: Android APK arm64
+            target: aarch64-linux-android
+            build-args: "--release"
+            platform_type: android
+
+          # Disabled - reduce build time
+          # - name: Android aarch64
+          #   target: aarch64-linux-android
+          #   build-args: "--release --bin dure-desktop"
+          #   platform_type: android
+
+          # Disabled - reduce build time
+          # - name: Android armv7
+          #   target: armv7-linux-androideabi
+          #   build-args: "--release --bin dure-desktop"
+          #   platform_type: android
+
+          # Mac OS
+          - name: MacOS x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            build-args: "--release --bin dure-desktop"
+            platform_type: macos
+
+          - name: MacOS aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            build-args: "--release --bin dure-desktop"
+            platform_type: macos
+
+          # Windows
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            build-args: "--profile release-with-symbols --bin dure-desktop"
+            platform_type: windows
+
+          - name: Windows x86
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            build-args: "--profile release-with-symbols --bin dure-desktop"
+            platform_type: windows
+
+          - name: Windows aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            build-args: "--profile release-with-symbols --bin dure-desktop"
+            platform_type: windows
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: ${{ matrix.platform.target }}
-
-      - name: Install musl tools (x86_64)
-        if: matrix.platform.target == 'x86_64-unknown-linux-musl'
+      - name: Linux - Install Build Dependencies
+        if: contains(matrix.platform.target, 'linux')
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev
+          sudo apt-get install -y musl-tools libgtk-3-dev libxdo-dev libappindicator3-dev libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev libcairo2-dev libpixman-1-dev libpango1.0-dev libxdo-dev librust-glib-sys-dev librust-gio-sys-dev librust-gobject-sys-dev librust-gdk-sys-dev libwebkit2gtk-4.1-dev librust-gdk-pixbuf-sys-dev librust-cairo-sys-rs-dev librust-pango-sys-dev librust-atk-sys-dev libgdk-pixbuf2.0-dev libatk1.0-dev musl-dev
+          export PKG_CONFIG_ALLOW_CROSS=1
+          export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-musl/pkgconfig"
 
-      - name: Download aarch64-linux-musl toolchain
+      - name: Linux aarch64 - Download musl toolchain
         if: matrix.platform.target == 'aarch64-unknown-linux-musl'
         run: |
-          # Mirror: https://github.com/troglobit/misc/releases/download/11-20211120/
-          # Available toolchains (add here when needed):
-          #   aarch64-linux-musl-cross.tgz
-          #   x86_64-linux-musl-cross.tgz
-          #   i686-linux-musl-cross.tgz
-          #   musl-cross.sha512  (checksums)
           wget -q https://github.com/troglobit/misc/releases/download/11-20211120/aarch64-linux-musl-cross.tgz
           tar -xzf aarch64-linux-musl-cross.tgz -C "$HOME"
           echo "$HOME/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=$HOME/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
 
-      - name: Install GUI dependencies
-        if: contains(matrix.platform.name, 'GUI')
+      - name: Android - Install Build Dependencies
+        if: contains(matrix.platform.target, 'android')
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev libcairo2-dev libpango1.0-dev golang-go
+          sudo apt-get install -y android-libunwind android-libunwind-dev libunwind-dev musl-tools llvm-14 clang llvm
 
-      - name: Build binary for ${{ matrix.platform.name }}
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Update Version from Git Tag
+        shell: bash
+        run: |
+          # Extract version from git tag (remove 'v' prefix if present)
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+            echo "Detected version: $VERSION"
+            # Update version in Cargo.toml (compatible with both GNU and BSD sed)
+            sed -i.bak "s/^version = .*/version = \"$VERSION\"/" ./Cargo.toml && rm -f ./Cargo.toml.bak
+            echo "Updated Cargo.toml with version $VERSION"
+            grep "^version = " ./Cargo.toml
+          else
+            echo "Not a tag build, skipping version update"
+            VERSION=$(git describe --tags --always --dirty)
+            echo "Build version: $VERSION"
+          fi
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.platform.target }}
+          components: rustfmt, clippy
+
+      - name: Android - Install Cross-Compilation Tool
+        if: contains(matrix.platform.target, 'android')
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Android - Build Release APK
+        if: |
+          (contains(matrix.platform.name, 'Android APK arm64')) &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'android' || github.event.inputs.platforms == '')
+        run: |
+          echo "storePassword=${{ secrets.STORE_PASSWORD }}" > ./mobile/app/keystore.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> ./mobile/app/keystore.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> ./mobile/app/keystore.properties
+          echo "storeFile=release.keystore" >> ./mobile/app/keystore.properties
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./mobile/app/release.keystore
+          echo "${{ secrets.STORE_PASSWORD }}" | keytool -list -v -keystore $PWD/mobile/app/release.keystore
+
+          pushd mobile
+          bash ./build.gh.sh
+
+          # Verify outputs
+          echo "=== Listing APK outputs ==="
+          ls -alh ./app/build/outputs/apk/release/ || echo "APK directory not found"
+          echo "=== Listing AAB outputs ==="
+          ls -alh ./app/build/outputs/bundle/release/ || echo "AAB directory not found"
+
+          # Copy APK for artifact upload
+          cp ./app/build/outputs/apk/release/app-release.apk ./app/build/outputs/apk/release/dure-installer-all-signed.apk
+          # Copy AAB for artifact upload
+          cp ./app/build/outputs/bundle/release/app-release.aab ./app/build/outputs/apk/release/dure-installer-all.aab
+          popd
+
+      - name: Build Binary for ${{ matrix.platform.name }}
+        if: |
+          (contains(matrix.platform.target, 'x86_64') || contains(matrix.platform.target, 'i686') || contains(matrix.platform.target, 'aarch64') || contains(matrix.platform.target, 'armv7') || contains(matrix.platform.target, 'arm-')) &&
+          !contains(matrix.platform.name, 'Android APK arm64') && !contains(matrix.platform.target, 'freebsd') &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == matrix.platform.platform_type || github.event.inputs.platforms == '')
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
@@ -82,148 +224,426 @@ jobs:
           PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
           RUSTFLAGS: ${{ matrix.platform.rustflags }}
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ env.CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER }}
-        working-directory: mobile
-        run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
-
-      - name: Prepare artifact
-        run: |
-          mkdir -p artifact-staging
-          cp "target/${{ matrix.platform.target }}/release/dure-desktop" "artifact-staging/dure-desktop"
-          cd artifact-staging
-          sha256sum dure-desktop > dure-desktop.sha256
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions-rs/cargo@v1
         with:
-          name: dure-desktop-${{ matrix.platform.target }}${{ contains(matrix.platform.name, 'Headless') && '-headless' || '' }}
-          path: artifact-staging/*
-          retention-days: 1
+          command: build
+          args: ${{ matrix.platform.build-args }} --package ${{ env.PACKAGE_NAME }} --target ${{ matrix.platform.target }}
 
-  build-macos:
-    name: Build - ${{ matrix.platform.name }}
-    runs-on: macos-latest
-    if: github.ref == 'refs/heads/macos' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    strategy:
-      matrix:
-        platform:
-          - name: macOS x86_64
-            target: x86_64-apple-darwin
-            build-args: "--release --bin dure-desktop"
-
-          - name: macOS aarch64
-            target: aarch64-apple-darwin
-            build-args: "--release --bin dure-desktop"
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Build FreeBSD Binary in VM
+        if: |
+          contains(matrix.platform.target, 'freebsd') &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'freebsd' || github.event.inputs.platforms == '')
+        uses: vmactions/freebsd-vm@v1
         with:
-          targets: ${{ matrix.platform.target }}
+          release: ${{ matrix.platform.freebsd_version }}
+          usesh: true
+          prepare: |
+            pkg install -y curl pkgconf gtk3 cairo pango gdk-pixbuf2 at-spi2-core pixman wayland bzip2
+            ln -sf /usr/local/bin/pkgconf /usr/local/bin/pkg-config || true
+            export PKG_CONFIG_PATH=/usr/local/libdata/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig
+            mkdir -p /usr/local/libdata/pkgconfig
+            # FreeBSD base ships bzip2 and zlib without pkgconfig metadata, which
+            # breaks pango/cairo's transitive freetype2 -> bzip2/zlib pkg-config lookup.
+            # Synthesize minimal .pc files pointing at the real headers/libs.
+            for lib in bzip2:bz2:bzlib.h zlib:z:zlib.h; do
+              pcname=${lib%%:*}
+              rest=${lib#*:}
+              libname=${rest%%:*}
+              header=${rest#*:}
+              if pkg-config --exists "$pcname" 2>/dev/null; then
+                continue
+              fi
+              incdir=$(dirname "$(find /usr/include /usr/local/include -name "$header" 2>/dev/null | head -1)")
+              libdir=$(dirname "$(find /usr/lib /usr/local/lib -name "lib${libname}.so*" 2>/dev/null | head -1)")
+              if [ -n "$incdir" ] && [ -n "$libdir" ]; then
+                printf 'Name: %s\nDescription: %s compression library (FreeBSD base, synthesized .pc)\nVersion: 1.0.0\nLibs: -L%s -l%s\nCflags: -I%s\n' \
+                  "$pcname" "$pcname" "$libdir" "$libname" "$incdir" > "/usr/local/libdata/pkgconfig/${pcname}.pc"
+                echo "Synthesized ${pcname}.pc (include=${incdir}, lib=${libdir})"
+              else
+                echo "::warning::Could not locate headers/libs for ${pcname} (header=${header}, lib=lib${libname}.so)"
+              fi
+            done
+            curl https://sh.rustup.rs -sSf | sh -s -- -y --profile=minimal --default-toolchain ${{ env.RUST_VERSION }}
+          run: |
+            . $HOME/.cargo/env
+            export PKG_CONFIG_PATH=/usr/local/libdata/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig
+            export GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+            export GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+            cargo build --release --package ${{ env.PACKAGE_NAME }} --bin ${{ env.BIN_NAME }} --target ${{ matrix.platform.target }}
 
-      - name: Build binary for ${{ matrix.platform.name }}
-        env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-        working-directory: mobile
-        run: cargo build ${{ matrix.platform.build-args }} --target ${{ matrix.platform.target }}
-
-      - name: Prepare artifact
-        run: |
-          mkdir -p artifact-staging
-          cp "target/${{ matrix.platform.target }}/release/dure-desktop" "artifact-staging/dure-desktop"
-          cd artifact-staging
-          shasum -a 256 dure-desktop > dure-desktop.sha256
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dure-desktop-${{ matrix.platform.target }}
-          path: artifact-staging/*
-          retention-days: 1
-
-  build-windows:
-    name: Build - Windows x86_64
-    runs-on: windows-latest
-    if: github.ref == 'refs/heads/windows' || startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Install OpenSSL
+      - name: Windows - Install OpenSSL
+        if: contains(matrix.platform.target, 'windows')
         run: |
           vcpkg install openssl:x64-windows-static-md
           vcpkg integrate install
 
-      - name: Build binary
+      - name: Windows - Code Signing
+        if: |
+          (contains(matrix.platform.target, 'windows') && env.WINDOWS_CERT_P12_BASE64 != '' && env.WINDOWS_CERT_PASSWORD != '') &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'windows' || github.event.inputs.platforms == '')
+        id: sign_exe
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
-          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-          VCPKG_ROOT: C:\vcpkg
-        working-directory: mobile
-        run: cargo build --release --bin dure-desktop --target x86_64-pc-windows-msvc
-
-      - name: Prepare artifact
-        shell: bash
+          WINDOWS_CERT_P12_BASE64: ${{ secrets.WINDOWS_CERT_P12_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
         run: |
-          mkdir -p artifact-staging
-          cp "target/x86_64-pc-windows-msvc/release/dure-desktop.exe" "artifact-staging/dure-desktop.exe"
-          cd artifact-staging
-          sha256sum dure-desktop.exe > dure-desktop.exe.sha256
+          # Decode the certificate
+          $certBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERT_P12_BASE64)
+          [System.IO.File]::WriteAllBytes("windows.pfx", $certBytes)
 
-      - name: Upload artifact
+          # Verify the executable exists
+          echo "Checking for build output..."
+          Get-ChildItem -Path target -Recurse -Filter "*.exe" | Format-Table FullName
+
+          $EXE_PATH = "target/release-with-symbols/${{ env.BIN_NAME }}.exe"
+          if (-Not (Test-Path $EXE_PATH)) {
+            echo "::error:: Executable not found at $EXE_PATH"
+            echo "Listing target directory contents:"
+            Get-ChildItem -Path target -Recurse | Format-Table FullName
+            exit 1
+          }
+          echo "Signing $EXE_PATH..."
+
+          # Validate the certificate before signing so a bad pfx fails with a clear reason
+          # instead of the opaque "No certificates were found that met all the given criteria."
+          try {
+            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+              "windows.pfx", $env:WINDOWS_CERT_PASSWORD,
+              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet)
+          } catch {
+            echo "::error:: Failed to load windows.pfx - likely wrong WINDOWS_CERT_PASSWORD or a corrupted/invalid certificate file: $_"
+            exit 1
+          }
+          echo "Certificate Subject: $($cert.Subject)"
+          echo "Certificate Thumbprint: $($cert.Thumbprint)"
+          echo "Certificate NotAfter: $($cert.NotAfter)"
+          echo "Certificate HasPrivateKey: $($cert.HasPrivateKey)"
+          $eku = $cert.Extensions | Where-Object { $_.Oid.FriendlyName -eq 'Enhanced Key Usage' }
+          if ($eku) {
+            echo "Certificate EKU: $($eku.Format($false))"
+          }
+          if (-Not $cert.HasPrivateKey) {
+            echo "::error:: windows.pfx has no private key - re-export the certificate with 'Include all certificates in the certification path if possible' and the private key included"
+            exit 1
+          }
+          if ($cert.NotAfter -lt (Get-Date)) {
+            echo "::error:: Certificate expired on $($cert.NotAfter)"
+            exit 1
+          }
+
+          # Find signtool.exe (it's part of the Windows SDK)
+          $SIGNTOOL_PATH = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Filter "signtool.exe" -Recurse | Sort-Object VersionInfo -Descending | Select-Object -First 1).FullName
+          if ($null -eq $SIGNTOOL_PATH) {
+            echo "::error:: signtool.exe not found."
+            exit 1
+          }
+          echo "Using signtool at $SIGNTOOL_PATH"
+
+          # Sign the file
+          & $SIGNTOOL_PATH sign /f "windows.pfx" /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 $EXE_PATH
+
+          # Clean up
+          Remove-Item windows.pfx
+
+      - name: Windows - Rename Binary by Architecture
+        if: |
+          contains(matrix.platform.target, 'windows') &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'windows' || github.event.inputs.platforms == '')
+        shell: pwsh
+        run: |
+          $arch = switch -Wildcard ("${{ matrix.platform.target }}") {
+            "x86_64-*"  { "x86_64" }
+            "i686-*"    { "i686" }
+            "aarch64-*" { "aarch64" }
+            default     { "${{ matrix.platform.target }}" }
+          }
+          $src = "target/release-with-symbols/${{ env.BIN_NAME }}.exe"
+          $dst = "target/release-with-symbols/${{ env.BIN_NAME }}-$arch.exe"
+          if (Test-Path $src) {
+            Move-Item -Force $src $dst
+            echo "Renamed $src -> $dst"
+          } elseif (Test-Path $dst) {
+            echo "$dst already exists, skipping rename"
+          } else {
+            echo "::error:: Neither $src nor $dst found"
+            exit 1
+          }
+
+      - name: Upload Binary Artifact
+        if: (!contains(matrix.platform.name, 'Android APK arm64'))
         uses: actions/upload-artifact@v4
         with:
-          name: dure-desktop-x86_64-pc-windows-msvc
-          path: artifact-staging/*
+          # Finally, we store the binary as GitHub artifact for later usage
+          name: ${{ env.BIN_NAME }}-${{ matrix.platform.target }}${{ contains(matrix.platform.name, 'Headless') && '-headless' || '' }}
+          path: ${{ contains(matrix.platform.target, 'freebsd') && format('target/{0}/release/{1}*', matrix.platform.target, env.BIN_NAME) || format('target/release{0}/{1}*', contains(matrix.platform.target, 'windows') && '-with-symbols' || '', env.BIN_NAME) }}
+          retention-days: 1
+
+      - name: Android - Upload APK Artifact
+        if: (contains(matrix.platform.name, 'Android APK arm64'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: dure-installer-all-signed.apk
+          path: ./mobile/app/build/outputs/apk/release/dure-installer-all-signed.apk
+          retention-days: 1
+
+      - name: Android - Upload AAB Artifact
+        if: (contains(matrix.platform.name, 'Android APK arm64'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: dure-installer-all.aab
+          path: ./mobile/app/build/outputs/apk/release/dure-installer-all.aab
           retention-days: 1
 
   release:
     name: Release
-    needs: [build-linux, build-macos, build-windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    # We run the release job only if a tag starts with 'v' letter
+    if: startsWith( github.ref, 'refs/tags/v' )
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      # Download all artifacts
+      - uses: actions/download-artifact@v4.1.7
         with:
           path: artifacts
 
-      - name: Prepare release artifacts
+      - name: Debug - List Downloaded Artifacts
         run: |
-          mkdir -p distbin/
-
-          # Copy all artifacts to distbin
-          for dir in ./artifacts/dure-desktop-*/; do
-            if [ -d "$dir" ]; then
-              cp -v "$dir"/* distbin/ 2>/dev/null || true
+          echo "=== Artifact directory structure ==="
+          find artifacts -type f -ls 2>/dev/null || true
+          echo ""
+          echo "=== Checking files for VirusTotal scan ==="
+          MISSING=0
+          FOUND=0
+          for file in \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
+            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
+            # ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
+            ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe; do
+            if [ -f "$file" ]; then
+              echo "✓ Found: $file ($(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown") bytes)"
+              FOUND=$((FOUND + 1))
+            else
+              echo "✗ Missing: $file"
+              MISSING=$((MISSING + 1))
             fi
           done
+          echo ""
+          echo "Summary: $FOUND found, $MISSING missing"
+          if [ $MISSING -gt 0 ]; then
+            echo "⚠️ Warning: Some build artifacts are missing. Check build job logs."
+          fi
 
-          # List what we have
-          echo "=== Release artifacts ==="
-          ls -lh distbin/
+      - name: Setup Python for VirusTotal Scan
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install requests
+
+      - name: VirusTotal Scan
+        id: vt_scan
+        continue-on-error: true
+        env:
+          VT_REQUEST_RATE: 4
+        run: |
+          python .github/scripts/virustotal_scan.py \
+            "${{ secrets.VT_API_KEY }}" \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
+            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
+            # ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
+            ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe
+
+      - name: Parse Analysis Results
+        id: parse_results
+        run: |
+          # Auto-generate changelog from git commits between tags
+          CHANGELOG_CONTENT=""
+
+          echo "Generating changelog from git history..."
+
+          # Get previous tag (fallback to first commit if no previous tag)
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          CURRENT_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "HEAD")
+
+          echo "Commits between $PREVIOUS_TAG and $CURRENT_TAG:"
+
+          # Get all commits between tags, excluding merges
+          ALL_COMMITS=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s" --no-merges | \
+            sed -E 's/ \(#[0-9]+\)$//g' | \
+            awk '!seen[$0]++')
+
+          if [ -n "$ALL_COMMITS" ]; then
+            # Group commits by type
+            FEATURES=$(echo "$ALL_COMMITS" | grep -E "^- (feat|feature)" || echo "")
+            FIXES=$(echo "$ALL_COMMITS" | grep -E "^- fix" || echo "")
+            CHORES=$(echo "$ALL_COMMITS" | grep -E "^- (chore|ci|docs|refactor|perf|test|style)" || echo "")
+            OTHER=$(echo "$ALL_COMMITS" | grep -vE "^- (feat|feature|fix|chore|ci|docs|refactor|perf|test|style)" || echo "")
+
+            # Build formatted changelog
+            if [ -n "$FEATURES" ]; then
+              CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### ✨ Features\n${FEATURES}\n\n"
+            fi
+
+            if [ -n "$FIXES" ]; then
+              CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### 🐛 Bug Fixes\n${FIXES}\n\n"
+            fi
+
+            if [ -n "$CHORES" ]; then
+              CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### 🔧 Maintenance\n${CHORES}\n\n"
+            fi
+
+            if [ -n "$OTHER" ]; then
+              CHANGELOG_CONTENT="${CHANGELOG_CONTENT}### 📦 Other Changes\n${OTHER}\n\n"
+            fi
+
+            echo "Generated changelog:"
+            echo -e "$CHANGELOG_CONTENT"
+          else
+            echo "No commits found between tags"
+            CHANGELOG_CONTENT="No changes recorded."
+          fi
+
+          # Get the analysis output from previous step
+          ANALYSIS="${{ steps.vt_scan.outputs.analysis }}"
+
+          echo "Raw analysis output:"
+          echo "$ANALYSIS"
+
+          # Parse the analysis output and format for release notes
+          # Format: file1=url1,file2=url2,...
+
+          VT_RESULTS=""
+
+          # Check if we have any results
+          VT_SCAN_COUNT=0
+          if [ -z "$ANALYSIS" ]; then
+            echo "Warning: No analysis output from VirusTotal scan"
+            VT_RESULTS="⚠️ VirusTotal scan encountered errors. Some files may have been scanned previously (409 error)."
+          else
+            # Split by comma and process each entry
+            IFS=',' read -ra ENTRIES <<< "$ANALYSIS"
+            for entry in "${ENTRIES[@]}"; do
+              # Skip empty entries
+              if [ -z "$entry" ]; then
+                continue
+              fi
+
+              # Split by = to get file and URL
+              IFS='=' read -r file url <<< "$entry"
+
+              # Skip if file or url is empty
+              if [ -z "$file" ] || [ -z "$url" ]; then
+                continue
+              fi
+
+              # Extract identifier from path
+              # For .exe and .apk files, use the filename
+              # For other files (binaries), use the parent directory name which contains platform info
+              if [[ "$file" == *.exe ]] || [[ "$file" == *.apk ]]; then
+                identifier=$(basename "$file")
+              else
+                identifier=$(basename "$(dirname "$file")")
+              fi
+
+              # Build markdown link
+              VT_RESULTS="${VT_RESULTS}- **${identifier}**: [View VirusTotal Report](${url})\n"
+              VT_SCAN_COUNT=$((VT_SCAN_COUNT + 1))
+            done
+
+            # Check if we have formatted results
+            if [ -z "$VT_RESULTS" ]; then
+              echo "Warning: No valid results to format"
+              VT_RESULTS="⚠️ No scan results available. Files may have been scanned recently."
+            fi
+          fi
+
+          # Combine changelog and VirusTotal results
+          FORMATTED_RESULTS=""
+
+          if [ -n "$CHANGELOG_CONTENT" ]; then
+            FORMATTED_RESULTS="${FORMATTED_RESULTS}## What's Changed\n${CHANGELOG_CONTENT}\n"
+          fi
+
+          # Add VirusTotal section with scan count
+          if [ $VT_SCAN_COUNT -gt 0 ]; then
+            FORMATTED_RESULTS="${FORMATTED_RESULTS}## VirusTotal Scan Results\n\n"
+            FORMATTED_RESULTS="${FORMATTED_RESULTS}✅ **${VT_SCAN_COUNT} files scanned**\n\n"
+            FORMATTED_RESULTS="${FORMATTED_RESULTS}${VT_RESULTS}"
+          else
+            FORMATTED_RESULTS="${FORMATTED_RESULTS}## VirusTotal Scan Results\n\n${VT_RESULTS}"
+          fi
+
+          # Save to output (escape for GitHub Actions)
+          echo "formatted_results<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FORMATTED_RESULTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "Formatted results:"
+          echo -e "$FORMATTED_RESULTS"
+
+      - name: Prepare Release Artifacts
+        run: |
+          find artifacts/
+          mkdir distbin/
+
+          for i in ./artifacts/*
+          do
+              if [ -d "$i" ]
+              then
+                  # Handle APK separately
+                  [[ "$i" == *"dure-installer-all-signed.apk"* ]] && cp artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk distbin/dure-installer-all-signed.apk && continue
+
+                  # Handle Windows executables - already named by architecture from the build job
+                  if [[ "$i" == *"x86_64-pc-windows-msvc"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }}-x86_64.exe distbin/${{ env.BIN_NAME }}-x86_64.exe 2>/dev/null || true
+                      continue
+                  elif [[ "$i" == *"i686-pc-windows-msvc"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }}-i686.exe distbin/${{ env.BIN_NAME }}-i686.exe 2>/dev/null || true
+                      continue
+                  elif [[ "$i" == *"aarch64-pc-windows-msvc"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }}-aarch64.exe distbin/${{ env.BIN_NAME }}-aarch64.exe 2>/dev/null || true
+                      continue
+                  fi
+
+                  # Handle other platforms - tar compress
+                  cp LICENSE* "$i" 2>/dev/null || true
+                  cp README.md "$i" 2>/dev/null || true
+                  rm "$i/${{ env.BIN_NAME }}.d" 1>/dev/null 2>&1 || true
+                  chmod +x "$i/${{ env.BIN_NAME }}" 1>/dev/null 2>&1 || true
+                  tar -cvpzf "${i}.tar.gz" --directory=${i} .
+              fi
+          done
+          cp artifacts/*.tar.gz distbin/ 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
           tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
+          # draft: true
           make_latest: true
           files: distbin/*
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          body: ${{ steps.parse_results.outputs.formatted_results }}
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -511,7 +511,7 @@ fi
 
 # get logcat per app
 if [[ "$1" == "slog" ]]; then
-  adb logcat --pid=$(adb shell pidof -s pe.nikescar.dure)
+  adb logcat --pid=$(adb shell pidof -s app.dure.installer)
 fi
 
 # get logcat

@@ -1,7 +1,9 @@
 //! SSH actor events
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::calc::ansible::AnsibleRoleMetadata;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
 
 #[derive(Debug, Clone)]
@@ -90,12 +92,14 @@ pub enum SshEvent {
         host_name: String,
         container_name: String,
     },
+    #[cfg(not(target_arch = "wasm32"))]
     DockerContainersListedNew {
         host_name: String,
         containers: Vec<DockerContainerConfig>,
     },
 
     // Ansible Lifecycle Events
+    #[cfg(not(target_arch = "wasm32"))]
     AnsibleRoleValidated {
         role: String,
         metadata: AnsibleRoleMetadata,

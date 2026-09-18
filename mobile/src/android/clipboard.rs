@@ -1,6 +1,8 @@
 // Android ClipboardManager integration for clipboard operations
 // Reference: https://developer.android.com/reference/android/content/ClipboardManager
 
+#![allow(unsafe_code)]
+
 #[cfg(target_os = "android")]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::{JObject, JValue};
@@ -477,7 +479,7 @@ pub fn set_text(text: &str) -> std::io::Result<()> {
         )
     })?;
 
-    dure_debug!("Text copied to clipboard");
+    log::debug!("Text copied to clipboard");
     Ok(())
 }
 

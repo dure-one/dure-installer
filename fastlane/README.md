@@ -66,7 +66,7 @@ The Dure project is compliant with F-Droid inclusion policy:
 - No auto-updates bypassing F-Droid
 - Cryptographic identity management (private/public keys)
 - User controls their own hosting infrastructure
-- Proper application ID: pe.nikescar.dure
+- Proper application ID: app.dure.installer
 
 ### ✅ Source Code
 - Publicly available on GitHub: https://github.com/dure-one/dure-installer

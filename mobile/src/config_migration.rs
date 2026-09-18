@@ -1,6 +1,6 @@
 //! Configuration migration from V1 (with platform.name) to V2 (project_id-based)
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+// Logging provided by standard log crate
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -60,7 +60,7 @@ pub struct AppConfigV1 {
 fn migrate_platform_v1_to_v2(v1: CloudPlatformConfigV1) -> Option<CloudPlatformConfig> {
     // Only migrate platforms with valid gcp_selected_project_id
     if v1.platform_type == "gcp" && v1.gcp_selected_project_id.is_none() {
-        dure_warn!(" Skipping platform '{}': no gcp_selected_project_id", v1.name);
+        log::warn!(" Skipping platform '{}': no gcp_selected_project_id", v1.name);
         return None;
     }
 
@@ -102,7 +102,7 @@ pub fn migrate_config_v1_to_v2(v1: AppConfigV1) -> Result<AppConfig, String> {
     }
 
     if skipped_count > 0 {
-        dure_warn!(" Migration: Skipped {} invalid platform(s)", skipped_count);
+        log::warn!(" Migration: Skipped {} invalid platform(s)", skipped_count);
     }
 
     Ok(AppConfig {
@@ -116,7 +116,7 @@ pub fn backup_config(config_path: &Path) -> Result<(), String> {
     let backup_path = config_path.with_extension("yml.backup");
     std::fs::copy(config_path, &backup_path)
         .map_err(|e| format!("Failed to create backup: {}", e))?;
-    dure_info!(" Created backup: {}", backup_path.display());
+    log::info!(" Created backup: {}", backup_path.display());
     Ok(())
 }
 
@@ -125,7 +125,7 @@ pub fn restore_from_backup(config_path: &Path) -> Result<(), String> {
     let backup_path = config_path.with_extension("yml.backup");
     std::fs::copy(&backup_path, config_path)
         .map_err(|e| format!("Failed to restore backup: {}", e))?;
-    dure_info!(" Restored from backup: {}", backup_path.display());
+    log::info!(" Restored from backup: {}", backup_path.display());
     Ok(())
 }
 

@@ -3,10 +3,10 @@
 //! This module provides the main eframe application UI that works across all platforms.
 //! Platform-specific functionality is injected via traits.
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::api::desktop::check_user_mismatch;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::install;
 use crate::ui_dlg::DlgSettings;
 use crate::{Config, Settings};
@@ -68,13 +68,13 @@ pub struct DureApp {
     pub dlg_about: crate::ui_dlg::DlgAbout,
 
     // Installation status (desktop only)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_status: crate::install_stt::InstallStatus,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_dialog_open: bool,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_message: String,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_in_progress: bool,
 
     // Update status
@@ -112,25 +112,13 @@ pub struct DureApp {
     #[cfg_attr(feature = "serde", serde(skip))]
     pub viewmodel: Option<ViewModel>,
 
-    // Tabs state
+    // Tabs state (infrastructure management only)
     pub active_tab: crate::ui_tabs::Tab,
     pub scrolling_selected: usize,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_platform: crate::ui_tabs::platform::PlatformTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_ns: crate::ui_tabs::ns::NsTab,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
     pub tab_site: crate::ui_tabs::site::SiteTab,
-    pub tab_roles: crate::ui_tabs::roles::RolesTab,
-    pub tab_members: crate::ui_tabs::members::MembersTab,
-    pub tab_channel: crate::ui_tabs::channel::ChannelTab,
-    pub tab_dm: crate::ui_tabs::dm::DMTab,
-    pub tab_products: crate::ui_tabs::products::ProductsTab,
-    pub tab_orders: crate::ui_tabs::orders::OrdersTab,
-    pub tab_email: crate::ui_tabs::email::EmailTab,
-    pub tab_client: crate::ui_tabs::client::ClientTab,
 }
 
 impl Default for DureApp {
@@ -139,7 +127,7 @@ impl Default for DureApp {
         info!("Config creation result: {:?}", config.is_some());
 
         // Check for user mismatch (desktop user vs runtime user) - desktop only
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let user_mismatch_warning = {
             let (current_user, desktop_user, is_different) = check_user_mismatch();
             if is_different {
@@ -213,13 +201,13 @@ impl Default for DureApp {
             dlg_settings: DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
             // Installation status (desktop only)
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: install::check_install(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_dialog_open: false,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_message: String::new(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_in_progress: false,
             // Update status
             update_status: String::new(),
@@ -239,36 +227,24 @@ impl Default for DureApp {
             square_corners,
             ehttp_cache,
             viewmodel: None,
-            // Tabs
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            // Tabs (infrastructure management only)
             active_tab: crate::ui_tabs::Tab::Platform,
-            #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-            active_tab: crate::ui_tabs::Tab::Client,
             scrolling_selected: 0,
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_platform: crate::ui_tabs::platform::PlatformTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_ns: crate::ui_tabs::ns::NsTab::default(),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             tab_site: crate::ui_tabs::site::SiteTab::default(),
-            tab_roles: crate::ui_tabs::roles::RolesTab::default(),
-            tab_members: crate::ui_tabs::members::MembersTab::default(),
-            tab_channel: crate::ui_tabs::channel::ChannelTab::default(),
-            tab_dm: crate::ui_tabs::dm::DMTab::default(),
-            tab_products: crate::ui_tabs::products::ProductsTab::default(),
-            tab_orders: crate::ui_tabs::orders::OrdersTab::default(),
-            tab_email: crate::ui_tabs::email::EmailTab::default(),
-            tab_client: crate::ui_tabs::client::ClientTab::default(),
         }
     }
 }
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        log::debug!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
+            info!("🔥 Initializing ViewModel");
             self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
         }
 
@@ -313,7 +289,7 @@ impl eframe::App for DureApp {
             &self.update_status,
         );
         // Handle check update and perform update from about dialog
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         if self.dlg_about.do_check_update {
             self.check_for_update();
         }
@@ -322,13 +298,15 @@ impl eframe::App for DureApp {
         }
 
         // Show install dialog (desktop only)
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         self.show_install_dialog(ctx);
     }
 }
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
+        log::debug!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
 
@@ -342,7 +320,7 @@ impl DureApp {
         }
 
         // Tabs navigation
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(not(target_arch = "wasm32"))]
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
@@ -363,70 +341,35 @@ impl DureApp {
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                // .tab(tr!("tab-client"))
-                // .tab(tr!("tab-roles"))
-                // .tab(tr!("tab-members"))
-                // .tab(tr!("tab-channel"))
-                // .tab(tr!("tab-dm"))
-                // .tab(tr!("tab-products"))
-                // .tab(tr!("tab-orders"))
-                // .tab(tr!("tab-email")),
+                .tab(tr!("tab-client"))
+                .tab(tr!("tab-roles"))
+                .tab(tr!("tab-members"))
+                .tab(tr!("tab-channel"))
+                .tab(tr!("tab-dm"))
+                .tab(tr!("tab-products"))
+                .tab(tr!("tab-orders"))
+                .tab(tr!("tab-email")),
         );
 
         // Sync scrolling_selected with active_tab enum
         use crate::ui_tabs::Tab;
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-        {
-            self.active_tab = match self.scrolling_selected {
-                // 0 => Tab::Client,
-                0 => Tab::Platform,
-                1 => Tab::Ssh,
-                2 => Tab::Ns,
-                3 => Tab::Site,
-                // 5 => Tab::Members,
-                // 6 => Tab::Channel,
-                // 7 => Tab::DM,
-                // 8 => Tab::Products,
-                // 9 => Tab::Orders,
-                // 10 => Tab::Email,
-                _ => Tab::Platform,
-            };
-        }
-        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-        {
-            self.active_tab = match self.scrolling_selected {
-                // 0 => Tab::Client,
-                // 1 => Tab::Members,
-                // 2 => Tab::Channel,
-                // 3 => Tab::DM,
-                // 4 => Tab::Products,
-                // 5 => Tab::Orders,
-                // 6 => Tab::Email,
-                _ => Tab::Platform,
-            };
-        }
+        self.active_tab = match self.scrolling_selected {
+            0 => Tab::Platform,
+            1 => Tab::Ssh,
+            2 => Tab::Ns,
+            3 => Tab::Site,
+            _ => Tab::Platform,
+        };
 
         ui.add_space(10.0);
 
         // Render active tab content
+        log::debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            // Tab::Client => self.tab_client.ui(ui),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
             Tab::Site => self.tab_site.ui(ui),
-            Tab::Roles => self.tab_roles.ui(ui),
-            // Tab::Members => self.tab_members.ui(ui),
-            // Tab::Channel => self.tab_channel.ui(ui),
-            // Tab::DM => self.tab_dm.ui(ui),
-            // Tab::Products => self.tab_products.ui(ui),
-            // Tab::Orders => self.tab_orders.ui(ui),
-            // Tab::Email => self.tab_email.ui(ui),
-            _ => {},
         }
     }
 
@@ -514,7 +457,7 @@ impl DureApp {
 }
 
 /// Open a directory in the file manager (Desktop only)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 fn open_directory(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
@@ -655,31 +598,39 @@ impl DureApp {
     }
 
     /// Check for updates from GitHub
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     fn check_for_update(&mut self) {
         self.update_checking = true;
         self.update_status.clear();
         self.update_available = false;
 
-        match crate::install::check_update() {
-            Ok(info) => {
-                self.update_checking = false;
-                if info.available {
-                    self.update_available = true;
-                    // Store update info for later use
-                    self.update_download_url = info.download_url.clone();
-                    self.update_current_version = info.current_version.clone();
-                    self.update_latest_version = info.latest_version.clone();
-                    self.update_status =
-                        format!("{} → {}", info.current_version, info.latest_version);
-                } else {
-                    self.update_status = tr!("up-to-date").to_string();
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+        {
+            match crate::install::check_update() {
+                Ok(info) => {
+                    self.update_checking = false;
+                    if info.available {
+                        self.update_available = true;
+                        // Store update info for later use
+                        self.update_download_url = info.download_url.clone();
+                        self.update_current_version = info.current_version.clone();
+                        self.update_latest_version = info.latest_version.clone();
+                        self.update_status =
+                            format!("{} → {}", info.current_version, info.latest_version);
+                    } else {
+                        self.update_status = tr!("up-to-date").to_string();
+                    }
+                }
+                Err(e) => {
+                    self.update_checking = false;
+                    self.update_status = format!("{}: {}", tr!("update-error"), e);
                 }
             }
-            Err(e) => {
-                self.update_checking = false;
-                self.update_status = format!("{}: {}", tr!("update-error"), e);
-            }
+        }
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+        {
+            self.update_checking = false;
+            self.update_status = "Update checking not available on this platform".to_string();
         }
     }
 
@@ -690,7 +641,7 @@ impl DureApp {
 
         // Check if we have update info stored from check_for_update()
         if !self.update_available || self.update_download_url.is_empty() {
-            #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+            #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             {
                 // Only show error dialog if this is a genuine attempt (dialog still open)
                 // Don't warn if state was just cleared from a successful update
@@ -703,7 +654,7 @@ impl DureApp {
                             self.update_status
                         )
                     };
-                    dure_warn!(
+                    log::warn!(
                         "Update aborted: update_available={}, download_url_empty={}",
                         self.update_available,
                         self.update_download_url.is_empty()
@@ -715,7 +666,7 @@ impl DureApp {
             return;
         }
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             use crate::install_stt::InstallResult;
 
@@ -746,14 +697,14 @@ impl DureApp {
                     self.dlg_about.close();
 
                     // Give the filesystem time to sync before checking status
-                    dure_debug!("Waiting for filesystem to sync after update...");
+                    log::debug!("Waiting for filesystem to sync after update...");
                     std::thread::sleep(std::time::Duration::from_millis(200));
 
                     // Refresh install status with retries (same logic as install)
                     let old_status = self.install_status;
                     let mut retries = 3;
                     loop {
-                        dure_debug!(
+                        log::debug!(
                             "Checking install status after update (attempt {}/{})",
                             4 - retries,
                             3
@@ -775,7 +726,7 @@ impl DureApp {
                         }
 
                         // Status not as expected, wait and retry
-                        dure_warn!(
+                        log::warn!(
                             "Install status check unexpected, retrying... ({} retries left)",
                             retries
                         );
@@ -784,7 +735,7 @@ impl DureApp {
                     }
 
                     if retries == 0 {
-                        dure_error!("Install status check failed after all retries!");
+                        log::error!("Install status check failed after all retries!");
                         self.install_message = format!(
                             "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                             self.install_message
@@ -792,7 +743,7 @@ impl DureApp {
                     }
                 }
                 InstallResult::Error(err) => {
-                    dure_error!("Update failed: {}", err);
+                    log::error!("Update failed: {}", err);
                     self.install_message = format!("Error: {}", err);
                 }
             }
@@ -803,7 +754,7 @@ impl DureApp {
         {
             // On Android, open browser to download page using stored URL
             if let Err(e) = webbrowser::open(&self.update_download_url) {
-                dure_error!("Failed to open browser for update download: {}", e);
+                log::error!("Failed to open browser for update download: {}", e);
                 self.update_status = format!("Failed to open browser: {}", e);
             } else {
                 dure_info!("Opened browser for update download");
@@ -813,7 +764,7 @@ impl DureApp {
     }
 
     /// Show install dialog (desktop only)
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn show_install_dialog(&mut self, ctx: &egui::Context) {
         if !self.install_dialog_open {
             return;
@@ -840,13 +791,13 @@ impl DureApp {
     }
 
     /// Perform install or uninstall action based on current status
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn perform_install_action(&mut self) {
         use crate::install_stt::InstallResult;
 
         // Prevent concurrent operations
         if self.install_in_progress {
-            dure_warn!("Install operation already in progress, ignoring duplicate request");
+            log::warn!("Install operation already in progress, ignoring duplicate request");
             return;
         }
 
@@ -871,13 +822,13 @@ impl DureApp {
 
                 // Give the filesystem time to sync before checking status
                 // This is especially important on Windows where file operations may be asynchronous
-                dure_debug!("Waiting for filesystem to sync...");
+                log::debug!("Waiting for filesystem to sync...");
                 std::thread::sleep(std::time::Duration::from_millis(200));
 
                 // Refresh install status with retries
                 let mut retries = 3;
                 loop {
-                    dure_debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
+                    log::debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
                     let new_status = crate::install::check_install();
 
                     // Check if status changed as expected
@@ -907,7 +858,7 @@ impl DureApp {
                     }
 
                     // Status didn't change, wait and retry
-                    dure_warn!(
+                    log::warn!(
                         "Install status didn't change as expected, retrying... ({} retries left)",
                         retries
                     );
@@ -916,7 +867,7 @@ impl DureApp {
                 }
 
                 if retries == 0 {
-                    dure_error!("Install status check failed after all retries!");
+                    log::error!("Install status check failed after all retries!");
                     self.install_message = format!(
                         "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                         self.install_message
@@ -924,7 +875,7 @@ impl DureApp {
                 }
             }
             InstallResult::Error(err) => {
-                dure_error!("Operation failed: {}", err);
+                log::error!("Operation failed: {}", err);
                 self.install_message = format!("Error: {}", err);
             }
         }

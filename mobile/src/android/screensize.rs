@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 #[cfg(target_os = "android")]
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use jni::objects::JValue;
@@ -86,7 +88,7 @@ pub fn get_screen_size() -> std::io::Result<(i32, i32)> {
 /// Get Android screen size for non-Android platforms (returns default values)
 #[cfg(not(target_os = "android"))]
 pub fn get_screen_size() -> std::io::Result<(i32, i32)> {
-    dure_warn!("Android screen size detection not available on this platform, returning default values");
+    log::warn!("Android screen size detection not available on this platform, returning default values");
     // Return common mobile screen resolution as fallback
     Ok((1080, 1920))
 }

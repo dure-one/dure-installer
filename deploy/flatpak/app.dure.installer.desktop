@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dure
+Comment=Distributed E-commerce Platform - Run your online store without centralized servers
+Exec=dure --tray
+Icon=app.dure.installer
+Categories=Office;Network;Finance;
+Keywords=ecommerce;store;shop;distributed;hosting;payment;products;orders;
+StartupNotify=true
+StartupWMClass=dure
+Terminal=false

@@ -28,7 +28,7 @@ impl PlatformActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        dure_error!("PlatformActor command failed: {}", e);
+                        log::error!("PlatformActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -132,12 +132,22 @@ impl PlatformActor {
         Ok(())
     }
 
-    /// Helper to get config file path
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Helper to get config file path (Desktop)
+    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<PathBuf> {
-        let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
-            .ok_or_else(|| anyhow::anyhow!("Failed to get project directories"))?;
-        Ok(proj_dirs.config_dir().join("config.yml"))
+        Ok(crate::get_app_config_dir()?.join("config.yml"))
+    }
+
+    /// Helper to get config file path (Android)
+    #[cfg(target_os = "android")]
+    fn get_config_path() -> anyhow::Result<PathBuf> {
+        Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
+    }
+
+    /// Helper to get config file path (WASM)
+    #[cfg(target_arch = "wasm32")]
+    fn get_config_path() -> anyhow::Result<PathBuf> {
+        Ok(PathBuf::from(".dure/config.yml"))
     }
 
     /// Helper to load platform config by name
@@ -212,7 +222,7 @@ impl PlatformActor {
                 for zone in zones {
                     match client.list_instances(&project_id, &zone) {
                         Ok(list) => all_vms.extend(list.items),
-                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
+                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
                     }
                 }
                 Ok(all_vms)
@@ -1042,7 +1052,7 @@ impl PlatformActor {
                             // Check if the error is due to expired/revoked refresh token
                             let error_msg = e.to_string();
                             if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
-                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
+                                log::error!("Refresh token has expired or been revoked. Clearing tokens...");
 
                                 // Clear the invalid tokens
                                 platform.gcp_oauth_access_token = None;
@@ -1076,15 +1086,11 @@ impl PlatformActor {
     async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
         dure_info!("🔄 Refreshing platform: {}", platform_name);
 
-        // Load platform config
-        #[cfg(not(target_arch = "wasm32"))]
-        let (platform, _) = Self::load_platform_config(&platform_name)?;
-
-        #[cfg(target_arch = "wasm32")]
-        return Err(anyhow::anyhow!("Refresh not supported on WASM"));
-
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
+            // Load platform config
+            let (platform, _) = Self::load_platform_config(&platform_name)?;
+
             // Step 1: Check VM status
             let vm_status = self.check_vm_status(&platform).await;
 
@@ -1108,6 +1114,11 @@ impl PlatformActor {
             .await;
 
             Ok(())
+        }
+
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
+        {
+            Err(anyhow::anyhow!("Refresh not supported on this platform"))
         }
     }
 
@@ -1135,7 +1146,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for VM check");
+                log::warn!("No valid access token for VM check");
                 return VmStatus {
                     exists: false,
                     name: None,
@@ -1182,7 +1193,7 @@ impl PlatformActor {
                 }
             }
             Err(e) => {
-                dure_error!("Failed to list VMs: {}", e);
+                log::error!("Failed to list VMs: {}", e);
                 VmStatus {
                     exists: false,
                     name: None,
@@ -1215,7 +1226,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for firewall check");
+                log::warn!("No valid access token for firewall check");
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1230,7 +1241,7 @@ impl PlatformActor {
                 ip
             },
             Err(e) => {
-                dure_warn!("Failed to get current IP: {}", e);
+                log::warn!("Failed to get current IP: {}", e);
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1254,7 +1265,7 @@ impl PlatformActor {
                 }
             },
             Err(e) => {
-                dure_error!("Failed to check firewall: {}", e);
+                log::error!("Failed to check firewall: {}", e);
                 FirewallStatus {
                     whitelisted: false,
                     current_ip: Some(current_ip),
@@ -1295,7 +1306,7 @@ impl PlatformActor {
         };
 
         // Test SSH connection
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
@@ -1337,11 +1348,11 @@ impl PlatformActor {
             }
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
         {
             SshStatus {
                 connected: false,
-                error: Some("SSH test not supported on WASM".to_string()),
+                error: Some("SSH test not supported on this platform".to_string()),
             }
         }
     }
@@ -1355,7 +1366,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                dure_warn!("No valid access token for project count fetch");
+                log::warn!("No valid access token for project count fetch");
                 return None;
             }
         };
@@ -1373,7 +1384,7 @@ impl PlatformActor {
                 Some(count)
             }
             Err(e) => {
-                dure_warn!("Failed to fetch project count: {}", e);
+                log::warn!("Failed to fetch project count: {}", e);
                 None
             }
         };

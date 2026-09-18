@@ -298,7 +298,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub ssh_hosts: Vec<SshHostConfig>,
     #[serde(default)]
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub ns: crate::calc::ns::NsConfig,
 }
 
@@ -328,6 +328,12 @@ impl AppConfig {
     /// WASM always uses default (no file system access)
     #[cfg(target_arch = "wasm32")]
     pub fn load_or_default(_path: &PathBuf) -> Self {
+        Self::default()
+    }
+
+    /// Android-specific defaults (no filesystem access for config.yml)
+    #[cfg(target_os = "android")]
+    pub fn default_android() -> Self {
         Self::default()
     }
 }

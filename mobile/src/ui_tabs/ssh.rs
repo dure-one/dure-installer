@@ -186,6 +186,7 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_instance_name: String,
     #[cfg_attr(feature = "serde", serde(skip))]
+    #[cfg(not(target_arch = "wasm32"))]
     ansible_metadata: Option<crate::calc::ansible::AnsibleRoleMetadata>,
     #[cfg_attr(feature = "serde", serde(skip))]
     ansible_ports: Vec<String>,
@@ -321,9 +322,7 @@ impl Default for SshTab {
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
 fn get_config_path() -> Result<std::path::PathBuf, String> {
-    let proj_dirs = directories::ProjectDirs::from("pe", "nikescar", "dure")
-        .ok_or_else(|| "Failed to get project directories".to_string())?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+        Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
 }
 
 /// Load application config
@@ -501,8 +500,8 @@ impl SshTab {
                 env_vars,
             }) => {
                 dure_info!(" Docker image inspected: {}:{}", image, tag);
-                dure_debug!("  Ports: {:?}", exposed_ports);
-                dure_debug!("  Env vars: {} variables", env_vars.len());
+                log::debug!("  Ports: {:?}", exposed_ports);
+                log::debug!("  Env vars: {} variables", env_vars.len());
 
                 // Update dialog state
                 self.docker_inspecting = false;
@@ -529,8 +528,8 @@ impl SshTab {
                 failed,
             }) => {
                 dure_info!(" Docker containers removal complete for {}", host_name);
-                dure_debug!("  Removed: {} containers", removed.len());
-                dure_debug!("  Failed: {} containers", failed.len());
+                log::debug!("  Removed: {} containers", removed.len());
+                log::debug!("  Failed: {} containers", failed.len());
 
                 // Update dialog state
                 self.docker_removing = false;
@@ -620,12 +619,12 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::HostHealthChecked { name, is_alive, latency_ms }) => {
-                dure_debug!("Health check result for {}: alive={}, latency={:?}", name, is_alive, latency_ms);
+                log::debug!("Health check result for {}: alive={}, latency={:?}", name, is_alive, latency_ms);
 
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == name) {
                     if is_alive {
                         // Host is reachable - queue for refresh
-                        dure_debug!("Host {} is alive, queueing refresh", name);
+                        log::debug!("Host {} is alive, queueing refresh", name);
                         row.connection_status = ConnectionStatus::Unknown;
                         row.refresh_failed = false;
 
@@ -635,7 +634,7 @@ impl SshTab {
                         }
                     } else {
                         // Host unreachable - mark as failed
-                        dure_debug!("Host {} is unreachable", name);
+                        log::debug!("Host {} is unreachable", name);
                         row.refresh_failed = true;
                         row.connection_status = ConnectionStatus::Offline;
                     }
@@ -646,7 +645,7 @@ impl SshTab {
                     r.connection_status != ConnectionStatus::CheckingHealth
                 );
                 if all_checked && !self.auto_refresh_done {
-                    dure_debug!("All health checks complete, marking auto_refresh_done");
+                    log::debug!("All health checks complete, marking auto_refresh_done");
                     self.auto_refresh_done = true;
                 }
             }
@@ -795,7 +794,7 @@ impl SshTab {
             if let Some(host) = ui.data(|d| d.get_temp::<String>(health_check_id)) {
                 ui.data_mut(|d| d.remove::<String>(health_check_id));
 
-                dure_debug!("Manual health check triggered for {}", host);
+                log::debug!("Manual health check triggered for {}", host);
 
                 if let Some(row) = self.rows.get_mut(idx) {
                     row.connection_status = ConnectionStatus::CheckingHealth;
@@ -831,11 +830,11 @@ impl SshTab {
                 // Clear the temp data immediately to prevent continuous triggering
                 ui.data_mut(|d| d.remove::<String>(docker_install_id));
 
-                dure_debug!(" UI: Install Docker button clicked for host: {}", host);
+                log::debug!(" UI: Install Docker button clicked for host: {}", host);
 
                 // Check if already in progress
                 if self.show_docker_progress && !self.docker_progress_complete {
-                    dure_warn!("️  Docker installation already in progress, ignoring click");
+                    log::warn!("️  Docker installation already in progress, ignoring click");
                 } else {
                     // Show progress dialog immediately
                     self.show_docker_progress = true;
@@ -888,11 +887,11 @@ impl SshTab {
                 // Clear the temp data immediately to prevent continuous triggering
                 ui.data_mut(|d| d.remove::<String>(ansible_install_id));
 
-                dure_debug!(" UI: Install Ansible button clicked for host: {}", host);
+                log::debug!(" UI: Install Ansible button clicked for host: {}", host);
 
                 // Check if already in progress
                 if self.show_ansible_progress && !self.ansible_progress_complete {
-                    dure_warn!("️  Ansible installation already in progress, ignoring click");
+                    log::warn!("️  Ansible installation already in progress, ignoring click");
                 } else {
                     // Show progress dialog immediately
                     self.show_ansible_progress = true;
@@ -992,7 +991,7 @@ impl SshTab {
                 r.cell(&format!("{}:{}", row_for_cells.host, row_for_cells.port))
                     .cell(&format_platform(&row_for_cells))
                     .cell(&format_status(&row_for_cells))
-                    .widget_cell(move |ui| {
+                    .cell_widget(move |ui| {
                         render_operations(ui, &row_for_ops, idx);
                     })
                     .drawer(move |ui| {
@@ -1101,7 +1100,7 @@ impl SshTab {
                     // Generate container name
                     self.docker_container_name = generate_container_name(&image, &row.docker_containers);
 
-                    dure_debug!(" UI: Starting image inspection for {}:{}", image, tag);
+                    log::debug!(" UI: Starting image inspection for {}:{}", image, tag);
                     let _ = vm.inspect_docker_image(row.host.clone(), image, tag);
                 }
             }
@@ -1258,9 +1257,9 @@ impl SshTab {
                     self.docker_installing = true;
                     self.docker_install_error = None;
 
-                    dure_debug!(" UI: Starting container installation");
-                    dure_debug!("  Container: {}", self.docker_container_name);
-                    dure_debug!("  Image: {}:{}", self.docker_parsed_image, self.docker_parsed_tag);
+                    log::debug!(" UI: Starting container installation");
+                    log::debug!("  Container: {}", self.docker_container_name);
+                    log::debug!("  Image: {}:{}", self.docker_parsed_image, self.docker_parsed_tag);
 
                     let _ = vm.install_docker_image(
                         row.host.clone(),
@@ -1493,7 +1492,7 @@ impl SshTab {
                 self.docker_available_containers = row.docker_containers.clone();
                 self.docker_fetching_containers = false;
 
-                dure_debug!(" UI: Loaded {} containers for removal", self.docker_available_containers.len());
+                log::debug!(" UI: Loaded {} containers for removal", self.docker_available_containers.len());
             }
         }
     }
@@ -1508,8 +1507,8 @@ impl SshTab {
                 if let Some(vm) = vm.as_deref_mut() {
                     self.docker_removing = true;
 
-                    dure_debug!(" UI: Starting container removal");
-                    dure_debug!("  Containers: {:?}", self.docker_selected_containers);
+                    log::debug!(" UI: Starting container removal");
+                    log::debug!("  Containers: {:?}", self.docker_selected_containers);
 
                     let _ = vm.remove_docker_containers(
                         row.host.clone(),
@@ -1940,7 +1939,7 @@ impl SshTab {
         // 1b. Process pending refresh queue (after health checks)
         if let Some(ref mut vm) = vm {
             for host in self.pending_refresh_hosts.drain(..) {
-                dure_debug!("Processing pending refresh for {}", host);
+                log::debug!("Processing pending refresh for {}", host);
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.refreshing = true;
                     row.refresh_pending_count = 3;  // 3 operations: Linux, Docker, Ansible
@@ -2011,17 +2010,17 @@ impl SshTab {
 
             // Auto-refresh only once per session
             if !self.auto_refresh_done {
-                dure_debug!("First session load - starting health checks");
+                log::debug!("First session load - starting health checks");
                 if let Some(ref mut vm) = vm {
                     for row in &mut self.rows {
-                        dure_debug!("Starting health check for {}", row.host);
+                        log::debug!("Starting health check for {}", row.host);
                         row.connection_status = ConnectionStatus::CheckingHealth;
                         row.refresh_failed = false;
                         let _ = vm.check_host_health(row.host.clone(), 5);
                     }
                 }
             } else {
-                dure_debug!("Auto-refresh already done this session, skipping");
+                log::debug!("Auto-refresh already done this session, skipping");
             }
         }
 
@@ -2073,13 +2072,13 @@ impl SshTab {
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
             if !events.is_empty() {
-                dure_debug!(" SSH UI: Polling events, found {} events", events.len());
+                log::debug!(" SSH UI: Polling events, found {} events", events.len());
             }
             for event in events {
                 use crate::viewmodel::ViewModelEvent;
                 use crate::viewmodel::ssh::SshEvent;
 
-                dure_debug!(" SSH UI: Processing event: {:?}", event);
+                log::debug!(" SSH UI: Processing event: {:?}", event);
                 match event {
                     ViewModelEvent::Ssh(SshEvent::HostAdded { name }) => {
                         dure_info!(" SSH host {} added successfully", name);
@@ -2107,7 +2106,7 @@ impl SshTab {
                         }
                     }
                     ViewModelEvent::Ssh(SshEvent::ConnectionTested { name, success, latency_ms }) => {
-                        dure_debug!(" SSH UI: Received ConnectionTested event - name: {}, success: {}, latency: {:?}", name, success, latency_ms);
+                        log::debug!(" SSH UI: Received ConnectionTested event - name: {}, success: {}, latency: {:?}", name, success, latency_ms);
                         if success {
                             let latency_str = if let Some(latency) = latency_ms {
                                 format!(" ({}ms)", latency)
@@ -2118,7 +2117,7 @@ impl SshTab {
                             dure_info!(" SSH UI: Set test result to success");
                         } else {
                             self.test_result = Some(Err(format!("✗ Connection failed to {}", name)));
-                            dure_debug!("✗ SSH UI: Set test result to failure");
+                            log::debug!("✗ SSH UI: Set test result to failure");
                         }
                         self.test_in_progress = false;
                     }
@@ -2192,16 +2191,16 @@ impl SshTab {
             };
 
             if ui.add(check_button).clicked() {
-                dure_debug!(" Check Connection button clicked");
+                log::debug!(" Check Connection button clicked");
                 if let Some(idx) = selected_row_idx {
-                    dure_debug!(" Selected row index: {}", idx);
+                    log::debug!(" Selected row index: {}", idx);
                     if idx < self.rows.len() {
                         let host = self.rows[idx][0].clone();
-                        dure_debug!(" Testing connection to host: {}", host);
+                        log::debug!(" Testing connection to host: {}", host);
                         self.execute_test_connection(host, vm.as_deref_mut());
                     }
                 } else {
-                    dure_warn!("️ No row selected");
+                    log::warn!("️ No row selected");
                 }
             }
 

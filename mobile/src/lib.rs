@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 
 // Core modules
@@ -19,17 +19,20 @@ pub mod logging;
 pub mod site;
 pub mod storage;
 
+// Android-specific modules
+#[cfg(target_os = "android")]
+pub mod android;
+
 #[cfg(feature = "gui")]
 pub mod ui_dlg;
 #[cfg(feature = "gui")]
 pub mod ui_components;
 
 // Desktop-only modules (minimal implementations for CLI)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 pub mod config;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod config_migration;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod error;
 
 /// No-op macro replacing egui's demo github file link widget.
@@ -53,40 +56,37 @@ pub mod ui_tabs;
 pub mod viewmodel;
 
 // Desktop-only modules
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod cli;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod install;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod install_stt;
 #[cfg(all(
-    feature = "gui",
+    feature = "tray-icon",
     not(any(target_os = "android", target_arch = "wasm32")),
     not(target_os = "openbsd")
 ))]
 pub mod tray;
-// WSS server/client (HTTPS + WebSocket Secure)
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-pub mod wss;
 // HTTP server for OAuth callbacks (platform-specific: darkhttpd/winhttpd)
 // TODO: Re-enable when HTTP server implementation is available
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod http_server;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod attestation;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod validation;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod sync;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod mcp;
-// #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+// #[cfg(not(target_arch = "wasm32"))]
 // pub mod output;
-#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod log_capture;
 
 // Platform-specific entry points
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "gui"))]
 pub mod main_android;
 #[cfg(target_arch = "wasm32")]
 pub mod main_wasm;
@@ -96,6 +96,42 @@ pub trait ScreenSizeProvider: Send + Sync {
     fn get_screen_size(&self) -> std::io::Result<(i32, i32)>;
 }
 
+/// Get the application config directory (~/.config/dure-installer)
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_app_config_dir() -> Result<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let config_dir = PathBuf::from(home).join(".config").join("dure-installer");
+        Ok(config_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/data/data/app.dure.installer/files"))
+    }
+}
+
+/// Get the application cache directory (~/.cache/dure-installer)
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_app_cache_dir() -> Result<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let cache_dir = PathBuf::from(home).join(".cache").join("dure-installer");
+        Ok(cache_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/data/data/app.dure.installer/cache"))
+    }
+}
+
 /// Application directory paths configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -103,7 +139,7 @@ pub struct Config {
     pub cache_dir: PathBuf,
     pub tmp_dir: PathBuf,
     pub data_dir: PathBuf,
-    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub app_config: config::AppConfig,
 }
 
@@ -112,8 +148,8 @@ impl Config {
         #[cfg(target_os = "android")]
         {
             // Android-specific paths
-            let config_dir = PathBuf::from("/data/data/pe.nikescar.dure/files");
-            let cache_dir = PathBuf::from("/data/data/pe.nikescar.dure/cache");
+            let config_dir = PathBuf::from("/data/data/app.dure.installer/files");
+            let cache_dir = PathBuf::from("/data/data/app.dure.installer/cache");
 
             dure_info!(
                 "Android config paths - config_dir: {:?}, cache_dir: {:?}",
@@ -128,11 +164,13 @@ impl Config {
             for dir in [&config_dir, &cache_dir, &tmp_dir, &data_dir] {
                 match fs::create_dir_all(dir) {
                     Ok(()) => dure_info!("Successfully created directory: {:?}", dir),
-                    Err(e) => dure_error!("Failed to create directory: {:?} - Error: {}", dir, e),
+                    Err(e) => log::error!("Failed to create directory: {:?} - Error: {}", dir, e),
                 }
             }
 
-            let app_config = config::AppConfig::default();
+            // Load configuration
+            let config_file = config_dir.join("config.yml");
+            let app_config = config::AppConfig::load_or_default(&config_file);
 
             Ok(Config {
                 config_dir: config_dir.clone(),
@@ -156,14 +194,11 @@ impl Config {
             })
         }
 
-        #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+        #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Desktop platforms (Linux, Windows, macOS)
-            let proj_dirs = ProjectDirs::from("pe", "nikescar", "dure")
-                .context("Failed to get project directories")?;
-
-            let config_dir = proj_dirs.config_dir().to_path_buf();
-            let cache_dir = proj_dirs.cache_dir().to_path_buf();
+            let config_dir = get_app_config_dir()?;
+            let cache_dir = get_app_cache_dir()?;
 
             let tmp_dir = cache_dir.join("tmp");
             let data_dir = cache_dir.join("data");

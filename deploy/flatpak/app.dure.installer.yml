@@ -1,0 +1,44 @@
+app-id: app.dure.installer
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: dure
+separate-locales: false
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  - --share=network
+  - --filesystem=xdg-config/dure:create
+  - --filesystem=xdg-data/dure:create
+  - --filesystem=xdg-cache/dure:create
+  - --filesystem=home/.dure:create
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+  - --device=dri
+  - --socket=pulseaudio
+  # Network access for WebSocket server, hosting APIs (DNS, Database, etc.)
+  - --allow=bluetooth
+  # Allow tray icon
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
+
+modules:
+  - name: dure
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 dure /app/bin/dure
+      - install -Dm644 app.dure.installer.desktop /app/share/applications/app.dure.installer.desktop
+      - install -Dm644 app.dure.installer.metainfo.xml /app/share/metainfo/app.dure.installer.metainfo.xml
+      - install -Dm644 logo.png /app/share/icons/hicolor/256x256/apps/app.dure.installer.png
+    sources:
+      - type: file
+        path: ../../artifacts/dure
+      - type: file
+        path: app.dure.installer.desktop
+      - type: file
+        path: app.dure.installer.metainfo.xml
+      - type: file
+        path: ../../fastlane/metadata/android/en-US/images/icon.png
