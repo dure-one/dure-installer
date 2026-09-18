@@ -322,9 +322,7 @@ impl Default for SshTab {
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
 fn get_config_path() -> Result<std::path::PathBuf, String> {
-    let proj_dirs = directories::ProjectDirs::from("app", "dure", "installer")
-        .ok_or_else(|| "Failed to get project directories".to_string())?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+        Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
 }
 
 /// Load application config

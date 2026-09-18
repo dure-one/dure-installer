@@ -55,24 +55,16 @@ pub struct KeyEntry {
     pub ssh_key: Option<Vec<u8>>, // Binary SSH private key
 }
 
-/// Get the default config directory for dure (Desktop)
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+/// Get the default config directory for dure
+#[cfg(not(target_arch = "wasm32"))]
 fn get_config_dir() -> Result<PathBuf> {
-    ProjectDirs::from("app", "dure", "installer")
-        .map(|proj_dirs| proj_dirs.config_dir().to_path_buf())
-        .context("Failed to determine config directory")
-}
-
-/// Get the default config directory for dure (Android)
-#[cfg(target_os = "android")]
-fn get_config_dir() -> Result<PathBuf> {
-    Ok(PathBuf::from("/data/data/app.dure.installer/files"))
+    crate::get_app_config_dir()
 }
 
 /// WASM builds do not have native project directories, so keep path generation local.
 #[cfg(target_arch = "wasm32")]
 fn get_config_dir() -> Result<PathBuf> {
-    Ok(PathBuf::from(".dure"))
+    Ok(PathBuf::from(".dure-installer"))
 }
 
 /// Get the default KeePass database path

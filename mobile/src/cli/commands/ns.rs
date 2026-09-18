@@ -14,9 +14,7 @@ use crate::calc::ns::apply_record;
 /// Get the path to config.yml (Desktop)
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 fn get_config_path() -> Result<PathBuf> {
-    let proj_dirs = ProjectDirs::from("app", "dure", "installer")
-        .ok_or_else(|| anyhow::anyhow!("Failed to determine config directory"))?;
-    Ok(proj_dirs.config_dir().join("config.yml"))
+    Ok(crate::get_app_config_dir()?.join("config.yml"))
 }
 
 /// Get the path to config.yml (Android)

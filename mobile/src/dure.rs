@@ -240,7 +240,7 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        info!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+        log::debug!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
 
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
@@ -305,7 +305,7 @@ impl eframe::App for DureApp {
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
-        info!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+        log::debug!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
 
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
@@ -364,7 +364,7 @@ impl DureApp {
         ui.add_space(10.0);
 
         // Render active tab content
-        info!("🔥 RENDERING TAB: {:?}", self.active_tab);
+        log::debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
