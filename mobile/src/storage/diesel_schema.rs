@@ -2,23 +2,48 @@
 
 diesel::table! {
     acme_certificates (domain) {
-        domain -> Text,
+        domain -> Nullable<Text>,
         cert_path -> Text,
         key_path -> Text,
-        ca_path -> Text,
-        fullchain_path -> Text,
-        issued_at -> BigInt,
-        expires_at -> BigInt,
+        issuer_path -> Text,
+        issued_at -> Integer,
+        expires_at -> Integer,
         is_valid -> Integer,
     }
 }
 
 diesel::table! {
-    crypt_keys (device_id) {
+    audit_records (id) {
+        id -> Nullable<Integer>,
+        timestamp -> Integer,
+        category -> Text,
+        actor_id -> Text,
         device_id -> Text,
+        surface -> Text,
+        action -> Text,
+        object -> Text,
+        outcome -> Text,
+        detail -> Text,
+        ip_address -> Text,
+    }
+}
+
+diesel::table! {
+    authenticated_devices (device_id) {
+        device_id -> Text,
+        public_key -> Text,
+        session_id -> Text,
+        authenticated_at -> Integer,
+        last_seen -> Integer,
+    }
+}
+
+diesel::table! {
+    crypt_keys (device_id) {
+        device_id -> Nullable<Text>,
         private_key -> Binary,
         public_key -> Binary,
-        created_at -> BigInt,
+        created_at -> Integer,
     }
 }
 
@@ -27,14 +52,14 @@ diesel::table! {
         domain -> Text,
         record_type -> Text,
         value -> Text,
-        ttl -> BigInt,
-        timestamp -> BigInt,
+        ttl -> Integer,
+        timestamp -> Integer,
     }
 }
 
 diesel::table! {
     hosting (id) {
-        id -> BigInt,
+        id -> Nullable<Integer>,
         domain -> Text,
         status -> Text,
         domain_registrar -> Nullable<Text>,
@@ -53,63 +78,88 @@ diesel::table! {
         vm_created -> Integer,
         service_installed -> Integer,
         service_running -> Integer,
-        created_at -> BigInt,
-        updated_at -> BigInt,
+        created_at -> Integer,
+        updated_at -> Integer,
         error_message -> Nullable<Text>,
     }
 }
 
 diesel::table! {
     nft_whitelist (ip) {
-        ip -> Text,
+        ip -> Nullable<Text>,
         description -> Text,
-        added_at -> BigInt,
+        added_at -> Integer,
+    }
+}
+
+diesel::table! {
+    operation_logs (id) {
+        id -> Nullable<Integer>,
+        project_id -> Text,
+        operation_type -> Text,
+        external_system -> Text,
+        status -> Text,
+        started_at -> Integer,
+        completed_at -> Nullable<Integer>,
+        error_message -> Nullable<Text>,
+        details -> Nullable<Text>,
     }
 }
 
 diesel::table! {
     sessions (session_id) {
-        session_id -> Text,
+        session_id -> Nullable<Text>,
         domain -> Text,
         session_type -> Text,
-        connected_at -> BigInt,
-        last_seen -> BigInt,
-        request_count -> BigInt,
+        connected_at -> Integer,
+        last_seen -> Integer,
+        request_count -> Integer,
         remote_addr -> Text,
     }
 }
 
 diesel::table! {
+    sites (domain) {
+        domain -> Nullable<Text>,
+        public_key -> Text,
+        status -> Text,
+        last_seen -> Nullable<Integer>,
+        created_at -> Integer,
+        updated_at -> Integer,
+    }
+}
+
+diesel::table! {
     webhook_allow_patterns (id) {
-        id -> BigInt,
+        id -> Nullable<Integer>,
         pattern -> Text,
-        created_at -> BigInt,
+        created_at -> Integer,
     }
 }
 
 diesel::table! {
     webhook_config (id) {
-        id -> Integer,
+        id -> Nullable<Integer>,
         logging_enabled -> Integer,
     }
 }
 
 diesel::table! {
     webhook_requests (id) {
-        id -> BigInt,
+        id -> Nullable<Integer>,
         pattern -> Text,
         path -> Text,
         method -> Text,
         headers -> Text,
         body -> Text,
         remote_addr -> Text,
-        received_at -> BigInt,
+        received_at -> Integer,
     }
 }
 
 diesel::table! {
     wss_servers (domain) {
-        domain -> Text,
+        domain -> Nullable<Text>,
         bind_addr -> Text,
         bind_port -> Integer,
         server_id -> Text,
@@ -121,12 +171,12 @@ diesel::table! {
 
 diesel::table! {
     wss_sessions (session_id) {
-        session_id -> Text,
+        session_id -> Nullable<Text>,
         domain -> Text,
-        connected_at -> BigInt,
-        last_seen -> BigInt,
-        message_count -> BigInt,
-        reconnect_count -> BigInt,
+        connected_at -> Integer,
+        last_seen -> Integer,
+        message_count -> Integer,
+        reconnect_count -> Integer,
     }
 }
 
@@ -134,11 +184,15 @@ diesel::joinable!(wss_sessions -> wss_servers (domain));
 
 diesel::allow_tables_to_appear_in_same_query!(
     acme_certificates,
+    audit_records,
+    authenticated_devices,
     crypt_keys,
     dns_cache,
     hosting,
     nft_whitelist,
+    operation_logs,
     sessions,
+    sites,
     webhook_allow_patterns,
     webhook_config,
     webhook_requests,
