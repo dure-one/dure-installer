@@ -741,22 +741,31 @@ fn format_project_count_display(count: Option<usize>) -> String {
 /// Render drawer content showing platform hierarchy
 fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     use crate::ui_tabs::platform_drawer;
-    use crate::viewmodel::platform::DrawerState;
+    use crate::viewmodel::platform::{DrawerState, DrawerTab};
 
-    // Create a temporary drawer state
-    // TODO: This should come from PlatformTab.drawer_state with proper state management
+    // Create unique ID for this row's drawer state
+    let drawer_id = egui::Id::new("platform_drawer").with(&row.project_id);
+
+    // Load active tab from persistent storage (default to Status)
+    let active_tab: DrawerTab = ui.data_mut(|d| {
+        d.get_persisted(drawer_id)
+            .unwrap_or(DrawerTab::Status)
+    });
+
+    // Create drawer state with persisted tab
     let mut drawer_state = DrawerState::new();
+    drawer_state.active_tab = active_tab;
     if let Some(project_id) = &row.selected_project_id {
         drawer_state.set_project(project_id);
     }
 
-    let mut tab_switch: Option<crate::viewmodel::platform::DrawerTab> = None;
+    let mut tab_switch: Option<DrawerTab> = None;
 
-    platform_drawer::render_drawer(ui, &drawer_state, &mut tab_switch);
+    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch);
 
-    // TODO: Handle tab_switch by sending DrawerCommand to ViewModel
-    if let Some(_new_tab) = tab_switch {
-        // Future: vm.send_drawer_command(DrawerCommand::SwitchTab { tab: new_tab })?;
+    // Persist tab switch
+    if let Some(new_tab) = tab_switch {
+        ui.data_mut(|d| d.insert_persisted(drawer_id, new_tab));
     }
 }
 
