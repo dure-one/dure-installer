@@ -86,7 +86,7 @@ pub mod tray;
 pub mod log_capture;
 
 // Platform-specific entry points
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "gui"))]
 pub mod main_android;
 #[cfg(target_arch = "wasm32")]
 pub mod main_wasm;
