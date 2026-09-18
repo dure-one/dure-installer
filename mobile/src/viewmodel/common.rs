@@ -7,6 +7,7 @@ use crate::viewmodel::{ns, platform, ssh, wss};
 #[derive(Clone, Debug)]
 pub enum ViewModelEvent {
     Platform(platform::PlatformEvent),
+    Drawer(platform::DrawerEvent),
     Ssh(ssh::SshEvent),
     Ns(ns::NsEvent),
     Wss(wss::WssEvent),
