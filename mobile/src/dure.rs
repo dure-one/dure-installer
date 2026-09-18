@@ -400,59 +400,11 @@ impl DureApp {
     }
 
     fn apply_theme(&self, ctx: &egui::Context) {
-        let theme = self.get_theme();
-
-        let mut visuals = match theme.theme_mode {
-            ThemeMode::Light => egui::Visuals::light(),
-            ThemeMode::Dark => egui::Visuals::dark(),
-            ThemeMode::Auto => {
-                // Use system preference or default to light
-                if ctx.style().visuals.dark_mode {
-                    egui::Visuals::dark()
-                } else {
-                    egui::Visuals::light()
-                }
-            }
-        };
-
-        // Apply Material Design 3 colors from theme
-        let primary_color = theme.get_primary_color();
-        let on_primary = theme.get_on_primary_color();
-        let surface = theme.get_surface_color(visuals.dark_mode);
-
-        // Apply colors to visuals
-        visuals.selection.bg_fill = primary_color;
-        visuals.selection.stroke.color = primary_color;
-        visuals.hyperlink_color = primary_color;
-
-        // Button and widget colors
-        visuals.widgets.noninteractive.bg_fill = surface;
-
-        visuals.widgets.inactive.bg_fill = Color32::from_rgba_unmultiplied(
-            primary_color.r(),
-            primary_color.g(),
-            primary_color.b(),
-            20,
-        );
-
-        visuals.widgets.hovered.bg_fill = Color32::from_rgba_unmultiplied(
-            primary_color.r(),
-            primary_color.g(),
-            primary_color.b(),
-            40,
-        );
-
-        visuals.widgets.active.bg_fill = primary_color;
-        visuals.widgets.active.fg_stroke.color = on_primary;
-
-        // Window background
-        visuals.window_fill = surface;
-        visuals.panel_fill = theme.get_color_by_name("surfaceContainer");
-
-        // Apply surface colors
-        visuals.extreme_bg_color = theme.get_color_by_name("surfaceContainerLowest");
-
-        ctx.set_visuals(visuals);
+        // Use the comprehensive Material Design 3 theme implementation
+        // from egui_material3::theme which correctly maps all Material 3
+        // color roles to egui visuals, including proper selection colors
+        // (inverse_surface/inverse_primary for contrast with on_surface text)
+        egui_material3::theme::apply_theme(ctx, None::<fn() -> ThemeMode>);
     }
 }
 

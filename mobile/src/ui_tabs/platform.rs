@@ -1200,8 +1200,7 @@ impl PlatformTab {
                 .min_row_height(70.0)       // Maintain MD3 minimum height
                 .column("Project", 150.0 * width_ratio, false)
                 .column("Type", 80.0 * width_ratio, false)
-                .column("Steps", 250.0 * width_ratio, false)
-                .column("Operations", 260.0 * width_ratio, false);
+                .column("Operations", 510.0 * width_ratio, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
@@ -1211,11 +1210,6 @@ impl PlatformTab {
                 table = table.row(move |r| {
                     r.cell(&row_for_cells.project_id)
                         .cell(&row_for_cells.platform_type)
-                        .cell_widget(move |ui| {
-                            let progress = EmojiProgressBar::from_platform_row(&row_for_cells)
-                                .compact(true);
-                            progress.show(ui);
-                        })
                         .cell_widget(move |ui| {
                             // Calculate needed height for button wrapping
                             let column_width = 260.0 * width_ratio;
