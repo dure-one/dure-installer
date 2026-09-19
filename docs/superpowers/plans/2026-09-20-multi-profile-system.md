@@ -61,32 +61,189 @@ For detailed implementation guidance, refer to:
 - Rust coding standards: `~/.claude/rules/ecc/rust/coding-style.md`
 - Testing requirements: `~/.claude/rules/ecc/rust/testing.md`
 
-## Task Summary
+## Detailed Task Implementation
 
-**Task 1**: ProfileManager - Core types (ProfileContext, ProfileError)  
-**Task 2**: ProfileManager - Name validation  
-**Task 3**: ProfileManager - List profiles  
-**Task 4**: ProfileManager - Create profile (keys + kdbx + config)  
-**Task 5**: ProfileManager - Verify password  
-**Task 6**: ProfileManager - Delete profile  
-**Task 7**: UI - ProfileLoginDialog  
-**Task 8**: UI - ProfileCreateDialog  
-**Task 9**: UI - ProfileDeleteDialog  
-**Task 10**: DureApp - Add profile state fields  
-**Task 11**: DureApp - Profile selector ComboBox  
-**Task 12**: DureApp - Dialog coordination logic  
-**Task 13**: Tabs - Add profile state checks (platform, ssh, ns, site)  
-**Task 14**: Database - Connect profile to db path  
-**Task 15**: Integration tests + manual verification  
+### Task 1: ProfileManager Core - Data Structures
 
-## Execution Handoff
+**Files:**
+- Create: `mobile/src/calc/profile.rs`
+- Modify: `mobile/src/calc/mod.rs`, `mobile/src/lib.rs`
 
-Plan complete and saved to `docs/superpowers/plans/2026-09-20-multi-profile-system.md`.
+- [ ] Create `mobile/src/calc/profile.rs` with module doc and imports
+- [ ] Define `ProfileContext` struct with all path fields
+- [ ] Define `ProfileError` enum with thiserror
+- [ ] Add `pub mod profile;` to `mobile/src/calc/mod.rs`
+- [ ] Add `get_profiles_base_dir()` to `mobile/src/lib.rs` with test override support
+- [ ] Run `cargo check --lib` to verify compilation
+- [ ] Commit: "feat(profile): add ProfileContext and ProfileError types"
 
-Two execution options:
+### Task 2: ProfileManager - Name Validation  
 
-**1. Subagent-Driven (recommended)** - Fresh subagent per task, review between tasks, fast iteration
+**Files:**
+- Modify: `mobile/src/calc/profile.rs`
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+- [ ] Write failing test `test_validate_name_valid()` and `test_validate_name_invalid()`
+- [ ] Run test to verify failure
+- [ ] Add `ProfileManager` struct and `validate_name()` method
+- [ ] Run test to verify pass
+- [ ] Commit: "feat(profile): add ProfileManager with name validation"
 
-Which approach?
+### Task 3: ProfileManager - List Profiles
+
+**Files:**
+- Modify: `mobile/src/calc/profile.rs`, `mobile/src/lib.rs`
+
+- [ ] Write failing test `test_list_profiles_empty()`
+- [ ] Run test to verify failure
+- [ ] Implement `ProfileManager::list_profiles()` with directory scanning
+- [ ] Implement `validate_profile_dir()` helper
+- [ ] Run test to verify pass  
+- [ ] Commit: "feat(profile): implement ProfileManager::list_profiles"
+
+### Task 4: ProfileManager - Create Profile
+
+**Files:**
+- Modify: `mobile/src/calc/profile.rs`
+
+- [ ] Write failing tests `test_create_profile_success()` and `test_create_profile_invalid_name()`
+- [ ] Run tests to verify failure
+- [ ] Implement `ProfileManager::create_profile()` main function
+- [ ] Implement `generate_keypair()` helper using ed25519-dalek
+- [ ] Implement `create_kdbx()` helper using keepass crate
+- [ ] Run tests to verify pass
+- [ ] Commit: "feat(profile): implement ProfileManager::create_profile"
+
+### Task 5: ProfileManager - Verify Password
+
+**Files:**
+- Modify: `mobile/src/calc/profile.rs`
+
+- [ ] Write failing tests `test_verify_password_correct()` and `test_verify_password_incorrect()`
+- [ ] Run tests to verify failure
+- [ ] Implement `ProfileManager::verify_password()` using keepass crate
+- [ ] Run tests to verify pass
+- [ ] Commit: "feat(profile): implement ProfileManager::verify_password"
+
+### Task 6: ProfileManager - Delete Profile
+
+**Files:**
+- Modify: `mobile/src/calc/profile.rs`
+
+- [ ] Write failing tests `test_delete_profile()` and `test_delete_profile_not_found()`
+- [ ] Run tests to verify failure
+- [ ] Implement `ProfileManager::delete_profile()`
+- [ ] Run all profile tests to verify pass
+- [ ] Commit: "feat(profile): implement ProfileManager::delete_profile"
+
+### Task 7: UI - ProfileLoginDialog
+
+**Files:**
+- Create: `mobile/src/ui_dlg/profile_login.rs`
+- Modify: `mobile/src/ui_dlg/mod.rs`
+
+- [ ] Create `profile_login.rs` with `ProfileLoginDialog` struct
+- [ ] Implement `show()` method returning `Option<String>`
+- [ ] Implement `set_error()` and `reset()` methods
+- [ ] Export in `ui_dlg/mod.rs`
+- [ ] Run `cargo check --lib` to verify
+- [ ] Commit: "feat(ui): add ProfileLoginDialog widget"
+
+### Task 8: UI - ProfileCreateDialog
+
+**Files:**
+- Create: `mobile/src/ui_dlg/profile_create.rs`
+- Modify: `mobile/src/ui_dlg/mod.rs`
+
+- [ ] Create `profile_create.rs` with `ProfileCreateDialog` struct
+- [ ] Implement `show()` method with inline validation
+- [ ] Implement `reset()` method
+- [ ] Export in `ui_dlg/mod.rs`
+- [ ] Run `cargo check --lib` to verify
+- [ ] Commit: "feat(ui): add ProfileCreateDialog widget"
+
+### Task 9: UI - ProfileDeleteDialog
+
+**Files:**
+- Create: `mobile/src/ui_dlg/profile_delete.rs`  
+- Modify: `mobile/src/ui_dlg/mod.rs`
+
+- [ ] Create `profile_delete.rs` with `ProfileDeleteDialog` struct
+- [ ] Implement `show()` method returning `Option<bool>`
+- [ ] Export in `ui_dlg/mod.rs`
+- [ ] Run `cargo check --lib` to verify
+- [ ] Commit: "feat(ui): add ProfileDeleteDialog widget"
+
+### Task 10: DureApp - Add Profile State
+
+**Files:**
+- Modify: `mobile/src/dure_stt.rs`
+
+- [ ] Add profile dialog state fields to DureApp struct
+- [ ] Add `current_profile: Option<ProfileContext>` field
+- [ ] Add `pending_profile_name: Option<String>` field
+- [ ] Initialize in Default impl
+- [ ] Run `cargo check` to verify
+- [ ] Commit: "feat(profile): add profile state to DureApp"
+
+### Task 11: DureApp - Profile Selector
+
+**Files:**
+- Modify: `mobile/src/dure.rs`
+
+- [ ] Add profile selector ComboBox in top-left of window
+- [ ] Show current profile or "None"
+- [ ] List profiles from `ProfileManager::list_profiles()`
+- [ ] Add "+ Create New Profile" option
+- [ ] Add "Delete Profile" option (when profile selected)
+- [ ] Run `cargo check` to verify
+- [ ] Commit: "feat(ui): add profile selector ComboBox"
+
+### Task 12: DureApp - Dialog Coordination
+
+**Files:**
+- Modify: `mobile/src/dure.rs`
+
+- [ ] Add login dialog logic (show, verify password, handle success/failure)
+- [ ] Add create dialog logic (show, create profile, auto-login)
+- [ ] Add delete dialog logic (show, unload if active, delete)
+- [ ] Connect profile selection to login dialog trigger
+- [ ] Run `cargo check` to verify
+- [ ] Commit: "feat(profile): add dialog coordination logic"
+
+### Task 13: Tabs - Profile State Checks
+
+**Files:**
+- Modify: `mobile/src/ui_tabs/platform.rs`, `ssh.rs`, `ns.rs`, `site.rs`
+
+For each tab:
+- [ ] Add profile check at start of `ui()` method
+- [ ] Show "No profile selected" message when None
+- [ ] Return early if no profile
+- [ ] Run `cargo check` to verify
+- [ ] Commit: "feat(tabs): add profile state checks to all tabs"
+
+### Task 14: Database Integration
+
+**Files:**
+- Modify: `mobile/src/calc/db.rs`
+
+- [ ] Make `set_db_path()` public
+- [ ] Add profile path update in DureApp profile load logic
+- [ ] Test database switching between profiles
+- [ ] Run `cargo check` to verify
+- [ ] Commit: "feat(profile): connect profile to database path"
+
+### Task 15: Integration Testing
+
+**Files:**
+- Create: `tests/profile_integration.rs`
+
+- [ ] Write integration test for full create → login → delete workflow
+- [ ] Write test for multi-profile isolation
+- [ ] Run `cargo test --test profile_integration`
+- [ ] Manual testing: create profiles, switch, delete
+- [ ] Commit: "test(profile): add integration tests"
+
+## Execution Complete
+
+After all tasks are done, use `superpowers:finishing-a-development-branch` to complete the work.
