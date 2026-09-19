@@ -137,3 +137,4 @@ crates/go-webauthn/bin/
 # Core dump files
 *.core
 rust-analyzer.core
+mobile/migrations/.diesel_lock
