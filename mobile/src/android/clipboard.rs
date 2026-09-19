@@ -479,7 +479,7 @@ pub fn set_text(text: &str) -> std::io::Result<()> {
         )
     })?;
 
-    log::debug!("Text copied to clipboard");
+    dure_debug!("Text copied to clipboard");
     Ok(())
 }
 

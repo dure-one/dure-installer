@@ -28,7 +28,7 @@ impl WssActor {
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
-                    log::warn!(
+                    dure_warn!(
                         "WssActor received command but is not implemented: {:?}",
                         cmd
                     );

@@ -1,7 +1,7 @@
 //! Platform actor implementation
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
-use super::{PlatformCommand, PlatformEvent, VmInfo};
+use super::{PlatformCommand, PlatformEvent, VmInfo, DrawerRepository};
 use crate::api::gcp::GcpRestClient;
 use crate::config::AppConfig;
 use crate::viewmodel::{ViewModelEvent, runtime};
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 pub struct PlatformActor {
     command_rx: Receiver<PlatformCommand>,
     event_tx: Sender<ViewModelEvent>,
+    repository: DrawerRepository,
 }
 
 impl PlatformActor {
@@ -18,6 +19,7 @@ impl PlatformActor {
         Self {
             command_rx,
             event_tx,
+            repository: DrawerRepository::new(),
         }
     }
 
@@ -28,7 +30,7 @@ impl PlatformActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("PlatformActor command failed: {}", e);
+                        dure_error!("PlatformActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -222,7 +224,7 @@ impl PlatformActor {
                 for zone in zones {
                     match client.list_instances(&project_id, &zone) {
                         Ok(list) => all_vms.extend(list.items),
-                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
+                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
                     }
                 }
                 Ok(all_vms)
@@ -582,23 +584,47 @@ impl PlatformActor {
             .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
 
-        runtime::unblock({
+        // Log operation start
+        let log_id = self.repository.log_operation(
+            project_id.clone(),
+            "update_firewall",
+            "gcp",
+            Some(format!("Adding IP {} to firewall whitelist", allow_ip)),
+        ).await?;
+
+        dure_info!("🔥 Starting firewall update for project '{}', IP: {}", project_id, allow_ip);
+
+        // Execute firewall update
+        let result = runtime::unblock({
             let allow_ip = allow_ip.clone();
+            let project_id = project_id.clone();
             move || -> anyhow::Result<()> {
                 let client = GcpRestClient::new(access_token);
                 client.add_ip_to_firewall(&project_id, &allow_ip)?;
                 Ok(())
             }
         })
-        .await?;
-
-        self.send_event(PlatformEvent::FirewallUpdated {
-            platform_name,
-            whitelisted_ip: allow_ip,
-        })
         .await;
 
-        Ok(())
+        // Log operation result
+        match &result {
+            Ok(_) => {
+                self.repository.mark_success(log_id).await?;
+                dure_info!("✅ Firewall updated successfully for project '{}'", project_id);
+                self.send_event(PlatformEvent::FirewallUpdated {
+                    platform_name,
+                    whitelisted_ip: allow_ip,
+                })
+                .await;
+            }
+            Err(e) => {
+                let error_msg = format!("{:#}", e);
+                self.repository.mark_failed(log_id, &error_msg).await?;
+                dure_error!("❌ Firewall update failed for project '{}': {}", project_id, error_msg);
+            }
+        }
+
+        result
     }
 
     async fn fetch_billing(
@@ -1052,7 +1078,7 @@ impl PlatformActor {
                             // Check if the error is due to expired/revoked refresh token
                             let error_msg = e.to_string();
                             if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
-                                log::error!("Refresh token has expired or been revoked. Clearing tokens...");
+                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
 
                                 // Clear the invalid tokens
                                 platform.gcp_oauth_access_token = None;
@@ -1084,7 +1110,7 @@ impl PlatformActor {
     }
 
     async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
-        dure_info!("🔄 Refreshing platform: {}", platform_name);
+        dure_info!(project_id = &platform_name, "🔄 Refreshing platform: {}", platform_name);
 
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
@@ -1146,7 +1172,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for VM check");
+                dure_warn!("No valid access token for VM check");
                 return VmStatus {
                     exists: false,
                     name: None,
@@ -1193,7 +1219,7 @@ impl PlatformActor {
                 }
             }
             Err(e) => {
-                log::error!("Failed to list VMs: {}", e);
+                dure_error!("Failed to list VMs: {}", e);
                 VmStatus {
                     exists: false,
                     name: None,
@@ -1226,7 +1252,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for firewall check");
+                dure_warn!("No valid access token for firewall check");
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1237,11 +1263,11 @@ impl PlatformActor {
         // Get current external IP
         let current_ip = match crate::api::gcp::get_current_ip() {
             Ok(ip) => {
-                dure_info!("🔍 Firewall check: Client's current IP = {}", ip);
+                dure_info!(project_id = project_id, "🔍 Firewall check: Client's current IP = {}", ip);
                 ip
             },
             Err(e) => {
-                log::warn!("Failed to get current IP: {}", e);
+                dure_warn!("Failed to get current IP: {}", e);
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1253,19 +1279,19 @@ impl PlatformActor {
         let client = crate::api::gcp::GcpRestClient::new(access_token);
 
         // Check ONLY direct IP access (ignore IAP - this app uses direct SSH)
-        dure_info!("🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
+        dure_info!(project_id = project_id, "🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
 
         // Check if current IP is whitelisted (direct access)
         match client.check_ip_whitelisted(project_id, &current_ip) {
             Ok(whitelisted) => {
-                dure_info!("🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
+                dure_info!(project_id = project_id, "🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
                 FirewallStatus {
                     whitelisted,
                     current_ip: Some(current_ip),
                 }
             },
             Err(e) => {
-                log::error!("Failed to check firewall: {}", e);
+                dure_error!("Failed to check firewall: {}", e);
                 FirewallStatus {
                     whitelisted: false,
                     current_ip: Some(current_ip),
@@ -1280,12 +1306,15 @@ impl PlatformActor {
     ) -> super::SshStatus {
         use super::SshStatus;
 
+        // Get project ID for logging
+        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
+
         // Get VM info
         let (external_ip, keyring_domain) = match platform.vms.first() {
             Some(vm) => {
                 let ip = match &vm.external_ip {
                     Some(ip) => {
-                        dure_info!("🔍 SSH test: VM's external IP = {}", ip);
+                        dure_info!(project_id = project_id, "🔍 SSH test: VM's external IP = {}", ip);
                         ip.clone()
                     },
                     None => {
@@ -1324,6 +1353,8 @@ impl PlatformActor {
             };
 
             // Run test connection
+            let project_id_clone = project_id.to_string();
+            let project_id_clone2 = project_id.to_string();
             match runtime::unblock(move || {
                 smol::block_on(async {
                     async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await
@@ -1332,14 +1363,14 @@ impl PlatformActor {
             .await
             {
                 Ok(_) => {
-                    dure_info!("🔍 SSH test result: connected = true");
+                    dure_info!(project_id = &project_id_clone, "🔍 SSH test result: connected = true");
                     SshStatus {
                         connected: true,
                         error: None,
                     }
                 },
                 Err(e) => {
-                    dure_info!("🔍 SSH test result: connected = false, error = {}", e);
+                    dure_info!(project_id = &project_id_clone2, "🔍 SSH test result: connected = false, error = {}", e);
                     SshStatus {
                         connected: false,
                         error: Some(format!("Connection failed: {}", e)),
@@ -1366,12 +1397,13 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for project count fetch");
+                dure_warn!("No valid access token for project count fetch");
                 return None;
             }
         };
 
         // Fetch project list from GCP
+        let platform_name_clone = platform_name.to_string();
         let project_count = match runtime::unblock(move || {
             let client = crate::api::gcp::GcpRestClient::new(access_token);
             client.list_projects(None)
@@ -1380,11 +1412,11 @@ impl PlatformActor {
         {
             Ok(project_list) => {
                 let count = project_list.projects.len();
-                dure_info!("🔍 Fetched project count: {}", count);
+                dure_info!(project_id = &platform_name_clone, "🔍 Fetched project count: {}", count);
                 Some(count)
             }
             Err(e) => {
-                log::warn!("Failed to fetch project count: {}", e);
+                dure_warn!("Failed to fetch project count: {}", e);
                 None
             }
         };

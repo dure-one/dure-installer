@@ -264,7 +264,7 @@ mod list_tests {
         };
 
         let result = format_platform_list(&config);
-        assert!(result.contains("test-gcp"));
+        assert!(result.contains("test-project-123"));
         assert!(result.contains("GCP"));
         assert!(result.contains("✓"));
         assert!(result.contains("→"));
@@ -289,10 +289,10 @@ mod list_tests {
             ..Default::default()
         };
 
-        let result = format_platform_show(&config, "test-gcp");
+        let result = format_platform_show(&config, "test-project-123");
         assert!(result.is_ok());
         let output = result.unwrap();
-        assert!(output.contains("test-gcp"));
+        assert!(output.contains("test-project-123"));
         assert!(output.contains("test@example.com"));
         assert!(output.contains("Available Actions"));
     }

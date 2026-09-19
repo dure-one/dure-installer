@@ -29,7 +29,7 @@ pub fn android_main(app: AndroidApp) {
 
     // Initialize application configuration and database
     let config = crate::Config::new().unwrap_or_else(|e| {
-        log::error!("Failed to initialize application config: {}", e);
+        dure_error!("Failed to initialize application config: {}", e);
         std::panic::panic_any("Failed to initialize config");
     });
     let db_path = config.data_dir.join("dure.db");
@@ -51,7 +51,7 @@ pub fn android_main(app: AndroidApp) {
         };
 
         if is_expected_window_panic {
-            log::warn!(
+            dure_warn!(
                 "Expected window destruction during activity lifecycle change: {}",
                 panic_info
             );
@@ -60,9 +60,9 @@ pub fn android_main(app: AndroidApp) {
         }
 
         // For other panics, log as errors
-        log::error!("PANIC: {}", panic_info);
+        dure_error!("PANIC: {}", panic_info);
         if let Some(location) = panic_info.location() {
-            log::error!("Location: {}:{}", location.file(), location.line());
+            dure_error!("Location: {}:{}", location.file(), location.line());
         }
     }));
 
@@ -72,7 +72,7 @@ pub fn android_main(app: AndroidApp) {
         ..Default::default()
     };
 
-    log::info!("🔥 CALLING eframe::run_native");
+    dure_info!("🔥 CALLING eframe::run_native");
     match eframe::run_native(
         "Dure",
         options,
@@ -128,23 +128,23 @@ pub fn android_main(app: AndroidApp) {
 
             // Initialize i18n with Auto language detection
             if let Err(e) = crate::i18n::init_i18n("Auto") {
-                log::error!("Failed to initialize i18n: {}", e);
+                dure_error!("Failed to initialize i18n: {}", e);
             }
 
             let app = DureApp::default();
 
-            log::info!("🔥 DureApp initialized with Android services");
-            log::info!("🔥 About to return app to eframe");
+            dure_info!("🔥 DureApp initialized with Android services");
+            dure_info!("🔥 About to return app to eframe");
 
             Ok(Box::new(app))
         }),
     ) {
         Ok(_) => {
-            log::info!("🔥 eframe::run_native RETURNED OK");
+            dure_info!("🔥 eframe::run_native RETURNED OK");
         }
         Err(e) => {
-            log::error!("🔥 eframe::run_native RETURNED ERROR: {}", e);
+            dure_error!("🔥 eframe::run_native RETURNED ERROR: {}", e);
         }
     }
-    log::info!("🔥 android_main EXITING");
+    dure_info!("🔥 android_main EXITING");
 }

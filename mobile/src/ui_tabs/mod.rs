@@ -3,6 +3,7 @@
 // Infrastructure management tabs (active on all platforms)
 pub mod ns;
 pub mod platform;
+pub mod platform_drawer;
 pub mod site;
 pub mod ssh;
 
