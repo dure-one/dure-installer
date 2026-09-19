@@ -81,6 +81,8 @@ impl GcpRestClient {
     ///
     /// API: GET /v1/projects/{projectId}/billingInfo
     pub fn get_project_billing_info(&self, project_id: &str) -> Result<ProjectBillingInfo> {
+        dure_debug!(project_id = project_id, "Fetching billing info for project");
+
         let url = format!(
             "{}/projects/{}/billingInfo",
             GCP_BILLING_API_BASE, project_id

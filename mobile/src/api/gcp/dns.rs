@@ -145,6 +145,8 @@ impl GcpDnsClient {
 
     /// Create a new managed zone with DNSSEC enabled
     pub fn create_managed_zone(&self, project_id: &str, domain: &str) -> Result<ManagedZone> {
+        dure_info!(project_id = project_id, "Creating DNS managed zone for domain '{}'", domain);
+
         let url = format!("{}/projects/{}/managedZones", API_BASE, project_id);
 
         // Convert domain to zone name format (replace dots with hyphens)

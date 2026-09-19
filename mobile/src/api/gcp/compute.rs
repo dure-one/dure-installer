@@ -425,6 +425,8 @@ impl GcpRestClient {
         zone: &str,
         instance: &InstanceRequest,
     ) -> Result<Operation> {
+        dure_info!(project_id = project_id, "Creating VM instance '{}' in zone {}", instance.name, zone);
+
         let url = format!(
             "{}/projects/{}/zones/{}/instances",
             GCP_COMPUTE_API_BASE, project_id, zone
@@ -530,6 +532,8 @@ impl GcpRestClient {
         zone: &str,
         instance_name: &str,
     ) -> Result<Operation> {
+        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {}", instance_name, zone);
+
         let url = format!(
             "{}/projects/{}/zones/{}/instances/{}",
             GCP_COMPUTE_API_BASE, project_id, zone, instance_name
