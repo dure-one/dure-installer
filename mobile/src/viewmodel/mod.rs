@@ -2,6 +2,7 @@
 
 pub mod common;
 pub mod io;
+pub mod logs;
 pub mod ns;
 pub mod platform;
 pub mod runtime;
