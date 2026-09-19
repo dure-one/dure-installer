@@ -117,6 +117,27 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Delete a profile
+    ///
+    /// Removes the profile directory and all its contents.
+    /// Returns NotFound error if profile doesn't exist.
+    pub fn delete_profile(name: &str) -> Result<()> {
+        // Get profile context
+        let ctx = ProfileContext::new(name)?;
+
+        // Check if profile exists
+        if !ctx.config_dir.exists() {
+            return Err(ProfileError::NotFound(name.to_string()).into());
+        }
+
+        // Remove profile directory and all contents
+        fs::remove_dir_all(&ctx.config_dir)
+            .with_context(|| format!("failed to delete profile directory: {}", name))?;
+
+        dure_info!("Deleted profile: {}", name);
+        Ok(())
+    }
+
     /// Verify profile password
     ///
     /// Attempts to open the KeePass database with the given password.
@@ -338,13 +359,15 @@ mod tests {
     #[test]
     fn test_list_profiles_empty() {
         use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Use temporary directory for test
-        let test_dir = std::env::temp_dir().join("dure_test_list_empty");
+        // Use unique temporary directory for test
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_list_empty_{}", timestamp));
         std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
-
-        // Clean up any existing test directory
-        let _ = fs::remove_dir_all(&test_dir);
 
         // Create empty profiles directory
         fs::create_dir_all(&test_dir).unwrap();
@@ -480,6 +503,74 @@ mod tests {
         match result.unwrap_err().downcast_ref::<ProfileError>() {
             Some(ProfileError::IncorrectPassword) => {}
             _ => panic!("Expected IncorrectPassword error"),
+        }
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_delete_profile() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Use unique temporary directory for test
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_delete_{}", timestamp));
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Create base directory and profile
+        fs::create_dir_all(&test_dir).unwrap();
+        let profile_name = "test-profile";
+        let password = "test-password-123";
+        ProfileManager::create_profile(profile_name, password).unwrap();
+
+        // Verify profile exists
+        let profiles = ProfileManager::list_profiles().unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0], profile_name);
+
+        // Delete profile
+        let result = ProfileManager::delete_profile(profile_name);
+        assert!(result.is_ok());
+
+        // Verify profile no longer exists
+        let profiles = ProfileManager::list_profiles().unwrap();
+        assert_eq!(profiles.len(), 0);
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_delete_profile_not_found() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Use unique temporary directory for test
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_delete_not_found_{}", timestamp));
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Create base directory
+        fs::create_dir_all(&test_dir).unwrap();
+
+        // Try to delete non-existent profile
+        let result = ProfileManager::delete_profile("nonexistent");
+        assert!(result.is_err());
+
+        // Verify error is NotFound
+        match result.unwrap_err().downcast_ref::<ProfileError>() {
+            Some(ProfileError::NotFound(_)) => {}
+            _ => panic!("Expected NotFound error"),
         }
 
         // Cleanup
