@@ -762,6 +762,13 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
         if let Some(logs) = ui.ctx().data(|d| d.get_temp::<Vec<String>>(drawer_id.with("logs"))) {
             drawer_state.set_logs(logs);
         }
+
+        // Load operations from temp storage if available
+        if let Some(operations) = ui.ctx().data(|d| {
+            d.get_temp::<Vec<crate::storage::models::opslog::OperationLog>>(drawer_id.with("operations"))
+        }) {
+            drawer_state.set_operations(operations);
+        }
     }
 
     let mut tab_switch: Option<DrawerTab> = None;
@@ -778,6 +785,18 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
                 ui.data_mut(|d| {
                     d.insert_temp(
                         egui::Id::new("drawer_action_load_logs_on_switch"),
+                        project_id.clone(),
+                    );
+                });
+            }
+        }
+
+        // Auto-load operations when switching to Operations tab
+        if new_tab == DrawerTab::Operations {
+            if let Some(ref project_id) = row.selected_project_id {
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new("drawer_action_load_operations_on_switch"),
                         project_id.clone(),
                     );
                 });
@@ -1050,6 +1069,13 @@ impl PlatformTab {
                                 let drawer_id = egui::Id::new("platform_drawer").with(&project_id);
                                 ui.ctx().data_mut(|d| {
                                     d.insert_temp(drawer_id.with("logs"), lines.clone());
+                                });
+                            }
+                            DrawerEvent::OperationsLoaded { project_id, logs } => {
+                                // Store operations in egui temp storage using drawer_id
+                                let drawer_id = egui::Id::new("platform_drawer").with(&project_id);
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(drawer_id.with("operations"), logs.clone());
                                 });
                             }
                             _ => {}
@@ -1576,6 +1602,24 @@ impl PlatformTab {
                 }
                 ui.data_mut(|d| {
                     d.remove::<String>(egui::Id::new("drawer_action_load_logs_on_switch"))
+                });
+            }
+
+            // Drawer action: Auto-load operations on tab switch
+            if let Some(project_id) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new("drawer_action_load_operations_on_switch"))
+            }) {
+                if let Some(ref vm) = vm {
+                    use crate::viewmodel::platform::DrawerCommand;
+                    if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadOperations {
+                        project_id: project_id.clone(),
+                        limit: 100,
+                    }) {
+                        dure_error!("Failed to auto-load operations on tab switch: {}", e);
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_load_operations_on_switch"))
                 });
             }
 
