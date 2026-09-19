@@ -1,6 +1,8 @@
 pub mod about;
 pub mod about_stt;
 pub mod clipboard_popup;
+pub mod profile_login;
+pub mod profile_login_stt;
 pub mod settings;
 pub mod settings_stt;
 pub mod uninstall_confirm;
@@ -13,6 +15,7 @@ pub mod update_stt;
 pub mod platform_gcp;
 
 pub use about_stt::*;
+pub use profile_login_stt::*;
 pub use settings_stt::*;
 pub use uninstall_confirm_stt::*;
 pub use update_stt::*;
