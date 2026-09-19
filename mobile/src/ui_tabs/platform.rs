@@ -744,7 +744,10 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     use crate::viewmodel::platform::{DrawerState, DrawerTab};
 
     // Create unique ID for this row's drawer state
-    let drawer_id = egui::Id::new("platform_drawer").with(&row.project_id);
+    // Include last_refresh_time to invalidate cache when platform refreshes
+    let drawer_id = egui::Id::new("platform_drawer")
+        .with(&row.project_id)
+        .with(row.last_refresh_time.unwrap_or(0));
 
     // Load active tab from persistent storage (default to Status)
     let active_tab: DrawerTab = ui.data_mut(|d| {
@@ -1066,17 +1069,27 @@ impl PlatformTab {
                         match drawer_event {
                             DrawerEvent::LogsLoaded { project_id, lines } => {
                                 // Store logs in egui temp storage using drawer_id
-                                let drawer_id = egui::Id::new("platform_drawer").with(&project_id);
-                                ui.ctx().data_mut(|d| {
-                                    d.insert_temp(drawer_id.with("logs"), lines.clone());
-                                });
+                                // Find row to get last_refresh_time for cache invalidation
+                                if let Some(row) = self.rows.iter().find(|r| r.project_id == project_id) {
+                                    let drawer_id = egui::Id::new("platform_drawer")
+                                        .with(&project_id)
+                                        .with(row.last_refresh_time.unwrap_or(0));
+                                    ui.ctx().data_mut(|d| {
+                                        d.insert_temp(drawer_id.with("logs"), lines.clone());
+                                    });
+                                }
                             }
                             DrawerEvent::OperationsLoaded { project_id, logs } => {
                                 // Store operations in egui temp storage using drawer_id
-                                let drawer_id = egui::Id::new("platform_drawer").with(&project_id);
-                                ui.ctx().data_mut(|d| {
-                                    d.insert_temp(drawer_id.with("operations"), logs.clone());
-                                });
+                                // Find row to get last_refresh_time for cache invalidation
+                                if let Some(row) = self.rows.iter().find(|r| r.project_id == project_id) {
+                                    let drawer_id = egui::Id::new("platform_drawer")
+                                        .with(&project_id)
+                                        .with(row.last_refresh_time.unwrap_or(0));
+                                    ui.ctx().data_mut(|d| {
+                                        d.insert_temp(drawer_id.with("operations"), logs.clone());
+                                    });
+                                }
                             }
                             _ => {}
                         }
