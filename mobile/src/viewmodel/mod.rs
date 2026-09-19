@@ -99,6 +99,9 @@ impl ViewModel {
         // Initialize global log sender
         logs::init_log_sender(logs_tx.clone());
 
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
+
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
@@ -106,7 +109,7 @@ impl ViewModel {
 
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
@@ -152,12 +155,15 @@ impl ViewModel {
         // Initialize global log sender
         logs::init_log_sender(logs_tx.clone());
 
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
+
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
                 dure_info!("ViewModel runtime started (headless)");
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
@@ -203,12 +209,15 @@ impl ViewModel {
         // Initialize global log sender
         logs::init_log_sender(logs_tx.clone());
 
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
+
         // Spawn actors in Web Worker context
         spawn_local(async move {
             dure_info!("ViewModel runtime started (WASM)");
 
             let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-            let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone());
+            let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 

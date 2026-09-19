@@ -1,6 +1,7 @@
 //! Drawer actor implementation for tab management and operation logging
 
 use super::{DrawerCommand, DrawerEvent, DrawerRepository, DrawerState};
+use crate::viewmodel::logs::LogCommand;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info};
 use smol::channel::{Receiver, Sender};
@@ -9,6 +10,7 @@ use smol::channel::{Receiver, Sender};
 pub struct DrawerActor {
     command_rx: Receiver<DrawerCommand>,
     event_tx: Sender<ViewModelEvent>,
+    logs_tx: Sender<LogCommand>,
     repository: DrawerRepository,
     state: DrawerState,
 }
@@ -17,10 +19,12 @@ impl DrawerActor {
     pub fn new(
         command_rx: Receiver<DrawerCommand>,
         event_tx: Sender<ViewModelEvent>,
+        logs_tx: Sender<LogCommand>,
     ) -> Self {
         Self {
             command_rx,
             event_tx,
+            logs_tx,
             repository: DrawerRepository::new(),
             state: DrawerState::new(),
         }
@@ -119,33 +123,31 @@ impl DrawerActor {
     }
 
     /// Load stdout logs filtered by project
-    async fn load_logs(&mut self, project_id: String, limit: usize) -> anyhow::Result<()> {
+    async fn load_logs(&mut self, project_id: String, _limit: usize) -> anyhow::Result<()> {
         dure_debug!(
-            "DrawerActor: loading stdout logs for project {} (limit {})",
-            project_id,
-            limit
+            "DrawerActor: requesting stdout logs for project {}",
+            project_id
         );
 
         self.state.set_loading(true);
         self.state.set_project(&project_id);
 
-        // TODO: Implement stdout log filtering by project_id
-        // For now, return empty logs as placeholder
-        let lines: Vec<String> = vec![];
+        // Send command to LogActor to retrieve logs
+        self.logs_tx
+            .send(LogCommand::GetLogs {
+                project_id: project_id.clone(),
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send GetLogs command: {}", e))?;
 
-        dure_info!(
-            "DrawerActor: loaded {} stdout logs for project {}",
-            lines.len(),
+        dure_debug!(
+            "DrawerActor: GetLogs command sent for project {}",
             project_id
         );
 
-        self.state.set_logs(lines.clone());
-
-        let event = DrawerEvent::LogsLoaded {
-            project_id: project_id.clone(),
-            lines,
-        };
-        self.send_event(event).await
+        // LogActor will respond via ViewModelEvent::Log(LogEvent::LogsRetrieved)
+        // which will be handled by ViewModel and forwarded back to drawer
+        Ok(())
     }
 
     /// Refresh current tab data
@@ -205,8 +207,9 @@ mod tests {
 
             let (cmd_tx, cmd_rx) = unbounded();
             let (evt_tx, evt_rx) = unbounded();
+            let (logs_tx, _logs_rx) = unbounded();
 
-            let actor = DrawerActor::new(cmd_rx, evt_tx);
+            let actor = DrawerActor::new(cmd_rx, evt_tx, logs_tx);
 
             // Spawn actor
             smol::spawn(async move {
@@ -242,8 +245,9 @@ mod tests {
 
             let (cmd_tx, cmd_rx) = unbounded();
             let (evt_tx, evt_rx) = unbounded();
+            let (logs_tx, _logs_rx) = unbounded();
 
-            let actor = DrawerActor::new(cmd_rx, evt_tx);
+            let actor = DrawerActor::new(cmd_rx, evt_tx, logs_tx);
 
             // Spawn actor
             smol::spawn(async move {
