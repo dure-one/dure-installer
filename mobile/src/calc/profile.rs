@@ -83,6 +83,41 @@ pub enum ProfileError {
 /// Profile manager - stateless operations
 pub struct ProfileManager;
 
+impl ProfileManager {
+    /// Validate profile name
+    ///
+    /// Rules:
+    /// - Only a-z, A-Z, 0-9, -, _ allowed
+    /// - Length 1-64 characters
+    /// - Case-sensitive
+    pub fn validate_name(name: &str) -> Result<(), ProfileError> {
+        // Check empty
+        if name.is_empty() {
+            return Err(ProfileError::InvalidName("name cannot be empty".to_string()));
+        }
+
+        // Check length
+        if name.len() > 64 {
+            return Err(ProfileError::InvalidName(format!(
+                "name too long ({} chars, max 64)",
+                name.len()
+            )));
+        }
+
+        // Check valid characters: a-z, A-Z, 0-9, -, _
+        for ch in name.chars() {
+            if !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_' {
+                return Err(ProfileError::InvalidName(format!(
+                    "invalid character '{}' in name (only a-z, A-Z, 0-9, -, _ allowed)",
+                    ch
+                )));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +135,32 @@ mod tests {
         assert!(profile.kdbx_path.to_string_lossy().ends_with("key.kdbx"));
 
         std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_validate_name_valid() {
+        // Valid names: a-z, A-Z, 0-9, -, _, 1-64 chars
+        assert!(ProfileManager::validate_name("profile1").is_ok());
+        assert!(ProfileManager::validate_name("my-profile").is_ok());
+        assert!(ProfileManager::validate_name("my_profile").is_ok());
+        assert!(ProfileManager::validate_name("Profile123").is_ok());
+        assert!(ProfileManager::validate_name("a").is_ok());
+        assert!(ProfileManager::validate_name("a".repeat(64).as_str()).is_ok());
+    }
+
+    #[test]
+    fn test_validate_name_invalid() {
+        // Empty name
+        assert!(ProfileManager::validate_name("").is_err());
+
+        // Too long (>64 chars)
+        assert!(ProfileManager::validate_name(&"a".repeat(65)).is_err());
+
+        // Invalid characters
+        assert!(ProfileManager::validate_name("profile name").is_err()); // space
+        assert!(ProfileManager::validate_name("profile.name").is_err()); // dot
+        assert!(ProfileManager::validate_name("profile/name").is_err()); // slash
+        assert!(ProfileManager::validate_name("profile@name").is_err()); // @
+        assert!(ProfileManager::validate_name("profile#name").is_err()); // #
     }
 }
