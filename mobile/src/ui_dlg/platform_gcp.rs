@@ -8,6 +8,7 @@
 //! 5. Complete (show connection info)
 
 use eframe::egui;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
@@ -453,14 +454,14 @@ impl GcpWizard {
 
                         if is_expired {
                             // Refresh token
-                            log::info!("OAuth token expired, refreshing...");
+                            dure_info!("OAuth token expired, refreshing...");
                             match self.refresh_token_sync(refresh_token) {
                                 Ok(new_oauth) => {
                                     self.oauth_result = Some(new_oauth);
                                     self.state = WizardState::SelectProject;
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to refresh token: {}", e);
+                                    dure_error!("Failed to refresh token: {}", e);
                                     // Show error but allow retry
                                 }
                             }
@@ -1439,7 +1440,7 @@ impl GcpWizard {
                     .save(&config_path)
                     .map_err(|e| format!("Failed to save refreshed token: {}", e))?;
 
-                log::info!("✓ OAuth token refreshed and saved");
+                dure_info!("✓ OAuth token refreshed and saved");
             }
         }
 
@@ -1546,13 +1547,13 @@ impl GcpWizard {
                     self.projects_load_error = None;
 
                     // Log project details for debugging
-                    log::info!(
+                    dure_info!(
                         "Loaded {} projects from GCP API",
                         self.available_projects.len()
                     );
                     for proj in &self.available_projects {
                         let state_str = proj.state.as_deref().unwrap_or("<no state field>");
-                        log::debug!(
+                        dure_debug!(
                             "  Project: {} ({}), state: {:?}",
                             proj.display_name(),
                             proj.project_id,
@@ -1565,7 +1566,7 @@ impl GcpWizard {
                         .iter()
                         .filter(|p| p.is_active())
                         .count();
-                    log::info!(
+                    dure_info!(
                         "  {} active/usable projects, {} total",
                         active_count,
                         self.available_projects.len()
@@ -1574,9 +1575,9 @@ impl GcpWizard {
                     // Auto-select first active project if available
                     if let Some(project) = self.available_projects.iter().find(|p| p.is_active()) {
                         self.selected_project_id = project.project_id.clone();
-                        log::info!("Auto-selected first active project: {}", project.project_id);
+                        dure_info!("Auto-selected first active project: {}", project.project_id);
                     } else {
-                        log::warn!(
+                        dure_warn!(
                             "No active projects found among {} total projects",
                             self.available_projects.len()
                         );
@@ -1585,7 +1586,7 @@ impl GcpWizard {
                 Err(e) => {
                     self.projects_load_error = Some(format!("Failed to load projects: {}", e));
                     self.projects_loaded = true;
-                    log::error!("Failed to load projects: {}", e);
+                    dure_error!("Failed to load projects: {}", e);
                 }
             }
         }

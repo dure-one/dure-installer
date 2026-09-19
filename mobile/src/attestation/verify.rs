@@ -33,7 +33,7 @@ pub fn verify_binary(
     let attestations = download_attestations(binary_path, owner, repo)?;
 
     if attestations.is_empty() {
-        log::warn!("No attestations found for this binary");
+        dure_warn!("No attestations found for this binary");
         return Err(VerificationError::NoAttestationsFound);
     }
 
@@ -46,7 +46,7 @@ pub fn verify_binary(
         // Check if signature was verified by GitHub
         if let Some(summary) = &attestation.verification_summary {
             if !summary.signature_verified {
-                log::warn!("Attestation signature not verified");
+                dure_warn!("Attestation signature not verified");
                 continue;
             }
 
@@ -69,7 +69,7 @@ pub fn verify_binary(
                 );
             }
             Err(e) => {
-                log::warn!("Failed to verify attestation payload: {}", e);
+                dure_warn!("Failed to verify attestation payload: {}", e);
             }
         }
     }
@@ -152,7 +152,7 @@ pub fn verify_wasm(
 
     // For WASM, we'd need to fetch attestations via ehttp
     // This is a simplified implementation
-    log::warn!("WASM attestation verification not fully implemented");
+    dure_warn!("WASM attestation verification not fully implemented");
 
     // Return a result indicating the hash was computed but not verified
     Ok(AttestationResult {

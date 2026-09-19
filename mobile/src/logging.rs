@@ -179,7 +179,7 @@ pub fn log_to_actor(project_id: impl Into<String>, level: crate::viewmodel::logs
 #[cfg(not(target_family = "wasm"))]
 #[macro_export]
 macro_rules! dure_info {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::info!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
             $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
@@ -196,7 +196,7 @@ macro_rules! dure_info {
 #[cfg(not(target_family = "wasm"))]
 #[macro_export]
 macro_rules! dure_debug {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::debug!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
             $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
@@ -213,7 +213,7 @@ macro_rules! dure_debug {
 #[cfg(not(target_family = "wasm"))]
 #[macro_export]
 macro_rules! dure_warn {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::warn!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
             $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
@@ -230,7 +230,7 @@ macro_rules! dure_warn {
 #[cfg(not(target_family = "wasm"))]
 #[macro_export]
 macro_rules! dure_error {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::error!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
             $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
@@ -248,7 +248,7 @@ macro_rules! dure_error {
 #[cfg(target_family = "wasm")]
 #[macro_export]
 macro_rules! dure_info {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             web_sys::console::log_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
@@ -269,7 +269,7 @@ macro_rules! dure_info {
 #[cfg(target_family = "wasm")]
 #[macro_export]
 macro_rules! dure_debug {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             web_sys::console::debug_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
@@ -290,7 +290,7 @@ macro_rules! dure_debug {
 #[cfg(target_family = "wasm")]
 #[macro_export]
 macro_rules! dure_warn {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             web_sys::console::warn_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
@@ -311,7 +311,7 @@ macro_rules! dure_warn {
 #[cfg(target_family = "wasm")]
 #[macro_export]
 macro_rules! dure_error {
-    ($project_id:expr, $($arg:tt)*) => {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             web_sys::console::error_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()

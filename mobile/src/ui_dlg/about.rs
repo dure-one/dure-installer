@@ -1,5 +1,6 @@
 pub use super::about_stt::*;
 use eframe::egui;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use egui_i18n::tr;
 use egui_material3::MaterialButton;
 
@@ -93,7 +94,7 @@ impl DlgAbout {
                             ui.label(format!("{}: ", website_label));
                             if ui.button("https://dure.pages.dev").clicked() {
                                 if let Err(e) = webbrowser::open("https://dure.pages.dev") {
-                                    log::error!("Failed to open website URL: {}", e);
+                                    dure_error!("Failed to open website URL: {}", e);
                                 }
                             }
                         });

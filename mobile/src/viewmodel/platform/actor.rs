@@ -28,7 +28,7 @@ impl PlatformActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("PlatformActor command failed: {}", e);
+                        dure_error!("PlatformActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -222,7 +222,7 @@ impl PlatformActor {
                 for zone in zones {
                     match client.list_instances(&project_id, &zone) {
                         Ok(list) => all_vms.extend(list.items),
-                        Err(e) => log::warn!("Failed to list instances in zone {}: {}", zone, e),
+                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
                     }
                 }
                 Ok(all_vms)
@@ -1052,7 +1052,7 @@ impl PlatformActor {
                             // Check if the error is due to expired/revoked refresh token
                             let error_msg = e.to_string();
                             if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
-                                log::error!("Refresh token has expired or been revoked. Clearing tokens...");
+                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
 
                                 // Clear the invalid tokens
                                 platform.gcp_oauth_access_token = None;
@@ -1146,7 +1146,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for VM check");
+                dure_warn!("No valid access token for VM check");
                 return VmStatus {
                     exists: false,
                     name: None,
@@ -1193,7 +1193,7 @@ impl PlatformActor {
                 }
             }
             Err(e) => {
-                log::error!("Failed to list VMs: {}", e);
+                dure_error!("Failed to list VMs: {}", e);
                 VmStatus {
                     exists: false,
                     name: None,
@@ -1226,7 +1226,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for firewall check");
+                dure_warn!("No valid access token for firewall check");
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1241,7 +1241,7 @@ impl PlatformActor {
                 ip
             },
             Err(e) => {
-                log::warn!("Failed to get current IP: {}", e);
+                dure_warn!("Failed to get current IP: {}", e);
                 return FirewallStatus {
                     whitelisted: false,
                     current_ip: None,
@@ -1265,7 +1265,7 @@ impl PlatformActor {
                 }
             },
             Err(e) => {
-                log::error!("Failed to check firewall: {}", e);
+                dure_error!("Failed to check firewall: {}", e);
                 FirewallStatus {
                     whitelisted: false,
                     current_ip: Some(current_ip),
@@ -1366,7 +1366,7 @@ impl PlatformActor {
         let access_token = match &platform.gcp_oauth_access_token {
             Some(token) => token.clone(),
             None => {
-                log::warn!("No valid access token for project count fetch");
+                dure_warn!("No valid access token for project count fetch");
                 return None;
             }
         };
@@ -1384,7 +1384,7 @@ impl PlatformActor {
                 Some(count)
             }
             Err(e) => {
-                log::warn!("Failed to fetch project count: {}", e);
+                dure_warn!("Failed to fetch project count: {}", e);
                 None
             }
         };

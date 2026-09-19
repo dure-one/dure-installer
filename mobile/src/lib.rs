@@ -164,7 +164,7 @@ impl Config {
             for dir in [&config_dir, &cache_dir, &tmp_dir, &data_dir] {
                 match fs::create_dir_all(dir) {
                     Ok(()) => dure_info!("Successfully created directory: {:?}", dir),
-                    Err(e) => log::error!("Failed to create directory: {:?} - Error: {}", dir, e),
+                    Err(e) => dure_error!("Failed to create directory: {:?} - Error: {}", dir, e),
                 }
             }
 

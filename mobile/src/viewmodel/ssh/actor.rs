@@ -141,7 +141,7 @@ impl SshActor {
         let host_config = match self.load_host_config(&name) {
             Ok(config) => config,
             Err(e) => {
-                log::debug!("Failed to load host config for {}: {}", name, e);
+                dure_debug!("Failed to load host config for {}: {}", name, e);
                 let _ = self.event_tx.send(ViewModelEvent::Ssh(
                     SshEvent::HostHealthChecked {
                         name,
@@ -161,7 +161,7 @@ impl SshActor {
         };
 
         let address = format!("{}:{}", hostname, host_config.port);
-        log::debug!("Health check: connecting to {}", address);
+        dure_debug!("Health check: connecting to {}", address);
 
         // TCP connection attempt with timeout
         let timeout = std::time::Duration::from_secs(timeout_secs as u64);
@@ -181,11 +181,11 @@ impl SshActor {
         let elapsed = start.elapsed();
         let (is_alive, latency_ms) = match result {
             Ok(_stream) => {
-                log::debug!("Health check succeeded for {} in {:?}", name, elapsed);
+                dure_debug!("Health check succeeded for {} in {:?}", name, elapsed);
                 (true, Some(elapsed.as_millis() as u64))
             }
             Err(e) => {
-                log::debug!("Health check failed for {}: {}", name, e);
+                dure_debug!("Health check failed for {}: {}", name, e);
                 (false, None)
             }
         };
@@ -206,7 +206,7 @@ impl SshActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("SshActor command failed: {}", e);
+                        dure_error!("SshActor command failed: {}", e);
                     }
                 }
                 Err(_) => {
@@ -219,7 +219,7 @@ impl SshActor {
 
     async fn handle_command(&mut self, cmd: SshCommand) -> anyhow::Result<()> {
         let operation = format!("{:?}", cmd);
-        log::debug!(" SSH Actor: Received command: {}", operation);
+        dure_debug!(" SSH Actor: Received command: {}", operation);
 
         let result = match cmd {
             SshCommand::AddHost {
@@ -232,7 +232,7 @@ impl SshActor {
             SshCommand::DeleteHost { name } => self.delete_host(name).await,
             SshCommand::ListHosts => self.list_hosts().await,
             SshCommand::TestConnection { name } => {
-                log::debug!(" SSH Actor: Handling TestConnection for '{}'", name);
+                dure_debug!(" SSH Actor: Handling TestConnection for '{}'", name);
                 self.test_connection(name).await
             }
             SshCommand::InitHost { name } => self.init_host(name).await,
@@ -308,7 +308,7 @@ impl SshActor {
                 return self.handle_list_docker_containers(host_name).await;
             }
             SshCommand::InspectDockerImage { host_name, image, tag } => {
-                log::debug!(" SSH Actor: inspect_docker_image called for '{}' with {}:{}", host_name, image, tag);
+                dure_debug!(" SSH Actor: inspect_docker_image called for '{}' with {}:{}", host_name, image, tag);
 
                 // Load host config
                 let host_config = match self.load_host_config(&host_name) {
@@ -329,11 +329,11 @@ impl SshActor {
                 let host_config_clone = host_config.clone();
                 match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd)).await {
                     Ok(output) => {
-                        log::debug!(" SSH Actor: Image pulled successfully");
-                        log::debug!(" Pull output: {}", output);
+                        dure_debug!(" SSH Actor: Image pulled successfully");
+                        dure_debug!(" Pull output: {}", output);
                     }
                     Err(e) => {
-                        log::error!(" SSH Actor: Failed to pull image: {}", e);
+                        dure_error!(" SSH Actor: Failed to pull image: {}", e);
                         self.send_event(SshEvent::Error {
                             operation: format!("inspect_docker_image({})", full_image),
                             error: format!("Failed to pull image: {}", e),
@@ -344,11 +344,11 @@ impl SshActor {
 
                 // Step 2: Get image history
                 let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
-                log::debug!(" SSH Actor: Running command: {}", history_cmd);
+                dure_debug!(" SSH Actor: Running command: {}", history_cmd);
                 let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd)).await {
                     Ok(output) => output,
                     Err(e) => {
-                        log::error!(" SSH Actor: Failed to get image history: {}", e);
+                        dure_error!(" SSH Actor: Failed to get image history: {}", e);
                         self.send_event(SshEvent::Error {
                             operation: format!("inspect_docker_image({})", full_image),
                             error: format!("Failed to inspect image history: {}", e),
@@ -357,21 +357,21 @@ impl SshActor {
                     }
                 };
 
-                log::debug!(" History output ({} bytes, {} lines):", history_output.len(), history_output.lines().count());
+                dure_debug!(" History output ({} bytes, {} lines):", history_output.len(), history_output.lines().count());
                 for (i, line) in history_output.lines().take(10).enumerate() {
-                    log::debug!("  Line {}: {}", i + 1, line);
+                    dure_debug!("  Line {}: {}", i + 1, line);
                 }
                 if history_output.lines().count() > 10 {
-                    log::debug!("  ... ({} more lines)", history_output.lines().count() - 10);
+                    dure_debug!("  ... ({} more lines)", history_output.lines().count() - 10);
                 }
 
                 // Step 3: Parse history output
                 let (exposed_ports, env_vars) = parse_docker_history(&history_output);
 
-                log::debug!(" SSH Actor: Sending DockerImageInspected event");
-                log::debug!("  Image: {}:{}", image, tag);
-                log::debug!("  Ports: {:?}", exposed_ports);
-                log::debug!("  Env vars: {} variables", env_vars.len());
+                dure_debug!(" SSH Actor: Sending DockerImageInspected event");
+                dure_debug!("  Image: {}:{}", image, tag);
+                dure_debug!("  Ports: {:?}", exposed_ports);
+                dure_debug!("  Env vars: {} variables", env_vars.len());
 
                 self.send_event(SshEvent::DockerImageInspected {
                     image: image.clone(),
@@ -385,8 +385,8 @@ impl SshActor {
             }
             #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveDockerContainers { host_name, container_names } => {
-                log::debug!(" SSH Actor: remove_docker_containers called for '{}'", host_name);
-                log::debug!("  Containers to remove: {:?}", container_names);
+                dure_debug!(" SSH Actor: remove_docker_containers called for '{}'", host_name);
+                dure_debug!("  Containers to remove: {:?}", container_names);
 
                 // Load host config
                 let host_config = match self.load_host_config(&host_name) {
@@ -410,15 +410,15 @@ impl SshActor {
                             removed.push(container_name.clone());
                         }
                         Err(e) => {
-                            log::error!(" SSH Actor: Failed to remove '{}': {}", container_name, e);
+                            dure_error!(" SSH Actor: Failed to remove '{}': {}", container_name, e);
                             failed.push((container_name.clone(), e.to_string()));
                         }
                     }
                 }
 
-                log::debug!(" SSH Actor: Sending DockerContainersRemoved event");
-                log::debug!("  Removed: {} containers", removed.len());
-                log::debug!("  Failed: {} containers", failed.len());
+                dure_debug!(" SSH Actor: Sending DockerContainersRemoved event");
+                dure_debug!("  Removed: {} containers", removed.len());
+                dure_debug!("  Failed: {} containers", failed.len());
 
                 self.send_event(SshEvent::DockerContainersRemoved {
                     host_name: host_name.clone(),
@@ -618,14 +618,14 @@ impl SshActor {
     }
 
     async fn test_connection(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: test_connection called for '{}'", name);
+        dure_debug!(" SSH Actor: test_connection called for '{}'", name);
         self.send_progress("test_connection", 0.5, "Testing SSH connection...")
             .await;
 
         let start = std::time::Instant::now();
 
         // Load host config first (blocking operation)
-        log::debug!(" SSH Actor: Loading host config...");
+        dure_debug!(" SSH Actor: Loading host config...");
         let host_config = runtime::unblock({
             let name = name.clone();
             move || -> anyhow::Result<crate::config::SshHostConfig> {
@@ -638,25 +638,25 @@ impl SshActor {
                     .find(|h| h.host == name)
                     .ok_or_else(|| anyhow::anyhow!("SSH host '{}' not found", name))?;
 
-                log::debug!(" SSH Actor: Found host config for '{}'", host_config.host);
+                dure_debug!(" SSH Actor: Found host config for '{}'", host_config.host);
                 Ok(host_config)
             }
         })
         .await?;
 
         // Test connection (async operation - russh uses tokio internally)
-        log::debug!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port
+        dure_debug!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port
         );
         let result =
             async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
-        log::debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms
+        dure_debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms
         );
 
         match result {
             Ok(conn_result) => {
-                log::debug!("✓ SSH Actor: Connection test succeeded: {}", conn_result.success
+                dure_debug!("✓ SSH Actor: Connection test succeeded: {}", conn_result.success
                 );
                 self.send_event(SshEvent::ConnectionTested {
                     name,
@@ -667,7 +667,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Connection test failed: {}", e);
+                dure_warn!(" SSH Actor: Connection test failed: {}", e);
                 self.send_event(SshEvent::ConnectionTested {
                     name,
                     success: false,
@@ -680,7 +680,7 @@ impl SshActor {
     }
 
     async fn init_host(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: init_host called for '{}'", name);
+        dure_debug!(" SSH Actor: init_host called for '{}'", name);
         self.send_progress("init_host", 0.1, "Loading host configuration...")
             .await;
 
@@ -721,7 +721,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Host initialization failed: {}", e);
+                dure_warn!(" SSH Actor: Host initialization failed: {}", e);
                 self.send_event(SshEvent::HostInitialized {
                     name,
                     success: false,
@@ -970,7 +970,7 @@ impl SshActor {
     }
 
     async fn get_linux_status(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: get_linux_status called for '{}'", name);
+        dure_debug!(" SSH Actor: get_linux_status called for '{}'", name);
         self.send_progress("get_linux_status", 0.1, "Loading host configuration...")
             .await;
 
@@ -1016,7 +1016,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Linux status retrieval failed: {}", e);
+                dure_warn!(" SSH Actor: Linux status retrieval failed: {}", e);
                 self.send_event(SshEvent::ServiceError {
                     name,
                     service: "linux".to_string(),
@@ -1030,7 +1030,7 @@ impl SshActor {
     }
 
     async fn install_docker(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: install_docker called for '{}'", name);
+        dure_debug!(" SSH Actor: install_docker called for '{}'", name);
         self.send_progress("install_docker", 0.1, "Loading host configuration...")
             .await;
 
@@ -1067,7 +1067,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Docker installation failed: {}", e);
+                dure_warn!(" SSH Actor: Docker installation failed: {}", e);
                 self.send_event(SshEvent::ServiceError {
                     name,
                     service: "docker".to_string(),
@@ -1081,7 +1081,7 @@ impl SshActor {
     }
 
     async fn get_docker_status(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: get_docker_status called for '{}'", name);
+        dure_debug!(" SSH Actor: get_docker_status called for '{}'", name);
         self.send_progress("get_docker_status", 0.1, "Loading host configuration...")
             .await;
 
@@ -1129,7 +1129,7 @@ impl SshActor {
     }
 
     async fn uninstall_docker(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: uninstall_docker called for '{}'", name);
+        dure_debug!(" SSH Actor: uninstall_docker called for '{}'", name);
         self.send_progress("uninstall_docker", 0.1, "Loading host configuration...")
             .await;
 
@@ -1166,7 +1166,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Docker uninstallation failed: {}", e);
+                dure_warn!(" SSH Actor: Docker uninstallation failed: {}", e);
                 self.send_event(SshEvent::ServiceError {
                     name,
                     service: "docker".to_string(),
@@ -1181,7 +1181,7 @@ impl SshActor {
 
     #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn install_ansible(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: install_ansible called for '{}'", name);
+        dure_debug!(" SSH Actor: install_ansible called for '{}'", name);
         self.send_progress("install_ansible", 0.1, "Loading host configuration...")
             .await;
 
@@ -1218,7 +1218,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Ansible installation failed: {}", e);
+                dure_warn!(" SSH Actor: Ansible installation failed: {}", e);
                 self.send_event(SshEvent::ServiceError {
                     name,
                     service: "ansible".to_string(),
@@ -1233,7 +1233,7 @@ impl SshActor {
 
     #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn get_ansible_status(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: get_ansible_status called for '{}'", name);
+        dure_debug!(" SSH Actor: get_ansible_status called for '{}'", name);
         self.send_progress("get_ansible_status", 0.1, "Loading host configuration...")
             .await;
 
@@ -1272,7 +1272,7 @@ impl SshActor {
 
     #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     async fn uninstall_ansible(&mut self, name: String) -> anyhow::Result<()> {
-        log::debug!(" SSH Actor: uninstall_ansible called for '{}'", name);
+        dure_debug!(" SSH Actor: uninstall_ansible called for '{}'", name);
         self.send_progress("uninstall_ansible", 0.1, "Loading host configuration...")
             .await;
 
@@ -1309,7 +1309,7 @@ impl SshActor {
                 Ok(())
             }
             Err(e) => {
-                log::warn!(" SSH Actor: Ansible uninstallation failed: {}", e);
+                dure_warn!(" SSH Actor: Ansible uninstallation failed: {}", e);
                 self.send_event(SshEvent::ServiceError {
                     name,
                     service: "ansible".to_string(),
@@ -2125,10 +2125,10 @@ impl SshActor {
 
     async fn send_event(&self, event: SshEvent) {
         let event_desc = Self::get_event_description(&event);
-        log::debug!(" SSH Actor: Sending event: {}", event_desc);
+        dure_debug!(" SSH Actor: Sending event: {}", event_desc);
         match self.event_tx.send(ViewModelEvent::Ssh(event.clone())).await {
             Ok(_) => dure_info!(" SSH Actor: {}", event_desc),
-            Err(e) => log::warn!(" SSH Actor: Failed to send event ({}): {}", event_desc, e),
+            Err(e) => dure_warn!(" SSH Actor: Failed to send event ({}): {}", event_desc, e),
         }
     }
 
@@ -2191,7 +2191,7 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
         }
     }
 
-    log::debug!(" Parsed {} ports and {} args from docker history", ports.len(), args.len());
+    dure_debug!(" Parsed {} ports and {} args from docker history", ports.len(), args.len());
 
     // Remove duplicate ports
     ports.sort_unstable();

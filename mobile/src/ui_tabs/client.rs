@@ -175,13 +175,13 @@ impl AuditSubTab {
                             dure_info!(" Spreadsheet refreshed with latest data");
                         }
                         Err(e) => {
-                            log::warn!(" Failed to create spreadsheet: {}", e);
+                            dure_warn!(" Failed to create spreadsheet: {}", e);
                             self.load_error = Some(format!("Spreadsheet error: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    log::warn!(" Failed to load audit records: {}", e);
+                    dure_warn!(" Failed to load audit records: {}", e);
                     self.load_error = Some(format!("Failed to load audit records: {e}"));
                 }
             }
@@ -419,12 +419,12 @@ impl DnsClientSubTab {
             // Try cache first
             match get_cached_dns_records(&mut conn, &self.query_domain, record_type) {
                 Ok(cached) if !cached.is_empty() => {
-                    log::debug!("✓ Using cached DNS results for {} {}", self.query_domain, record_type
+                    dure_debug!("✓ Using cached DNS results for {} {}", self.query_domain, record_type
                     );
                 }
                 _ => {
                     // Fetch fresh
-                    log::debug!("Fetching fresh DNS records for {} {}...", self.query_domain, record_type
+                    dure_debug!("Fetching fresh DNS records for {} {}...", self.query_domain, record_type
                     );
                     match resolve_dns(&self.query_domain, record_type) {
                         Ok(records) => {
@@ -436,7 +436,7 @@ impl DnsClientSubTab {
                                 }
                                 dure_info!(" Cached {} records", records.len());
                             } else {
-                                log::warn!(" No records found");
+                                dure_warn!(" No records found");
                             }
                         }
                         Err(e) => {

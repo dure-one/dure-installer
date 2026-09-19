@@ -114,7 +114,7 @@ impl OAuthHandler {
         dure_info!("Opening browser for OAuth authorization...");
         dure_info!("If the browser doesn't open, visit: {}", auth_url);
         if let Err(e) = webbrowser::open(&auth_url) {
-            log::warn!("Failed to open browser: {}", e);
+            dure_warn!("Failed to open browser: {}", e);
             dure_info!("Please manually open this URL:");
             dure_info!("{}", auth_url);
         }
@@ -406,18 +406,18 @@ pub fn refresh_access_token(
 ) -> Result<OAuthResult> {
     // Validate inputs
     if client_id.is_empty() {
-        log::error!("OAuth client_id is empty - check GOOGLE_OAUTH_CLIENT_ID environment variable");
+        dure_error!("OAuth client_id is empty - check GOOGLE_OAUTH_CLIENT_ID environment variable");
         return Err(anyhow::anyhow!("OAuth client_id is not configured"));
     }
     if client_secret.is_empty() {
-        log::error!("OAuth client_secret is empty - check GOOGLE_OAUTH_CLIENT_SECRET environment variable");
+        dure_error!("OAuth client_secret is empty - check GOOGLE_OAUTH_CLIENT_SECRET environment variable");
         return Err(anyhow::anyhow!("OAuth client_secret is not configured"));
     }
     if refresh_token.is_empty() {
         return Err(anyhow::anyhow!("Refresh token is empty"));
     }
 
-    log::debug!("Refreshing access token (client_id: {}...)", &client_id.chars().take(10).collect::<String>());
+    dure_debug!("Refreshing access token (client_id: {}...)", &client_id.chars().take(10).collect::<String>());
 
     let params = [
         ("client_id", client_id),
@@ -440,7 +440,7 @@ pub fn refresh_access_token(
         Ok(resp) => resp,
         Err(ureq::Error::Status(code, resp)) => {
             let error_text = resp.into_string().unwrap_or_default();
-            log::error!("Token refresh failed with status {}: {}", code, error_text);
+            dure_error!("Token refresh failed with status {}: {}", code, error_text);
             return Err(anyhow::anyhow!(
                 "Token refresh failed (HTTP {}): {}",
                 code,
@@ -455,7 +455,7 @@ pub fn refresh_access_token(
     if response.status() != 200 {
         let status = response.status();
         let error_text = response.into_string().unwrap_or_default();
-        log::error!("Unexpected status {}: {}", status, error_text);
+        dure_error!("Unexpected status {}: {}", status, error_text);
         return Err(anyhow::anyhow!("Token refresh failed: {}", error_text));
     }
 

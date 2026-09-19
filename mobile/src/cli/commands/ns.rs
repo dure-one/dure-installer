@@ -2,6 +2,7 @@
 
 // Logging provided by standard log crate
 use crate::calc::audit;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use crate::calc::ns::{NsConfig, RecordType};
 use anyhow::{Context, Result};
 #[cfg(not(target_arch = "wasm32"))]
@@ -95,10 +96,10 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
     let config = load_ns_config()?;
 
     if config.total_domains() == 0 {
-        log::info!("No domains registered.");
-        log::info!("");
-        log::info!("Add a domain with:");
-        log::info!("  dure ns add www.example.com --provider cloudflare --token YOUR_TOKEN");
+        dure_info!("No domains registered.");
+        dure_info!("");
+        dure_info!("Add a domain with:");
+        dure_info!("  dure ns add www.example.com --provider cloudflare --token YOUR_TOKEN");
         return Ok(());
     }
 
@@ -112,43 +113,43 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
             .get_api_token(&provider_name)
             .ok_or_else(|| anyhow::anyhow!("API token not found for provider {}", provider_name))?;
 
-        log::info!("Domain: {}", domain_entry.domain);
-        log::info!("Provider: {}", provider_name);
-        log::info!("API Token: {}...", &api_token.chars().take(8).collect::<String>()
+        dure_info!("Domain: {}", domain_entry.domain);
+        dure_info!("Provider: {}", provider_name);
+        dure_info!("API Token: {}...", &api_token.chars().take(8).collect::<String>()
         );
-        log::info!("");
-        log::info!("Records:");
+        dure_info!("");
+        dure_info!("Records:");
 
         if domain_entry.records.is_empty() {
-            log::info!("  (no records)");
+            dure_info!("  (no records)");
         } else {
             for record in &domain_entry.records {
-                log::info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
+                dure_info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
                     record.value
                 );
             }
         }
     } else {
         // Show all domains
-        log::info!("Registered Domains:");
-        log::info!("");
+        dure_info!("Registered Domains:");
+        dure_info!("");
 
         for (provider_name, domain_entry) in config.iter_all_domains() {
-            log::info!("• {} ({})", domain_entry.domain, provider_name);
+            dure_info!("• {} ({})", domain_entry.domain, provider_name);
 
             if domain_entry.records.is_empty() {
-                log::info!("  (no records)");
+                dure_info!("  (no records)");
             } else {
                 for record in &domain_entry.records {
-                    log::info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
+                    dure_info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
                         record.value
                     );
                 }
             }
-            log::info!("");
+            dure_info!("");
         }
 
-        log::info!("Use 'dure ns status DOMAIN' to see details for a specific domain");
+        dure_info!("Use 'dure ns status DOMAIN' to see details for a specific domain");
     }
 
     Ok(())
@@ -195,12 +196,12 @@ pub fn execute_ns_add(domain: &str, provider: &str, token: &str) -> Result<()> {
     // Record audit event
     let _ = audit::push_cli("system", "cli", "ns add", domain);
 
-    log::info!("✓ Domain '{}' added with provider '{}'", domain, provider_display
+    dure_info!("✓ Domain '{}' added with provider '{}'", domain, provider_display
     );
-    log::info!("");
-    log::info!("Add DNS records with:");
-    log::info!("  dure ns insert a {} 1.2.3.4", domain);
-    log::info!("  dure ns insert txt {} 'durepubkey=...'", domain);
+    dure_info!("");
+    dure_info!("Add DNS records with:");
+    dure_info!("  dure ns insert a {} 1.2.3.4", domain);
+    dure_info!("  dure ns insert txt {} 'durepubkey=...'", domain);
 
     Ok(())
 }
@@ -233,7 +234,7 @@ pub fn execute_ns_del(domain: &str) -> Result<()> {
     // Record audit event
     let _ = audit::push_cli("system", "cli", "ns del", domain);
 
-    log::info!(" Domain '{}' removed from provider '{}'", domain, provider);
+    dure_info!(" Domain '{}' removed from provider '{}'", domain, provider);
 
     Ok(())
 }
@@ -286,7 +287,7 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
     let record_desc = format!("{} @ {} {}", domain, record_type, value);
     let _ = audit::push_cli("system", "cli", "ns insert", &record_desc);
 
-    log::info!("✓ Record added: {} {} -> {}", domain,
+    dure_info!("✓ Record added: {} {} -> {}", domain,
         record_type.to_uppercase(),
         value
     );
@@ -294,8 +295,8 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
     // Apply to DNS provider if requested
     #[cfg(not(target_arch = "wasm32"))]
     if apply {
-        log::info!("");
-        log::info!("Applying to DNS provider...");
+        dure_info!("");
+        dure_info!("Applying to DNS provider...");
 
         let domain_entry = config.get_domain(provider, domain).unwrap();
         let api_token = config.get_api_token(provider).unwrap();
@@ -307,18 +308,18 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
 
         match apply_record(provider, &api_token, domain, record) {
             Ok(_) => {
-                log::info!(" Record applied to DNS provider");
+                dure_info!(" Record applied to DNS provider");
             }
             Err(e) => {
-                log::warn!(" Failed to apply to DNS provider: {}", e);
-                log::info!("  Record is saved in config but not applied to provider");
+                dure_warn!(" Failed to apply to DNS provider: {}", e);
+                dure_info!("  Record is saved in config but not applied to provider");
             }
         }
     }
 
     #[cfg(any(target_os = "android", target_arch = "wasm32"))]
     if apply {
-        log::warn!(" DNS provider apply not supported on this platform");
+        dure_warn!(" DNS provider apply not supported on this platform");
     }
 
     Ok(())
@@ -362,13 +363,13 @@ pub fn execute_ns_remove(record_type: &str, domain: &str, value: &str) -> Result
     let record_desc = format!("{} {} {}", domain, record_type, value);
     let _ = audit::push_cli("system", "cli", "ns remove", &record_desc);
 
-    log::info!("✓ Record removed: {} {} {}", domain,
+    dure_info!("✓ Record removed: {} {} {}", domain,
         record_type.to_uppercase(),
         value
     );
-    log::info!("");
-    log::info!("Note: This only removes from config. To remove from DNS provider,");
-    log::info!("you may need to use the provider's control panel.");
+    dure_info!("");
+    dure_info!("Note: This only removes from config. To remove from DNS provider,");
+    dure_info!("you may need to use the provider's control panel.");
 
     Ok(())
 }

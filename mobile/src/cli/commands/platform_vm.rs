@@ -4,6 +4,7 @@
 
 // Logging provided by standard log crate
 use crate::viewmodel::{ViewModel, ViewModelEvent, platform::PlatformEvent};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use std::time::Duration;
 
@@ -41,7 +42,7 @@ pub async fn create_vm(
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    log::info!("\n✗ Failed: {}", error);
+                    dure_info!("\n✗ Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}
@@ -84,7 +85,7 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    log::error!(" Failed: {}", error);
+                    dure_error!(" Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}
@@ -119,7 +120,7 @@ pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> 
                     return Ok(());
                 }
                 ViewModelEvent::Platform(PlatformEvent::Error { error, .. }) => {
-                    log::info!("\n✗ Failed: {}", error);
+                    dure_info!("\n✗ Failed: {}", error);
                     return Err(anyhow::anyhow!(error));
                 }
                 _ => {}
