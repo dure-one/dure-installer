@@ -66,6 +66,9 @@ impl DrawerActor {
             DrawerCommand::LoadLogs { project_id, limit } => {
                 self.load_logs(project_id, limit).await
             }
+            DrawerCommand::UpdateLogs { project_id, lines } => {
+                self.update_logs(project_id, lines).await
+            }
             DrawerCommand::Refresh => self.refresh().await,
         };
 
@@ -148,6 +151,29 @@ impl DrawerActor {
         // LogActor will respond via ViewModelEvent::Log(LogEvent::LogsRetrieved)
         // which will be handled by ViewModel and forwarded back to drawer
         Ok(())
+    }
+
+    /// Update logs from LogActor response
+    async fn update_logs(&mut self, project_id: String, lines: Vec<String>) -> anyhow::Result<()> {
+        dure_debug!(
+            "DrawerActor: updating logs for project {} ({} lines)",
+            project_id,
+            lines.len()
+        );
+
+        self.state.set_logs(lines.clone());
+
+        dure_info!(
+            "DrawerActor: updated {} log lines for project {}",
+            lines.len(),
+            project_id
+        );
+
+        let event = DrawerEvent::LogsLoaded {
+            project_id: project_id.clone(),
+            lines,
+        };
+        self.send_event(event).await
     }
 
     /// Refresh current tab data

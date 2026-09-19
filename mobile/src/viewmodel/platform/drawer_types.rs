@@ -51,6 +51,11 @@ pub enum DrawerCommand {
         project_id: String,
         limit: usize,
     },
+    /// Update logs from LogActor response
+    UpdateLogs {
+        project_id: String,
+        lines: Vec<String>,
+    },
     /// Refresh current tab data
     Refresh,
 }
@@ -232,7 +237,11 @@ mod tests {
             project_id: "test-456".to_string(),
             limit: 100,
         };
-        let cmd4 = DrawerCommand::Refresh;
+        let cmd4 = DrawerCommand::UpdateLogs {
+            project_id: "test-789".to_string(),
+            lines: vec!["log line 1".to_string(), "log line 2".to_string()],
+        };
+        let cmd5 = DrawerCommand::Refresh;
 
         // Just verify they compile and match correctly
         match cmd1 {
@@ -254,6 +263,13 @@ mod tests {
             _ => panic!("Expected LoadLogs"),
         }
         match cmd4 {
+            DrawerCommand::UpdateLogs { project_id, lines } => {
+                assert_eq!(project_id, "test-789");
+                assert_eq!(lines.len(), 2);
+            }
+            _ => panic!("Expected UpdateLogs"),
+        }
+        match cmd5 {
             DrawerCommand::Refresh => {}
             _ => panic!("Expected Refresh"),
         }

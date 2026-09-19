@@ -288,8 +288,24 @@ impl ViewModel {
     }
 
     #[cfg(feature = "gui")]
-    fn apply_event(&mut self, _event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
-        // TODO: implement in Week 2
+    fn apply_event(&mut self, event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
+        // Forward LogEvent::LogsRetrieved to DrawerActor
+        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { project_id, lines }) = event {
+            dure_debug!(
+                "ViewModel: Forwarding LogsRetrieved to DrawerActor ({} lines for project {})",
+                lines.len(),
+                project_id
+            );
+
+            let cmd = platform::DrawerCommand::UpdateLogs {
+                project_id: project_id.clone(),
+                lines: lines.clone(),
+            };
+
+            if let Err(e) = self.drawer_tx.try_send(cmd) {
+                dure_error!("ViewModel: Failed to forward logs to drawer: {}", e);
+            }
+        }
     }
 
     // State accessors

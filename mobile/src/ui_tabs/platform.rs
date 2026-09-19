@@ -763,9 +763,21 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
     platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch);
 
-    // Persist tab switch
+    // Persist tab switch and trigger auto-load
     if let Some(new_tab) = tab_switch {
         ui.data_mut(|d| d.insert_persisted(drawer_id, new_tab));
+
+        // Auto-load logs when switching to Logs tab
+        if new_tab == DrawerTab::Logs {
+            if let Some(ref project_id) = row.selected_project_id {
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new("drawer_action_load_logs_on_switch"),
+                        project_id.clone(),
+                    );
+                });
+            }
+        }
     }
 }
 
@@ -1511,7 +1523,46 @@ impl PlatformTab {
                         d.remove::<String>(egui::Id::new("platform_action_scan_vms"))
                     });
                 }
+            }
 
+            // Drawer action: Refresh logs
+            if let Some(project_id) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs"))
+            }) {
+                if let Some(ref vm) = vm {
+                    use crate::viewmodel::platform::DrawerCommand;
+                    if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadLogs {
+                        project_id: project_id.clone(),
+                        limit: 1000,
+                    }) {
+                        dure_error!("Failed to send LoadLogs command: {}", e);
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_refresh_logs"))
+                });
+            }
+
+            // Drawer action: Auto-load logs on tab switch
+            if let Some(project_id) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new("drawer_action_load_logs_on_switch"))
+            }) {
+                if let Some(ref vm) = vm {
+                    use crate::viewmodel::platform::DrawerCommand;
+                    if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadLogs {
+                        project_id: project_id.clone(),
+                        limit: 1000,
+                    }) {
+                        dure_error!("Failed to auto-load logs on tab switch: {}", e);
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_load_logs_on_switch"))
+                });
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
                 if let Some((platform_name, vm_name, vm_zone)) = ui.data(|d| {
                     d.get_temp::<(String, String, String)>(egui::Id::new(
                         "platform_action_delete_vm",

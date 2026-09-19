@@ -171,12 +171,33 @@ fn format_project_count_display(count: Option<usize>) -> String {
 
 /// Render Logs tab (stdout logs filtered by project)
 fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    ui.heading("Stdout Logs");
+    ui.horizontal(|ui| {
+        ui.heading("Stdout Logs");
+        ui.add_space(8.0);
+
+        // Refresh button
+        if let Some(ref project_id) = drawer_state.project_id {
+            if ui.button("🔄 Refresh").clicked() {
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new("drawer_action_refresh_logs"),
+                        project_id.clone(),
+                    );
+                });
+            }
+        }
+    });
+
     ui.add_space(8.0);
 
     if drawer_state.loading {
         ui.spinner();
         ui.label("Loading logs...");
+        return;
+    }
+
+    if drawer_state.project_id.is_none() {
+        ui.label("No project selected");
         return;
     }
 
