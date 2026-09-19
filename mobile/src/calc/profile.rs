@@ -116,6 +116,58 @@ impl ProfileManager {
 
         Ok(())
     }
+
+    /// List all valid profiles
+    ///
+    /// Scans the profiles base directory and returns names of all valid profiles.
+    /// A valid profile directory must contain: config.yml, id_ed25519, id_ed25519.pub, key.kdbx
+    pub fn list_profiles() -> Result<Vec<String>> {
+        let base_dir = crate::get_profiles_base_dir()?;
+
+        // If directory doesn't exist, return empty list
+        if !base_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut profiles = Vec::new();
+
+        // Scan directory for valid profiles
+        for entry in fs::read_dir(&base_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Skip if not a directory
+            if !path.is_dir() {
+                continue;
+            }
+
+            // Get directory name as profile name
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                // Validate directory contains required files
+                if Self::validate_profile_dir(&path).is_ok() {
+                    profiles.push(name.to_string());
+                }
+            }
+        }
+
+        Ok(profiles)
+    }
+
+    /// Validate that a profile directory contains all required files
+    ///
+    /// Required files: config.yml, id_ed25519, id_ed25519.pub, key.kdbx
+    fn validate_profile_dir(dir: &PathBuf) -> Result<()> {
+        let required_files = ["config.yml", "id_ed25519", "id_ed25519.pub", "key.kdbx"];
+
+        for file in &required_files {
+            let file_path = dir.join(file);
+            if !file_path.exists() {
+                return Err(ProfileError::CorruptedProfile(file.to_string()).into());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -162,5 +214,28 @@ mod tests {
         assert!(ProfileManager::validate_name("profile/name").is_err()); // slash
         assert!(ProfileManager::validate_name("profile@name").is_err()); // @
         assert!(ProfileManager::validate_name("profile#name").is_err()); // #
+    }
+
+    #[test]
+    fn test_list_profiles_empty() {
+        use std::fs;
+
+        // Use temporary directory for test
+        let test_dir = std::env::temp_dir().join("dure_test_list_empty");
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Clean up any existing test directory
+        let _ = fs::remove_dir_all(&test_dir);
+
+        // Create empty profiles directory
+        fs::create_dir_all(&test_dir).unwrap();
+
+        // List should return empty vector
+        let profiles = ProfileManager::list_profiles().unwrap();
+        assert_eq!(profiles.len(), 0);
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
     }
 }
