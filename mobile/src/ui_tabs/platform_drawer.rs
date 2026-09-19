@@ -193,7 +193,29 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     }
 
     ui.horizontal(|ui| {
-        ui.heading("Stdout Logs");
+        ui.heading("Project Logs");
+        ui.add_space(8.0);
+
+        // New logs indicator - show badge when logs are added
+        let log_count_id = egui::Id::new("drawer_prev_log_count");
+        let current_count = drawer_state.logs.len();
+        let prev_count = ui.data(|d| d.get_temp::<usize>(log_count_id)).unwrap_or(0);
+
+        if current_count > prev_count {
+            // Show "NEW" badge when logs are added
+            ui.label(
+                egui::RichText::new("🆕 NEW")
+                    .color(egui::Color32::from_rgb(76, 175, 80))
+                    .strong()
+            );
+
+            // Request repaint for animation
+            ui.ctx().request_repaint();
+        }
+
+        // Update stored count
+        ui.data_mut(|d| d.insert_temp(log_count_id, current_count));
+
         ui.add_space(8.0);
 
         // Log level filter
@@ -245,20 +267,17 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
             .collect()
     };
 
-    // Scrollable log view with fixed-width font
-    // Only set max_height if more than 4 lines
-    let mut scroll_area = egui::ScrollArea::vertical().auto_shrink([false, false]);
-    if filtered_logs.len() > 4 {
-        scroll_area = scroll_area.max_height(500.0);
-    }
+    // Scrollable log view with fixed-width font - always 500px height
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
 
-    scroll_area.show(ui, |ui| {
-        ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
-
-        for line in filtered_logs {
-            ui.label(line);
-        }
-    });
+            for line in filtered_logs {
+                ui.label(line);
+            }
+        });
 }
 
 /// Render Operations tab (operation logs from SQLite)
