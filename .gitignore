@@ -133,3 +133,7 @@ dure.db
 /mobile/src/**/*.stub
 /mobile/src/**/*.md
 crates/go-webauthn/bin/
+
+# Core dump files
+*.core
+rust-analyzer.core
