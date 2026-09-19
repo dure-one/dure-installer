@@ -117,6 +117,35 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Verify profile password
+    ///
+    /// Attempts to open the KeePass database with the given password.
+    /// Returns Ok if password is correct, IncorrectPassword error if wrong.
+    pub fn verify_password(name: &str, password: &str) -> Result<()> {
+        // Get profile context
+        let ctx = ProfileContext::new(name)?;
+
+        // Check if profile exists
+        if !ctx.config_dir.exists() {
+            return Err(ProfileError::NotFound(name.to_string()).into());
+        }
+
+        // Try to open KeePass database with password
+        use keepass::{Database, DatabaseKey};
+        use std::fs::File;
+
+        let mut file = File::open(&ctx.kdbx_path)
+            .context("failed to open kdbx file")?;
+
+        let key = DatabaseKey::new().with_password(password);
+
+        // Attempt to open database
+        match Database::open(&mut file, key) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(ProfileError::IncorrectPassword.into()),
+        }
+    }
+
     /// Create a new profile
     ///
     /// Creates profile directory with:
@@ -393,6 +422,68 @@ mod tests {
 
         // Cleanup
         let _ = fs::remove_dir_all(&test_dir);
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_verify_password_correct() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Use unique temporary directory for test
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_verify_correct_{}", timestamp));
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Create base directory and profile
+        fs::create_dir_all(&test_dir).unwrap();
+        let profile_name = "test-profile";
+        let password = "test-password-123";
+        ProfileManager::create_profile(profile_name, password).unwrap();
+
+        // Verify correct password
+        let result = ProfileManager::verify_password(profile_name, password);
+        assert!(result.is_ok());
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_verify_password_incorrect() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Use unique temporary directory for test
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_verify_incorrect_{}", timestamp));
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Create base directory and profile
+        fs::create_dir_all(&test_dir).unwrap();
+        let profile_name = "test-profile";
+        let password = "test-password-123";
+        ProfileManager::create_profile(profile_name, password).unwrap();
+
+        // Verify incorrect password fails
+        let result = ProfileManager::verify_password(profile_name, "wrong-password");
+        assert!(result.is_err());
+
+        // Verify error is IncorrectPassword
+        match result.unwrap_err().downcast_ref::<ProfileError>() {
+            Some(ProfileError::IncorrectPassword) => {}
+            _ => panic!("Expected IncorrectPassword error"),
+        }
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
         std::env::remove_var("DURE_TEST_PROFILES_DIR");
     }
 }
