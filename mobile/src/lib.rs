@@ -114,6 +114,29 @@ pub fn get_app_config_dir() -> Result<PathBuf> {
     }
 }
 
+/// Get the profiles base directory (~/.config/dure_installer)
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_profiles_base_dir() -> Result<PathBuf> {
+    // Test override for unit tests
+    if let Ok(test_dir) = std::env::var("DURE_TEST_PROFILES_DIR") {
+        return Ok(PathBuf::from(test_dir));
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let profiles_dir = PathBuf::from(home).join(".config").join("dure_installer");
+        Ok(profiles_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/data/data/app.dure.installer/profiles"))
+    }
+}
+
 /// Get the application cache directory (~/.cache/dure-installer)
 #[cfg(not(target_arch = "wasm32"))]
 pub fn get_app_cache_dir() -> Result<PathBuf> {
