@@ -804,15 +804,29 @@ impl GcpRestClient {
                     GCP_COMPUTE_API_BASE, project_id, rule.name
                 );
 
-                dure_debug!(
-                    "Updating firewall rule '{}' with IP: {}",
+                dure_info!(
+                    "🔥 Updating firewall rule '{}' with IP: {}",
                     rule.name, ip
                 );
                 dure_debug!("PATCH URL: {}", url);
                 dure_debug!("Body: {}", body.to_string());
 
                 let response = self.patch(&url, &body.to_string())?;
+                let status = response.status();
+
+                // Check response status
+                if status != 200 && status != 202 {
+                    let response_text = response.into_string().unwrap_or_default();
+                    dure_error!("❌ GCP API error (status {}): {}", status, response_text);
+                    return Err(anyhow::anyhow!(
+                        "Failed to update firewall rule (status {}): {}",
+                        status,
+                        response_text
+                    ));
+                }
+
                 let response_text = response.into_string().unwrap_or_default();
+                dure_info!("✅ Firewall rule updated successfully");
                 dure_debug!("Response: {}", response_text);
             } else {
                 dure_debug!("IP {} already in firewall rule '{}'", ip, rule.name);
@@ -835,15 +849,29 @@ impl GcpRestClient {
                 GCP_COMPUTE_API_BASE, project_id
             );
 
-            dure_debug!(
-                "Creating new firewall rule 'allow-ssh-dure' with IP: {}",
+            dure_info!(
+                "🔥 Creating new firewall rule 'allow-ssh-dure' with IP: {}",
                 ip
             );
             dure_debug!("POST URL: {}", url);
             dure_debug!("Body: {}", body.to_string());
 
             let response = self.post(&url, &body.to_string())?;
+            let status = response.status();
+
+            // Check response status
+            if status != 200 && status != 201 && status != 202 {
+                let response_text = response.into_string().unwrap_or_default();
+                dure_error!("❌ GCP API error (status {}): {}", status, response_text);
+                return Err(anyhow::anyhow!(
+                    "Failed to create firewall rule (status {}): {}",
+                    status,
+                    response_text
+                ));
+            }
+
             let response_text = response.into_string().unwrap_or_default();
+            dure_info!("✅ Firewall rule created successfully");
             dure_debug!("Response: {}", response_text);
         }
 

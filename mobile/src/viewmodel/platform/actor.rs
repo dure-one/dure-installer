@@ -1,7 +1,7 @@
 //! Platform actor implementation
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
-use super::{PlatformCommand, PlatformEvent, VmInfo};
+use super::{PlatformCommand, PlatformEvent, VmInfo, DrawerRepository};
 use crate::api::gcp::GcpRestClient;
 use crate::config::AppConfig;
 use crate::viewmodel::{ViewModelEvent, runtime};
@@ -11,6 +11,7 @@ use std::path::PathBuf;
 pub struct PlatformActor {
     command_rx: Receiver<PlatformCommand>,
     event_tx: Sender<ViewModelEvent>,
+    repository: DrawerRepository,
 }
 
 impl PlatformActor {
@@ -18,6 +19,7 @@ impl PlatformActor {
         Self {
             command_rx,
             event_tx,
+            repository: DrawerRepository::new(),
         }
     }
 
@@ -582,23 +584,47 @@ impl PlatformActor {
             .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
 
-        runtime::unblock({
+        // Log operation start
+        let log_id = self.repository.log_operation(
+            project_id.clone(),
+            "update_firewall",
+            "gcp",
+            Some(format!("Adding IP {} to firewall whitelist", allow_ip)),
+        ).await?;
+
+        dure_info!("🔥 Starting firewall update for project '{}', IP: {}", project_id, allow_ip);
+
+        // Execute firewall update
+        let result = runtime::unblock({
             let allow_ip = allow_ip.clone();
+            let project_id = project_id.clone();
             move || -> anyhow::Result<()> {
                 let client = GcpRestClient::new(access_token);
                 client.add_ip_to_firewall(&project_id, &allow_ip)?;
                 Ok(())
             }
         })
-        .await?;
-
-        self.send_event(PlatformEvent::FirewallUpdated {
-            platform_name,
-            whitelisted_ip: allow_ip,
-        })
         .await;
 
-        Ok(())
+        // Log operation result
+        match &result {
+            Ok(_) => {
+                self.repository.mark_success(log_id).await?;
+                dure_info!("✅ Firewall updated successfully for project '{}'", project_id);
+                self.send_event(PlatformEvent::FirewallUpdated {
+                    platform_name,
+                    whitelisted_ip: allow_ip,
+                })
+                .await;
+            }
+            Err(e) => {
+                let error_msg = format!("{:#}", e);
+                self.repository.mark_failed(log_id, &error_msg).await?;
+                dure_error!("❌ Firewall update failed for project '{}': {}", project_id, error_msg);
+            }
+        }
+
+        result
     }
 
     async fn fetch_billing(
