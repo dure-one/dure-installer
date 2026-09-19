@@ -280,3 +280,9 @@ tab-products = 상품
 tab-orders = 주문
 tab-email = 이메일
 tab-client = 클라이언트
+
+# Profile Login Dialog
+profile-login-title = 프로필 로그인
+profile-login-heading = 프로필 비밀번호 입력
+password = 비밀번호:
+password-hint = 비밀번호 입력

@@ -39,7 +39,7 @@ impl DlgProfileLogin {
         let mut close_clicked = false;
         let mut login_clicked = false;
 
-        egui::Window::new("Login Profile")
+        egui::Window::new(tr!("profile-login-title"))
             .id(egui::Id::new("profile_login_window"))
             .title_bar(false)
             .resizable(false)
@@ -51,7 +51,7 @@ impl DlgProfileLogin {
                 r.default_size([400.0, 250.0])
             })
             .show(ctx, |ui| {
-                ui.heading("Enter Profile Password");
+                ui.heading(tr!("profile-login-heading"));
                 ui.add_space(12.0);
 
                 // Error message display
@@ -64,18 +64,22 @@ impl DlgProfileLogin {
                 }
 
                 // Password input
-                ui.label("Password:");
-                ui.text_edit_singleline(&mut self.password);
+                ui.label(tr!("password"));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.password)
+                        .password(true)
+                        .hint_text(tr!("password-hint")),
+                );
 
                 ui.add_space(12.0);
 
                 // Action buttons
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("OK")).clicked() {
+                        if ui.add(MaterialButton::filled(tr!("ok"))).clicked() {
                             login_clicked = true;
                         }
-                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
                             close_clicked = true;
                         }
                     });

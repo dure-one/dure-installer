@@ -280,3 +280,9 @@ tab-products = Products
 tab-orders = Orders
 tab-email = Email
 tab-client = Client
+
+# Profile Login Dialog
+profile-login-title = Login Profile
+profile-login-heading = Enter Profile Password
+password = Password:
+password-hint = Enter password
