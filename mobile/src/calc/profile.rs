@@ -117,6 +117,96 @@ impl ProfileManager {
         Ok(())
     }
 
+    /// Create a new profile
+    ///
+    /// Creates profile directory with:
+    /// - config.yml (default configuration)
+    /// - id_ed25519, id_ed25519.pub (SSH keypair)
+    /// - key.kdbx (KeePass database)
+    pub fn create_profile(name: &str, password: &str) -> Result<ProfileContext> {
+        // Validate name
+        Self::validate_name(name)?;
+
+        // Get profile context
+        let ctx = ProfileContext::new(name)?;
+
+        // Check if already exists
+        if ctx.config_dir.exists() {
+            return Err(ProfileError::AlreadyExists(name.to_string()).into());
+        }
+
+        // Create profile directory
+        fs::create_dir_all(&ctx.config_dir).context("failed to create profile directory")?;
+
+        // Generate SSH keypair
+        let (private_key, public_key) = Self::generate_keypair()?;
+
+        // Write private key
+        fs::write(&ctx.kpkey_path, private_key).context("failed to write private key")?;
+
+        // Write public key
+        fs::write(&ctx.kppubkey_path, public_key).context("failed to write public key")?;
+
+        // Create KeePass database
+        Self::create_kdbx(&ctx.kdbx_path, password)?;
+
+        // Create default config.yml
+        let default_config = "# Profile configuration\n";
+        fs::write(&ctx.config_file, default_config).context("failed to write config file")?;
+
+        dure_info!("Created profile: {}", name);
+        Ok(ctx)
+    }
+
+    /// Generate Ed25519 SSH keypair
+    ///
+    /// Returns (private_key_pem, public_key_openssh)
+    fn generate_keypair() -> Result<(String, String)> {
+        use ed25519_dalek::{SigningKey, VerifyingKey};
+        use rand::rngs::OsRng;
+
+        // Generate keypair
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key: VerifyingKey = (&signing_key).into();
+
+        // Format private key (PEM-like format for OpenSSH)
+        let private_bytes = signing_key.to_bytes();
+        let private_key = format!(
+            "-----BEGIN OPENSSH PRIVATE KEY-----\n{}\n-----END OPENSSH PRIVATE KEY-----\n",
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_bytes)
+        );
+
+        // Format public key (OpenSSH format)
+        let public_bytes = verifying_key.to_bytes();
+        let public_key = format!(
+            "ssh-ed25519 {} dure-profile\n",
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_bytes)
+        );
+
+        Ok((private_key, public_key))
+    }
+
+    /// Create KeePass database
+    ///
+    /// Creates a new KDBX4 database with the given password
+    fn create_kdbx(path: &PathBuf, password: &str) -> Result<()> {
+        use keepass::{Database, DatabaseKey};
+
+        // Create new database
+        let mut db = Database::new(Default::default());
+        db.root.name = "Dure Profile".to_string();
+
+        // Create database key with password
+        let key = DatabaseKey::new().with_password(password);
+
+        // Save database
+        let mut file = fs::File::create(path).context("failed to create kdbx file")?;
+        db.save(&mut file, key)
+            .context("failed to save kdbx database")?;
+
+        Ok(())
+    }
+
     /// List all valid profiles
     ///
     /// Scans the profiles base directory and returns names of all valid profiles.
@@ -236,6 +326,73 @@ mod tests {
 
         // Cleanup
         fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_create_profile_success() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Use unique temporary directory for test (avoid parallel test conflicts)
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let test_dir = std::env::temp_dir().join(format!("dure_test_create_success_{}", timestamp));
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Create base directory
+        fs::create_dir_all(&test_dir).unwrap();
+
+        // Create profile
+        let profile_name = "test-profile";
+        let password = "test-password-123";
+        let ctx = ProfileManager::create_profile(profile_name, password).unwrap();
+
+        // Verify profile directory was created
+        let profile_dir = test_dir.join(profile_name);
+        assert!(profile_dir.exists());
+
+        // Verify all required files exist
+        assert!(profile_dir.join("config.yml").exists());
+        assert!(profile_dir.join("id_ed25519").exists());
+        assert!(profile_dir.join("id_ed25519.pub").exists());
+        assert!(profile_dir.join("key.kdbx").exists());
+
+        // Verify it appears in list
+        let profiles = ProfileManager::list_profiles().unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0], profile_name);
+
+        // Cleanup
+        fs::remove_dir_all(&test_dir).unwrap();
+        std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    fn test_create_profile_invalid_name() {
+        use std::fs;
+
+        // Use temporary directory for test
+        let test_dir = std::env::temp_dir().join("dure_test_create_invalid");
+        std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
+
+        // Clean up any existing test directory
+        let _ = fs::remove_dir_all(&test_dir);
+
+        // Try to create profile with invalid name
+        let result = ProfileManager::create_profile("invalid name", "password");
+        assert!(result.is_err());
+
+        // Verify error is InvalidName
+        match result.unwrap_err().downcast_ref::<ProfileError>() {
+            Some(ProfileError::InvalidName(_)) => {}
+            _ => panic!("Expected InvalidName error"),
+        }
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&test_dir);
         std::env::remove_var("DURE_TEST_PROFILES_DIR");
     }
 }
