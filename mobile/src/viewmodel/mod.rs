@@ -2,6 +2,7 @@
 
 pub mod common;
 pub mod io;
+pub mod logs;
 pub mod ns;
 pub mod platform;
 pub mod runtime;
@@ -21,9 +22,11 @@ use std::collections::{HashMap, VecDeque};
 pub struct ViewModel {
     // Actor communication channels
     platform_tx: Sender<platform::PlatformCommand>,
+    drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
     wss_tx: Sender<wss::WssCommand>,
+    logs_tx: Sender<logs::LogCommand>,
 
     // Unified event receiver
     event_rx: Receiver<ViewModelEvent>,
@@ -86,10 +89,18 @@ impl ViewModel {
     #[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
     pub fn new(ctx: egui::Context) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
+
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
 
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
@@ -98,15 +109,18 @@ impl ViewModel {
 
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
+                smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 // Keep thread alive
                 std::future::pending::<()>().await
@@ -115,9 +129,11 @@ impl ViewModel {
 
         Self {
             platform_tx,
+            drawer_tx,
             ssh_tx,
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -129,24 +145,35 @@ impl ViewModel {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new_headless() -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
+
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
 
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
                 dure_info!("ViewModel runtime started (headless)");
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
                 let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 smol::spawn(platform_actor.run()).detach();
+                smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 std::future::pending::<()>().await
             })
@@ -154,9 +181,11 @@ impl ViewModel {
 
         Self {
             platform_tx,
+            drawer_tx,
             ssh_tx,
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -171,29 +200,47 @@ impl ViewModel {
         use wasm_bindgen_futures::spawn_local;
 
         let (platform_tx, platform_rx) = smol::channel::unbounded();
+        let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
+
+        // Clone for closure (logs_tx is moved into Self at the end)
+        let logs_tx_for_drawer = logs_tx.clone();
 
         // Spawn actors in Web Worker context
         spawn_local(async move {
             dure_info!("ViewModel runtime started (WASM)");
 
             let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+            let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
             // Run actors concurrently
-            futures::join!(platform_actor.run(), ns_actor.run(), wss_actor.run(),);
+            let logs_actor = logs::log_actor_loop(logs_rx, event_tx.clone());
+            futures::join!(
+                platform_actor.run(),
+                drawer_actor.run(),
+                ns_actor.run(),
+                wss_actor.run(),
+                logs_actor,
+            );
         });
 
         Self {
             platform_tx,
+            drawer_tx,
             // ssh_tx gated out for WASM builds
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: None,
@@ -208,13 +255,13 @@ impl ViewModel {
         let mut events = Vec::new();
 
         while let Ok(event) = self.event_rx.try_recv() {
-            log::debug!(" ViewModel: Received event: {:?}", event);
+            dure_debug!(" ViewModel: Received event: {:?}", event);
             self.apply_event(&event, Some(ctx));
             events.push(event);
         }
 
         if !events.is_empty() {
-            log::debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
+            dure_debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
             );
             ctx.request_repaint();
         }
@@ -241,8 +288,30 @@ impl ViewModel {
     }
 
     #[cfg(feature = "gui")]
-    fn apply_event(&mut self, _event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
-        // TODO: implement in Week 2
+    fn apply_event(&mut self, event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
+        // Forward LogEvent::LogsRetrieved to DrawerActor
+        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { project_id, lines }) = event {
+            dure_debug!(
+                "[VM_FORWARD] Received LogsRetrieved - project_id='{}', {} lines",
+                project_id,
+                lines.len()
+            );
+
+            if !lines.is_empty() {
+                dure_debug!("[VM_FORWARD] First line: {}", lines[0]);
+            }
+
+            let cmd = platform::DrawerCommand::UpdateLogs {
+                project_id: project_id.clone(),
+                lines: lines.clone(),
+            };
+
+            dure_debug!("[VM_FORWARD] Sending UpdateLogs to DrawerActor");
+            match self.drawer_tx.try_send(cmd) {
+                Ok(_) => dure_debug!("[VM_FORWARD] ✓ UpdateLogs sent successfully"),
+                Err(e) => dure_error!("[VM_FORWARD] ✗ Failed to forward logs to drawer: {}", e),
+            }
+        }
     }
 
     // State accessors
@@ -422,6 +491,13 @@ impl ViewModel {
     pub fn scan_existing_vms(&self, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::ScanExistingVMs { platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // Drawer commands
+    pub fn send_drawer_command(&self, cmd: platform::DrawerCommand) -> anyhow::Result<()> {
+        self.drawer_tx
+            .send_blocking(cmd)
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

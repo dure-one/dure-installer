@@ -240,7 +240,7 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        log::debug!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+        dure_debug!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
 
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
@@ -305,7 +305,7 @@ impl eframe::App for DureApp {
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
-        log::debug!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+        dure_debug!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
 
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
@@ -364,7 +364,7 @@ impl DureApp {
         ui.add_space(10.0);
 
         // Render active tab content
-        log::debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
+        dure_debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
             Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
             Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
@@ -606,7 +606,7 @@ impl DureApp {
                             self.update_status
                         )
                     };
-                    log::warn!(
+                    dure_warn!(
                         "Update aborted: update_available={}, download_url_empty={}",
                         self.update_available,
                         self.update_download_url.is_empty()
@@ -649,14 +649,14 @@ impl DureApp {
                     self.dlg_about.close();
 
                     // Give the filesystem time to sync before checking status
-                    log::debug!("Waiting for filesystem to sync after update...");
+                    dure_debug!("Waiting for filesystem to sync after update...");
                     std::thread::sleep(std::time::Duration::from_millis(200));
 
                     // Refresh install status with retries (same logic as install)
                     let old_status = self.install_status;
                     let mut retries = 3;
                     loop {
-                        log::debug!(
+                        dure_debug!(
                             "Checking install status after update (attempt {}/{})",
                             4 - retries,
                             3
@@ -678,7 +678,7 @@ impl DureApp {
                         }
 
                         // Status not as expected, wait and retry
-                        log::warn!(
+                        dure_warn!(
                             "Install status check unexpected, retrying... ({} retries left)",
                             retries
                         );
@@ -687,7 +687,7 @@ impl DureApp {
                     }
 
                     if retries == 0 {
-                        log::error!("Install status check failed after all retries!");
+                        dure_error!("Install status check failed after all retries!");
                         self.install_message = format!(
                             "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                             self.install_message
@@ -695,7 +695,7 @@ impl DureApp {
                     }
                 }
                 InstallResult::Error(err) => {
-                    log::error!("Update failed: {}", err);
+                    dure_error!("Update failed: {}", err);
                     self.install_message = format!("Error: {}", err);
                 }
             }
@@ -706,7 +706,7 @@ impl DureApp {
         {
             // On Android, open browser to download page using stored URL
             if let Err(e) = webbrowser::open(&self.update_download_url) {
-                log::error!("Failed to open browser for update download: {}", e);
+                dure_error!("Failed to open browser for update download: {}", e);
                 self.update_status = format!("Failed to open browser: {}", e);
             } else {
                 dure_info!("Opened browser for update download");
@@ -749,7 +749,7 @@ impl DureApp {
 
         // Prevent concurrent operations
         if self.install_in_progress {
-            log::warn!("Install operation already in progress, ignoring duplicate request");
+            dure_warn!("Install operation already in progress, ignoring duplicate request");
             return;
         }
 
@@ -774,13 +774,13 @@ impl DureApp {
 
                 // Give the filesystem time to sync before checking status
                 // This is especially important on Windows where file operations may be asynchronous
-                log::debug!("Waiting for filesystem to sync...");
+                dure_debug!("Waiting for filesystem to sync...");
                 std::thread::sleep(std::time::Duration::from_millis(200));
 
                 // Refresh install status with retries
                 let mut retries = 3;
                 loop {
-                    log::debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
+                    dure_debug!("Checking install status (attempt {}/{})", 4 - retries, 3);
                     let new_status = crate::install::check_install();
 
                     // Check if status changed as expected
@@ -810,7 +810,7 @@ impl DureApp {
                     }
 
                     // Status didn't change, wait and retry
-                    log::warn!(
+                    dure_warn!(
                         "Install status didn't change as expected, retrying... ({} retries left)",
                         retries
                     );
@@ -819,7 +819,7 @@ impl DureApp {
                 }
 
                 if retries == 0 {
-                    log::error!("Install status check failed after all retries!");
+                    dure_error!("Install status check failed after all retries!");
                     self.install_message = format!(
                         "{}\n\nNote: Status may not have updated correctly. Please restart the application.",
                         self.install_message
@@ -827,7 +827,7 @@ impl DureApp {
                 }
             }
             InstallResult::Error(err) => {
-                log::error!("Operation failed: {}", err);
+                dure_error!("Operation failed: {}", err);
                 self.install_message = format!("Error: {}", err);
             }
         }

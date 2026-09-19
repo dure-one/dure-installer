@@ -25,7 +25,7 @@ impl NsActor {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
                     if let Err(e) = self.handle_command(cmd).await {
-                        log::error!("NsActor command failed: {}", e);
+                        dure_error!("NsActor command failed: {}", e);
                     }
                 }
                 Err(_) => {

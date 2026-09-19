@@ -425,6 +425,8 @@ impl GcpRestClient {
         zone: &str,
         instance: &InstanceRequest,
     ) -> Result<Operation> {
+        dure_info!(project_id = project_id, "Creating VM instance '{}' in zone {}", instance.name, zone);
+
         let url = format!(
             "{}/projects/{}/zones/{}/instances",
             GCP_COMPUTE_API_BASE, project_id, zone
@@ -530,6 +532,8 @@ impl GcpRestClient {
         zone: &str,
         instance_name: &str,
     ) -> Result<Operation> {
+        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {}", instance_name, zone);
+
         let url = format!(
             "{}/projects/{}/zones/{}/instances/{}",
             GCP_COMPUTE_API_BASE, project_id, zone, instance_name
@@ -800,18 +804,32 @@ impl GcpRestClient {
                     GCP_COMPUTE_API_BASE, project_id, rule.name
                 );
 
-                log::debug!(
-                    "Updating firewall rule '{}' with IP: {}",
+                dure_info!(
+                    "🔥 Updating firewall rule '{}' with IP: {}",
                     rule.name, ip
                 );
-                log::debug!("PATCH URL: {}", url);
-                log::debug!("Body: {}", body.to_string());
+                dure_debug!("PATCH URL: {}", url);
+                dure_debug!("Body: {}", body.to_string());
 
                 let response = self.patch(&url, &body.to_string())?;
+                let status = response.status();
+
+                // Check response status
+                if status != 200 && status != 202 {
+                    let response_text = response.into_string().unwrap_or_default();
+                    dure_error!("❌ GCP API error (status {}): {}", status, response_text);
+                    return Err(anyhow::anyhow!(
+                        "Failed to update firewall rule (status {}): {}",
+                        status,
+                        response_text
+                    ));
+                }
+
                 let response_text = response.into_string().unwrap_or_default();
-                log::debug!("Response: {}", response_text);
+                dure_info!("✅ Firewall rule updated successfully");
+                dure_debug!("Response: {}", response_text);
             } else {
-                log::debug!("IP {} already in firewall rule '{}'", ip, rule.name);
+                dure_debug!("IP {} already in firewall rule '{}'", ip, rule.name);
             }
         } else {
             // Create new SSH rule
@@ -831,16 +849,30 @@ impl GcpRestClient {
                 GCP_COMPUTE_API_BASE, project_id
             );
 
-            log::debug!(
-                "Creating new firewall rule 'allow-ssh-dure' with IP: {}",
+            dure_info!(
+                "🔥 Creating new firewall rule 'allow-ssh-dure' with IP: {}",
                 ip
             );
-            log::debug!("POST URL: {}", url);
-            log::debug!("Body: {}", body.to_string());
+            dure_debug!("POST URL: {}", url);
+            dure_debug!("Body: {}", body.to_string());
 
             let response = self.post(&url, &body.to_string())?;
+            let status = response.status();
+
+            // Check response status
+            if status != 200 && status != 201 && status != 202 {
+                let response_text = response.into_string().unwrap_or_default();
+                dure_error!("❌ GCP API error (status {}): {}", status, response_text);
+                return Err(anyhow::anyhow!(
+                    "Failed to create firewall rule (status {}): {}",
+                    status,
+                    response_text
+                ));
+            }
+
             let response_text = response.into_string().unwrap_or_default();
-            log::debug!("Response: {}", response_text);
+            dure_info!("✅ Firewall rule created successfully");
+            dure_debug!("Response: {}", response_text);
         }
 
         Ok(())
@@ -885,7 +917,7 @@ impl GcpRestClient {
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Debian images: {}", e);
-                log::warn!("{}", err_msg);
+                dure_warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }
@@ -898,7 +930,7 @@ impl GcpRestClient {
             }
             Err(e) => {
                 let err_msg = format!("Failed to fetch Ubuntu images: {}", e);
-                log::warn!("{}", err_msg);
+                dure_warn!("{}", err_msg);
                 errors.push(err_msg);
             }
         }

@@ -1,4 +1,5 @@
 use crate::LogLevel;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use crate::Settings;
 use crate::ui_dlg::settings_stt::*;
 use eframe::egui;
@@ -204,7 +205,7 @@ impl DlgSettings {
                                 settings.language = selected_lang.clone();
                                 // Apply language change immediately
                                 if let Err(e) = crate::i18n::set_language(&selected_lang) {
-                                    log::error!("Failed to set language: {}", e);
+                                    dure_error!("Failed to set language: {}", e);
                                 }
                                 // Request repaint to update UI with new language
                                 ctx.request_repaint();
@@ -329,7 +330,7 @@ impl DlgSettings {
                                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
                                         egui::vec2(size.0, size.1),
                                     ));
-                                    log::info!("Window resized to {}x{}", size.0, size.1);
+                                    dure_info!("Window resized to {}x{}", size.0, size.1);
                                 }
                             }
                             ui.add_space(8.0);
@@ -403,11 +404,11 @@ impl DlgSettings {
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add(MaterialButton::filled(tr!("save"))).clicked() {
-                            log::info!("Settings dialog Save clicked!");
+                            dure_info!("Settings dialog Save clicked!");
                             save_clicked = true;
                         }
                         if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            log::info!("Settings dialog Cancel clicked!");
+                            dure_info!("Settings dialog Cancel clicked!");
                             close_clicked = true;
                         }
                     });

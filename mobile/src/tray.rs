@@ -60,7 +60,7 @@ pub fn init_tray_event_handlers() {
     // Set up global event handlers that push to queues
     let tray_queue_for_handler = tray_queue.clone();
     TrayIconEvent::set_event_handler(Some(move |event| {
-        log::debug!(
+        dure_debug!(
             "TrayIconEvent received, pushing to global queue: {:?}",
             event
         );
@@ -88,31 +88,31 @@ struct MenuItems {
 /// Load the embedded icon
 fn load_icon() -> Icon {
     let start_time = std::time::Instant::now();
-    log::debug!("Loading tray icon...");
+    dure_debug!("Loading tray icon...");
 
     let icon_bytes = include_bytes!("../app/src/main/play_store_512.png");
 
     let t0 = std::time::Instant::now();
     let image = image::load_from_memory(icon_bytes).expect("Failed to load icon");
-    log::debug!("  image::load_from_memory(): {:?}", t0.elapsed());
+    dure_debug!("  image::load_from_memory(): {:?}", t0.elapsed());
 
     let t1 = std::time::Instant::now();
     let rgba = image.to_rgba8();
-    log::debug!("  to_rgba8(): {:?}", t1.elapsed());
+    dure_debug!("  to_rgba8(): {:?}", t1.elapsed());
 
     let t2 = std::time::Instant::now();
     let icon = Icon::from_rgba(rgba.to_vec(), image.width(), image.height())
         .expect("Failed to create icon");
-    log::debug!("  Icon::from_rgba(): {:?}", t2.elapsed());
+    dure_debug!("  Icon::from_rgba(): {:?}", t2.elapsed());
 
-    log::debug!("Icon loaded in {:?}", start_time.elapsed());
+    dure_debug!("Icon loaded in {:?}", start_time.elapsed());
     icon
 }
 
 /// Create the tray menu
 fn create_tray_menu() -> (Menu, MenuItems) {
     let start_time = std::time::Instant::now();
-    log::debug!("=== Creating tray menu ===");
+    dure_debug!("=== Creating tray menu ===");
 
     let menu = Menu::new();
     let show_app = MenuItem::new("Show App", true, None);
@@ -126,7 +126,7 @@ fn create_tray_menu() -> (Menu, MenuItems) {
     menu.append(&show_app).ok();
     menu.append(&quit).ok();
 
-    log::debug!("Menu created in {:?}", start_time.elapsed());
+    dure_debug!("Menu created in {:?}", start_time.elapsed());
     (menu, menu_items)
 }
 
@@ -224,20 +224,20 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
 
         // Process events from global queues
         while let Some(tray_event) = tray_queue.pop() {
-            log::debug!("Processing TrayIconEvent from queue: {:?}", tray_event);
+            dure_debug!("Processing TrayIconEvent from queue: {:?}", tray_event);
         }
 
         while let Some(menu_event) = menu_queue.pop() {
             dure_info!(">>> Menu event received from queue: {:?}", menu_event);
 
             if let Some(ref items) = menu_items {
-                log::debug!("Menu items available, checking which item was clicked");
+                dure_debug!("Menu items available, checking which item was clicked");
                 if menu_event.id == items.show_app {
                     dure_info!(">>> 'Show App' menu item clicked!");
                     dure_info!("Sending OpenGui action to main thread");
                     // Send action but keep tray running
                     if let Err(e) = action_sender.send(TrayExitAction::OpenGui) {
-                        log::error!("Failed to send OpenGui action: {}", e);
+                        dure_error!("Failed to send OpenGui action: {}", e);
                     }
                     dure_info!("OpenGui action sent, tray continues running");
                     continue; // Skip further processing
@@ -247,7 +247,7 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
                     tray_icon.take(); // Drop tray icon
                     // Send Quit action before exiting
                     if let Err(e) = action_sender.send(TrayExitAction::Quit) {
-                        log::error!("Failed to send Quit action: {}", e);
+                        dure_error!("Failed to send Quit action: {}", e);
                     }
                     *control_flow = ControlFlow::Exit;
                 }
@@ -260,11 +260,11 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
 
             let t0 = std::time::Instant::now();
             let icon = load_icon();
-            log::debug!("  load_icon(): {:?}", t0.elapsed());
+            dure_debug!("  load_icon(): {:?}", t0.elapsed());
 
             let t1 = std::time::Instant::now();
             let (tray_menu, items) = create_tray_menu();
-            log::debug!("  create_tray_menu(): {:?}", t1.elapsed());
+            dure_debug!("  create_tray_menu(): {:?}", t1.elapsed());
 
             let t2 = std::time::Instant::now();
             tray_icon = Some(
@@ -275,7 +275,7 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
                     .build()
                     .expect("Failed to create tray icon"),
             );
-            log::debug!("  TrayIconBuilder.build(): {:?}", t2.elapsed());
+            dure_debug!("  TrayIconBuilder.build(): {:?}", t2.elapsed());
 
             menu_items = Some(items);
             dure_info!("=== Tray icon created in {:?} ===", init_start.elapsed());
