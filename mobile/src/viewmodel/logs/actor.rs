@@ -1,10 +1,11 @@
 use crate::viewmodel::logs::types::{LogBuffer, LogCommand, LogEvent, LogLevel};
+use crate::viewmodel::ViewModelEvent;
 use smol::channel::{Receiver, Sender};
 use std::collections::HashMap;
 
 pub async fn log_actor_loop(
     cmd_rx: Receiver<LogCommand>,
-    event_tx: Sender<LogEvent>,
+    event_tx: Sender<ViewModelEvent>,
 ) {
     let mut buffers: HashMap<String, LogBuffer> = HashMap::new();
 
@@ -21,10 +22,10 @@ pub async fn log_actor_loop(
                     .map(|b| b.get_lines())
                     .unwrap_or_default();
 
-                let _ = event_tx.send(LogEvent::LogsRetrieved {
+                let _ = event_tx.send(ViewModelEvent::Logs(LogEvent::LogsRetrieved {
                     project_id,
                     lines,
-                }).await;
+                })).await;
             }
             LogCommand::ClearLogs { project_id } => {
                 if let Some(buffer) = buffers.get_mut(&project_id) {
@@ -33,7 +34,7 @@ pub async fn log_actor_loop(
             }
             LogCommand::ListProjects => {
                 let project_ids: Vec<String> = buffers.keys().cloned().collect();
-                let _ = event_tx.send(LogEvent::ProjectList { project_ids }).await;
+                let _ = event_tx.send(ViewModelEvent::Logs(LogEvent::ProjectList { project_ids })).await;
             }
         }
     }
@@ -70,12 +71,12 @@ mod tests {
             // Check event
             let event = event_rx.recv().await.unwrap();
             match event {
-                LogEvent::LogsRetrieved { project_id, lines } => {
+                ViewModelEvent::Logs(LogEvent::LogsRetrieved { project_id, lines }) => {
                     assert_eq!(project_id, "test-project");
                     assert_eq!(lines.len(), 1);
                     assert!(lines[0].contains("test message"));
                 }
-                _ => panic!("Expected LogsRetrieved event"),
+                _ => panic!("Expected Logs(LogsRetrieved) event"),
             }
         });
     }

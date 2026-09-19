@@ -26,6 +26,7 @@ pub struct ViewModel {
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
     wss_tx: Sender<wss::WssCommand>,
+    logs_tx: Sender<logs::LogCommand>,
 
     // Unified event receiver
     event_rx: Receiver<ViewModelEvent>,
@@ -92,7 +93,11 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
 
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
@@ -112,6 +117,7 @@ impl ViewModel {
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 // Keep thread alive
                 std::future::pending::<()>().await
@@ -124,6 +130,7 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -139,7 +146,11 @@ impl ViewModel {
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
 
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
@@ -156,6 +167,7 @@ impl ViewModel {
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
                 smol::spawn(wss_actor.run()).detach();
+                smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 std::future::pending::<()>().await
             })
@@ -167,6 +179,7 @@ impl ViewModel {
             ssh_tx,
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -184,7 +197,11 @@ impl ViewModel {
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
+        let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
+
+        // Initialize global log sender
+        logs::init_log_sender(logs_tx.clone());
 
         // Spawn actors in Web Worker context
         spawn_local(async move {
@@ -198,11 +215,13 @@ impl ViewModel {
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
             // Run actors concurrently
+            let logs_actor = logs::log_actor_loop(logs_rx, event_tx.clone());
             futures::join!(
                 platform_actor.run(),
                 drawer_actor.run(),
                 ns_actor.run(),
                 wss_actor.run(),
+                logs_actor,
             );
         });
 
@@ -212,6 +231,7 @@ impl ViewModel {
             // ssh_tx gated out for WASM builds
             ns_tx,
             wss_tx,
+            logs_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: None,
