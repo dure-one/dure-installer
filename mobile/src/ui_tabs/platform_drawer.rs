@@ -171,21 +171,48 @@ fn format_project_count_display(count: Option<usize>) -> String {
 
 /// Render Logs tab (stdout logs filtered by project)
 fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
+    // Auto-refresh: trigger log reload every 1 second (not every frame)
+    if let Some(ref project_id) = drawer_state.project_id {
+        let refresh_id = egui::Id::new("drawer_log_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 1)
+                .unwrap_or(true)
+        });
+
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("drawer_action_refresh_logs"),
+                    project_id.clone(),
+                );
+            });
+        }
+    }
+
     ui.horizontal(|ui| {
         ui.heading("Stdout Logs");
         ui.add_space(8.0);
 
-        // Refresh button
-        if let Some(ref project_id) = drawer_state.project_id {
-            if ui.button("🔄 Refresh").clicked() {
-                ui.data_mut(|d| {
-                    d.insert_temp(
-                        egui::Id::new("drawer_action_refresh_logs"),
-                        project_id.clone(),
-                    );
-                });
-            }
-        }
+        // Log level filter
+        ui.label("Level:");
+        let filter_id = egui::Id::new("log_level_filter");
+        let mut log_level_filter = ui.data(|d| d.get_temp::<String>(filter_id))
+            .unwrap_or_else(|| "All".to_string());
+
+        egui::ComboBox::from_label("")
+            .selected_text(&log_level_filter)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+            });
+
+        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
     });
 
     ui.add_space(8.0);
@@ -206,16 +233,32 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         return;
     }
 
-    // Scrollable log view with fixed-width font
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+    // Filter logs by level
+    let log_level_filter = ui.data(|d| d.get_temp::<String>(egui::Id::new("log_level_filter")))
+        .unwrap_or_else(|| "All".to_string());
 
-            for line in &drawer_state.logs {
-                ui.label(line);
-            }
-        });
+    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
+        drawer_state.logs.iter().collect()
+    } else {
+        drawer_state.logs.iter()
+            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
+            .collect()
+    };
+
+    // Scrollable log view with fixed-width font
+    // Only set max_height if more than 4 lines
+    let mut scroll_area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+    if filtered_logs.len() > 4 {
+        scroll_area = scroll_area.max_height(500.0);
+    }
+
+    scroll_area.show(ui, |ui| {
+        ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+
+        for line in filtered_logs {
+            ui.label(line);
+        }
+    });
 }
 
 /// Render Operations tab (operation logs from SQLite)

@@ -292,18 +292,24 @@ impl ViewModel {
         // Forward LogEvent::LogsRetrieved to DrawerActor
         if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { project_id, lines }) = event {
             dure_debug!(
-                "ViewModel: Forwarding LogsRetrieved to DrawerActor ({} lines for project {})",
-                lines.len(),
-                project_id
+                "[VM_FORWARD] Received LogsRetrieved - project_id='{}', {} lines",
+                project_id,
+                lines.len()
             );
+
+            if !lines.is_empty() {
+                dure_debug!("[VM_FORWARD] First line: {}", lines[0]);
+            }
 
             let cmd = platform::DrawerCommand::UpdateLogs {
                 project_id: project_id.clone(),
                 lines: lines.clone(),
             };
 
-            if let Err(e) = self.drawer_tx.try_send(cmd) {
-                dure_error!("ViewModel: Failed to forward logs to drawer: {}", e);
+            dure_debug!("[VM_FORWARD] Sending UpdateLogs to DrawerActor");
+            match self.drawer_tx.try_send(cmd) {
+                Ok(_) => dure_debug!("[VM_FORWARD] ✓ UpdateLogs sent successfully"),
+                Err(e) => dure_error!("[VM_FORWARD] ✗ Failed to forward logs to drawer: {}", e),
             }
         }
     }

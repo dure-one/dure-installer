@@ -18,13 +18,22 @@ pub fn get_log_sender() -> Option<&'static Sender<LogCommand>> {
 }
 
 pub fn append_log(project_id: impl Into<String>, level: LogLevel, message: impl Into<String>) {
+    let pid = project_id.into();
+    let msg = message.into();
+
     if let Some(sender) = get_log_sender() {
+        log::debug!("[APPEND_LOG] Sending AppendLog command - project_id='{}', level={:?}", pid, level);
         let cmd = LogCommand::AppendLog {
-            project_id: project_id.into(),
+            project_id: pid,
             level,
-            message: message.into(),
+            message: msg,
         };
-        let _ = sender.try_send(cmd);
+        match sender.try_send(cmd) {
+            Ok(_) => log::debug!("[APPEND_LOG] ✓ Command sent successfully"),
+            Err(e) => log::error!("[APPEND_LOG] ✗ Failed to send command: {}", e),
+        }
+    } else {
+        log::warn!("[APPEND_LOG] ✗ Log sender not initialized!");
     }
 }
 

@@ -1084,7 +1084,7 @@ impl PlatformActor {
     }
 
     async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
-        dure_info!("🔄 Refreshing platform: {}", platform_name);
+        dure_info!(project_id = &platform_name, "🔄 Refreshing platform: {}", platform_name);
 
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
@@ -1237,7 +1237,7 @@ impl PlatformActor {
         // Get current external IP
         let current_ip = match crate::api::gcp::get_current_ip() {
             Ok(ip) => {
-                dure_info!("🔍 Firewall check: Client's current IP = {}", ip);
+                dure_info!(project_id = project_id, "🔍 Firewall check: Client's current IP = {}", ip);
                 ip
             },
             Err(e) => {
@@ -1253,12 +1253,12 @@ impl PlatformActor {
         let client = crate::api::gcp::GcpRestClient::new(access_token);
 
         // Check ONLY direct IP access (ignore IAP - this app uses direct SSH)
-        dure_info!("🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
+        dure_info!(project_id = project_id, "🔍 Firewall check: Checking if current IP {} is whitelisted for direct SSH access...", current_ip);
 
         // Check if current IP is whitelisted (direct access)
         match client.check_ip_whitelisted(project_id, &current_ip) {
             Ok(whitelisted) => {
-                dure_info!("🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
+                dure_info!(project_id = project_id, "🔍 Firewall check result: whitelisted = {}, current_ip = {}", whitelisted, current_ip);
                 FirewallStatus {
                     whitelisted,
                     current_ip: Some(current_ip),
@@ -1280,12 +1280,15 @@ impl PlatformActor {
     ) -> super::SshStatus {
         use super::SshStatus;
 
+        // Get project ID for logging
+        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
+
         // Get VM info
         let (external_ip, keyring_domain) = match platform.vms.first() {
             Some(vm) => {
                 let ip = match &vm.external_ip {
                     Some(ip) => {
-                        dure_info!("🔍 SSH test: VM's external IP = {}", ip);
+                        dure_info!(project_id = project_id, "🔍 SSH test: VM's external IP = {}", ip);
                         ip.clone()
                     },
                     None => {
@@ -1324,6 +1327,8 @@ impl PlatformActor {
             };
 
             // Run test connection
+            let project_id_clone = project_id.to_string();
+            let project_id_clone2 = project_id.to_string();
             match runtime::unblock(move || {
                 smol::block_on(async {
                     async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await
@@ -1332,14 +1337,14 @@ impl PlatformActor {
             .await
             {
                 Ok(_) => {
-                    dure_info!("🔍 SSH test result: connected = true");
+                    dure_info!(project_id = &project_id_clone, "🔍 SSH test result: connected = true");
                     SshStatus {
                         connected: true,
                         error: None,
                     }
                 },
                 Err(e) => {
-                    dure_info!("🔍 SSH test result: connected = false, error = {}", e);
+                    dure_info!(project_id = &project_id_clone2, "🔍 SSH test result: connected = false, error = {}", e);
                     SshStatus {
                         connected: false,
                         error: Some(format!("Connection failed: {}", e)),
@@ -1372,6 +1377,7 @@ impl PlatformActor {
         };
 
         // Fetch project list from GCP
+        let platform_name_clone = platform_name.to_string();
         let project_count = match runtime::unblock(move || {
             let client = crate::api::gcp::GcpRestClient::new(access_token);
             client.list_projects(None)
@@ -1380,7 +1386,7 @@ impl PlatformActor {
         {
             Ok(project_list) => {
                 let count = project_list.projects.len();
-                dure_info!("🔍 Fetched project count: {}", count);
+                dure_info!(project_id = &platform_name_clone, "🔍 Fetched project count: {}", count);
                 Some(count)
             }
             Err(e) => {

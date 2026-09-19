@@ -128,7 +128,7 @@ impl DrawerActor {
     /// Load stdout logs filtered by project
     async fn load_logs(&mut self, project_id: String, _limit: usize) -> anyhow::Result<()> {
         dure_debug!(
-            "DrawerActor: requesting stdout logs for project {}",
+            "[DRAWER_LOAD] Requesting stdout logs for project '{}'",
             project_id
         );
 
@@ -136,6 +136,7 @@ impl DrawerActor {
         self.state.set_project(&project_id);
 
         // Send command to LogActor to retrieve logs
+        dure_debug!("[DRAWER_LOAD] Sending GetLogs command to LogActor");
         self.logs_tx
             .send(LogCommand::GetLogs {
                 project_id: project_id.clone(),
@@ -144,7 +145,7 @@ impl DrawerActor {
             .map_err(|e| anyhow::anyhow!("Failed to send GetLogs command: {}", e))?;
 
         dure_debug!(
-            "DrawerActor: GetLogs command sent for project {}",
+            "[DRAWER_LOAD] ✓ GetLogs command sent for project '{}'",
             project_id
         );
 
@@ -156,14 +157,18 @@ impl DrawerActor {
     /// Update logs from LogActor response
     async fn update_logs(&mut self, project_id: String, lines: Vec<String>) -> anyhow::Result<()> {
         dure_debug!(
-            "DrawerActor: updating logs for project {} ({} lines)",
+            "[DRAWER_UPDATE] Received UpdateLogs for project '{}' ({} lines)",
             project_id,
             lines.len()
         );
 
+        if !lines.is_empty() {
+            dure_debug!("[DRAWER_UPDATE] First log line: {}", lines[0]);
+        }
+
         self.state.set_logs(lines.clone());
 
-        dure_info!(
+        dure_debug!(
             "DrawerActor: updated {} log lines for project {}",
             lines.len(),
             project_id

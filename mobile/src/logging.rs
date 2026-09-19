@@ -172,7 +172,10 @@ mod tests {
 
 // Helper function for routing logs to actor
 pub fn log_to_actor(project_id: impl Into<String>, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
-    crate::viewmodel::logs::append_log(project_id, level, message);
+    let pid = project_id.into();
+    let msg = message.into();
+    log::debug!("[LOG_ROUTE] Routing log to actor - project_id='{}', level={:?}, msg='{}'", pid, level, msg);
+    crate::viewmodel::logs::append_log(pid, level, msg);
 }
 
 // Non-WASM platforms: use standard log crate

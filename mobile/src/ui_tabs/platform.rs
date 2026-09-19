@@ -608,46 +608,46 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
 ///
 /// Returns (private_key, public_key)
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
     use crate::calc::keyring;
 
     let domain = match keyring_domain.as_ref() {
         Some(d) => {
-            dure_debug!("Loading SSH key for domain: {}", d);
+            dure_debug!(project_id = project_id, "Loading SSH key for domain: {}", d);
             d
         }
         None => {
-            dure_debug!("No keyring domain provided");
+            dure_debug!(project_id = project_id, "No keyring domain provided");
             return (None, None);
         }
     };
 
     let kdbx_path = match keyring::get_default_kdbx_path() {
         Ok(p) => {
-            dure_debug!("KeePass DB path: {}", p.display());
+            dure_debug!(project_id = project_id, "KeePass DB path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kdbx path: {}", e);
+            dure_debug!(project_id = project_id, "Failed to get kdbx path: {}", e);
             return (None, None);
         }
     };
     let kpkey_path = match keyring::get_default_kpkey_path() {
         Ok(p) => {
-            dure_debug!("KPKey path: {}", p.display());
+            dure_debug!(project_id = project_id, "KPKey path: {}", p.display());
             p
         }
         Err(e) => {
-            dure_debug!("Failed to get kpkey path: {}", e);
+            dure_debug!(project_id = project_id, "Failed to get kpkey path: {}", e);
             return (None, None);
         }
     };
 
     let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
         Ok(k) => {
-            dure_debug!("Found {} keys in keyring", k.len());
+            dure_debug!(project_id = project_id, "Found {} keys in keyring", k.len());
             for key in &k {
-                dure_debug!("  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
+                dure_debug!(project_id = project_id, "  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
                     key.ssh_key.is_some()
                 );
@@ -655,7 +655,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
             k
         }
         Err(e) => {
-            dure_debug!("Failed to list keys: {}", e);
+            dure_debug!(project_id = project_id, "Failed to list keys: {}", e);
             return (None, None);
         }
     };
@@ -663,31 +663,31 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
         Some(e) => {
-            dure_debug!("Found matching key entry");
+            dure_debug!(project_id = project_id, "Found matching key entry");
             e
         }
         None => {
-            dure_debug!("No key found for domain: {}", domain);
+            dure_debug!(project_id = project_id, "No key found for domain: {}", domain);
             return (None, None);
         }
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        dure_debug!("SSH key bytes length: {}", ssh_key_bytes.len());
+        dure_debug!(project_id = project_id, "SSH key bytes length: {}", ssh_key_bytes.len());
 
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
         if let Some(ref pk) = public_key {
-            dure_debug!("Derived public key: {}", pk);
+            dure_debug!(project_id = project_id, "Derived public key: {}", pk);
         } else {
-            dure_debug!("Failed to derive public key");
+            dure_debug!(project_id = project_id, "Failed to derive public key");
         }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                dure_debug!("Key already in OpenSSH format");
+                dure_debug!(project_id = project_id, "Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
@@ -703,7 +703,7 @@ fn load_ssh_key_from_keyring(keyring_domain: &Option<String>) -> (Option<String>
 }
 
 #[cfg(target_arch = "wasm32")]
-fn load_ssh_key_from_keyring(_keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+fn load_ssh_key_from_keyring(_project_id: &str, _keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
     (None, None)
 }
 
@@ -757,6 +757,11 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
     drawer_state.active_tab = active_tab;
     if let Some(project_id) = &row.selected_project_id {
         drawer_state.set_project(project_id);
+
+        // Load logs from temp storage if available
+        if let Some(logs) = ui.ctx().data(|d| d.get_temp::<Vec<String>>(drawer_id.with("logs"))) {
+            drawer_state.set_logs(logs);
+        }
     }
 
     let mut tab_switch: Option<DrawerTab> = None;
@@ -1035,6 +1040,19 @@ impl PlatformTab {
                                 error: error.clone(),
                                 failed_at: chrono::Utc::now().timestamp(),
                             };
+                        }
+                    }
+                    ViewModelEvent::Drawer(drawer_event) => {
+                        use crate::viewmodel::platform::DrawerEvent;
+                        match drawer_event {
+                            DrawerEvent::LogsLoaded { project_id, lines } => {
+                                // Store logs in egui temp storage using drawer_id
+                                let drawer_id = egui::Id::new("platform_drawer").with(&project_id);
+                                ui.ctx().data_mut(|d| {
+                                    d.insert_temp(drawer_id.with("logs"), lines.clone());
+                                });
+                            }
+                            _ => {}
                         }
                     }
                     _ => {}
@@ -1793,8 +1811,9 @@ impl PlatformTab {
                         let (ssh_private_key, ssh_public_key, ssh_keyring_domain) =
                             if let Some(vm) = platform.vms.first() {
                                 let keyring_domain = vm.ssh_key_name.clone();
+                                let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
                                 let (private_key, public_key) =
-                                    load_ssh_key_from_keyring(&keyring_domain);
+                                    load_ssh_key_from_keyring(project_id, &keyring_domain);
                                 (private_key, public_key, keyring_domain)
                             } else {
                                 (None, None, None)
