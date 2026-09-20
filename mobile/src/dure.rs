@@ -66,6 +66,9 @@ pub struct DureApp {
     // Dialog states
     pub dlg_settings: DlgSettings,
     pub dlg_about: crate::ui_dlg::DlgAbout,
+    pub dlg_profile_login: crate::ui_dlg::DlgProfileLogin,
+    pub dlg_profile_create: crate::ui_dlg::DlgProfileCreate,
+    pub dlg_profile_delete: crate::ui_dlg::DlgProfileDelete,
 
     // Profile state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -205,6 +208,9 @@ impl Default for DureApp {
             // Dialog states
             dlg_settings: DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
+            dlg_profile_login: crate::ui_dlg::DlgProfileLogin::new(),
+            dlg_profile_create: crate::ui_dlg::DlgProfileCreate::new(),
+            dlg_profile_delete: crate::ui_dlg::DlgProfileDelete::new(),
             // Profile state
             current_profile: None,
             pending_profile_name: None,
@@ -308,6 +314,9 @@ impl eframe::App for DureApp {
         // Show install dialog (desktop only)
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         self.show_install_dialog(ctx);
+
+        // Profile dialogs coordination
+        self.handle_profile_dialogs(ctx);
     }
 }
 
@@ -366,14 +375,16 @@ impl DureApp {
                     // Add "+ Create New Profile" option
                     if ui.button(tr!("create-new-profile")).clicked() {
                         dure_info!("Create new profile clicked");
-                        // Dialog will be wired in Task 12
+                        self.dlg_profile_create.open();
                     }
 
                     // Add "Delete Profile" option (only when a profile is selected)
                     if self.current_profile.is_some() {
                         if ui.button(tr!("delete-profile")).clicked() {
-                            dure_info!("Delete profile clicked");
-                            // Dialog will be wired in Task 12
+                            if let Some(ref profile) = self.current_profile {
+                                dure_info!("Delete profile clicked: {}", profile.name);
+                                self.dlg_profile_delete.open(profile.name.clone());
+                            }
                         }
                     }
                 });
@@ -897,5 +908,120 @@ impl DureApp {
         // Reset the in-progress flag
         self.install_in_progress = false;
         self.install_dialog_open = true;
+    }
+
+    /// Handle profile dialogs coordination
+    ///
+    /// Manages the flow between profile selection, login, create, and delete dialogs.
+    fn handle_profile_dialogs(&mut self, ctx: &egui::Context) {
+        // Handle pending profile selection → trigger login dialog
+        if let Some(profile_name) = self.pending_profile_name.take() {
+            dure_info!("Opening login dialog for profile: {}", profile_name);
+            self.dlg_profile_login.open();
+            // Store the profile name for login processing
+            self.pending_profile_name = Some(profile_name);
+        }
+
+        // Show and handle login dialog
+        if self.dlg_profile_login.open {
+            self.dlg_profile_login.show(ctx);
+
+            // Process login result
+            if self.dlg_profile_login.confirmed {
+                if let Some(profile_name) = self.pending_profile_name.take() {
+                    let password = self.dlg_profile_login.password.clone();
+
+                    // Verify password
+                    match crate::calc::profile::ProfileManager::verify_password(&profile_name, &password) {
+                        Ok(()) => {
+                            dure_info!("Password verified for profile: {}", profile_name);
+
+                            // Load profile context
+                            match crate::calc::profile::ProfileContext::new(&profile_name) {
+                                Ok(ctx) => {
+                                    self.current_profile = Some(ctx);
+                                    dure_info!("Profile loaded successfully: {}", profile_name);
+                                    self.dlg_profile_login.reset();
+                                }
+                                Err(e) => {
+                                    dure_error!("Failed to load profile context: {}", e);
+                                    self.dlg_profile_login.set_error(format!("Failed to load profile: {}", e));
+                                    self.dlg_profile_login.confirmed = false;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            dure_warn!("Password verification failed: {}", e);
+                            self.dlg_profile_login.set_error("Incorrect password".to_string());
+                            self.dlg_profile_login.confirmed = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Show and handle create dialog
+        if self.dlg_profile_create.open {
+            self.dlg_profile_create.show(ctx);
+
+            // Process create result
+            if self.dlg_profile_create.confirmed {
+                let profile_name = self.dlg_profile_create.profile_name.clone();
+                let password = self.dlg_profile_create.password.clone();
+
+                // Create profile
+                match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password) {
+                    Ok(ctx) => {
+                        dure_info!("Profile created successfully: {}", profile_name);
+
+                        // Auto-login: load the newly created profile
+                        self.current_profile = Some(ctx);
+                        self.dlg_profile_create.reset();
+                        dure_info!("Auto-logged in to new profile: {}", profile_name);
+                    }
+                    Err(e) => {
+                        dure_error!("Failed to create profile: {}", e);
+                        self.dlg_profile_create.set_error(format!("Failed to create profile: {}", e));
+                        self.dlg_profile_create.confirmed = false;
+                    }
+                }
+            }
+        }
+
+        // Show and handle delete dialog
+        if self.dlg_profile_delete.open {
+            self.dlg_profile_delete.show(ctx);
+
+            // Process delete result
+            if self.dlg_profile_delete.confirmed {
+                let profile_name = self.dlg_profile_delete.profile_name.clone();
+
+                // Check if deleting the currently active profile
+                let is_active = self.current_profile
+                    .as_ref()
+                    .map(|p| p.name == profile_name)
+                    .unwrap_or(false);
+
+                // Delete profile
+                match crate::calc::profile::ProfileManager::delete_profile(&profile_name) {
+                    Ok(()) => {
+                        dure_info!("Profile deleted successfully: {}", profile_name);
+
+                        // Unload profile if it was active
+                        if is_active {
+                            self.current_profile = None;
+                            dure_info!("Unloaded active profile: {}", profile_name);
+                        }
+
+                        self.dlg_profile_delete.reset();
+                    }
+                    Err(e) => {
+                        dure_error!("Failed to delete profile: {}", e);
+                        // Note: Delete dialog doesn't have error display, just log
+                        self.dlg_profile_delete.reset();
+                    }
+                }
+            }
+        }
     }
 }
