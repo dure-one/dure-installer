@@ -2,6 +2,7 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 
@@ -911,7 +912,13 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
 impl NsTab {
     /// Render the NS tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // Check if profile is selected
+        if current_profile.is_none() {
+            ui.label(tr!("no-profile-selected"));
+            return;
+        }
+
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());

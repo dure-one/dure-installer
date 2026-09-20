@@ -2,6 +2,7 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 
 use crate::calc::audit;
@@ -1925,8 +1926,14 @@ impl SshTab {
     }
 
     /// Render the SSH tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         use egui_material3::MaterialButton;
+
+        // Check if profile is selected
+        if current_profile.is_none() {
+            ui.label(tr!("no-profile-selected"));
+            return;
+        }
 
         // 1. Process ViewModel events
         if let Some(ref mut vm) = vm {

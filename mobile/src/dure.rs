@@ -439,10 +439,10 @@ impl DureApp {
         // Render active tab content
         dure_debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
-            Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
-            Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
-            Tab::Site => self.tab_site.ui(ui),
+            Tab::Platform => self.tab_platform.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Site => self.tab_site.ui(&self.current_profile, ui),
         }
     }
 
