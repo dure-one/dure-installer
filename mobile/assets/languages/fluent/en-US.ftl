@@ -281,6 +281,12 @@ tab-orders = Orders
 tab-email = Email
 tab-client = Client
 
+# Profile Selector
+profile = Profile:
+none = None
+create-new-profile = + Create New Profile
+delete-profile = Delete Profile
+
 # Profile Login Dialog
 profile-login-title = Login Profile
 profile-login-heading = Enter Profile Password

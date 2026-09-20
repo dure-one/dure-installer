@@ -67,6 +67,11 @@ pub struct DureApp {
     pub dlg_settings: DlgSettings,
     pub dlg_about: crate::ui_dlg::DlgAbout,
 
+    // Profile state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub current_profile: Option<crate::calc::profile::ProfileContext>,
+    pub pending_profile_name: Option<String>,
+
     // Installation status (desktop only)
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub install_status: crate::install_stt::InstallStatus,
@@ -200,6 +205,9 @@ impl Default for DureApp {
             // Dialog states
             dlg_settings: DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
+            // Profile state
+            current_profile: None,
+            pending_profile_name: None,
             // Installation status (desktop only)
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: install::check_install(),
@@ -318,6 +326,60 @@ impl DureApp {
                 ui.colored_label(egui::Color32::from_rgb(255, 165, 0), warning);
             });
         }
+
+        // Profile selector (top-left)
+        ui.horizontal(|ui| {
+            ui.label(tr!("profile"));
+
+            // Get current profile name or "None"
+            let current_profile_name = self.current_profile
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| tr!("none"));
+
+            // Get list of available profiles
+            let profiles = crate::calc::profile::ProfileManager::list_profiles()
+                .unwrap_or_else(|e| {
+                    dure_warn!("Failed to list profiles: {}", e);
+                    Vec::new()
+                });
+
+            egui::ComboBox::from_label("")
+                .selected_text(&current_profile_name)
+                .show_ui(ui, |ui| {
+                    // List available profiles
+                    for profile_name in &profiles {
+                        if ui.selectable_value(
+                            &mut self.pending_profile_name,
+                            Some(profile_name.clone()),
+                            profile_name
+                        ).clicked() {
+                            dure_info!("Profile selected: {}", profile_name);
+                        }
+                    }
+
+                    // Separator before actions
+                    if !profiles.is_empty() {
+                        ui.separator();
+                    }
+
+                    // Add "+ Create New Profile" option
+                    if ui.button(tr!("create-new-profile")).clicked() {
+                        dure_info!("Create new profile clicked");
+                        // Dialog will be wired in Task 12
+                    }
+
+                    // Add "Delete Profile" option (only when a profile is selected)
+                    if self.current_profile.is_some() {
+                        if ui.button(tr!("delete-profile")).clicked() {
+                            dure_info!("Delete profile clicked");
+                            // Dialog will be wired in Task 12
+                        }
+                    }
+                });
+        });
+
+        ui.add_space(10.0);
 
         // Tabs navigation
         #[cfg(not(target_arch = "wasm32"))]

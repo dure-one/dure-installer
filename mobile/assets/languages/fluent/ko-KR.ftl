@@ -281,6 +281,12 @@ tab-orders = 주문
 tab-email = 이메일
 tab-client = 클라이언트
 
+# Profile Selector
+profile = 프로필:
+none = 없음
+create-new-profile = + 새 프로필 생성
+delete-profile = 프로필 삭제
+
 # Profile Login Dialog
 profile-login-title = 프로필 로그인
 profile-login-heading = 프로필 비밀번호 입력
