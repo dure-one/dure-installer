@@ -531,13 +531,18 @@ impl GcpRestClient {
         project_id: &str,
         zone: &str,
         instance_name: &str,
+        force: bool,
     ) -> Result<Operation> {
-        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {}", instance_name, zone);
+        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {} (noGracefulShutdown={})", instance_name, zone, force);
 
-        let url = format!(
+        let mut url = format!(
             "{}/projects/{}/zones/{}/instances/{}",
             GCP_COMPUTE_API_BASE, project_id, zone, instance_name
         );
+
+        if force {
+            url.push_str("?noGracefulShutdown=true");
+        }
 
         let response = self.delete(&url)?;
         let operation: Operation = response.into_json()?;

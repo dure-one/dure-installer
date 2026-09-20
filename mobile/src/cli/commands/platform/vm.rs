@@ -181,8 +181,11 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
+        // Use default config path for CLI
+        let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
         let event = runner
             .execute_command(PlatformCommand::RestartVM {
+                profile_config_path,
                 platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
@@ -231,11 +234,15 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
+        // Use default config path for CLI
+        let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
         let event = runner
             .execute_command(PlatformCommand::DeleteVM {
+                profile_config_path,
                 platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
+                force: false,
             })
             .await?;
 

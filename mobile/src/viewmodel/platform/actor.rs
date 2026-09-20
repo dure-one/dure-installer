@@ -26,6 +26,11 @@ impl PlatformActor {
     pub async fn run(mut self) {
         dure_info!("PlatformActor started");
 
+        // Initialize repository (operation logs table)
+        if let Err(e) = self.repository.init().await {
+            dure_error!("PlatformActor: failed to initialize repository: {}", e);
+        }
+
         loop {
             match self.command_rx.recv().await {
                 Ok(cmd) => {
@@ -42,11 +47,29 @@ impl PlatformActor {
     }
 
     async fn handle_command(&mut self, cmd: PlatformCommand) -> anyhow::Result<()> {
-        let operation = format!("{:?}", cmd);
+        // Extract operation name for error reporting (before moving cmd)
+        let operation = match &cmd {
+            PlatformCommand::ListVMs { .. } => "list_vms",
+            PlatformCommand::ScanExistingVMs { .. } => "scan_vms",
+            PlatformCommand::CreateVM { .. } => "create_vm",
+            PlatformCommand::DeleteVM { .. } => "delete_vm",
+            PlatformCommand::RestartVM { .. } => "restart_vm",
+            PlatformCommand::RegenerateVM { .. } => "regenerate_vm",
+            PlatformCommand::UpdateFirewall { .. } => "update_firewall",
+            PlatformCommand::FetchBilling { .. } => "fetch_billing",
+            PlatformCommand::ListProjects { .. } => "list_projects",
+            PlatformCommand::SelectProject { .. } => "select_project",
+            PlatformCommand::StartOAuth { .. } => "start_oauth",
+            PlatformCommand::CompleteOAuth { .. } => "complete_oauth",
+            PlatformCommand::AddPlatform { .. } => "add_platform",
+            PlatformCommand::DeletePlatform { .. } => "delete_platform",
+            PlatformCommand::RefreshPlatform { .. } => "refresh_platform",
+            PlatformCommand::RefreshAll => "refresh_all",
+        }.to_string();
 
         let result = match cmd {
             PlatformCommand::ListVMs { platform_name } => self.list_vms(platform_name).await,
-            PlatformCommand::ScanExistingVMs { platform_name } => self.scan_existing_vms(platform_name).await,
+            PlatformCommand::ScanExistingVMs { profile_config_path, platform_name } => self.scan_existing_vms(profile_config_path, platform_name).await,
             PlatformCommand::CreateVM {
                 platform_name,
                 vm_name,
@@ -57,46 +80,53 @@ impl PlatformActor {
                     .await
             }
             PlatformCommand::DeleteVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
-            } => self.delete_vm(platform_name, vm_name, zone).await,
+                force,
+            } => self.delete_vm(profile_config_path, platform_name, vm_name, zone, force).await,
             PlatformCommand::RestartVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
-            } => self.restart_vm(platform_name, vm_name, zone).await,
+            } => self.restart_vm(profile_config_path, platform_name, vm_name, zone).await,
             PlatformCommand::RegenerateVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
-            } => self.regenerate_vm(platform_name, vm_name, zone).await,
+            } => self.regenerate_vm(profile_config_path, platform_name, vm_name, zone).await,
             PlatformCommand::UpdateFirewall {
                 platform_name,
                 allow_ip,
             } => self.update_firewall(platform_name, allow_ip).await,
             PlatformCommand::FetchBilling {
+                profile_config_path,
                 platform_name,
                 project_id,
                 dataset,
                 table,
             } => {
-                self.fetch_billing(platform_name, project_id, dataset, table)
+                self.fetch_billing(profile_config_path, platform_name, project_id, dataset, table)
                     .await
             }
             PlatformCommand::ListProjects { platform_name } => {
                 self.list_projects(platform_name).await
             }
             PlatformCommand::SelectProject {
+                profile_config_path,
                 platform_name,
                 project_id,
-            } => self.select_project(platform_name, project_id).await,
+            } => self.select_project(profile_config_path, platform_name, project_id).await,
             PlatformCommand::StartOAuth { platform_name } => self.start_oauth(platform_name).await,
             PlatformCommand::CompleteOAuth {
                 platform_name,
                 auth_code,
             } => self.complete_oauth(platform_name, auth_code).await,
             PlatformCommand::AddPlatform {
+                profile_config_path,
                 platform_type,
                 oauth_access_token,
                 oauth_refresh_token,
@@ -105,6 +135,7 @@ impl PlatformActor {
                 selected_project_id,
             } => {
                 self.add_platform(
+                    profile_config_path,
                     platform_type,
                     oauth_access_token,
                     oauth_refresh_token,
@@ -115,11 +146,12 @@ impl PlatformActor {
                 .await
             }
             PlatformCommand::DeletePlatform {
+                profile_config_path,
                 platform_name,
                 delete_options,
-            } => self.delete_platform(platform_name, delete_options).await,
-            PlatformCommand::RefreshPlatform { platform_name } => {
-                self.refresh_platform(platform_name).await
+            } => self.delete_platform(profile_config_path, platform_name, delete_options).await,
+            PlatformCommand::RefreshPlatform { profile_config_path, platform_name } => {
+                self.refresh_platform(profile_config_path, platform_name).await
             }
             _ => {
                 // Unimplemented commands
@@ -255,25 +287,32 @@ impl PlatformActor {
         Ok(())
     }
 
-    async fn scan_existing_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
+    async fn scan_existing_vms(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.send_progress("scan_existing_vms", 0.1, "Checking authentication...")
             .await;
 
-        // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        // Get valid access token (refreshes if expired) from profile-specific config
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
 
         self.send_progress("scan_existing_vms", 0.2, "Loading platform config...")
             .await;
 
-        // Load platform config
-        let (config_path, project_id) = runtime::unblock({
+        // Load platform config from profile-specific path
+        let project_id = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || -> anyhow::Result<(std::path::PathBuf, String)> {
-                let (platform, config_path) = Self::load_platform_config(&platform_name)?;
+            let config_path = profile_config_path.clone();
+            move || -> anyhow::Result<String> {
+                let config = AppConfig::load_or_default(&config_path);
+                let platform = config
+                    .platforms
+                    .iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
                 let project_id = platform
                     .gcp_selected_project_id
+                    .clone()
                     .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-                Ok((config_path, project_id))
+                Ok(project_id)
             }
         })
         .await?;
@@ -295,9 +334,10 @@ impl PlatformActor {
         self.send_progress("scan_existing_vms", 0.7, "Converting VM data...")
             .await;
 
-        // Convert to VmInstance and save to config
+        // Convert to VmInstance and save to profile-specific config
         let vm_count = runtime::unblock({
             let platform_name = platform_name.clone();
+            let config_path = profile_config_path;
             move || -> anyhow::Result<usize> {
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
@@ -345,7 +385,7 @@ impl PlatformActor {
                 // Save config
                 app_config.save(&config_path)?;
 
-                dure_info!("Scanned and saved {} VMs to config", vm_count);
+                dure_info!(project_id = &platform_name, "Scanned and saved {} VMs to config", vm_count);
 
                 Ok(vm_count)
             }
@@ -428,17 +468,21 @@ impl PlatformActor {
 
     async fn delete_vm(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
+        force: bool,
     ) -> anyhow::Result<()> {
         self.send_progress("delete_vm", 0.5, "Deleting VM...").await;
 
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        let config = AppConfig::load_or_default(&profile_config_path);
+        let platform = config
+            .platforms
+            .iter()
+            .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+            .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+            .clone();
 
         let project_id = platform
             .gcp_selected_project_id
@@ -447,11 +491,20 @@ impl PlatformActor {
             .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        runtime::unblock({
+        // Log operation start
+        let delete_type = if force { "force delete" } else { "delete" };
+        let log_id = self.repository.log_operation(
+            &platform_name,
+            "delete_vm",
+            "gcp",
+            Some(format!("Deleting VM '{}' in zone '{}' (force={})", vm_name, zone, force)),
+        ).await?;
+
+        let result = runtime::unblock({
             let vm_name_clone = vm_name.clone();
             move || -> anyhow::Result<()> {
                 let client = GcpRestClient::new(access_token);
-                let operation = client.delete_instance(&project_id, &zone, &vm_name_clone)?;
+                let operation = client.delete_instance(&project_id, &zone, &vm_name_clone, force)?;
 
                 // Wait for deletion to complete
                 let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
@@ -459,19 +512,32 @@ impl PlatformActor {
                 Ok(())
             }
         })
-        .await?;
-
-        self.send_event(PlatformEvent::VMDeleted {
-            platform_name,
-            vm_name,
-        })
         .await;
 
-        Ok(())
+        match result {
+            Ok(_) => {
+                // Mark operation as success
+                self.repository.mark_success(log_id).await?;
+
+                self.send_event(PlatformEvent::VMDeleted {
+                    platform_name,
+                    vm_name,
+                })
+                .await;
+
+                Ok(())
+            }
+            Err(e) => {
+                // Mark operation as failed
+                let _ = self.repository.mark_failed(log_id, e.to_string()).await;
+                Err(e)
+            }
+        }
     }
 
     async fn restart_vm(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -479,11 +545,13 @@ impl PlatformActor {
         self.send_progress("restart_vm", 0.5, "Restarting VM...")
             .await;
 
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        let config = AppConfig::load_or_default(&profile_config_path);
+        let platform = config
+            .platforms
+            .iter()
+            .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+            .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+            .clone();
 
         let project_id = platform
             .gcp_selected_project_id
@@ -492,7 +560,15 @@ impl PlatformActor {
             .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        runtime::unblock({
+        // Log operation start
+        let log_id = self.repository.log_operation(
+            &platform_name,
+            "restart_vm",
+            "gcp",
+            Some(format!("Restarting VM '{}' in zone '{}'", vm_name, zone)),
+        ).await?;
+
+        let result = runtime::unblock({
             let vm_name_clone = vm_name.clone();
             move || -> anyhow::Result<()> {
                 let client = GcpRestClient::new(access_token);
@@ -504,19 +580,32 @@ impl PlatformActor {
                 Ok(())
             }
         })
-        .await?;
-
-        self.send_event(PlatformEvent::VMRestarted {
-            platform_name,
-            vm_name,
-        })
         .await;
 
-        Ok(())
+        match result {
+            Ok(_) => {
+                // Mark operation as success
+                self.repository.mark_success(log_id).await?;
+
+                self.send_event(PlatformEvent::VMRestarted {
+                    platform_name,
+                    vm_name,
+                })
+                .await;
+
+                Ok(())
+            }
+            Err(e) => {
+                // Mark operation as failed
+                let _ = self.repository.mark_failed(log_id, e.to_string()).await;
+                Err(e)
+            }
+        }
     }
 
     async fn regenerate_vm(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -524,12 +613,14 @@ impl PlatformActor {
         self.send_progress("regenerate_vm", 0.3, "Regenerating VM...")
             .await;
 
-        // Load platform config
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        // Load platform config from profile-specific path
+        let config = AppConfig::load_or_default(&profile_config_path);
+        let platform = config
+            .platforms
+            .iter()
+            .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+            .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+            .clone();
 
         self.send_progress("regenerate_vm", 0.6, "Calling GCP API...")
             .await;
@@ -592,7 +683,7 @@ impl PlatformActor {
             Some(format!("Adding IP {} to firewall whitelist", allow_ip)),
         ).await?;
 
-        dure_info!("🔥 Starting firewall update for project '{}', IP: {}", project_id, allow_ip);
+        dure_info!(project_id = &project_id, "🔥 Starting firewall update for project '{}', IP: {}", project_id, allow_ip);
 
         // Execute firewall update
         let result = runtime::unblock({
@@ -610,7 +701,7 @@ impl PlatformActor {
         match &result {
             Ok(_) => {
                 self.repository.mark_success(log_id).await?;
-                dure_info!("✅ Firewall updated successfully for project '{}'", project_id);
+                dure_info!(project_id = &project_id, "✅ Firewall updated successfully for project '{}'", project_id);
                 self.send_event(PlatformEvent::FirewallUpdated {
                     platform_name,
                     whitelisted_ip: allow_ip,
@@ -629,33 +720,46 @@ impl PlatformActor {
 
     async fn fetch_billing(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         project_id: String,
         dataset: String,
         table: String,
     ) -> anyhow::Result<()> {
+        dure_info!(project_id = &platform_name, "[ACTOR] fetch_billing started: platform={}, project={}, dataset={}, table={}",
+            platform_name, project_id, dataset, table);
+
         self.send_progress("fetch_billing", 0.3, "Checking authentication...")
             .await;
 
-        // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        // Get valid access token (refreshes if expired) from profile-specific config
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path).await?;
+        dure_debug!("[ACTOR] Got valid access token");
 
         self.send_progress("fetch_billing", 0.5, "Fetching billing data...")
             .await;
 
         let records = runtime::unblock(
             move || -> anyhow::Result<Vec<crate::api::gcp::bigquery::BillingRecord>> {
+                dure_debug!("[ACTOR] Calling BigQuery API...");
                 let client = GcpRestClient::new(access_token);
-                client.get_current_month_billing(&project_id, &dataset, &table)
+                let result = client.get_current_month_billing(&project_id, &dataset, &table);
+                match &result {
+                    Ok(records) => dure_info!("[ACTOR] BigQuery returned {} billing records", records.len()),
+                    Err(e) => dure_error!("[ACTOR] BigQuery API failed: {}", e),
+                }
+                result
             },
         )
         .await?;
 
+        dure_info!(project_id = &platform_name, "[ACTOR] Sending BillingFetched event with {} records", records.len());
         self.send_event(PlatformEvent::BillingFetched {
-            platform_name,
+            platform_name: platform_name.clone(),
             records,
         })
         .await;
+        dure_info!(project_id = &platform_name, "[ACTOR] BillingFetched event sent for platform '{}'", platform_name);
 
         Ok(())
     }
@@ -703,6 +807,7 @@ impl PlatformActor {
 
     async fn select_project(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         project_id: String,
     ) -> anyhow::Result<()> {
@@ -713,8 +818,8 @@ impl PlatformActor {
         runtime::unblock({
             let platform_name = platform_name.clone();
             let project_id = project_id.clone();
+            let config_path = profile_config_path;
             move || -> anyhow::Result<()> {
-                let config_path = Self::get_config_path()?;
                 let mut config = AppConfig::load_or_default(&config_path);
 
                 if let Some(platform) = config
@@ -790,6 +895,7 @@ impl PlatformActor {
 
     async fn add_platform(
         &mut self,
+        profile_config_path: PathBuf,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -803,8 +909,8 @@ impl PlatformActor {
         runtime::unblock({
             let platform_type = platform_type.clone();
             let selected_project_id = selected_project_id.clone();
+            let config_path = profile_config_path;
             move || -> anyhow::Result<()> {
-                let config_path = Self::get_config_path()?;
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
                 // Check if platform already exists (by project_id)
@@ -868,6 +974,7 @@ impl PlatformActor {
 
     async fn delete_platform(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         delete_options: crate::viewmodel::platform::DeleteOptions,
     ) -> anyhow::Result<()> {
@@ -907,8 +1014,8 @@ impl PlatformActor {
         // Get platform data before deletion
         let (project_id, vms) = runtime::unblock({
             let platform_name = platform_name.clone();
+            let config_path = profile_config_path.clone();
             move || -> anyhow::Result<(String, Vec<crate::config::VmInstance>)> {
-                let config_path = Self::get_config_path()?;
                 let app_config = crate::config::AppConfig::load_or_default(&config_path);
 
                 // Find platform
@@ -944,7 +1051,7 @@ impl PlatformActor {
 
                 runtime::unblock(move || -> anyhow::Result<()> {
                     let client = crate::api::gcp::GcpRestClient::new(token);
-                    client.delete_instance(&proj_id, &zone, &vm_name)?;
+                    client.delete_instance(&proj_id, &zone, &vm_name, false)?;
                     Ok(())
                 })
                 .await
@@ -976,8 +1083,8 @@ impl PlatformActor {
         // Remove from local config
         let vm_count = runtime::unblock({
             let platform_name = platform_name.clone();
+            let config_path = profile_config_path;
             move || -> anyhow::Result<usize> {
-                let config_path = Self::get_config_path()?;
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
                 // Find and remove platform
@@ -1109,13 +1216,110 @@ impl PlatformActor {
         .await
     }
 
-    async fn refresh_platform(&mut self, platform_name: String) -> anyhow::Result<()> {
+    /// Helper to get a valid access token from a specific config file, refreshing if expired
+    #[cfg(not(target_arch = "wasm32"))]
+    async fn get_valid_access_token_from_config(
+        platform_name: &str,
+        config_path: PathBuf,
+    ) -> anyhow::Result<(String, PathBuf)> {
+        runtime::unblock({
+            let platform_name = platform_name.to_string();
+            move || -> anyhow::Result<(String, PathBuf)> {
+                let mut config = AppConfig::load_or_default(&config_path);
+
+                let platform = config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found in profile config", platform_name))?;
+
+                // Check if we have tokens
+                let access_token = platform
+                    .gcp_oauth_access_token
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+                let refresh_token = platform
+                    .gcp_oauth_refresh_token
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("No refresh token available"))?;
+
+                // Check if token is expired (with 5 minute buffer)
+                let now = chrono::Utc::now().timestamp();
+                let expiry = platform.gcp_oauth_token_expiry.unwrap_or(0);
+                let needs_refresh = expiry <= now + 300; // Refresh if expires in < 5 minutes
+
+                if needs_refresh {
+                    dure_info!("Access token expired or expiring soon, refreshing...");
+
+                    // Get OAuth credentials
+                    let oauth_handler = crate::api::gcp::oauth::OAuthHandler::default();
+
+                    // Refresh the token
+                    match crate::api::gcp::oauth::refresh_access_token(
+                        oauth_handler.client_id(),
+                        oauth_handler.client_secret(),
+                        refresh_token,
+                    ) {
+                        Ok(oauth_result) => {
+                            // Update platform config with new token
+                            platform.gcp_oauth_access_token = Some(oauth_result.access_token.clone());
+                            platform.gcp_oauth_token_expiry = Some(oauth_result.expires_at as i64);
+                            // Keep the existing refresh token (it doesn't change)
+
+                            // Save config
+                            config.save(&config_path)?;
+
+                            dure_info!("Access token refreshed successfully");
+                            Ok((oauth_result.access_token, config_path))
+                        }
+                        Err(e) => {
+                            // Check if the error is due to expired/revoked refresh token
+                            let error_msg = e.to_string();
+                            if error_msg.contains("invalid_grant") || error_msg.contains("Token has been expired or revoked") {
+                                dure_error!("Refresh token has expired or been revoked. Clearing tokens...");
+
+                                // Clear the invalid tokens
+                                platform.gcp_oauth_access_token = None;
+                                platform.gcp_oauth_refresh_token = None;
+                                platform.gcp_oauth_token_expiry = None;
+
+                                // Save config with cleared tokens
+                                config.save(&config_path)?;
+
+                                return Err(anyhow::anyhow!(
+                                    "Your Google Cloud authentication has expired. Please reconnect your Google account:\n\
+                                     1. Click the 'Connect' button in the Platform tab\n\
+                                     2. Sign in with Google again\n\
+                                     3. Grant permissions to Dure\n\n\
+                                     This happens when refresh tokens expire after 6 months of inactivity or are revoked."
+                                ));
+                            }
+
+                            // Other refresh errors - propagate as-is
+                            Err(e)
+                        }
+                    }
+                } else {
+                    Ok((access_token.clone(), config_path))
+                }
+            }
+        })
+        .await
+    }
+
+    async fn refresh_platform(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
         dure_info!(project_id = &platform_name, "🔄 Refreshing platform: {}", platform_name);
 
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
-            // Load platform config
-            let (platform, _) = Self::load_platform_config(&platform_name)?;
+            // Load platform config from profile-specific path
+            let config = AppConfig::load_or_default(&profile_config_path);
+            let platform = config
+                .platforms
+                .iter()
+                .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+                .clone();
 
             // Step 1: Check VM status
             let vm_status = self.check_vm_status(&platform).await;
@@ -1126,8 +1330,8 @@ impl PlatformActor {
             // Step 3: Test SSH connection
             let ssh_status = self.test_ssh_connection(&platform).await;
 
-            // Step 4: Fetch project count and cache to config
-            let project_count = self.fetch_and_cache_project_count(&platform_name, &platform).await;
+            // Step 4: Fetch project count and cache to profile-specific config
+            let project_count = self.fetch_and_cache_project_count(&profile_config_path, &platform_name, &platform).await;
 
             // Send RefreshCompleted event
             self.send_event(PlatformEvent::RefreshCompleted {
@@ -1390,6 +1594,7 @@ impl PlatformActor {
 
     async fn fetch_and_cache_project_count(
         &self,
+        profile_config_path: &PathBuf,
         platform_name: &str,
         platform: &crate::config::CloudPlatformConfig,
     ) -> Option<usize> {
@@ -1421,11 +1626,11 @@ impl PlatformActor {
             }
         };
 
-        // Cache to config if we got a count
+        // Cache to profile-specific config if we got a count
         if let Some(count) = project_count {
             let platform_name = platform_name.to_string();
+            let config_path = profile_config_path.clone();
             let _ = runtime::unblock(move || -> anyhow::Result<()> {
-                let config_path = Self::get_config_path()?;
                 let mut config = crate::config::AppConfig::load_or_default(&config_path);
 
                 if let Some(platform) = config

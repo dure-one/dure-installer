@@ -349,27 +349,33 @@ impl ViewModel {
 
     pub fn delete_vm(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
+        force: bool,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::DeleteVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
+                force,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     pub fn restart_vm(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::RestartVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
@@ -379,12 +385,14 @@ impl ViewModel {
 
     pub fn regenerate_vm(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::RegenerateVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
@@ -403,6 +411,7 @@ impl ViewModel {
 
     pub fn fetch_billing(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
         dataset: String,
@@ -410,6 +419,7 @@ impl ViewModel {
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::FetchBilling {
+                profile_config_path,
                 platform_name,
                 project_id,
                 dataset,
@@ -418,9 +428,9 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn refresh_platform(&self, platform_name: String) -> anyhow::Result<()> {
+    pub fn refresh_platform(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::RefreshPlatform { platform_name })
+            .send_blocking(platform::PlatformCommand::RefreshPlatform { profile_config_path, platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -430,9 +440,10 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn select_project(&self, platform_name: String, project_id: String) -> anyhow::Result<()> {
+    pub fn select_project(&self, profile_config_path: std::path::PathBuf, platform_name: String, project_id: String) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::SelectProject {
+                profile_config_path,
                 platform_name,
                 project_id,
             })
@@ -456,6 +467,7 @@ impl ViewModel {
 
     pub fn add_platform(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -465,6 +477,7 @@ impl ViewModel {
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::AddPlatform {
+                profile_config_path,
                 platform_type,
                 oauth_access_token,
                 oauth_refresh_token,
@@ -477,20 +490,22 @@ impl ViewModel {
 
     pub fn delete_platform(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         delete_options: platform::DeleteOptions,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::DeletePlatform {
+                profile_config_path,
                 platform_name,
                 delete_options,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn scan_existing_vms(&self, platform_name: String) -> anyhow::Result<()> {
+    pub fn scan_existing_vms(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::ScanExistingVMs { platform_name })
+            .send_blocking(platform::PlatformCommand::ScanExistingVMs { profile_config_path, platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

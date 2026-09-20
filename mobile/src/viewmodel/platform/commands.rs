@@ -17,6 +17,7 @@ pub enum PlatformCommand {
         auth_code: String,
     },
     AddPlatform {
+        profile_config_path: std::path::PathBuf,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -25,6 +26,7 @@ pub enum PlatformCommand {
         selected_project_id: Option<String>,
     },
     DeletePlatform {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         delete_options: DeleteOptions,
     },
@@ -34,6 +36,7 @@ pub enum PlatformCommand {
         platform_name: String,
     },
     SelectProject {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
     },
@@ -43,6 +46,7 @@ pub enum PlatformCommand {
         platform_name: String,
     },
     ScanExistingVMs {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
     CreateVM {
@@ -52,16 +56,20 @@ pub enum PlatformCommand {
         machine_type: String,
     },
     DeleteVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
+        force: bool,
     },
     RestartVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
     },
     RegenerateVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -75,6 +83,7 @@ pub enum PlatformCommand {
 
     // Billing Operations
     FetchBilling {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
         dataset: String,
@@ -83,6 +92,7 @@ pub enum PlatformCommand {
 
     // Refresh Operation
     RefreshPlatform {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
 

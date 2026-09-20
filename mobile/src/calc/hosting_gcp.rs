@@ -45,7 +45,7 @@ pub fn generate_ssh_keypair() -> Result<(String, Vec<u8>)> {
 /// Delete a VM instance
 pub fn delete_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String> {
     // Call GCP API to delete instance
-    let operation = client.delete_instance(&vm.gcp_project_id, &vm.zone, &vm.name)?;
+    let operation = client.delete_instance(&vm.gcp_project_id, &vm.zone, &vm.name, false)?;
 
     // Poll operation status until complete (60 second timeout)
     client.wait_for_operation(&vm.gcp_project_id, &vm.zone, &operation.name, 60)?;
