@@ -92,11 +92,24 @@ impl DlgProfileLogin {
 
                 // Password input
                 ui.label(tr!("password"));
-                ui.add(
+                let response = ui.add(
                     egui::TextEdit::singleline(&mut self.password)
                         .password(true)
-                        .hint_text(tr!("password-hint")),
+                        .hint_text(tr!("password-hint"))
+                        .desired_width(ui.available_width() - 40.0),
                 );
+
+                #[cfg(target_os = "android")]
+                {
+                    if response.gained_focus() {
+                        let _ = crate::android::inputmethod::show_soft_input();
+                    }
+                    if response.lost_focus() {
+                        let _ = crate::android::inputmethod::hide_soft_input();
+                    }
+                }
+
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password);
 
                 ui.add_space(12.0);
 

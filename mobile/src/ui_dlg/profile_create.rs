@@ -148,30 +148,69 @@ impl DlgProfileCreate {
 
                 // Profile name input
                 ui.label(tr!("profile-name"));
-                ui.add(
+                let response = ui.add(
                     egui::TextEdit::singleline(&mut self.profile_name)
-                        .hint_text(tr!("profile-name-hint")),
+                        .hint_text(tr!("profile-name-hint"))
+                        .desired_width(ui.available_width() - 40.0),
                 );
+
+                #[cfg(target_os = "android")]
+                {
+                    if response.gained_focus() {
+                        let _ = crate::android::inputmethod::show_soft_input();
+                    }
+                    if response.lost_focus() {
+                        let _ = crate::android::inputmethod::hide_soft_input();
+                    }
+                }
+
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.profile_name);
 
                 ui.add_space(8.0);
 
                 // Password input
                 ui.label(tr!("password"));
-                ui.add(
+                let response = ui.add(
                     egui::TextEdit::singleline(&mut self.password)
                         .password(true)
-                        .hint_text(tr!("password-hint")),
+                        .hint_text(tr!("password-hint"))
+                        .desired_width(ui.available_width() - 40.0),
                 );
+
+                #[cfg(target_os = "android")]
+                {
+                    if response.gained_focus() {
+                        let _ = crate::android::inputmethod::show_soft_input();
+                    }
+                    if response.lost_focus() {
+                        let _ = crate::android::inputmethod::hide_soft_input();
+                    }
+                }
+
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password);
 
                 ui.add_space(8.0);
 
                 // Password confirmation input
                 ui.label(tr!("password-confirm"));
-                ui.add(
+                let response = ui.add(
                     egui::TextEdit::singleline(&mut self.password_confirm)
                         .password(true)
-                        .hint_text(tr!("password-confirm-hint")),
+                        .hint_text(tr!("password-confirm-hint"))
+                        .desired_width(ui.available_width() - 40.0),
                 );
+
+                #[cfg(target_os = "android")]
+                {
+                    if response.gained_focus() {
+                        let _ = crate::android::inputmethod::show_soft_input();
+                    }
+                    if response.lost_focus() {
+                        let _ = crate::android::inputmethod::hide_soft_input();
+                    }
+                }
+
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password_confirm);
 
                 ui.add_space(12.0);
 
