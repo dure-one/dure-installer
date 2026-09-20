@@ -286,3 +286,12 @@ profile-login-title = Login Profile
 profile-login-heading = Enter Profile Password
 password = Password:
 password-hint = Enter password
+
+# Profile Create Dialog
+profile-create-title = Create New Profile
+profile-create-heading = Create a New Profile
+profile-name = Profile Name:
+profile-name-hint = Enter profile name (a-z, A-Z, 0-9, -, _)
+password-confirm = Confirm Password:
+password-confirm-hint = Confirm password
+create = Create
