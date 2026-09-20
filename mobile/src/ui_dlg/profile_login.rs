@@ -30,14 +30,41 @@ impl DlgProfileLogin {
         self.error_message = error;
     }
 
+    /// Process dialog action and return the result.
+    /// Separated from UI rendering for testability.
+    ///
+    /// # Arguments
+    /// * `action` - The button that was clicked (DialogAction enum)
+    ///
+    /// # Returns
+    /// * `Some(password)` if Submit action with non-empty password
+    /// * `None` if Cancel action, no action, or Submit with empty password
+    pub fn process_action(&mut self, action: DialogAction) -> Option<String> {
+        match action {
+            DialogAction::Submit => {
+                if !self.password.is_empty() {
+                    self.confirmed = true;
+                    self.open = false;
+                    return Some(self.password.clone());
+                }
+                // Empty password: keep dialog open, no action
+                None
+            }
+            DialogAction::Cancel => {
+                self.close();
+                None
+            }
+            DialogAction::None => None,
+        }
+    }
+
     /// Display the login dialog and return password if confirmed, None if cancelled
     pub fn show(&mut self, ctx: &egui::Context) -> Option<String> {
         if !self.open {
             return None;
         }
 
-        let mut close_clicked = false;
-        let mut login_clicked = false;
+        let mut dialog_action = DialogAction::None;
 
         egui::Window::new(tr!("profile-login-title"))
             .id(egui::Id::new("profile_login_window"))
@@ -77,26 +104,15 @@ impl DlgProfileLogin {
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.add(MaterialButton::filled(tr!("ok"))).clicked() {
-                            login_clicked = true;
+                            dialog_action = DialogAction::Submit;
                         }
                         if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            close_clicked = true;
+                            dialog_action = DialogAction::Cancel;
                         }
                     });
                 });
             });
 
-        if login_clicked {
-            self.confirmed = true;
-            self.open = false;
-            let password = self.password.clone();
-            return Some(password);
-        }
-
-        if close_clicked {
-            self.close();
-        }
-
-        None
+        self.process_action(dialog_action)
     }
 }
