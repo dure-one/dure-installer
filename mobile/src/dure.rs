@@ -939,6 +939,11 @@ impl DureApp {
                             // Load profile context
                             match crate::calc::profile::ProfileContext::new(&profile_name) {
                                 Ok(ctx) => {
+                                    // Update database path to profile's database
+                                    let db_path = ctx.db_path.to_string_lossy().to_string();
+                                    crate::calc::db::set_db_path(db_path);
+                                    dure_info!("Database path updated to: {}", ctx.db_path.display());
+
                                     self.current_profile = Some(ctx);
                                     dure_info!("Profile loaded successfully: {}", profile_name);
                                     self.dlg_profile_login.reset();
@@ -973,6 +978,11 @@ impl DureApp {
                 match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password) {
                     Ok(ctx) => {
                         dure_info!("Profile created successfully: {}", profile_name);
+
+                        // Update database path to profile's database
+                        let db_path = ctx.db_path.to_string_lossy().to_string();
+                        crate::calc::db::set_db_path(db_path);
+                        dure_info!("Database path updated to: {}", ctx.db_path.display());
 
                         // Auto-login: load the newly created profile
                         self.current_profile = Some(ctx);
@@ -1010,7 +1020,9 @@ impl DureApp {
                         // Unload profile if it was active
                         if is_active {
                             self.current_profile = None;
-                            dure_info!("Unloaded active profile: {}", profile_name);
+                            // Reset database path to default when profile is unloaded
+                            crate::calc::db::set_db_path("dure.db".to_string());
+                            dure_info!("Unloaded active profile: {} and reset database path", profile_name);
                         }
 
                         self.dlg_profile_delete.reset();
