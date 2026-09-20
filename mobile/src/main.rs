@@ -108,14 +108,8 @@ fn main() -> Result<()> {
 
     dure_info!("Dure v{} starting...", env!("CARGO_PKG_VERSION"));
 
-    // Initialize application configuration and database
-    let config = dure::Config::new().unwrap_or_else(|e| {
-        dure_error!("Failed to initialize application config: {}", e);
-        std::process::exit(1);
-    });
-    let db_path = config.data_dir.join("dure.db");
-    dure::calc::db::set_db_path(db_path.to_string_lossy().to_string());
-    dure_info!("Database path set to: {}", db_path.display());
+    // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
+    // See mobile/src/dure.rs profile login/create handlers for config/DB initialization
 
     // Verify binary attestation (if not disabled)
     // if !args.iter().any(|arg| arg == "--skip-attestation") {

@@ -322,14 +322,17 @@ impl Default for SshTab {
 
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
-fn get_config_path() -> Result<std::path::PathBuf, String> {
-        Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
+fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<std::path::PathBuf, String> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => Err("No active profile - please select or create a profile first".to_string()),
+    }
 }
 
 /// Load application config
 #[cfg(not(target_arch = "wasm32"))]
-fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
-    let config_path = get_config_path()?;
+fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<(AppConfig, std::path::PathBuf), String> {
+    let config_path = get_config_path(profile)?;
     let app_config = AppConfig::load_or_default(&config_path);
     Ok((app_config, config_path))
 }
@@ -341,13 +344,13 @@ fn calculate_width_ratio(available_width: f32, base_width: f32) -> f32 {
 
 impl SshTab {
     /// Load SSH hosts from config and build row data
-    fn load_rows(&mut self) {
+    fn load_rows(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
         self.rows.clear();
         self.load_error = None;
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_config() {
+            match load_config(profile) {
                 Ok((app_config, _)) => {
                     for host_config in &app_config.ssh_hosts {
                         // Resolve platform relationship
@@ -414,7 +417,7 @@ impl SshTab {
     }
 
     /// Handle ViewModel events to update UI state
-    fn handle_event(&mut self, event: crate::viewmodel::ViewModelEvent) {
+    fn handle_event(&mut self, event: crate::viewmodel::ViewModelEvent, profile: &Option<crate::calc::profile::ProfileContext>) {
         use crate::viewmodel::ViewModelEvent;
         use crate::viewmodel::ssh::SshEvent;
 
@@ -429,7 +432,7 @@ impl SshTab {
 
                 // Remove from config
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok((mut app_config, config_path)) = load_config() {
+                if let Ok((mut app_config, config_path)) = load_config(profile) {
                     app_config.ssh_hosts.retain(|h| h.host != name);
                     let _ = app_config.save(&config_path);
                 }
@@ -541,7 +544,7 @@ impl SshTab {
 
                 // Update config - remove successfully removed containers
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Ok((mut app_config, config_path)) = load_config() {
+                if let Ok((mut app_config, config_path)) = load_config(profile) {
                     if let Some(host_config) = app_config.ssh_hosts.iter_mut().find(|h| h.host == host_name) {
                         host_config.docker_containers.retain(|c| !removed.contains(&c.name));
                         let _ = app_config.save(&config_path);
@@ -1939,7 +1942,7 @@ impl SshTab {
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
             for event in events {
-                self.handle_event(event);
+                self.handle_event(event, current_profile);
             }
         }
 
@@ -2012,7 +2015,7 @@ impl SshTab {
 
         // 6. Load rows on demand
         if !self.loaded {
-            self.load_rows();
+            self.load_rows(current_profile);
             self.loaded = true;
 
             // Auto-refresh only once per session
@@ -2244,7 +2247,7 @@ impl SshTab {
 
         // Lazy-load from config on first render or after refresh
         if !self.loaded {
-            self.load_rows();
+            self.load_rows(current_profile);
             self.loaded = true;
         }
 

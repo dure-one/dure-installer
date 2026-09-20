@@ -96,7 +96,10 @@ pub trait ScreenSizeProvider: Send + Sync {
     fn get_screen_size(&self) -> std::io::Result<(i32, i32)>;
 }
 
-/// Get the application config directory (~/.config/dure-installer)
+/// Get the application config directory (~/.config/dure_installer)
+///
+/// Note: In multi-profile mode, this returns the base directory.
+/// For profile-specific config, use ProfileContext::config_file
 #[cfg(not(target_arch = "wasm32"))]
 pub fn get_app_config_dir() -> Result<PathBuf> {
     #[cfg(not(target_os = "android"))]
@@ -104,7 +107,7 @@ pub fn get_app_config_dir() -> Result<PathBuf> {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .context("Failed to get home directory")?;
-        let config_dir = PathBuf::from(home).join(".config").join("dure-installer");
+        let config_dir = PathBuf::from(home).join(".config").join("dure_installer");
         Ok(config_dir)
     }
 
@@ -134,6 +137,18 @@ pub fn get_profiles_base_dir() -> Result<PathBuf> {
     #[cfg(target_os = "android")]
     {
         Ok(PathBuf::from("/data/data/app.dure.installer/profiles"))
+    }
+}
+
+/// Get config path for the current profile
+///
+/// Returns the config.yml path for the given profile, or an error if no profile is provided.
+/// This enforces that config operations only happen within a profile context.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_profile_config_path(profile: Option<&calc::profile::ProfileContext>) -> Result<PathBuf> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => anyhow::bail!("No active profile - config operations require a profile to be selected"),
     }
 }
 
@@ -167,12 +182,19 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Result<Self> {
+    /// Create a new Config instance
+    ///
+    /// # Arguments
+    /// * `profile_dir` - Optional profile directory path for per-profile config
+    ///   If None, uses global config directory (~/.config/dure_installer)
+    ///   If Some, loads config from profile directory ({profile}/config.yml)
+    pub fn new(profile_dir: Option<PathBuf>) -> Result<Self> {
         #[cfg(target_os = "android")]
         {
             // Android-specific paths
-            let config_dir = PathBuf::from("/data/data/app.dure.installer/files");
-            let cache_dir = PathBuf::from("/data/data/app.dure.installer/cache");
+            let base_dir = PathBuf::from("/data/data/app.dure.installer");
+            let config_dir = profile_dir.unwrap_or_else(|| base_dir.join("files"));
+            let cache_dir = base_dir.join("cache");
 
             dure_info!(
                 "Android config paths - config_dir: {:?}, cache_dir: {:?}",
@@ -220,7 +242,14 @@ impl Config {
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
             // Desktop platforms (Linux, Windows, macOS)
-            let config_dir = get_app_config_dir()?;
+            let config_dir = if let Some(profile_path) = profile_dir {
+                // Use profile-specific config directory
+                profile_path
+            } else {
+                // Use global config directory
+                get_app_config_dir()?
+            };
+
             let cache_dir = get_app_cache_dir()?;
 
             let tmp_dir = cache_dir.join("tmp");
@@ -245,6 +274,7 @@ impl Config {
 
             // Load configuration
             let app_config = config::AppConfig::load_or_default(&config_file);
+            dure_info!("Loaded config from: {:?}", config_file);
 
             Ok(Config {
                 config_dir: config_dir.clone(),
