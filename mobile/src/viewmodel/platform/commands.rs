@@ -120,6 +120,7 @@ mod tests {
     #[test]
     fn test_delete_platform_with_options() {
         let cmd = PlatformCommand::DeletePlatform {
+            profile_config_path: std::path::PathBuf::from("test.yml"),
             platform_name: "test-platform".to_string(),
             delete_options: DeleteOptions {
                 delete_vms: true,
@@ -128,6 +129,7 @@ mod tests {
         };
         match cmd {
             PlatformCommand::DeletePlatform {
+                profile_config_path: _,
                 platform_name,
                 delete_options,
             } => {
