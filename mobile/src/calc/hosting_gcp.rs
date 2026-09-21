@@ -150,6 +150,7 @@ pub fn regenerate_vm(
             access_configs: Some(vec![AccessConfig {
                 type_: "ONE_TO_ONE_NAT".to_string(),
                 name: "External NAT".to_string(),
+                nat_ip: None,
             }]),
         }],
         tags: None,

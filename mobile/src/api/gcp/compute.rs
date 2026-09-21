@@ -56,6 +56,8 @@ pub struct AccessConfig {
     #[serde(rename = "type")]
     pub type_: String, // "ONE_TO_ONE_NAT"
     pub name: String, // "External NAT"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nat_ip: Option<String>, // Static IP address to attach
 }
 
 #[derive(Debug, Serialize)]
@@ -378,6 +380,7 @@ impl InstanceRequest {
                 access_configs: Some(vec![AccessConfig {
                     type_: "ONE_TO_ONE_NAT".to_string(),
                     name: "External NAT".to_string(),
+                    nat_ip: None,
                 }]),
             }],
             tags: Some(Tags {
