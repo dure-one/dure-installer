@@ -282,6 +282,27 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
 /// Render Operations tab (operation logs from SQLite)
 fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
+    // Auto-refresh: trigger operation reload every 2 seconds (not every frame)
+    if let Some(ref project_id) = drawer_state.project_id {
+        let refresh_id = egui::Id::new("drawer_ops_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 2)
+                .unwrap_or(true)
+        });
+
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("drawer_action_refresh_operations"),
+                    project_id.clone(),
+                );
+            });
+        }
+    }
+
     ui.heading("Operation History");
     ui.add_space(8.0);
 

@@ -858,7 +858,12 @@ impl PlatformTab {
                         // Note: NO self.loaded = false! Incremental update only
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
-                        dure_info!("✅ VM {} restarted successfully", vm_name);
+                        // Log with project_id context for filtering
+                        crate::viewmodel::logs::append_log(
+                            &platform_name,
+                            crate::viewmodel::logs::LogLevel::Info,
+                            format!("✅ VM {} restarted successfully", vm_name)
+                        );
 
                         // Incremental update
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -1158,13 +1163,6 @@ impl PlatformTab {
         // Request repaint to update UI when states auto-clear
         ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
 
-        ui.heading("Cloud Platforms");
-        ui.add_space(4.0);
-        ui.label(
-            "Manage cloud service platforms (GCP, Firebase, Supabase) for deployment and hosting.",
-        );
-        ui.add_space(8.0);
-
         // Poll SSH test promises (TODO: Replace with ViewModel event processing)
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -1208,13 +1206,6 @@ impl PlatformTab {
             }
         }
 
-        // Action buttons
-        if ui.add(MaterialButton::filled("Add Platform")).clicked() {
-            self.show_add_dialog = true;
-            self.add_platform_type = "gcp".to_string();
-        }
-        ui.add_space(8.0);
-
         // Table rendering
         if !self.loaded {
             self.load_rows(&Some(current_profile.clone()));
@@ -1249,6 +1240,16 @@ impl PlatformTab {
         }
 
         if self.rows.is_empty() && self.load_error.is_none() {
+            ui.heading("Cloud Platforms");
+            ui.add_space(4.0);
+            ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+            ui.add_space(8.0);
+
+            if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                self.show_add_dialog = true;
+                self.add_platform_type = "gcp".to_string();
+            }
+            ui.add_space(8.0);
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
         } else if !self.rows.is_empty() {
             // Calculate responsive column widths
@@ -1520,6 +1521,17 @@ impl PlatformTab {
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading("Cloud Platforms");
+                ui.add_space(4.0);
+                ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+                ui.add_space(8.0);
+
+                if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                    self.show_add_dialog = true;
+                    self.add_platform_type = "gcp".to_string();
+                }
+                ui.add_space(8.0);
+
                 table.show(ui);
             });
 
@@ -1628,6 +1640,24 @@ impl PlatformTab {
                 }
                 ui.data_mut(|d| {
                     d.remove::<String>(egui::Id::new("drawer_action_refresh_logs"))
+                });
+            }
+
+            // Drawer action: Refresh operations
+            if let Some(project_id) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations"))
+            }) {
+                if let Some(ref vm) = vm {
+                    use crate::viewmodel::platform::DrawerCommand;
+                    if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadOperations {
+                        project_id: project_id.clone(),
+                        limit: 100,
+                    }) {
+                        dure_error!("Failed to send LoadOperations command: {}", e);
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_refresh_operations"))
                 });
             }
 
@@ -1827,6 +1857,67 @@ impl PlatformTab {
 
             if let Some(wizard) = &mut self.gcp_wizard {
                 wizard.ui(ui.ctx());
+
+                // Operation logging integration
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    use crate::storage::models::opslog::{NewOperationLog, OperationStatus};
+
+                    // Create operation log when VM creation starts
+                    if wizard.is_creating_vm() && wizard.get_operation_log_id().is_none() {
+                        if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                            let log = NewOperationLog::new(
+                                wizard.get_project_id(),
+                                "create_vm",
+                                "gcp"
+                            );
+
+                            if let Ok(log_id) = crate::storage::models::opslog::create_log(&mut conn, log) {
+                                wizard.set_operation_log_id(log_id);
+                                dure_info!("Created operation log for VM creation: {}", log_id);
+                            }
+                        }
+                    }
+
+                    // Update operation log on completion
+                    if wizard.vm_creation_completed() {
+                        if let Some(log_id) = wizard.get_operation_log_id() {
+                            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                let _ = crate::storage::models::opslog::update_log_status(
+                                    &mut conn,
+                                    log_id,
+                                    OperationStatus::Success,
+                                    None
+                                );
+                                wizard.mark_operation_log_updated();
+                                dure_info!("Updated operation log {} to success", log_id);
+                            }
+                        }
+                    }
+
+                    // Update operation log on failure
+                    if let Some(error) = wizard.vm_creation_failed() {
+                        if let Some(log_id) = wizard.get_operation_log_id() {
+                            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                let _ = crate::storage::models::opslog::update_log_status(
+                                    &mut conn,
+                                    log_id,
+                                    OperationStatus::Failed,
+                                    Some(error)
+                                );
+                                wizard.mark_operation_log_updated();
+                                dure_info!("Updated operation log {} to failed", log_id);
+                            }
+                        }
+                    }
+
+                    // Trigger refresh when VM creation completes
+                    if wizard.needs_refresh() {
+                        dure_info!("VM creation completed, refreshing platform data");
+                        self.loaded = false;
+                        wizard.reset_refresh_flag();
+                    }
+                }
             }
 
             // Detect wizard closure - if it was open and now closed, refresh
@@ -3684,13 +3775,14 @@ impl PlatformTab {
                 ui.separator();
                 ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data(profile, vm, None);
-                    }
-
+                // Right-bottom aligned buttons
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
                     if ui.add(MaterialButton::outlined("Close")).clicked() {
                         self.show_billing_dialog = false;
+                    }
+
+                    if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+                        self.fetch_billing_data(profile, vm, None);
                     }
                 });
             });
