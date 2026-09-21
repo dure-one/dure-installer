@@ -102,7 +102,7 @@ impl DatabaseHandle {
     }
 
     /// Read-only access to database
-    pub fn read(&self) -> RwLockReadGuard<Database> {
+    pub fn read(&self) -> RwLockReadGuard<'_, Database> {
         self.db.read().unwrap()  // Poisoning = panic acceptable
     }
 
@@ -216,6 +216,71 @@ pub fn add_key_to_handle(
     db.root.entries.push(entry);
     Ok(())
     // db saved automatically when guard drops
+}
+
+/// Update key in opened database handle
+///
+/// Auto-saves on function return via SaveGuard Drop.
+pub fn update_key_to_handle(
+    handle: &DatabaseHandle,
+    domain: &str,
+    username: &str,
+    password: &str,
+    ssh_key: Option<&[u8]>,
+    notes: Option<&str>,
+) -> Result<()> {
+    let mut db = handle.write_and_save();
+
+    // Find existing entry
+    let entry = db.root.entries.iter_mut()
+        .find(|e| {
+            e.fields.get("Title")
+                .map(|v| v.get() == domain)
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| anyhow::anyhow!("Key not found: {}", domain))?;
+
+    // Update fields
+    entry.fields.insert("UserName".to_string(), Value::unprotected(username.to_string()));
+    entry.fields.insert("Password".to_string(), Value::protected(password.to_string()));
+
+    // Update SSH key
+    if let Some(key_data) = ssh_key {
+        use keepass::db::Attachment;
+        entry.attachments.insert(
+            "ssh_key".to_string(),
+            Attachment {
+                data: Value::unprotected(key_data.to_vec()),
+            },
+        );
+    }
+
+    // Update notes
+    if let Some(n) = notes {
+        entry.fields.insert("Notes".to_string(), Value::unprotected(n.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Delete key from opened database handle
+///
+/// Auto-saves on function return via SaveGuard Drop.
+/// Returns true if key was found and deleted, false otherwise.
+pub fn delete_key_from_handle(
+    handle: &DatabaseHandle,
+    domain: &str,
+) -> Result<bool> {
+    let mut db = handle.write_and_save();
+
+    let initial_len = db.root.entries.len();
+    db.root.entries.retain(|e| {
+        e.fields.get("Title")
+            .map(|v| v.get() != domain)
+            .unwrap_or(true)
+    });
+
+    Ok(db.root.entries.len() < initial_len)
 }
 
 /// A key entry in the keyring
@@ -476,6 +541,7 @@ pub fn save_kdbx(
 }
 
 /// List all keys from KeePass database
+#[deprecated(note = "Use list_keys_from_handle instead")]
 pub fn list_keys(kdbx_path: &Path, kpkey_path: Option<&Path>, password: Option<&str>) -> Result<Vec<KeyEntry>> {
     let db = open_kdbx(kdbx_path, kpkey_path, password)?;
     let mut keys = Vec::new();
@@ -586,6 +652,7 @@ fn parse_key_entry(entry: &Entry) -> Result<Option<KeyEntry>> {
 }
 
 /// Add a new key to the KeePass database
+#[deprecated(note = "Use add_key_to_handle instead")]
 pub fn add_key(
     kdbx_path: &Path,
     kpkey_path: Option<&Path>,
@@ -600,6 +667,7 @@ pub fn add_key(
 }
 
 /// Add a new key with optional SSH key and notes to the KeePass database
+#[deprecated(note = "Use add_key_to_handle instead")]
 pub fn add_key_with_ssh(
     kdbx_path: &Path,
     kpkey_path: Option<&Path>,
@@ -681,6 +749,7 @@ pub fn add_key_with_ssh(
 }
 
 /// Delete a key from the KeePass database
+#[deprecated(note = "Use delete_key_from_handle instead")]
 pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str, db_password: Option<&str>) -> Result<bool> {
     let mut db = open_kdbx(kdbx_path, kpkey_path, db_password)?;
 
@@ -707,6 +776,7 @@ pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str, db_
 ///
 /// If a key with the same domain exists, it will be replaced.
 /// Otherwise, a new key will be added.
+#[deprecated(note = "Use update_key_to_handle instead")]
 pub fn update_key(
     kdbx_path: &Path,
     kpkey_path: Option<&Path>,
@@ -724,6 +794,7 @@ pub fn update_key(
 ///
 /// If a key with the same domain exists, it will be replaced.
 /// Otherwise, a new key will be added.
+#[deprecated(note = "Use update_key_to_handle instead")]
 pub fn update_key_with_ssh(
     kdbx_path: &Path,
     kpkey_path: Option<&Path>,
