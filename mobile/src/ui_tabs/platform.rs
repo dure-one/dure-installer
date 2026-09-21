@@ -1748,7 +1748,7 @@ impl PlatformTab {
                         };
                     }
 
-                    self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
+                    self.show_delete_vm_confirmation(current_profile, platform_name, vm_name, vm_zone);
                     ui.data_mut(|d| {
                         d.remove::<(String, String, String)>(egui::Id::new(
                             "platform_action_delete_vm",
@@ -2841,6 +2841,7 @@ impl PlatformTab {
 
     fn show_delete_vm_confirmation(
         &mut self,
+        profile: &Option<crate::calc::profile::ProfileContext>,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -2861,39 +2862,70 @@ impl PlatformTab {
         // Check if VM has static IP (requires access token and config)
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Ok((app_config, _)) = load_config(&None) {
+            dure_info!("=== Static IP Detection START for VM: {} ===", vm_name);
+            if let Ok((app_config, _)) = load_config(profile) {
+                dure_info!("✓ Config loaded");
                 if let Some(platform) = app_config.platforms.iter()
                     .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                 {
+                    dure_info!("✓ Platform found: {}", platform_name);
                     if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
+                        dure_info!("✓ OAuth token exists");
                         if let Some(vm) = platform.vms.iter()
                             .find(|v| v.name == vm_name && v.zone == zone)
                         {
+                            dure_info!("✓ VM found: {}", vm_name);
                             if let Some(external_ip) = &vm.external_ip {
+                                dure_info!("✓ VM has external_ip: {}", external_ip);
                                 // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
                                 let region = zone.rsplitn(2, '-').nth(1)
                                     .unwrap_or(&zone)
                                     .to_string();
+                                dure_info!("  Region extracted from zone {}: {}", zone, region);
 
                                 // Query addresses to check if IP is static
                                 use crate::api::gcp::GcpRestClient;
                                 let client = GcpRestClient::new(token.clone());
 
-                                if let Ok(addresses) = client.list_addresses(&platform_name, &region) {
-                                    // Find address matching this IP
-                                    if let Some(addr) = addresses.iter()
-                                        .find(|a| &a.address == external_ip)
-                                    {
-                                        self.delete_vm_has_static_ip = true;
-                                        self.delete_vm_ip_address = Some(addr.address.clone());
-                                        self.delete_vm_ip_name = Some(addr.name.clone());
+                                match client.list_addresses(&platform_name, &region) {
+                                    Ok(addresses) => {
+                                        dure_info!("✓ Addresses API returned {} addresses", addresses.len());
+                                        for addr in &addresses {
+                                            dure_info!("  Address: {} = {} (status: {}, type: {})",
+                                                addr.name, addr.address, addr.status, addr.address_type);
+                                        }
+                                        // Find address matching this IP
+                                        if let Some(addr) = addresses.iter()
+                                            .find(|a| &a.address == external_ip)
+                                        {
+                                            dure_info!("✓ MATCH FOUND: {} is static IP (name: {})", external_ip, addr.name);
+                                            self.delete_vm_has_static_ip = true;
+                                            self.delete_vm_ip_address = Some(addr.address.clone());
+                                            self.delete_vm_ip_name = Some(addr.name.clone());
+                                        } else {
+                                            dure_info!("✗ NO MATCH: {} not found in addresses list (ephemeral IP)", external_ip);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        dure_warn!("✗ Addresses API failed: {}", e);
                                     }
                                 }
+                            } else {
+                                dure_info!("✗ VM has no external_ip field");
                             }
+                        } else {
+                            dure_info!("✗ VM not found in config");
                         }
+                    } else {
+                        dure_info!("✗ No OAuth token");
                     }
+                } else {
+                    dure_info!("✗ Platform not found");
                 }
+            } else {
+                dure_info!("✗ Config load failed");
             }
+            dure_info!("=== Static IP Detection END (has_static_ip={}) ===", self.delete_vm_has_static_ip);
         }
     }
 
