@@ -954,6 +954,41 @@ impl PlatformTab {
                     }) => {
                         dure_info!("✅ VM {} deleted successfully", vm_name);
 
+                        // Release static IP if requested
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if self.delete_vm_release_ip && self.delete_vm_ip_name.is_some() {
+                            if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
+                                if let Some(platform) = app_config.platforms.iter()
+                                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                                {
+                                    if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
+                                        if let Some(vm) = platform.vms.iter()
+                                            .find(|v| v.name == vm_name)
+                                        {
+                                            // Extract region from zone
+                                            let region = vm.zone.rsplitn(2, '-').nth(1)
+                                                .unwrap_or(&vm.zone)
+                                                .to_string();
+
+                                            use crate::api::gcp::GcpRestClient;
+                                            let client = GcpRestClient::new(token.clone());
+
+                                            let addr_name = self.delete_vm_ip_name.as_ref().unwrap();
+                                            if let Err(e) = client.delete_address(
+                                                &platform_name,
+                                                &region,
+                                                addr_name
+                                            ) {
+                                                dure_warn!("Failed to release static IP {}: {}", addr_name, e);
+                                            } else {
+                                                dure_info!("Released static IP address: {}", addr_name);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Update operation state before reload
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Completed {
