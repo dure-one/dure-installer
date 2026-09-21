@@ -675,7 +675,7 @@ fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) 
         }
     };
 
-    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
+    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path), None) {
         Ok(k) => {
             dure_debug!(project_id = project_id, "Found {} keys in keyring", k.len());
             for key in &k {
@@ -842,7 +842,14 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
 impl PlatformTab {
     /// Render the platform tab UI
-    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(
+        &mut self,
+        current_profile: &Option<crate::calc::profile::ProfileContext>,
+        current_profile_password: &Option<String>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+        ui: &mut egui::Ui,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         // Check if profile is selected
         if current_profile.is_none() {
             ui.label(tr!("no-profile-selected"));
@@ -1771,6 +1778,8 @@ impl PlatformTab {
                                     current_profile,
                                     platform_name,
                                     vm_cfg.name.clone(),
+                                    current_profile_password.clone(),
+                                    current_profile_kdbx.clone(),
                                     vm.as_deref_mut(),
                                 );
                             }
@@ -1816,7 +1825,7 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_add_vm")))
                 {
-                    self.show_gcp_wizard(current_profile, platform_name);
+                    self.show_gcp_wizard(current_profile, current_profile_password.clone(), platform_name);
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
@@ -2166,6 +2175,7 @@ impl PlatformTab {
                                         docker_containers: Vec::new(),
                                         ansible_roles: Vec::new(),
                                         dure_wss_config: None,
+                                        ..Default::default()
                                     });
                                 }
                             }
@@ -2643,7 +2653,7 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn show_gcp_wizard(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
+    fn show_gcp_wizard(&mut self, profile: &crate::calc::profile::ProfileContext, profile_password: Option<String>, platform_name: String) {
         // Try to load config and find platform with OAuth + project
         let mut wizard = if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
             // Find platform by name
@@ -2665,21 +2675,23 @@ impl PlatformTab {
                     };
 
                     GcpWizard::with_platform_context(
-                        platform_name,
+                        platform_name.clone(),
                         project_id.clone(),
                         oauth_result,
+                        profile.clone(),
+                        profile_password.clone(),
                     )
                 } else {
                     // Missing OAuth or project, use full wizard
-                    GcpWizard::new(platform_name)
+                    GcpWizard::new(platform_name.clone(), profile.clone(), profile_password.clone())
                 }
             } else {
                 // Platform not found in config, use full wizard
-                GcpWizard::new(platform_name)
+                GcpWizard::new(platform_name.clone(), profile.clone(), profile_password.clone())
             }
         } else {
             // Config load failed, use full wizard
-            GcpWizard::new(platform_name)
+            GcpWizard::new(platform_name, profile.clone(), profile_password.clone())
         };
 
         wizard.show();
@@ -2715,6 +2727,8 @@ impl PlatformTab {
         profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
         vm_name: String,
+        profile_password: Option<String>,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         if let Some(vm) = vm {
@@ -2744,9 +2758,10 @@ impl PlatformTab {
             };
 
             let profile_config_path = profile.config_file.clone();
-            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone) {
+            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, profile_password) {
                 self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
             }
+            // TODO: Pass profile_kdbx to vm.regenerate_vm() in Task 5
             // Result will be delivered via VMRegenerated event
         } else {
             self.load_error = Some("ViewModel not available".to_string());
@@ -3306,6 +3321,7 @@ impl PlatformTab {
             docker_containers: Vec::new(),
             ansible_roles: Vec::new(),
             dure_wss_config: None,
+            ..Default::default()
         };
 
         // Spawn connection test in background thread

@@ -452,7 +452,7 @@ impl DureApp {
         // Render active tab content
         dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_password, ui, self.viewmodel.as_mut()),
+            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_password, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
             Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             Tab::Site => self.tab_site.ui(&self.current_profile, ui),
