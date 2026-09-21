@@ -83,10 +83,13 @@ impl DatabaseHandle {
             }
         }
 
-        let kpkey_data = std::fs::read(&kpkey_path)
-            .with_context(|| format!("Failed to read KPKey: {}", kpkey_path.display()))?;
-        let mut kpkey_cursor = Cursor::new(kpkey_data);
-        key = key.with_keyfile(&mut kpkey_cursor)?;
+        // Add keyfile if it exists (backward compat: old DBs used password-only)
+        if kpkey_path.exists() {
+            let kpkey_data = std::fs::read(&kpkey_path)
+                .with_context(|| format!("Failed to read KPKey: {}", kpkey_path.display()))?;
+            let mut kpkey_cursor = Cursor::new(kpkey_data);
+            key = key.with_keyfile(&mut kpkey_cursor)?;
+        }
 
         // Open database
         let mut file = File::open(&kdbx_path)
