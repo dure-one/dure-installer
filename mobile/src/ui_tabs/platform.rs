@@ -167,6 +167,16 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_vm_hard_delete: bool,
 
+    // Static IP detection and release
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_has_static_ip: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_ip_address: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_ip_name: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_release_ip: bool,
+
     // Delete Platform dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
     show_delete_platform_dialog: bool,
@@ -269,6 +279,10 @@ impl Default for PlatformTab {
             delete_vm_selected: None,
             delete_vm_confirming: false,
             delete_vm_hard_delete: false,
+            delete_vm_has_static_ip: false,
+            delete_vm_ip_address: None,
+            delete_vm_ip_name: None,
+            delete_vm_release_ip: false,
             show_delete_platform_dialog: false,
             delete_platform_name: String::new(),
             delete_platform_vm_count: 0,
