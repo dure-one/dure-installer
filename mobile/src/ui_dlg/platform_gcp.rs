@@ -1099,10 +1099,16 @@ impl GcpWizard {
 
                     match client.list_addresses(&self.selected_project_id, &selected_region.name) {
                         Ok(addresses) => {
+                            dure_info!("=== Fetched {} addresses for region {} ===", addresses.len(), selected_region.name);
+                            for addr in &addresses {
+                                dure_info!("  Address: {} = {} (status: {}, type: {})",
+                                    addr.name, addr.address, addr.status, addr.address_type);
+                            }
                             self.available_reserved_ips = addresses
                                 .into_iter()
                                 .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
                                 .collect();
+                            dure_info!("  Filtered to {} RESERVED+EXTERNAL addresses", self.available_reserved_ips.len());
                         }
                         Err(e) => {
                             dure_warn!("Failed to list reserved IPs for region {}: {}", selected_region.name, e);
