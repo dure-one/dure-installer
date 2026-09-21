@@ -46,9 +46,10 @@ impl PlatformCliRunner {
                 vm_name,
                 zone,
                 force,
+                ..
             } => {
                 self.vm
-                    .delete_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), *force)?;
+                    .delete_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), *force, None)?;
             }
             PlatformCommand::RestartVM {
                 profile_config_path,
