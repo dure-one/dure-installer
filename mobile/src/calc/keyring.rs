@@ -48,6 +48,7 @@ const DEFAULT_KPPUBKEY_NAME: &str = "id_ed25519.pub";
 ///
 /// Opened once at profile login, shared via Arc::clone() across threads.
 /// Auto-saves on mutations via SaveGuard Drop.
+#[derive(Debug)]
 pub struct DatabaseHandle {
     db: Arc<RwLock<Database>>,
     kdbx_path: PathBuf,

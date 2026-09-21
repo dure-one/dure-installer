@@ -98,7 +98,9 @@ impl PlatformActor {
                 platform_name,
                 vm_name,
                 zone,
-            } => self.regenerate_vm(profile_config_path, platform_name, vm_name, zone).await,
+                profile_password,
+                profile_kdbx,
+            } => self.regenerate_vm(profile_config_path, platform_name, vm_name, zone, profile_password, profile_kdbx).await,
             PlatformCommand::UpdateFirewall {
                 platform_name,
                 allow_ip,
@@ -626,6 +628,8 @@ impl PlatformActor {
         platform_name: String,
         vm_name: String,
         zone: String,
+        profile_password: Option<String>,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.send_progress("regenerate_vm", 0.3, "Regenerating VM...")
             .await;
@@ -639,6 +643,12 @@ impl PlatformActor {
             .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
             .clone();
 
+        // Get kdbx and kpkey paths from profile
+        let profile_dir = profile_config_path.parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid profile config path"))?;
+        let kdbx_path = profile_dir.join("keys.kdbx");
+        let kpkey_path = profile_dir.join("keys.kpkey");
+
         self.send_progress("regenerate_vm", 0.6, "Calling GCP API...")
             .await;
 
@@ -646,13 +656,16 @@ impl PlatformActor {
         let message = runtime::unblock({
             let mut platform = platform.clone();
             let zone = zone.clone();
+            let kdbx = kdbx_path.clone();
+            let kpkey = kpkey_path.clone();
+            let pwd = profile_password.clone();
             move || {
                 let access_token = platform
                     .gcp_oauth_access_token
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
-                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone)
+                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, pwd.as_deref())
             }
         })
         .await?;
@@ -1345,7 +1358,7 @@ impl PlatformActor {
             let firewall_status = self.check_firewall_status(&platform).await;
 
             // Step 3: Test SSH connection
-            let ssh_status = self.test_ssh_connection(&platform).await;
+            let ssh_status = self.test_ssh_connection(&platform, &profile_config_path).await;
 
             // Step 4: Fetch project count and cache to profile-specific config
             let project_count = self.fetch_and_cache_project_count(&profile_config_path, &platform_name, &platform).await;
@@ -1524,6 +1537,7 @@ impl PlatformActor {
     async fn test_ssh_connection(
         &self,
         platform: &crate::config::CloudPlatformConfig,
+        profile_config_path: &std::path::Path,
     ) -> super::SshStatus {
         use super::SshStatus;
 
@@ -1558,6 +1572,17 @@ impl PlatformActor {
         // Test SSH connection
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
+            // Derive profile-specific keyring paths from profile_config_path
+            let profile_dir = profile_config_path.parent();
+            let (profile_kdbx_path, profile_kpkey_path) = if let Some(dir) = profile_dir {
+                (
+                    Some(dir.join("key.kdbx")),
+                    Some(dir.join("id_ed25519")),
+                )
+            } else {
+                (None, None)
+            };
+
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
                 host: format!("root@{}", external_ip),
@@ -1571,6 +1596,9 @@ impl PlatformActor {
                 docker_containers: Vec::new(),
                 ansible_roles: Vec::new(),
                 dure_wss_config: None,
+                profile_kdbx_path,
+                profile_kpkey_path,
+                profile_password: None, // TODO: Pass from profile login session
             };
 
             // Run test connection

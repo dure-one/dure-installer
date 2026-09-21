@@ -2758,10 +2758,9 @@ impl PlatformTab {
             };
 
             let profile_config_path = profile.config_file.clone();
-            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, profile_password) {
+            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, profile_password, profile_kdbx) {
                 self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
             }
-            // TODO: Pass profile_kdbx to vm.regenerate_vm() in Task 5
             // Result will be delivered via VMRegenerated event
         } else {
             self.load_error = Some("ViewModel not available".to_string());
