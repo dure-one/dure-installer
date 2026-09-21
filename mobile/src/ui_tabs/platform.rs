@@ -3625,10 +3625,16 @@ impl PlatformTab {
                 ui.heading("Monthly Total Cost (Last 3 Months)");
                 ui.add_space(8.0);
 
-                // Project ID display (read-only)
+                // Project ID display with GCP console link
                 ui.horizontal(|ui| {
                     ui.label("Project ID:");
                     ui.label(&self.billing_project_id);
+                    ui.add_space(8.0);
+                    if ui.add(MaterialButton::text("Open in GCP Console").small()).clicked() {
+                        let url = format!("https://console.cloud.google.com/billing?project={}",
+                                         self.billing_project_id);
+                        let _ = webbrowser::open(&url);
+                    }
                 });
                 ui.add_space(8.0);
                 ui.separator();
