@@ -61,6 +61,9 @@ pub enum PlatformCommand {
         vm_name: String,
         zone: String,
         force: bool,
+        /// If Some((region, address_name)), release this reserved static IP
+        /// after VM deletion completes on GCP.
+        release_ip: Option<(String, String)>,
     },
     RestartVM {
         profile_config_path: std::path::PathBuf,

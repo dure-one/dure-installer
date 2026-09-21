@@ -101,7 +101,7 @@ pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> 
 
     // Use default config path for CLI
     let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
-    vm.delete_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, false)?;
+    vm.delete_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, false, None)?;
 
     println!("Deleting VM '{}'...", vm_name);
 

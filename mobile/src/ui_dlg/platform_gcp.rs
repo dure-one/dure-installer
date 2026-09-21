@@ -1088,20 +1088,29 @@ impl GcpWizard {
 
         ui.add_space(8.0);
 
-        // Fetch reserved IPs when region is selected
+        // Fetch reserved IPs when region is selected — once per region.
+        // Set last_fetched_region on BOTH success and error so an empty list
+        // or a failing API call doesn't refetch every frame.
         if let Some(selected_region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
-            if self.available_reserved_ips.is_empty() || self.last_fetched_region.as_ref() != Some(&selected_region.name) {
+            if self.last_fetched_region.as_ref() != Some(&selected_region.name) {
                 if let Some(oauth) = &self.oauth_result {
                     use crate::api::gcp::GcpRestClient;
                     let client = GcpRestClient::new(oauth.access_token.clone());
 
-                    if let Ok(addresses) = client.list_addresses(&self.selected_project_id, &selected_region.name) {
-                        self.available_reserved_ips = addresses
-                            .into_iter()
-                            .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
-                            .collect();
-                        self.last_fetched_region = Some(selected_region.name.clone());
+                    match client.list_addresses(&self.selected_project_id, &selected_region.name) {
+                        Ok(addresses) => {
+                            self.available_reserved_ips = addresses
+                                .into_iter()
+                                .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
+                                .collect();
+                        }
+                        Err(e) => {
+                            dure_warn!("Failed to list reserved IPs for region {}: {}", selected_region.name, e);
+                            self.available_reserved_ips.clear();
+                        }
                     }
+                    // Mark region attempted regardless of outcome; prevents per-frame refetch.
+                    self.last_fetched_region = Some(selected_region.name.clone());
                 }
             }
         }

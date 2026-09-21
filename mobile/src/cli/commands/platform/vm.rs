@@ -243,6 +243,7 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
                 force: false,
+                release_ip: None,
             })
             .await?;
 

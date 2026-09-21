@@ -1326,7 +1326,6 @@ impl PlatformTab {
                                         .color(BadgeColor::Primary)
                                         .size(BadgeSize::Small)
                                 );
-                                ui.add_space(2.0);
                                 let text_color = ui.style().visuals.text_color();
                                 ui.label(egui::RichText::new(&row_for_cells.project_id)
                                     .size(16.0)
@@ -3092,43 +3091,37 @@ impl PlatformTab {
             // Send command to ViewModel with profile-specific config path
             let profile_config_path = profile.config_file.clone();
             let force = self.delete_vm_hard_delete;
-            if let Err(e) =
-                vm.delete_vm(profile_config_path, self.delete_vm_platform.clone(), instance_name.clone(), zone.clone(), force)
-            {
+
+            // Build release_ip payload so the actor can release the IP AFTER
+            // GCP confirms VM deletion (delete_instance is async; releasing the
+            // address before wait_for_operation returns gives resourceInUseByAnotherResource).
+            let release_ip = if self.delete_vm_release_ip {
+                match (self.delete_vm_ip_name.clone(), self.delete_vm_list.get(0)) {
+                    (Some(addr_name), Some((_, zone_s, _))) => {
+                        // Region = zone with trailing "-<letter>" stripped (e.g. us-central1-a -> us-central1)
+                        let region = zone_s
+                            .rsplitn(2, '-')
+                            .nth(1)
+                            .unwrap_or(zone_s)
+                            .to_string();
+                        Some((region, addr_name))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
+            if let Err(e) = vm.delete_vm(
+                profile_config_path,
+                self.delete_vm_platform.clone(),
+                instance_name.clone(),
+                zone.clone(),
+                force,
+                release_ip,
+            ) {
                 self.load_error = Some(format!("Failed to start VM deletion: {}", e));
                 return;
-            }
-
-            // Release static IP if requested
-            if self.delete_vm_release_ip && self.delete_vm_ip_name.is_some() {
-                if let Ok((app_config, _)) = load_config(&None) {
-                    if let Some(platform) = app_config.platforms.iter()
-                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.delete_vm_platform))
-                    {
-                        if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
-                            if let Some((_, zone, _)) = self.delete_vm_list.get(0) {
-                                // Extract region from zone
-                                let region = zone.rsplitn(2, '-').nth(1)
-                                    .unwrap_or(zone)
-                                    .to_string();
-
-                                use crate::api::gcp::GcpRestClient;
-                                let client = GcpRestClient::new(token.clone());
-
-                                let addr_name = self.delete_vm_ip_name.as_ref().unwrap();
-                                if let Err(e) = client.delete_address(
-                                    &self.delete_vm_platform,
-                                    &region,
-                                    addr_name
-                                ) {
-                                    dure_warn!("Failed to release static IP {}: {}", addr_name, e);
-                                } else {
-                                    dure_info!("Released static IP address: {}", addr_name);
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             // Record audit event

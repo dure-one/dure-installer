@@ -354,6 +354,7 @@ impl ViewModel {
         vm_name: String,
         zone: String,
         force: bool,
+        release_ip: Option<(String, String)>,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::DeleteVM {
@@ -362,6 +363,7 @@ impl ViewModel {
                 vm_name,
                 zone,
                 force,
+                release_ip,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }

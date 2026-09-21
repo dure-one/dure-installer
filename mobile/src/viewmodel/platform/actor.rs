@@ -85,7 +85,8 @@ impl PlatformActor {
                 vm_name,
                 zone,
                 force,
-            } => self.delete_vm(profile_config_path, platform_name, vm_name, zone, force).await,
+                release_ip,
+            } => self.delete_vm(profile_config_path, platform_name, vm_name, zone, force, release_ip).await,
             PlatformCommand::RestartVM {
                 profile_config_path,
                 platform_name,
@@ -473,6 +474,7 @@ impl PlatformActor {
         vm_name: String,
         zone: String,
         force: bool,
+        release_ip: Option<(String, String)>,
     ) -> anyhow::Result<()> {
         self.send_progress("delete_vm", 0.5, "Deleting VM...").await;
 
@@ -492,7 +494,7 @@ impl PlatformActor {
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
         // Log operation start
-        let delete_type = if force { "force delete" } else { "delete" };
+        let _delete_type = if force { "force delete" } else { "delete" };
         let log_id = self.repository.log_operation(
             &platform_name,
             "delete_vm",
@@ -502,13 +504,28 @@ impl PlatformActor {
 
         let result = runtime::unblock({
             let vm_name_clone = vm_name.clone();
+            let project_id_clone = project_id.clone();
+            let release_ip_clone = release_ip.clone();
             move || -> anyhow::Result<()> {
                 let client = GcpRestClient::new(access_token);
-                let operation = client.delete_instance(&project_id, &zone, &vm_name_clone, force)?;
+                let operation = client.delete_instance(&project_id_clone, &zone, &vm_name_clone, force)?;
 
                 // Wait for deletion to complete
                 let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
-                client.wait_for_operation(&project_id, &zone, op_name, 120)?;
+                client.wait_for_operation(&project_id_clone, &zone, op_name, 120)?;
+
+                // Release static IP AFTER VM deletion is confirmed complete.
+                // Doing this before wait_for_operation returns triggers GCP's
+                // resourceInUseByAnotherResource error and the IP leaks.
+                if let Some((region, address_name)) = release_ip_clone {
+                    if let Err(e) = client.delete_address(&project_id_clone, &region, &address_name) {
+                        // ponytail: log & continue — VM is already gone, IP release is best-effort.
+                        // Upgrade path: return a partial-success event if users need explicit UI feedback.
+                        dure_warn!("Failed to release static IP {}: {}", address_name, e);
+                    } else {
+                        dure_info!("Released static IP address: {}", address_name);
+                    }
+                }
                 Ok(())
             }
         })
