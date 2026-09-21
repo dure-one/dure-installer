@@ -1295,14 +1295,14 @@ impl PlatformTab {
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(&row_for_cells.project_id);
-                                ui.add_space(4.0);
+                            ui.vertical(|ui| {
                                 ui.add(
                                     badge(&row_for_cells.platform_type)
                                         .color(BadgeColor::Primary)
                                         .size(BadgeSize::Small)
                                 );
+                                ui.add_space(2.0);
+                                ui.label(egui::RichText::new(&row_for_cells.project_id).size(16.0).strong());
                             });
                         })
                         .cell_widget(move |ui| {
