@@ -1302,7 +1302,11 @@ impl PlatformTab {
                                         .size(BadgeSize::Small)
                                 );
                                 ui.add_space(2.0);
-                                ui.label(egui::RichText::new(&row_for_cells.project_id).size(16.0).strong());
+                                let text_color = ui.style().visuals.text_color();
+                                ui.label(egui::RichText::new(&row_for_cells.project_id)
+                                    .size(16.0)
+                                    .strong()
+                                    .color(text_color));
                             });
                         })
                         .cell_widget(move |ui| {
