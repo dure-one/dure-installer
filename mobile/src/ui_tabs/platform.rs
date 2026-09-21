@@ -3,7 +3,7 @@
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{MaterialButton, data_table, linear_progress};
+use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize};
 use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -1285,8 +1285,7 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .auto_row_height(true)      // Enable dynamic row heights
                 .min_row_height(70.0)       // Maintain MD3 minimum height
-                .column("Project", 150.0 * width_ratio, false)
-                .column("Type", 80.0 * width_ratio, false)
+                .column("Project", 230.0 * width_ratio, false)
                 .column("Operations", 510.0 * width_ratio, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
@@ -1295,8 +1294,17 @@ impl PlatformTab {
                 let row_for_actions = row.clone();
 
                 table = table.row(move |r| {
-                    r.cell(&row_for_cells.project_id)
-                        .cell(&row_for_cells.platform_type)
+                    r.cell_widget(move |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(&row_for_cells.project_id);
+                                ui.add_space(4.0);
+                                ui.add(
+                                    badge(&row_for_cells.platform_type)
+                                        .color(BadgeColor::Primary)
+                                        .size(BadgeSize::Small)
+                                );
+                            });
+                        })
                         .cell_widget(move |ui| {
                             // Calculate needed height for button wrapping
                             let column_width = 260.0 * width_ratio;
