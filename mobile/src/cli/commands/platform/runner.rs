@@ -65,11 +65,10 @@ impl PlatformCliRunner {
                 platform_name,
                 vm_name,
                 zone,
-                profile_password,
                 profile_kdbx,
             } => {
                 self.vm
-                    .regenerate_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), profile_password.clone(), profile_kdbx.clone())?;
+                    .regenerate_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), profile_kdbx.clone())?;
             }
             PlatformCommand::UpdateFirewall {
                 platform_name,

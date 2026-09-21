@@ -76,7 +76,6 @@ pub enum PlatformCommand {
         platform_name: String,
         vm_name: String,
         zone: String,
-        profile_password: Option<String>,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 

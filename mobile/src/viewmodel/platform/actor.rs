@@ -98,9 +98,8 @@ impl PlatformActor {
                 platform_name,
                 vm_name,
                 zone,
-                profile_password,
                 profile_kdbx,
-            } => self.regenerate_vm(profile_config_path, platform_name, vm_name, zone, profile_password, profile_kdbx).await,
+            } => self.regenerate_vm(profile_config_path, platform_name, vm_name, zone, profile_kdbx).await,
             PlatformCommand::UpdateFirewall {
                 platform_name,
                 allow_ip,
@@ -628,7 +627,6 @@ impl PlatformActor {
         platform_name: String,
         vm_name: String,
         zone: String,
-        profile_password: Option<String>,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.send_progress("regenerate_vm", 0.3, "Regenerating VM...")
@@ -658,7 +656,6 @@ impl PlatformActor {
             let zone = zone.clone();
             let kdbx = kdbx_path.clone();
             let kpkey = kpkey_path.clone();
-            let pwd = profile_password.clone();
             let handle = profile_kdbx.clone();
             move || {
                 let access_token = platform
@@ -666,7 +663,7 @@ impl PlatformActor {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
-                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, pwd.as_deref(), handle.as_ref())
+                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, handle.as_ref())
             }
         })
         .await?;
@@ -1597,9 +1594,6 @@ impl PlatformActor {
                 docker_containers: Vec::new(),
                 ansible_roles: Vec::new(),
                 dure_wss_config: None,
-                profile_kdbx_path,
-                profile_kpkey_path,
-                profile_password: None, // TODO: Pass from profile login session
             };
 
             // Run test connection

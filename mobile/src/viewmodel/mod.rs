@@ -391,7 +391,6 @@ impl ViewModel {
         platform_name: String,
         vm_name: String,
         zone: String,
-        profile_password: Option<String>,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.platform_tx
@@ -400,7 +399,6 @@ impl ViewModel {
                 platform_name,
                 vm_name,
                 zone,
-                profile_password,
                 profile_kdbx,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))

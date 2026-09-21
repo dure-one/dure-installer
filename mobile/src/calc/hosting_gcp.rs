@@ -71,7 +71,6 @@ pub fn regenerate_vm(
     zone: &str,
     kdbx_path: &std::path::Path,
     kpkey_path: &std::path::Path,
-    password: Option<&str>,
     handle: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<String> {
     use crate::api::gcp::compute::{
@@ -141,7 +140,7 @@ pub fn regenerate_vm(
             "",
             Some(&private_key_bytes),
             Some(&format!("SSH key for GCP VM {}", vm_name)),
-            password,
+            None,
         )
         .map_err(|e| {
             dure_debug!("Failed to add key to keyring: {}", e);

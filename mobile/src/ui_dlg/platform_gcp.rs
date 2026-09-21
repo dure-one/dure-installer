@@ -1672,7 +1672,7 @@ impl GcpWizard {
         let kpkey_path = keyring::get_default_kpkey_path()
             .map_err(|e| format!("Failed to get KPKey path: {}", e))?;
 
-        keyring::update_key(&kdbx_path, Some(&kpkey_path), &domain, username, password)
+        keyring::update_key(&kdbx_path, Some(&kpkey_path), &domain, username, password, None)
             .map_err(|e| format!("Failed to store OAuth token: {}", e))?;
 
         Ok(())
@@ -2252,6 +2252,7 @@ impl GcpWizard {
                 "",                             // Empty password field
                 Some(private_key.as_bytes()),   // SSH key as binary attachment
                 Some("GCP VM SSH private key"), // Notes
+                None,                           // db_password
             )
             .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 

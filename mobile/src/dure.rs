@@ -76,8 +76,6 @@ pub struct DureApp {
     pub pending_profile_name: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     pub current_profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    pub current_profile_password: Option<String>,
 
     // Installation status (desktop only)
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -220,7 +218,6 @@ impl Default for DureApp {
             current_profile: None,
             pending_profile_name: None,
             current_profile_kdbx: None,
-            current_profile_password: None,
             // Installation status (desktop only)
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: install::check_install(),
@@ -452,7 +449,7 @@ impl DureApp {
         // Render active tab content
         dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_password, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
+            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
             Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             Tab::Site => self.tab_site.ui(&self.current_profile, ui),
@@ -974,7 +971,6 @@ impl DureApp {
                                         Ok(handle) => {
                                             self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
                                             self.current_profile = Some(ctx);
-                                            self.current_profile_password = Some(password);
                                             dure_info!("Profile and keyring loaded successfully: {}", profile_name);
 
                                             // Clear screen and reload profile configs
@@ -1048,7 +1044,6 @@ impl DureApp {
                                 // Auto-login: load the newly created profile
                                 self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
                                 self.current_profile = Some(ctx);
-                                self.current_profile_password = Some(password);
 
                                 // Clear screen and reload profile configs
                                 self.clear_and_reload_profile();
@@ -1095,7 +1090,6 @@ impl DureApp {
                         if is_active {
                             self.current_profile_kdbx = None;
                             self.current_profile = None;
-                            self.current_profile_password = None;
 
                             // Clear config - no profile means no config
                             self.config = None;
