@@ -333,14 +333,14 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
     TableBuilder::new(ui)
         .striped(true)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(80.0))  // Time
+        .column(Column::auto().at_least(130.0)) // Date
         .column(Column::auto().at_least(120.0)) // Operation
         .column(Column::auto().at_least(80.0))  // System
         .column(Column::auto().at_least(80.0))  // Status
         .column(Column::auto().at_least(60.0))  // Duration
         .column(Column::remainder())             // Error
         .header(20.0, |mut header| {
-            header.col(|ui| { ui.heading("Time"); });
+            header.col(|ui| { ui.heading("Date"); });
             header.col(|ui| { ui.heading("Operation"); });
             header.col(|ui| { ui.heading("System"); });
             header.col(|ui| { ui.heading("Status"); });
@@ -350,11 +350,11 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
         .body(|mut body| {
             for op in operations {
                 body.row(30.0, |mut row| {
-                    // Time
+                    // Date
                     row.col(|ui| {
                         let dt = chrono::DateTime::from_timestamp(op.started_at, 0)
-                            .map(|dt| dt.format("%H:%M:%S").to_string())
-                            .unwrap_or_else(|| "??:??:??".to_string());
+                            .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
+                            .unwrap_or_else(|| "???????? ??:??".to_string());
                         ui.label(dt);
                     });
 
