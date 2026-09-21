@@ -317,8 +317,13 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         return;
     }
 
-    // Render operations table with 30px row height
-    render_operations_table(ui, &drawer_state.operations);
+    // Scrollable operations table - fixed 500px height (matches Logs tab)
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            render_operations_table(ui, &drawer_state.operations);
+        });
 }
 
 /// Render operations table with simple grid layout (30px rows)
