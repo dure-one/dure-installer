@@ -2846,12 +2846,56 @@ impl PlatformTab {
         vm_name: String,
         zone: String,
     ) {
-        self.delete_vm_platform = platform_name;
+        self.delete_vm_platform = platform_name.clone();
         self.delete_vm_list.clear();
-        self.delete_vm_list.push((vm_name, zone, "".to_string()));
+        self.delete_vm_list.push((vm_name.clone(), zone.clone(), "".to_string()));
         self.delete_vm_selected = Some(0);
         self.delete_vm_confirming = true;
         self.show_delete_vm_dialog = true;
+
+        // Reset static IP state
+        self.delete_vm_has_static_ip = false;
+        self.delete_vm_ip_address = None;
+        self.delete_vm_ip_name = None;
+        self.delete_vm_release_ip = false;
+
+        // Check if VM has static IP (requires access token and config)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok((app_config, _)) = load_config(&None) {
+                if let Some(platform) = app_config.platforms.iter()
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                {
+                    if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
+                        if let Some(vm) = platform.vms.iter()
+                            .find(|v| v.name == vm_name && v.zone == zone)
+                        {
+                            if let Some(external_ip) = &vm.external_ip {
+                                // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
+                                let region = zone.rsplitn(2, '-').nth(1)
+                                    .unwrap_or(&zone)
+                                    .to_string();
+
+                                // Query addresses to check if IP is static
+                                use crate::api::gcp::GcpRestClient;
+                                let client = GcpRestClient::new(token.clone());
+
+                                if let Ok(addresses) = client.list_addresses(&platform_name, &region) {
+                                    // Find address matching this IP
+                                    if let Some(addr) = addresses.iter()
+                                        .find(|a| &a.address == external_ip)
+                                    {
+                                        self.delete_vm_has_static_ip = true;
+                                        self.delete_vm_ip_address = Some(addr.address.clone());
+                                        self.delete_vm_ip_name = Some(addr.name.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn render_delete_vm_dialog(
@@ -2893,6 +2937,32 @@ impl PlatformTab {
                                 egui::Color32::GRAY,
                                 "VM will be terminated immediately without graceful shutdown",
                             );
+
+                            // Static IP section
+                            if self.delete_vm_has_static_ip {
+                                ui.add_space(8.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.label(format!(
+                                    "Static IP: {}",
+                                    self.delete_vm_ip_address.as_ref().unwrap()
+                                ));
+                                ui.checkbox(
+                                    &mut self.delete_vm_release_ip,
+                                    "Release static IP address"
+                                );
+                                ui.label("(Default: Keep IP reserved for future use)");
+
+                                ui.add_space(8.0);
+                                if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+                                    let url = format!(
+                                        "https://console.cloud.google.com/networking/addresses/list?project={}",
+                                        self.delete_vm_platform
+                                    );
+                                    let _ = webbrowser::open(&url);
+                                }
+                            }
 
                             ui.add_space(12.0);
 
