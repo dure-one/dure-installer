@@ -1748,7 +1748,7 @@ impl PlatformTab {
                         };
                     }
 
-                    self.show_delete_vm_confirmation(current_profile, platform_name, vm_name, vm_zone);
+                    self.show_delete_vm_confirmation(&Some(current_profile.clone()), platform_name, vm_name, vm_zone);
                     ui.data_mut(|d| {
                         d.remove::<(String, String, String)>(egui::Id::new(
                             "platform_action_delete_vm",
