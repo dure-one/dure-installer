@@ -644,8 +644,8 @@ impl PlatformActor {
         // Get kdbx and kpkey paths from profile
         let profile_dir = profile_config_path.parent()
             .ok_or_else(|| anyhow::anyhow!("Invalid profile config path"))?;
-        let kdbx_path = profile_dir.join("keys.kdbx");
-        let kpkey_path = profile_dir.join("keys.kpkey");
+        let kdbx_path = profile_dir.join("key.kdbx");
+        let kpkey_path = profile_dir.join("id_ed25519");
 
         self.send_progress("regenerate_vm", 0.6, "Calling GCP API...")
             .await;
