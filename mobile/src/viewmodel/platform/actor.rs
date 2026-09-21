@@ -641,29 +641,25 @@ impl PlatformActor {
             .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
             .clone();
 
-        // Get kdbx and kpkey paths from profile
-        let profile_dir = profile_config_path.parent()
-            .ok_or_else(|| anyhow::anyhow!("Invalid profile config path"))?;
-        let kdbx_path = profile_dir.join("key.kdbx");
-        let kpkey_path = profile_dir.join("id_ed25519");
+        // Require profile DatabaseHandle (profile must be logged in)
+        let handle = profile_kdbx
+            .ok_or_else(|| anyhow::anyhow!("Profile not logged in. Please login to your profile first."))?;
 
         self.send_progress("regenerate_vm", 0.6, "Calling GCP API...")
             .await;
 
-        // Regenerate VM
+        // Regenerate VM using profile keyring
         let message = runtime::unblock({
             let mut platform = platform.clone();
             let zone = zone.clone();
-            let kdbx = kdbx_path.clone();
-            let kpkey = kpkey_path.clone();
-            let handle = profile_kdbx.clone();
+            let handle = handle.clone();
             move || {
                 let access_token = platform
                     .gcp_oauth_access_token
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
-                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, handle.as_ref())
+                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &handle)
             }
         })
         .await?;
