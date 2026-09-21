@@ -151,14 +151,25 @@ impl ProfileManager {
             return Err(ProfileError::NotFound(name.to_string()).into());
         }
 
-        // Try to open KeePass database with password
+        // Try to open KeePass database with password + keyfile
         use keepass::{Database, DatabaseKey};
         use std::fs::File;
+        use std::io::Cursor;
 
         let mut file = File::open(&ctx.kdbx_path)
             .context("failed to open kdbx file")?;
 
-        let key = DatabaseKey::new().with_password(password);
+        // Build key with password + keyfile
+        let mut key = DatabaseKey::new().with_password(password);
+
+        // Add keyfile if it exists
+        if ctx.kpkey_path.exists() {
+            let kpkey_data = fs::read(&ctx.kpkey_path)
+                .context("failed to read keyfile")?;
+            let mut kpkey_cursor = Cursor::new(kpkey_data);
+            key = key.with_keyfile(&mut kpkey_cursor)
+                .context("failed to add keyfile to database key")?;
+        }
 
         // Attempt to open database
         match Database::open(&mut file, key) {
@@ -197,8 +208,8 @@ impl ProfileManager {
         // Write public key
         fs::write(&ctx.kppubkey_path, public_key).context("failed to write public key")?;
 
-        // Create KeePass database
-        Self::create_kdbx(&ctx.kdbx_path, password)?;
+        // Create KeePass database with password + keyfile
+        Self::create_kdbx(&ctx.kdbx_path, &ctx.kpkey_path, password)?;
 
         // Create default config.yml
         let default_config = "# Profile configuration\n";
@@ -239,15 +250,23 @@ impl ProfileManager {
     /// Create KeePass database
     ///
     /// Creates a new KDBX4 database with the given password
-    fn create_kdbx(path: &PathBuf, password: &str) -> Result<()> {
+    fn create_kdbx(path: &PathBuf, kpkey_path: &PathBuf, password: &str) -> Result<()> {
         use keepass::{Database, DatabaseKey};
+        use std::io::Cursor;
 
         // Create new database
         let mut db = Database::new(Default::default());
         db.root.name = "Dure Profile".to_string();
 
-        // Create database key with password
-        let key = DatabaseKey::new().with_password(password);
+        // Create database key with password + keyfile
+        let mut key = DatabaseKey::new().with_password(password);
+
+        // Add keyfile
+        let kpkey_data = fs::read(kpkey_path)
+            .context("failed to read keyfile")?;
+        let mut kpkey_cursor = Cursor::new(kpkey_data);
+        key = key.with_keyfile(&mut kpkey_cursor)
+            .context("failed to add keyfile to database key")?;
 
         // Save database
         let mut file = fs::File::create(path).context("failed to create kdbx file")?;
