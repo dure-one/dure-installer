@@ -58,6 +58,20 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(target_arch = "wasm32"))]
 use base64::Engine;
 
+/// External IP option for VM creation
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+enum IpOption {
+    Ephemeral,
+    Reserved(usize), // Index into available_reserved_ips
+}
+
+impl Default for IpOption {
+    fn default() -> Self {
+        IpOption::Ephemeral
+    }
+}
+
 /// GCP wizard state machine
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
@@ -184,6 +198,12 @@ pub struct GcpWizard {
     /// Flag to track if operation log has been updated (prevents repeated updates)
     #[cfg_attr(feature = "serde", serde(skip))]
     operation_log_updated: bool,
+
+    /// Reserved IP selection
+    #[cfg_attr(feature = "serde", serde(skip))]
+    available_reserved_ips: Vec<crate::api::gcp::Address>,
+    selected_ip_option: IpOption,
+    last_fetched_region: Option<String>,
 }
 
 impl Default for GcpWizard {
@@ -224,6 +244,9 @@ impl Default for GcpWizard {
             operation_log_id: None,
             needs_refresh: false,
             operation_log_updated: false,
+            available_reserved_ips: Vec::new(),
+            selected_ip_option: IpOption::Ephemeral,
+            last_fetched_region: None,
         }
     }
 }
@@ -1063,6 +1086,67 @@ impl GcpWizard {
                 });
         });
 
+        ui.add_space(8.0);
+
+        // Fetch reserved IPs when region is selected
+        if let Some(selected_region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+            if self.available_reserved_ips.is_empty() || self.last_fetched_region.as_ref() != Some(&selected_region.name) {
+                if let Some(oauth) = &self.oauth_result {
+                    use crate::api::gcp::GcpRestClient;
+                    let client = GcpRestClient::new(oauth.access_token.clone());
+
+                    if let Ok(addresses) = client.list_addresses(&self.selected_project_id, &selected_region.name) {
+                        self.available_reserved_ips = addresses
+                            .into_iter()
+                            .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
+                            .collect();
+                        self.last_fetched_region = Some(selected_region.name.clone());
+                    }
+                }
+            }
+        }
+
+        // External IP selection
+        ui.label("External IP:");
+        egui::ComboBox::from_label("")
+            .selected_text(match &self.selected_ip_option {
+                IpOption::Ephemeral => "Ephemeral (auto-assigned)".to_string(),
+                IpOption::Reserved(idx) => {
+                    if *idx < self.available_reserved_ips.len() {
+                        let addr = &self.available_reserved_ips[*idx];
+                        format!("Reserved: {} ({})", addr.address, addr.name)
+                    } else {
+                        "Ephemeral (auto-assigned)".to_string()
+                    }
+                }
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut self.selected_ip_option,
+                    IpOption::Ephemeral,
+                    "Ephemeral (auto-assigned)"
+                );
+
+                for (idx, addr) in self.available_reserved_ips.iter().enumerate() {
+                    ui.selectable_value(
+                        &mut self.selected_ip_option,
+                        IpOption::Reserved(idx),
+                        format!("Reserved: {} ({})", addr.address, addr.name)
+                    );
+                }
+            });
+
+        if !self.available_reserved_ips.is_empty() {
+            ui.add_space(4.0);
+            if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+                let url = format!(
+                    "https://console.cloud.google.com/networking/addresses/list?project={}",
+                    self.selected_project_id
+                );
+                let _ = webbrowser::open(&url);
+            }
+        }
+
         ui.add_space(16.0);
 
         // Back button on the left (if applicable)
@@ -1822,6 +1906,18 @@ impl GcpWizard {
         let disk_size_gb = self.disk_size_gb.clone();
         let swap_size_gb = self.swap_size_gb.clone();
 
+        // Capture IP selection
+        let selected_nat_ip = match &self.selected_ip_option {
+            IpOption::Ephemeral => None,
+            IpOption::Reserved(idx) => {
+                if *idx < self.available_reserved_ips.len() {
+                    Some(self.available_reserved_ips[*idx].address.clone())
+                } else {
+                    None
+                }
+            }
+        };
+
         let access_token = self
             .oauth_result
             .as_ref()
@@ -1870,6 +1966,14 @@ impl GcpWizard {
                     value: startup_script,
                 }],
             });
+
+            // Update network interface with selected IP
+            use crate::api::gcp::compute::AccessConfig;
+            instance_req.network_interfaces[0].access_configs = Some(vec![AccessConfig {
+                type_: "ONE_TO_ONE_NAT".to_string(),
+                name: "External NAT".to_string(),
+                nat_ip: selected_nat_ip,
+            }]);
 
             // Create the instance
             let operation = client
