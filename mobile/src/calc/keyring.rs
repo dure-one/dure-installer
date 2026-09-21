@@ -148,15 +148,74 @@ impl<'a> DerefMut for SaveGuard<'a> {
 
 impl<'a> Drop for SaveGuard<'a> {
     fn drop(&mut self) {
-        // Write guard unlocks here (via drop)
+        // Save while we still have write access
+        let save_result = (|| -> Result<()> {
+            let mut file = File::create(&self.handle.kdbx_path)
+                .with_context(|| format!("Failed to create kdbx file: {}", self.handle.kdbx_path.display()))?;
+            self.guard.save(&mut file, self.handle.key.clone())
+                .context("Failed to save database")?;
+            file.sync_all()
+                .context("Failed to sync database to disk")?;
+            Ok(())
+        })();
 
-        // Then save to disk
-        if let Err(e) = self.handle.save_internal() {
+        if let Err(e) = save_result {
             dure_error!("CRITICAL: Failed to save keyring: {}", e);
             dure_error!("  Path: {:?}", self.handle.kdbx_path);
             // Don't panic - Drop must not panic
         }
+        // Write guard unlocks here when self.guard drops
     }
+}
+
+/// List all keys from opened database handle
+///
+/// Read-only operation, no auto-save.
+pub fn list_keys_from_handle(handle: &DatabaseHandle) -> Result<Vec<KeyEntry>> {
+    let db = handle.read();
+    let mut keys = Vec::new();
+    collect_keys_from_group(&db.root, &mut keys)?;
+    Ok(keys)
+}
+
+/// Add key to opened database handle
+///
+/// Auto-saves on function return via SaveGuard Drop.
+pub fn add_key_to_handle(
+    handle: &DatabaseHandle,
+    domain: &str,
+    username: &str,
+    password: &str,
+    ssh_key: Option<&[u8]>,
+    notes: Option<&str>,
+) -> Result<()> {
+    let mut db = handle.write_and_save();  // Auto-saves on drop
+
+    // Create entry
+    let mut entry = Entry::default();
+    entry.fields.insert("Title".to_string(), Value::unprotected(domain.to_string()));
+    entry.fields.insert("UserName".to_string(), Value::unprotected(username.to_string()));
+    entry.fields.insert("Password".to_string(), Value::protected(password.to_string()));
+
+    // Add SSH key as attachment if provided
+    if let Some(key_data) = ssh_key {
+        use keepass::db::Attachment;
+        entry.attachments.insert(
+            "ssh_key".to_string(),
+            Attachment {
+                data: Value::unprotected(key_data.to_vec()),
+            },
+        );
+    }
+
+    // Add notes
+    if let Some(n) = notes {
+        entry.fields.insert("Notes".to_string(), Value::unprotected(n.to_string()));
+    }
+
+    db.root.entries.push(entry);
+    Ok(())
+    // db saved automatically when guard drops
 }
 
 /// A key entry in the keyring
@@ -851,5 +910,75 @@ mod tests {
         // Verify can read
         let db = handle.read();
         assert_eq!(db.root.name, "Test DB");
+    }
+
+    #[test]
+    fn test_list_keys_from_handle() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let kdbx_path = tmp.path().join("test.kdbx");
+        let kpkey_path = tmp.path().join("test.kpkey");
+
+        // Setup: Create database with one entry
+        std::fs::write(&kpkey_path, &[0u8; 32]).unwrap();
+        let mut db = Database::new(Default::default());
+
+        // Add Dure Keys group with entry
+        let mut group = Group::new("Dure Keys");
+        let mut entry = Entry::default();
+        entry.fields.insert("Title".to_string(), Value::unprotected("test.com".to_string()));
+        entry.fields.insert("UserName".to_string(), Value::unprotected("user".to_string()));
+        entry.fields.insert("Password".to_string(), Value::protected("pass".to_string()));
+        group.entries.push(entry);
+        db.root.groups.push(group);
+
+        let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
+        let key = DatabaseKey::new().with_keyfile(&mut kpkey_cursor).unwrap().with_password("testpass");
+        let mut file = File::create(&kdbx_path).unwrap();
+        db.save(&mut file, key).unwrap();
+
+        // Test: List keys
+        let handle = DatabaseHandle::open(kdbx_path, kpkey_path, Some("testpass")).unwrap();
+        let keys = list_keys_from_handle(&handle).unwrap();
+
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].domain, "test.com");
+        assert_eq!(keys[0].username, "user");
+    }
+
+    #[test]
+    fn test_add_key_to_handle() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let kdbx_path = tmp.path().join("test.kdbx");
+        let kpkey_path = tmp.path().join("test.kpkey");
+
+        // Setup: Empty database
+        std::fs::write(&kpkey_path, &[0u8; 32]).unwrap();
+        let db = Database::new(Default::default());
+        let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
+        let key = DatabaseKey::new().with_keyfile(&mut kpkey_cursor).unwrap().with_password("testpass");
+        let mut file = File::create(&kdbx_path).unwrap();
+        db.save(&mut file, key).unwrap();
+
+        // Test: Add key
+        let handle = DatabaseHandle::open(kdbx_path.clone(), kpkey_path.clone(), Some("testpass")).unwrap();
+        add_key_to_handle(&handle, "example.com", "testuser", "secret", None, Some("Test note")).unwrap();
+
+        // Verify: List keys
+        let keys = list_keys_from_handle(&handle).unwrap();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].domain, "example.com");
+        assert_eq!(keys[0].username, "testuser");
+        assert_eq!(keys[0].password, "secret");
+        assert_eq!(keys[0].notes, Some("Test note".to_string()));
+
+        // Verify: Persistence (reopen)
+        drop(handle);
+        let handle2 = DatabaseHandle::open(kdbx_path, kpkey_path, Some("testpass")).unwrap();
+        let keys2 = list_keys_from_handle(&handle2).unwrap();
+        assert_eq!(keys2.len(), 1);
     }
 }
