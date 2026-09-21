@@ -659,13 +659,14 @@ impl PlatformActor {
             let kdbx = kdbx_path.clone();
             let kpkey = kpkey_path.clone();
             let pwd = profile_password.clone();
+            let handle = profile_kdbx.clone();
             move || {
                 let access_token = platform
                     .gcp_oauth_access_token
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
-                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, pwd.as_deref())
+                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &kdbx, &kpkey, pwd.as_deref(), handle.as_ref())
             }
         })
         .await?;
