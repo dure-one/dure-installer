@@ -3,7 +3,7 @@
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize};
+use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize, notification, NotificationAlign};
 use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -228,6 +228,14 @@ pub struct PlatformTab {
     // Drawer state (for platform details drawer with tabs)
     #[cfg_attr(feature = "serde", serde(skip))]
     drawer_state: crate::viewmodel::platform::DrawerState,
+
+    // SSH creation notification state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_ssh_creation_notification: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_created_count: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_creation_notification_time: Option<std::time::Instant>,
 }
 
 impl Default for PlatformTab {
@@ -283,6 +291,9 @@ impl Default for PlatformTab {
             refresh_promises: std::collections::HashMap::new(),
             auto_refreshed_platforms: std::collections::HashSet::new(),
             drawer_state: crate::viewmodel::platform::DrawerState::new(),
+            show_ssh_creation_notification: false,
+            ssh_created_count: 0,
+            ssh_creation_notification_time: None,
         }
     }
 }
@@ -1940,6 +1951,32 @@ impl PlatformTab {
 
             self.wizard_was_open = wizard_is_open;
         }
+
+        // SSH creation notification (auto-dismiss after 5 seconds)
+        if self.show_ssh_creation_notification {
+            if let Some(show_time) = self.ssh_creation_notification_time {
+                if show_time.elapsed() >= std::time::Duration::from_secs(5) {
+                    self.show_ssh_creation_notification = false;
+                }
+            }
+
+            let response = ui.add(
+                notification()
+                    .title("SSH Entries Created")
+                    .text(&format!(
+                        "Created {} new SSH entr{} from VM scan",
+                        self.ssh_created_count,
+                        if self.ssh_created_count == 1 { "y" } else { "ies" }
+                    ))
+                    .icon("check")
+                    .align(NotificationAlign::Center)
+                    .opened(true),
+            );
+
+            if response.clicked() {
+                self.show_ssh_creation_notification = false;
+            }
+        }
     }
 
     fn load_rows(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>) {
@@ -2081,6 +2118,57 @@ impl PlatformTab {
                             {
                                 self.execute_test_connection(current_profile.as_ref().unwrap(), project_id);
                             }
+                        }
+                    }
+
+                    // Auto-create SSH entries for VMs not in SSH hosts
+                    let mut new_ssh_hosts = Vec::new();
+                    for platform in &app_config.platforms {
+                        if platform.platform_type != "gcp" {
+                            continue;
+                        }
+
+                        let platform_name = platform.gcp_selected_project_id.clone()
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        for vm in &platform.vms {
+                            if let Some(external_ip) = &vm.external_ip {
+                                // Check if SSH host already exists with this IP
+                                let exists = app_config.ssh_hosts.iter().any(|ssh_host| {
+                                    // Parse host to extract IP (format: "root@IP" or "user@IP" or just "IP")
+                                    let host_ip = ssh_host.host.split('@').last().unwrap_or(&ssh_host.host);
+                                    host_ip == external_ip
+                                });
+
+                                if !exists {
+                                    new_ssh_hosts.push(crate::config::SshHostConfig {
+                                        host: format!("root@{}", external_ip),
+                                        password: None,
+                                        private_key_path: None,
+                                        keyring_domain: vm.ssh_key_name.clone(),
+                                        port: 22,
+                                        initialized: false,
+                                        last_status: None,
+                                        platform_name: Some(platform_name.clone()),
+                                        docker_containers: Vec::new(),
+                                        ansible_roles: Vec::new(),
+                                        dure_wss_config: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // Add new SSH hosts to config and save
+                    if !new_ssh_hosts.is_empty() {
+                        app_config.ssh_hosts.extend(new_ssh_hosts.clone());
+                        if let Err(e) = app_config.save(&config_path) {
+                            dure_error!("Failed to save SSH hosts: {}", e);
+                        } else {
+                            // Show notification
+                            self.show_ssh_creation_notification = true;
+                            self.ssh_created_count = new_ssh_hosts.len();
+                            self.ssh_creation_notification_time = Some(std::time::Instant::now());
                         }
                     }
 
