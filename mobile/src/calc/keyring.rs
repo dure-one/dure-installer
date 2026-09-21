@@ -35,12 +35,129 @@ use keepass::{
 };
 use std::fs::{File, create_dir_all};
 use std::io::{Cursor, Write as IoWrite};
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 const KEEPASS_GROUP_NAME: &str = "Dure Keys";
 const DEFAULT_KDBX_NAME: &str = "key.kdbx";
 const DEFAULT_KPKEY_NAME: &str = "id_ed25519";
 const DEFAULT_KPPUBKEY_NAME: &str = "id_ed25519.pub";
+
+/// Thread-safe handle to opened KeePass database
+///
+/// Opened once at profile login, shared via Arc::clone() across threads.
+/// Auto-saves on mutations via SaveGuard Drop.
+pub struct DatabaseHandle {
+    db: Arc<RwLock<Database>>,
+    kdbx_path: PathBuf,
+    kpkey_path: PathBuf,
+    key: DatabaseKey,  // Cached for save operations
+}
+
+impl DatabaseHandle {
+    /// Open database with password + keyfile at login
+    ///
+    /// # Arguments
+    /// * `kdbx_path` - Path to .kdbx file
+    /// * `kpkey_path` - Path to keyfile
+    /// * `password` - Optional password (can be empty for keyfile-only)
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - File not found
+    /// - Incorrect password/keyfile
+    /// - Corrupted database
+    pub fn open(
+        kdbx_path: PathBuf,
+        kpkey_path: PathBuf,
+        password: Option<&str>,
+    ) -> Result<Self> {
+        // Build DatabaseKey from password + keyfile
+        let mut key = DatabaseKey::new();
+
+        if let Some(pwd) = password {
+            if !pwd.is_empty() {
+                key = key.with_password(pwd);
+            }
+        }
+
+        let kpkey_data = std::fs::read(&kpkey_path)
+            .with_context(|| format!("Failed to read KPKey: {}", kpkey_path.display()))?;
+        let mut kpkey_cursor = Cursor::new(kpkey_data);
+        key = key.with_keyfile(&mut kpkey_cursor)?;
+
+        // Open database
+        let mut file = File::open(&kdbx_path)
+            .with_context(|| format!("Failed to open kdbx file: {}", kdbx_path.display()))?;
+        let db = Database::open(&mut file, key.clone())
+            .context("Failed to open KeePass database. Check password/KPKey.")?;
+
+        Ok(Self {
+            db: Arc::new(RwLock::new(db)),
+            kdbx_path,
+            kpkey_path,
+            key,
+        })
+    }
+
+    /// Read-only access to database
+    pub fn read(&self) -> RwLockReadGuard<Database> {
+        self.db.read().unwrap()  // Poisoning = panic acceptable
+    }
+
+    /// Mutable access with auto-save on drop
+    pub fn write_and_save(&self) -> SaveGuard<'_> {
+        SaveGuard {
+            guard: self.db.write().unwrap(),
+            handle: self,
+        }
+    }
+
+    /// Internal save (called by SaveGuard::drop)
+    fn save_internal(&self) -> Result<()> {
+        let db = self.db.read().unwrap();
+        let mut file = File::create(&self.kdbx_path)
+            .with_context(|| format!("Failed to create kdbx file: {}", self.kdbx_path.display()))?;
+        db.save(&mut file, self.key.clone())
+            .context("Failed to save database")?;
+        file.sync_all()
+            .context("Failed to sync database to disk")?;
+        Ok(())
+    }
+}
+
+/// RAII guard: auto-saves database when dropped
+pub struct SaveGuard<'a> {
+    guard: RwLockWriteGuard<'a, Database>,
+    handle: &'a DatabaseHandle,
+}
+
+impl<'a> Deref for SaveGuard<'a> {
+    type Target = Database;
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+impl<'a> DerefMut for SaveGuard<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
+    }
+}
+
+impl<'a> Drop for SaveGuard<'a> {
+    fn drop(&mut self) {
+        // Write guard unlocks here (via drop)
+
+        // Then save to disk
+        if let Err(e) = self.handle.save_internal() {
+            dure_error!("CRITICAL: Failed to save keyring: {}", e);
+            dure_error!("  Path: {:?}", self.handle.kdbx_path);
+            // Don't panic - Drop must not panic
+        }
+    }
+}
 
 /// A key entry in the keyring
 #[derive(Debug, Clone)]
@@ -300,8 +417,8 @@ pub fn save_kdbx(
 }
 
 /// List all keys from KeePass database
-pub fn list_keys(kdbx_path: &Path, kpkey_path: Option<&Path>) -> Result<Vec<KeyEntry>> {
-    let db = open_kdbx(kdbx_path, kpkey_path, None)?;
+pub fn list_keys(kdbx_path: &Path, kpkey_path: Option<&Path>, password: Option<&str>) -> Result<Vec<KeyEntry>> {
+    let db = open_kdbx(kdbx_path, kpkey_path, password)?;
     let mut keys = Vec::new();
     collect_keys_from_group(&db.root, &mut keys)?;
     Ok(keys)
@@ -416,9 +533,10 @@ pub fn add_key(
     domain: &str,
     username: &str,
     password: &str,
+    db_password: Option<&str>,
 ) -> Result<()> {
     add_key_with_ssh(
-        kdbx_path, kpkey_path, domain, username, password, None, None,
+        kdbx_path, kpkey_path, domain, username, password, None, None, db_password,
     )
 }
 
@@ -431,8 +549,9 @@ pub fn add_key_with_ssh(
     password: &str,
     ssh_key: Option<&[u8]>,
     notes: Option<&str>,
+    db_password: Option<&str>,
 ) -> Result<()> {
-    let mut db = open_kdbx(kdbx_path, kpkey_path, None)?;
+    let mut db = open_kdbx(kdbx_path, kpkey_path, db_password)?;
 
     // Check if key with same domain already exists
     let existing_keys = {
@@ -497,14 +616,14 @@ pub fn add_key_with_ssh(
     db.root.entries.push(entry);
 
     // Save database
-    save_kdbx(&mut db, kdbx_path, kpkey_path, None)?;
+    save_kdbx(&mut db, kdbx_path, kpkey_path, db_password)?;
 
     Ok(())
 }
 
 /// Delete a key from the KeePass database
-pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str) -> Result<bool> {
-    let mut db = open_kdbx(kdbx_path, kpkey_path, None)?;
+pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str, db_password: Option<&str>) -> Result<bool> {
+    let mut db = open_kdbx(kdbx_path, kpkey_path, db_password)?;
 
     // Find and remove the entry
     let initial_count = db.root.entries.len();
@@ -519,7 +638,7 @@ pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str) -> 
 
     if deleted {
         // Save database
-        save_kdbx(&mut db, kdbx_path, kpkey_path, None)?;
+        save_kdbx(&mut db, kdbx_path, kpkey_path, db_password)?;
     }
 
     Ok(deleted)
@@ -535,9 +654,10 @@ pub fn update_key(
     domain: &str,
     username: &str,
     password: &str,
+    db_password: Option<&str>,
 ) -> Result<()> {
     update_key_with_ssh(
-        kdbx_path, kpkey_path, domain, username, password, None, None,
+        kdbx_path, kpkey_path, domain, username, password, None, None, db_password,
     )
 }
 
@@ -553,8 +673,9 @@ pub fn update_key_with_ssh(
     password: &str,
     ssh_key: Option<&[u8]>,
     notes: Option<&str>,
+    db_password: Option<&str>,
 ) -> Result<()> {
-    let mut db = open_kdbx(kdbx_path, kpkey_path, None)?;
+    let mut db = open_kdbx(kdbx_path, kpkey_path, db_password)?;
 
     // Remove existing entry with same domain (if exists)
     db.root
@@ -613,7 +734,7 @@ pub fn update_key_with_ssh(
     db.root.entries.push(entry);
 
     // Save database
-    save_kdbx(&mut db, kdbx_path, kpkey_path, None)?;
+    save_kdbx(&mut db, kdbx_path, kpkey_path, db_password)?;
 
     Ok(())
 }
@@ -666,11 +787,12 @@ mod tests {
             "example.com",
             "user@example.com",
             "secretpass123",
+            None,
         )
         .unwrap();
 
         // List keys
-        let keys = list_keys(&test_kdbx, Some(&test_kpkey)).unwrap();
+        let keys = list_keys(&test_kdbx, Some(&test_kpkey), None).unwrap();
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].domain, "example.com");
         assert_eq!(keys[0].username, "user@example.com");
@@ -683,19 +805,51 @@ mod tests {
             "example.com",
             "another@example.com",
             "pass",
+            None,
         );
         assert!(result.is_err());
 
         // Delete key
-        let deleted = delete_key(&test_kdbx, Some(&test_kpkey), "example.com").unwrap();
+        let deleted = delete_key(&test_kdbx, Some(&test_kpkey), "example.com", None).unwrap();
         assert!(deleted);
 
         // Verify deletion
-        let keys = list_keys(&test_kdbx, Some(&test_kpkey)).unwrap();
+        let keys = list_keys(&test_kdbx, Some(&test_kpkey), None).unwrap();
         assert_eq!(keys.len(), 0);
 
         // Cleanup
         std::fs::remove_file(test_kdbx).ok();
         std::fs::remove_file(test_kpkey).ok();
+    }
+
+    #[test]
+    fn test_database_handle_open() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let kdbx_path = tmp.path().join("test.kdbx");
+        let kpkey_path = tmp.path().join("test.kpkey");
+
+        // Create test keyfile (32 random bytes)
+        std::fs::write(&kpkey_path, &[0u8; 32]).unwrap();
+
+        // Create initial database with keyfile + password
+        let mut db = Database::new(Default::default());
+        db.root.name = "Test DB".to_string();
+
+        let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
+        let key = DatabaseKey::new()
+            .with_keyfile(&mut kpkey_cursor).unwrap()
+            .with_password("testpass");
+
+        let mut file = File::create(&kdbx_path).unwrap();
+        db.save(&mut file, key).unwrap();
+
+        // Test: Open handle
+        let handle = DatabaseHandle::open(kdbx_path, kpkey_path, Some("testpass")).unwrap();
+
+        // Verify can read
+        let db = handle.read();
+        assert_eq!(db.root.name, "Test DB");
     }
 }
