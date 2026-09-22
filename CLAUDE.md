@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Dure Installer** enables small shop owners to deploy and manage their own mycart backend instances (distributed e-commerce). Provides infrastructure automation for GCP VMs, DNS, SSH, and store management.
+**Dure Installer** lets small shop owners deploy/manage mycart backend (distributed e-commerce). Automates GCP VMs, DNS, SSH, store mgmt.
 
 **Separate project (dure-sijang)**: Customer shopping app (out of scope)
 
@@ -11,7 +11,7 @@
 - **Language**: Rust nightly (required)
 - **UI Framework**: egui + eframe (Material3)
 - **Platforms**: Desktop (Linux/macOS/Windows), Android, WASM
-- **Architecture**: Layered (UI → ViewModel → Calc/Api) with dual CLI/GUI interface
+- **Architecture**: Layered (UI → ViewModel → Calc/Api) w/ dual CLI/GUI
 - **License**: Dual MIT/Apache-2.0
 
 ## Architecture
@@ -39,9 +39,9 @@
 ## Core Features (CLI + GUI)
 
 1. **Identity**: Private/public keys, attestation (GitHub Sigstore)
-2. **Platform**: GCP VM management, billing
-3. **DNS**: Domain/TXT record management (Cloudflare, GCP DNS, DuckDNS, Porkbun)
-4. **SSH**: Host management, Docker/Ansible, system hardening (Jangbi)
+2. **Platform**: GCP VM mgmt, billing
+3. **DNS**: Domain/TXT record mgmt (Cloudflare, GCP DNS, DuckDNS, Porkbun)
+4. **SSH**: Host mgmt, Docker/Ansible, system hardening (Jangbi)
 5. **Store**: Products, orders, shipments, promotions
 6. **Guest** (WASM only): Shopping cart, payment (Portone/KakaoPay), OAuth login
 
@@ -99,44 +99,42 @@ RUST_LOG=debug cargo test                 # With logging
 
 ## Known Limitations
 
-1. No iOS support (Android only)
+1. No iOS (Android only)
 2. WASM deployment not fully automated
 3. Linux aarch64 GUI unavailable (headless only)
-4. Some docs reference old project name (beads_rust)
+4. Some docs reference old name (beads_rust)
 5. Requires nightly Rust
 
 ## Documentation
 
 **Start here**:
-- **[docs/INDEX.md](./docs/INDEX.md)** - Documentation index with status flags
+- **[docs/INDEX.md](./docs/INDEX.md)** - Doc index w/ status flags
 - **[docs/PROJECT_SUMMARY.md](./docs/PROJECT_SUMMARY.md)** - Detailed architecture
 - **[docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Commands and patterns
-- **[docs/INSTALLING.md](./docs/INSTALLING.md)** - Installation guide
+- **[docs/INSTALLING.md](./docs/INSTALLING.md)** - Install guide
 - **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Common issues
 - **[docs/GUIDELINES_RUST_CODING.md](./docs/GUIDELINES_RUST_CODING.md)** - Rust standards
 - **[docs/GUIDELINES_GIT_COMMITS.md](./docs/GUIDELINES_GIT_COMMITS.md)** - Git conventions
 
 ## For AI Assistants
 
-When working with this codebase:
-
-1. **Start with this file (CLAUDE.md)** - Provides complete project context
-2. **Read [docs/INDEX.md](./docs/INDEX.md)** - Know which docs are valid vs. need review
-3. **Check [docs/PROJECT_SUMMARY.md](./docs/PROJECT_SUMMARY.md)** - Deep architecture details
-4. **Use [docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Fast lookups for commands and patterns
-5. **Ignore docs marked with ⚠️** - These reference a different project (beads_rust)
-6. **Focus on `mobile/src/`** - This is where the actual application code lives (despite the directory name)
-7. **Check `.github/workflows/`** - For build configurations and CI/CD processes
-8. **Remember**: This project requires **Rust nightly** and prefers **musl** builds on Linux
+1. **Start with this file (CLAUDE.md)** - Full project context
+2. **Read [docs/INDEX.md](./docs/INDEX.md)** - Know valid docs vs. needs review
+3. **Check [docs/PROJECT_SUMMARY.md](./docs/PROJECT_SUMMARY.md)** - Deep architecture
+4. **Use [docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Fast cmd/pattern lookup
+5. **Ignore docs marked with ⚠️** - Reference different project (beads_rust)
+6. **Focus on `mobile/src/`** - Actual app code (despite dir name)
+7. **Check `.github/workflows/`** - Build configs and CI/CD
+8. **Remember**: Requires **Rust nightly**, prefers **musl** on Linux
 
 ## Contributing
 
-See CODE_OF_CONDUCT.md and CREDITS.md for contribution guidelines.
+See CODE_OF_CONDUCT.md and CREDITS.md.
 
 ## Security
 
-See SECURITY.md for reporting security issues.
+See SECURITY.md for reporting issues.
 
 ## License
 
-Dual-licensed under MIT OR Apache-2.0. See LICENSE-MIT and LICENSE-Apache-2.0.
+Dual-licensed MIT OR Apache-2.0. See LICENSE-MIT and LICENSE-Apache-2.0.
