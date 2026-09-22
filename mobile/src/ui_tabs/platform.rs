@@ -640,7 +640,11 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
 ///
 /// Returns (private_key, public_key)
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+fn load_ssh_key_from_keyring(
+    project_id: &str,
+    keyring_domain: &Option<String>,
+    kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> (Option<String>, Option<String>) {
     use crate::calc::keyring;
 
     let domain = match keyring_domain.as_ref() {
@@ -654,30 +658,18 @@ fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) 
         }
     };
 
-    let kdbx_path = match keyring::get_default_kdbx_path() {
-        Ok(p) => {
-            dure_debug!(project_id = project_id, "KeePass DB path: {}", p.display());
-            p
-        }
-        Err(e) => {
-            dure_debug!(project_id = project_id, "Failed to get kdbx path: {}", e);
-            return (None, None);
-        }
-    };
-    let kpkey_path = match keyring::get_default_kpkey_path() {
-        Ok(p) => {
-            dure_debug!(project_id = project_id, "KPKey path: {}", p.display());
-            p
-        }
-        Err(e) => {
-            dure_debug!(project_id = project_id, "Failed to get kpkey path: {}", e);
+    // Require profile keyring handle
+    let handle = match kdbx_handle {
+        Some(h) => h,
+        None => {
+            dure_debug!(project_id = project_id, "No profile keyring handle available");
             return (None, None);
         }
     };
 
-    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path), None) {
+    let keys = match keyring::list_keys_from_handle(handle) {
         Ok(k) => {
-            dure_debug!(project_id = project_id, "Found {} keys in keyring", k.len());
+            dure_debug!(project_id = project_id, "Found {} keys in profile keyring", k.len());
             for key in &k {
                 dure_debug!(project_id = project_id, "  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
                     key.username,
@@ -687,7 +679,7 @@ fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) 
             k
         }
         Err(e) => {
-            dure_debug!(project_id = project_id, "Failed to list keys: {}", e);
+            dure_debug!(project_id = project_id, "Failed to list keys from profile keyring: {}", e);
             return (None, None);
         }
     };
@@ -735,7 +727,11 @@ fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) 
 }
 
 #[cfg(target_arch = "wasm32")]
-fn load_ssh_key_from_keyring(_project_id: &str, _keyring_domain: &Option<String>) -> (Option<String>, Option<String>) {
+fn load_ssh_key_from_keyring(
+    _project_id: &str,
+    _keyring_domain: &Option<String>,
+    _kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> (Option<String>, Option<String>) {
     (None, None)
 }
 
@@ -1239,7 +1235,7 @@ impl PlatformTab {
 
         // Table rendering
         if !self.loaded {
-            self.load_rows(&Some(current_profile.clone()));
+            self.load_rows(&Some(current_profile.clone()), current_profile_kdbx);
         }
 
         // Auto-trigger refresh for rows with missing project count cache (once per platform)
@@ -1999,7 +1995,11 @@ impl PlatformTab {
         }
     }
 
-    fn load_rows(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>) {
+    fn load_rows(
+        &mut self,
+        current_profile: &Option<crate::calc::profile::ProfileContext>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) {
         self.rows.clear();
         self.load_error = None;
 
@@ -2060,13 +2060,13 @@ impl PlatformTab {
                                 false
                             };
 
-                        // Load SSH private key from KeePass if VM exists (quick local operation)
+                        // Load SSH private key from profile keyring if VM exists
                         let (ssh_private_key, ssh_public_key, ssh_keyring_domain) =
                             if let Some(vm) = platform.vms.first() {
                                 let keyring_domain = vm.ssh_key_name.clone();
                                 let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
                                 let (private_key, public_key) =
-                                    load_ssh_key_from_keyring(project_id, &keyring_domain);
+                                    load_ssh_key_from_keyring(project_id, &keyring_domain, current_profile_kdbx);
                                 (private_key, public_key, keyring_domain)
                             } else {
                                 (None, None, None)
@@ -2136,7 +2136,11 @@ impl PlatformTab {
                                 && !self.ssh_test_results.contains_key(&project_id)
                                 && !self.ssh_test_promises.contains_key(&project_id)
                             {
-                                self.execute_test_connection(current_profile.as_ref().unwrap(), project_id);
+                                self.execute_test_connection(
+                                    current_profile.as_ref().unwrap(),
+                                    current_profile_kdbx,
+                                    project_id,
+                                );
                             }
                         }
                     }
@@ -3270,7 +3274,12 @@ impl PlatformTab {
 
     /// Execute SSH connection test for a platform's VM
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_test_connection(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
+    fn execute_test_connection(
+        &mut self,
+        profile: &crate::calc::profile::ProfileContext,
+        kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+        platform_name: String,
+    ) {
         // Load config and find the VM for this platform (platform_name is actually project_id)
         let (vm_host, keyring_domain) = match load_config(&Some(profile.clone())) {
             Ok((app_config, _)) => {
@@ -3312,21 +3321,19 @@ impl PlatformTab {
             return;
         };
 
-        // Build SSH host config
-        let host_config = crate::config::SshHostConfig {
-            host: host.clone(),
-            password: None,
-            private_key_path: None,
-            keyring_domain,
-            port: 22,
-            initialized: false,
-            last_status: None,
-            platform_name: None,
-            docker_containers: Vec::new(),
-            ansible_roles: Vec::new(),
-            dure_wss_config: None,
-            ..Default::default()
+        // Load SSH private key from profile keyring before spawning thread
+        let (private_key, _public_key) = load_ssh_key_from_keyring(&platform_name, &keyring_domain, kdbx_handle);
+
+        let Some(private_key_pem) = private_key else {
+            self.ssh_test_results.insert(
+                platform_name,
+                Err("SSH key not found in profile keyring".to_string()),
+            );
+            return;
         };
+
+        // Parse IP from host (format: "root@IP")
+        let ip = host.split('@').last().unwrap_or(&host).to_string();
 
         // Spawn connection test in background thread
         let platform_name_clone = platform_name.clone();
@@ -3334,8 +3341,12 @@ impl PlatformTab {
             use crate::calc::ssh;
             // russh uses tokio internally, wrap with async-compat for smol
             smol::block_on(async {
-                async_compat::Compat::new(ssh::test_connection(&host_config))
+                async_compat::Compat::new(ssh::test_connection_simple(&ip, &private_key_pem, 22, 10000))
                     .await
+                    .map(|_| crate::calc::ssh::SshConnectionResult {
+                        success: true,
+                        message: format!("Successfully connected to {}", host),
+                    })
                     .map_err(|e| format!("{}", e))
             })
         });
