@@ -40,6 +40,8 @@ directories = "5.0"
 # Database
 diesel = { version = "2.3", features = ["sqlite", "chrono", "returning_clauses_for_sqlite_3_35"] }
 diesel_migrations = "2.3"
+libsqlite3-sys = { version = "0.30", default-features = false }
+libsqlite3-hotbundle = { version = "1.530400", default-features = false }
 
 # Async runtime
 smol = "2.0"

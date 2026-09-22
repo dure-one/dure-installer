@@ -108,6 +108,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     show_error_dialog: bool,
 
+    /// Config file last modified time (to detect changes)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    config_last_modified: Option<std::time::SystemTime>,
+
     // Add dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_dialog: bool,
@@ -255,6 +259,7 @@ impl Default for PlatformTab {
             loaded: false,
             load_error: None,
             show_error_dialog: false,
+            config_last_modified: None,
             show_add_dialog: false,
             add_platform_type: "gcp".to_string(),
             add_platform_oauth_url: None,
@@ -841,6 +846,39 @@ fn render_drawer_content(
 }
 
 impl PlatformTab {
+    /// Reset loaded flag to force config reload on next render
+    pub fn reset_loaded(&mut self) {
+        self.loaded = false;
+    }
+
+    /// Check if config file has changed since last load
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn should_reload_config(&self, profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // If never loaded, should reload
+        if self.config_last_modified.is_none() {
+            return true;
+        }
+
+        // Get current config file metadata
+        if let Ok(config_path) = get_config_path(profile) {
+            if let Ok(metadata) = std::fs::metadata(&config_path) {
+                if let Ok(current_modified) = metadata.modified() {
+                    // Compare with cached metadata
+                    return Some(current_modified) != self.config_last_modified;
+                }
+            }
+        }
+
+        // If we can't get metadata, don't reload (ponytail: fail safe)
+        false
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // WASM doesn't have config files
+        false
+    }
+
     /// Render the platform tab UI
     pub fn ui(
         &mut self,
@@ -2190,6 +2228,13 @@ impl PlatformTab {
                             self.show_ssh_creation_notification = true;
                             self.ssh_created_count = new_ssh_hosts.len();
                             self.ssh_creation_notification_time = Some(std::time::Instant::now());
+                        }
+                    }
+
+                    // Cache config file metadata
+                    if let Ok(metadata) = std::fs::metadata(&config_path) {
+                        if let Ok(modified) = metadata.modified() {
+                            self.config_last_modified = Some(modified);
                         }
                     }
 

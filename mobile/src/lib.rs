@@ -10,6 +10,10 @@ use std::path::PathBuf;
 #[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 
+// Force linkage of libsqlite3-hotbundle for encryption support
+#[cfg(not(target_arch = "wasm32"))]
+extern crate libsqlite3_hotbundle;
+
 // Core modules
 pub mod api;
 pub mod attestation;

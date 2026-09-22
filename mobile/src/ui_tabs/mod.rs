@@ -6,6 +6,7 @@ pub mod platform;
 pub mod platform_drawer;
 pub mod site;
 pub mod ssh;
+pub mod ssh_drawer;
 
 // E-commerce tabs (disabled)
 // pub mod channel;

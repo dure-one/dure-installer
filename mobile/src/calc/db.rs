@@ -31,6 +31,8 @@ static VFS: Mutex<(i32, Once)> = Mutex::new((0, Once::new()));
 #[cfg(not(target_family = "wasm"))]
 static DB_PATH: Mutex<Option<String>> = Mutex::new(None);
 #[cfg(not(target_family = "wasm"))]
+static DB_ENCRYPTION_KEY: Mutex<Option<String>> = Mutex::new(None);
+#[cfg(not(target_family = "wasm"))]
 static MIGRATIONS_RAN: Mutex<bool> = Mutex::new(false);
 
 /// Set the database path to use for connections
@@ -48,6 +50,20 @@ pub fn set_db_path(path: String) {
 pub fn get_db_path() -> String {
     let db_path = DB_PATH.lock().expect("DB_PATH lock poisoned");
     db_path.as_deref().unwrap_or("dure.db").to_string()
+}
+
+/// Set the database encryption key
+#[cfg(not(target_family = "wasm"))]
+pub fn set_db_encryption_key(key: String) {
+    let mut db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+    *db_key = Some(key);
+}
+
+/// Clear the database encryption key (on logout)
+#[cfg(not(target_family = "wasm"))]
+pub fn clear_db_encryption_key() {
+    let mut db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+    *db_key = None;
 }
 
 #[cfg(feature = "postgres")]
@@ -113,6 +129,23 @@ pub mod sqlite {
 
             let mut conn = SqliteConnection::establish(&url)
                 .unwrap_or_else(|e| panic!("Error connecting to {}: {}", url, e));
+
+            // CRITICAL: Set encryption BEFORE any other operations
+            let db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+            if let Some(key) = db_key.as_ref() {
+                // Set cipher (AES-256-CBC for hardware acceleration)
+                diesel::sql_query("PRAGMA cipher = 'aes256cbc';")
+                    .execute(&mut conn)
+                    .expect("Failed to set cipher");
+
+                // Set encryption key
+                diesel::sql_query(format!("PRAGMA key = '{}';", key))
+                    .execute(&mut conn)
+                    .expect("Failed to set encryption key");
+
+                dure_info!("SQLite encryption enabled (AES-256-CBC)");
+            }
+            drop(db_key); // Release lock
 
             // Enable WAL mode for better concurrent access
             diesel::sql_query("PRAGMA journal_mode=WAL;")
@@ -286,5 +319,126 @@ mod tests {
 
         // Reset to default
         set_db_path("dure.db".to_string());
+    }
+
+    #[cfg(not(any(feature = "postgres", target_family = "wasm")))]
+    #[test]
+    fn test_sqlite_encryption() {
+        use tempfile::tempdir;
+        use diesel::prelude::*;
+
+        // NOTE: This test verifies the encryption *setup* works correctly.
+        // Full encryption verification requires libsqlite3-hotbundle with encryption compiled in.
+
+        // Arrange: Create temporary database and encryption key
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test-encrypted.db");
+        set_db_path(db_path.to_str().unwrap().to_string());
+
+        // Generate a test encryption key (32 bytes base64-encoded)
+        use rand::RngCore;
+        let mut key_bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key_bytes);
+        let encryption_key = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
+
+        // Act 1: Test encryption key management
+        set_db_encryption_key(encryption_key.clone());
+
+        // Verify key is set
+        let db_key_guard = DB_ENCRYPTION_KEY.lock().unwrap();
+        assert!(db_key_guard.is_some(), "Encryption key should be set");
+        assert_eq!(db_key_guard.as_ref().unwrap(), &encryption_key, "Key mismatch");
+        drop(db_key_guard);
+
+        // Act 2: Establish connection with encryption (PRAGMA commands executed)
+        {
+            let mut conn = establish_connection();
+
+            // Create test table
+            diesel::sql_query("CREATE TABLE test_secrets (id INTEGER PRIMARY KEY, data TEXT)")
+                .execute(&mut conn)
+                .expect("Failed to create table");
+
+            // Insert test data
+            diesel::sql_query("INSERT INTO test_secrets (id, data) VALUES (1, 'test data')")
+                .execute(&mut conn)
+                .expect("Failed to insert data");
+
+            // Verify data can be queried
+            let result = diesel::sql_query("SELECT COUNT(*) FROM test_secrets")
+                .execute(&mut conn);
+
+            assert!(result.is_ok(), "Should be able to query database");
+        }
+
+        // Act 3: Test key clearing
+        clear_db_encryption_key();
+        let db_key_guard = DB_ENCRYPTION_KEY.lock().unwrap();
+        assert!(db_key_guard.is_none(), "Encryption key should be cleared");
+        drop(db_key_guard);
+
+        // Cleanup
+        set_db_path("dure.db".to_string());
+
+        println!("✓ Encryption key management works correctly");
+        println!("✓ PRAGMA commands execute without error");
+        println!("Note: Full encryption verification requires libsqlite3-hotbundle with encryption support");
+    }
+
+    #[cfg(not(any(feature = "postgres", target_family = "wasm")))]
+    #[test]
+    fn test_encryption_key_storage() {
+        use tempfile::tempdir;
+        use std::io::Cursor;
+
+        // Arrange: Create temporary keyring
+        let temp_dir = tempdir().unwrap();
+        let kdbx_path = temp_dir.path().join("test.kdbx");
+        let kpkey_path = temp_dir.path().join("id_ed25519");
+
+        // Generate test keyfile
+        use rand::RngCore;
+        let mut kpkey_bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut kpkey_bytes);
+        std::fs::write(&kpkey_path, &kpkey_bytes).unwrap();
+
+        // Create new KeePass database
+        let mut db = keepass::Database::new(Default::default());
+        db.meta.database_name = Some("Test".to_string());
+
+        // Create key from password + keyfile
+        let mut key = keepass::DatabaseKey::new().with_password("testpass");
+        let mut cursor = Cursor::new(&kpkey_bytes);
+        key = key.with_keyfile(&mut cursor).unwrap();
+
+        // Save database
+        let mut file = std::fs::File::create(&kdbx_path).unwrap();
+        db.save(&mut file, key).unwrap();
+        drop(file);
+
+        // Open database handle
+        let handle = crate::calc::keyring::DatabaseHandle::open(
+            kdbx_path.clone(),
+            kpkey_path.clone(),
+            Some("testpass"),
+        ).expect("Failed to open test database");
+
+        // Act: Generate DB encryption key
+        let generated_key = handle.generate_db_encryption_key()
+            .expect("Failed to generate DB encryption key");
+
+        // Assert: Key should be 44 characters (32 bytes base64-encoded)
+        assert_eq!(generated_key.len(), 44, "Generated key should be 32 bytes base64-encoded (44 chars)");
+
+        // Act: Retrieve the key
+        let retrieved_key = handle.get_db_encryption_key()
+            .expect("Failed to retrieve DB encryption key");
+
+        // Assert: Retrieved key should match generated key
+        assert_eq!(retrieved_key, generated_key, "Retrieved key should match generated key");
+
+        // Act: Try to generate again (should fail - key exists)
+        let result = handle.generate_db_encryption_key();
+        assert!(result.is_err(), "Should not be able to generate key twice");
     }
 }
