@@ -202,7 +202,9 @@ pub struct GcpWizard {
     /// Reserved IP selection
     #[cfg_attr(feature = "serde", serde(skip))]
     available_reserved_ips: Vec<crate::api::gcp::Address>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     selected_ip_option: IpOption,
+    #[cfg_attr(feature = "serde", serde(skip))]
     last_fetched_region: Option<String>,
 }
 
@@ -416,8 +418,8 @@ impl GcpWizard {
         egui::Window::new("Add VM")
             .open(&mut open)
             .resizable(true)
-            .default_width(600.0)
-            .default_height(500.0)
+            .default_width(450.0)
+            .default_height(450.0)
             .collapsible(false)
             .show(ctx, |ui| {
                 // Progress indicator
@@ -942,20 +944,20 @@ impl GcpWizard {
         ui.horizontal(|ui| {
             ui.label("Instance Name:");
             ui.text_edit_singleline(&mut self.instance_name);
-        });
 
-        // Show validation hint
-        if !self.instance_name.is_empty() {
-            let is_valid = self.validate_instance_name(&self.instance_name);
-            if is_valid {
-                ui.colored_label(egui::Color32::from_rgb(72, 187, 120), "✓ Valid name");
-            } else {
-                ui.colored_label(
-                    egui::Color32::from_rgb(245, 101, 101),
-                    "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
-                );
+            // Show validation hint
+            if !self.instance_name.is_empty() {
+                let is_valid = self.validate_instance_name(&self.instance_name);
+                if is_valid {
+                    ui.label("✓ Valid name");
+                } else {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(245, 101, 101),
+                        "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
+                    );
+                }
             }
-        }
+        });
 
         ui.add_space(8.0);
 
@@ -1027,6 +1029,7 @@ impl GcpWizard {
         ui.add_space(8.0);
 
         // Region selection
+        let prev_region = self.selected_region.clone();
         ui.horizontal(|ui| {
             ui.label("Region:");
             // Find current region to show friendly name
@@ -1049,6 +1052,15 @@ impl GcpWizard {
                     }
                 });
         });
+
+        // Reset zone if region changed
+        if prev_region != self.selected_region {
+            if let Some(region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+                if let Some(first_zone) = region.zones.first() {
+                    self.selected_zone = first_zone.clone();
+                }
+            }
+        }
 
         // Zone selection (based on selected region)
         if let Some(region) = self
@@ -1122,34 +1134,36 @@ impl GcpWizard {
         }
 
         // External IP selection
-        ui.label("External IP:");
-        egui::ComboBox::from_label("")
-            .selected_text(match &self.selected_ip_option {
-                IpOption::Ephemeral => "Ephemeral (auto-assigned)".to_string(),
-                IpOption::Reserved(idx) => {
-                    if *idx < self.available_reserved_ips.len() {
-                        let addr = &self.available_reserved_ips[*idx];
-                        format!("Reserved: {} ({})", addr.address, addr.name)
-                    } else {
-                        "Ephemeral (auto-assigned)".to_string()
+        ui.horizontal(|ui| {
+            ui.label("External IP:");
+            egui::ComboBox::from_label("")
+                .selected_text(match &self.selected_ip_option {
+                    IpOption::Ephemeral => "Ephemeral (auto-assigned)".to_string(),
+                    IpOption::Reserved(idx) => {
+                        if *idx < self.available_reserved_ips.len() {
+                            let addr = &self.available_reserved_ips[*idx];
+                            format!("Reserved: {} ({})", addr.address, addr.name)
+                        } else {
+                            "Ephemeral (auto-assigned)".to_string()
+                        }
                     }
-                }
-            })
-            .show_ui(ui, |ui| {
-                ui.selectable_value(
-                    &mut self.selected_ip_option,
-                    IpOption::Ephemeral,
-                    "Ephemeral (auto-assigned)"
-                );
-
-                for (idx, addr) in self.available_reserved_ips.iter().enumerate() {
+                })
+                .show_ui(ui, |ui| {
                     ui.selectable_value(
                         &mut self.selected_ip_option,
-                        IpOption::Reserved(idx),
-                        format!("Reserved: {} ({})", addr.address, addr.name)
+                        IpOption::Ephemeral,
+                        "Ephemeral (auto-assigned)"
                     );
-                }
-            });
+
+                    for (idx, addr) in self.available_reserved_ips.iter().enumerate() {
+                        ui.selectable_value(
+                            &mut self.selected_ip_option,
+                            IpOption::Reserved(idx),
+                            format!("Reserved: {} ({})", addr.address, addr.name)
+                        );
+                    }
+                });
+        });
 
         if !self.available_reserved_ips.is_empty() {
             ui.add_space(4.0);
@@ -1160,18 +1174,16 @@ impl GcpWizard {
                 );
                 let _ = webbrowser::open(&url);
             }
+            ui.add_space(16.0);
         }
-
-        ui.add_space(16.0);
 
         // Back button on the left (if applicable)
         if !self.skip_account_project_steps {
             if ui.button("← Back").clicked() {
                 self.state = WizardState::SelectProject;
             }
+            ui.add_space(8.0);
         }
-
-        ui.add_space(8.0);
 
         let can_create = !self.instance_name.is_empty()
             && self.validate_instance_name(&self.instance_name)
@@ -1921,14 +1933,23 @@ impl GcpWizard {
         let disk_size_gb = self.disk_size_gb.clone();
         let swap_size_gb = self.swap_size_gb.clone();
 
-        // Capture IP selection
-        let selected_nat_ip = match &self.selected_ip_option {
-            IpOption::Ephemeral => None,
+        // Capture IP selection and network tier
+        let (selected_nat_ip, selected_network_tier) = match &self.selected_ip_option {
+            IpOption::Ephemeral => {
+                dure_info!("🔍 Static IP selection: Ephemeral (auto-assigned)");
+                (None, None)
+            }
             IpOption::Reserved(idx) => {
+                dure_info!("🔍 Static IP selection: Reserved index={}, available_ips={}", idx, self.available_reserved_ips.len());
                 if *idx < self.available_reserved_ips.len() {
-                    Some(self.available_reserved_ips[*idx].address.clone())
+                    let addr = &self.available_reserved_ips[*idx];
+                    let ip = addr.address.clone();
+                    let tier = addr.network_tier.clone();
+                    dure_info!("✅ Using static IP: {} ({}) with tier: {:?}", ip, addr.name, tier);
+                    (Some(ip), tier)
                 } else {
-                    None
+                    dure_warn!("❌ Static IP index out of bounds: {} >= {}", idx, self.available_reserved_ips.len());
+                    (None, None)
                 }
             }
         };
@@ -1982,13 +2003,16 @@ impl GcpWizard {
                 }],
             });
 
-            // Update network interface with selected IP
+            // Update network interface with selected IP and network tier
             use crate::api::gcp::compute::AccessConfig;
             instance_req.network_interfaces[0].access_configs = Some(vec![AccessConfig {
                 type_: "ONE_TO_ONE_NAT".to_string(),
                 name: "External NAT".to_string(),
-                nat_ip: selected_nat_ip,
+                nat_ip: selected_nat_ip.clone(),
+                network_tier: selected_network_tier.clone(),
             }]);
+
+            dure_info!("🌐 Network config: nat_ip = {:?}, network_tier = {:?}", selected_nat_ip, selected_network_tier);
 
             // Create the instance
             let operation = client

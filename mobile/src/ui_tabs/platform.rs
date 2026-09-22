@@ -3869,7 +3869,7 @@ impl PlatformTab {
                     ui.label("Project ID:");
                     ui.label(&self.billing_project_id);
                     ui.add_space(8.0);
-                    if ui.add(MaterialButton::text("Open in GCP Console").small()).clicked() {
+                    if ui.add(badge("GCP Console").color(BadgeColor::Primary).size(BadgeSize::Regular)).clicked() {
                         let url = format!("https://console.cloud.google.com/billing?project={}",
                                          self.billing_project_id);
                         let _ = webbrowser::open(&url);

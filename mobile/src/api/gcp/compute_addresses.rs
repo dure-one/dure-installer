@@ -19,6 +19,8 @@ pub struct Address {
     #[serde(default)]
     pub users: Vec<String>,     // VM instances using this IP (empty if RESERVED)
     pub region: String,         // e.g., "us-central1"
+    #[serde(default)]
+    pub network_tier: Option<String>, // "PREMIUM" or "STANDARD"
 }
 
 #[derive(Debug, Deserialize)]

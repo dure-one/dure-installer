@@ -56,8 +56,10 @@ pub struct AccessConfig {
     #[serde(rename = "type")]
     pub type_: String, // "ONE_TO_ONE_NAT"
     pub name: String, // "External NAT"
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "natIP", skip_serializing_if = "Option::is_none")]
     pub nat_ip: Option<String>, // Static IP address to attach
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_tier: Option<String>, // "PREMIUM" or "STANDARD"
 }
 
 #[derive(Debug, Serialize)]
@@ -381,6 +383,7 @@ impl InstanceRequest {
                     type_: "ONE_TO_ONE_NAT".to_string(),
                     name: "External NAT".to_string(),
                     nat_ip: None,
+                    network_tier: None,
                 }]),
             }],
             tags: Some(Tags {
@@ -436,6 +439,7 @@ impl GcpRestClient {
         );
 
         let body = serde_json::to_string(instance)?;
+        dure_info!("📤 GCP Request Body: {}", body);
         let response = self.post(&url, &body)?;
 
         if response.status() != 200 {
