@@ -108,6 +108,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     show_error_dialog: bool,
 
+    /// Config file last modified time (to detect changes)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    config_last_modified: Option<std::time::SystemTime>,
+
     // Add dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_dialog: bool,
@@ -255,6 +259,7 @@ impl Default for PlatformTab {
             loaded: false,
             load_error: None,
             show_error_dialog: false,
+            config_last_modified: None,
             show_add_dialog: false,
             add_platform_type: "gcp".to_string(),
             add_platform_oauth_url: None,
@@ -640,7 +645,7 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
 ///
 /// Returns (private_key, public_key)
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ssh_key_from_keyring(
+pub fn load_ssh_key_from_keyring(
     project_id: &str,
     keyring_domain: &Option<String>,
     kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
@@ -767,7 +772,11 @@ fn format_project_count_display(count: Option<usize>) -> String {
 }
 
 /// Render drawer content showing platform hierarchy
-fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
+fn render_drawer_content(
+    ui: &mut egui::Ui,
+    row: &PlatformRow,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) {
     use crate::ui_tabs::platform_drawer;
     use crate::viewmodel::platform::{DrawerState, DrawerTab};
 
@@ -804,7 +813,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
     let mut tab_switch: Option<DrawerTab> = None;
 
-    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch);
+    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch, current_profile_kdbx);
 
     // Persist tab switch and trigger auto-load
     if let Some(new_tab) = tab_switch {
@@ -837,6 +846,39 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 }
 
 impl PlatformTab {
+    /// Reset loaded flag to force config reload on next render
+    pub fn reset_loaded(&mut self) {
+        self.loaded = false;
+    }
+
+    /// Check if config file has changed since last load
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn should_reload_config(&self, profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // If never loaded, should reload
+        if self.config_last_modified.is_none() {
+            return true;
+        }
+
+        // Get current config file metadata
+        if let Ok(config_path) = get_config_path(profile) {
+            if let Ok(metadata) = std::fs::metadata(&config_path) {
+                if let Ok(current_modified) = metadata.modified() {
+                    // Compare with cached metadata
+                    return Some(current_modified) != self.config_last_modified;
+                }
+            }
+        }
+
+        // If we can't get metadata, don't reload (ponytail: fail safe)
+        false
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // WASM doesn't have config files
+        false
+    }
+
     /// Render the platform tab UI
     pub fn ui(
         &mut self,
@@ -1319,6 +1361,7 @@ impl PlatformTab {
                 let row_for_cells = row.clone();
                 let row_for_drawer = row.clone();
                 let row_for_actions = row.clone();
+                let kdbx_for_drawer = current_profile_kdbx.clone();
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
@@ -1366,20 +1409,8 @@ impl PlatformTab {
                                     OperationState::InProgress { .. }
                                 );
 
-                                // Show progress indicator when operation in progress
-                                if operation_in_progress {
-                                    if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
-                                        ui.label(operation);
-                                    }
-                                    ui.add(
-                                        linear_progress()
-                                            .indeterminate(true)
-                                            .width(column_width - 20.0)
-                                            .height(4.0)
-                                            .four_color_enabled(true)
-                                    );
-                                    ui.add_space(4.0);
-                                }
+                                // Store top position for foreground overlay
+                                let overlay_pos = ui.cursor().min;
 
                                 // Row 1: Refresh, Billing, Delete
                                 ui.horizontal(|ui| {
@@ -1550,10 +1581,48 @@ impl PlatformTab {
                                         }
                                     });
                                 });
+
+                                // Render progress indicator on foreground layer (overlay)
+                                if operation_in_progress {
+                                    let current_area_id = ui.layer_id().id;
+                                    let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
+
+                                    ui.with_layer_id(foreground_layer, |ui| {
+                                        // Position at stored overlay position
+                                        let progress_rect = egui::Rect::from_min_size(
+                                            overlay_pos,
+                                            egui::vec2(column_width, 30.0)
+                                        );
+
+                                        // Semi-transparent background
+                                        ui.painter().rect_filled(
+                                            progress_rect,
+                                            egui::Rounding::same(4),
+                                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240)
+                                        );
+
+                                        // Draw progress label and bar
+                                        ui.allocate_ui_at_rect(progress_rect, |ui| {
+                                            ui.add_space(2.0);
+
+                                            if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
+                                                ui.label(operation);
+                                            }
+
+                                            ui.add(
+                                                linear_progress()
+                                                    .indeterminate(true)
+                                                    .width(column_width - 20.0)
+                                                    .height(4.0)
+                                                    .four_color_enabled(true)
+                                            );
+                                        });
+                                    });
+                                }
                             });
                     })
                     .drawer(move |ui| {
-                        render_drawer_content(ui, &row_for_drawer);
+                        render_drawer_content(ui, &row_for_drawer, &kdbx_for_drawer);
                     })
                 });
             }
@@ -2060,17 +2129,8 @@ impl PlatformTab {
                                 false
                             };
 
-                        // Load SSH private key from profile keyring if VM exists
-                        let (ssh_private_key, ssh_public_key, ssh_keyring_domain) =
-                            if let Some(vm) = platform.vms.first() {
-                                let keyring_domain = vm.ssh_key_name.clone();
-                                let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
-                                let (private_key, public_key) =
-                                    load_ssh_key_from_keyring(project_id, &keyring_domain, current_profile_kdbx);
-                                (private_key, public_key, keyring_domain)
-                            } else {
-                                (None, None, None)
-                            };
+                        // Store keyring domain only (no blocking I/O during rendering)
+                        let ssh_keyring_domain = platform.vms.first().and_then(|vm| vm.ssh_key_name.clone());
 
                         let row = PlatformRow {
                             // NEW: Use project_id as identifier
@@ -2100,8 +2160,8 @@ impl PlatformTab {
                             vm_external_ip: platform.cached_vm_external_ip.clone()
                                 .or_else(|| platform.vms.first().and_then(|vm| vm.external_ip.clone())),
 
-                            ssh_private_key,
-                            ssh_public_key,
+                            ssh_private_key: None,  // Loaded on-demand in drawer
+                            ssh_public_key: None,
                             ssh_keyring_domain,
 
                             // Use cached firewall status
@@ -2194,6 +2254,13 @@ impl PlatformTab {
                             self.show_ssh_creation_notification = true;
                             self.ssh_created_count = new_ssh_hosts.len();
                             self.ssh_creation_notification_time = Some(std::time::Instant::now());
+                        }
+                    }
+
+                    // Cache config file metadata
+                    if let Ok(metadata) = std::fs::metadata(&config_path) {
+                        if let Ok(modified) = metadata.modified() {
+                            self.config_last_modified = Some(modified);
                         }
                     }
 
@@ -3890,11 +3957,11 @@ impl PlatformTab {
                     ui.label("Project ID:");
                     ui.label(&self.billing_project_id);
                     ui.add_space(8.0);
-                    if ui.add(badge("GCP Console").color(BadgeColor::Primary).size(BadgeSize::Regular)).clicked() {
-                        let url = format!("https://console.cloud.google.com/billing?project={}",
-                                         self.billing_project_id);
-                        let _ = webbrowser::open(&url);
-                    }
+                    ui.hyperlink_to(
+                        "GCP Console",
+                        format!("https://console.cloud.google.com/billing?project={}",
+                               self.billing_project_id)
+                    );
                 });
                 ui.add_space(8.0);
                 ui.separator();

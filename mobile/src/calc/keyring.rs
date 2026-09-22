@@ -53,7 +53,7 @@ pub struct DatabaseHandle {
     db: Arc<RwLock<Database>>,
     kdbx_path: PathBuf,
     kpkey_path: PathBuf,
-    key: DatabaseKey,  // Cached for save operations
+    key: Arc<RwLock<DatabaseKey>>,  // Cached for save operations (mutable for password changes)
 }
 
 impl DatabaseHandle {
@@ -99,7 +99,7 @@ impl DatabaseHandle {
             db: Arc::new(RwLock::new(db)),
             kdbx_path,
             kpkey_path,
-            key,
+            key: Arc::new(RwLock::new(key)),
         })
     }
 
@@ -119,13 +119,132 @@ impl DatabaseHandle {
     /// Internal save (called by SaveGuard::drop)
     fn save_internal(&self) -> Result<()> {
         let db = self.db.read().unwrap();
+        let key = self.key.read().unwrap().clone();
         let mut file = File::create(&self.kdbx_path)
             .with_context(|| format!("Failed to create kdbx file: {}", self.kdbx_path.display()))?;
-        db.save(&mut file, self.key.clone())
+        db.save(&mut file, key)
             .context("Failed to save database")?;
         file.sync_all()
             .context("Failed to sync database to disk")?;
         Ok(())
+    }
+
+    /// Change database password
+    ///
+    /// Re-encrypts the database with a new password while keeping the same keyfile.
+    /// Pass None or empty string to remove password (keyfile-only).
+    ///
+    /// # Arguments
+    /// * `new_password` - New password (None or empty = keyfile-only)
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - Cannot read keyfile
+    /// - Cannot save database
+    /// - Disk sync fails
+    pub fn change_password(&self, new_password: Option<&str>) -> Result<()> {
+        // Build new key with new password + same keyfile
+        let mut new_key = DatabaseKey::new();
+
+        if let Some(pwd) = new_password {
+            if !pwd.is_empty() {
+                new_key = new_key.with_password(pwd);
+                dure_info!("Changing password (with password + keyfile)");
+            } else {
+                dure_info!("Changing password (keyfile-only)");
+            }
+        } else {
+            dure_info!("Changing password (keyfile-only)");
+        }
+
+        // Add existing keyfile
+        let kpkey_data = std::fs::read(&self.kpkey_path)
+            .with_context(|| format!("Failed to read keyfile: {}", self.kpkey_path.display()))?;
+        let mut cursor = Cursor::new(kpkey_data);
+        new_key = new_key.with_keyfile(&mut cursor)
+            .context("Failed to load keyfile")?;
+
+        // Save database with new key
+        let db = self.db.read().unwrap();
+        let mut file = File::create(&self.kdbx_path)
+            .with_context(|| format!("Failed to create kdbx file: {}", self.kdbx_path.display()))?;
+        db.save(&mut file, new_key.clone())
+            .context("Failed to save database with new password")?;
+        file.sync_all()
+            .context("Failed to sync database to disk")?;
+
+        // Update cached key for future saves
+        *self.key.write().unwrap() = new_key;
+
+        dure_info!("Password changed successfully");
+        Ok(())
+    }
+
+    /// Generate and store SQLite database encryption key
+    ///
+    /// Creates a random 32-byte key for SQLite encryption and stores it in KeePass
+    /// as an entry with title "sqlite_encryption_key". Auto-saves on completion.
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - Key already exists (use get_db_encryption_key to retrieve)
+    /// - Cannot generate random bytes
+    /// - Cannot save to database
+    pub fn generate_db_encryption_key(&self) -> Result<String> {
+        use rand::RngCore;
+
+        // Check if key already exists
+        let db = self.read();
+        if db.root.entries.iter().any(|e| {
+            e.fields.get("Title")
+                .map(|v| v.get() == "sqlite_encryption_key")
+                .unwrap_or(false)
+        }) {
+            drop(db); // Release read lock
+            return Err(anyhow::anyhow!("SQLite encryption key already exists"));
+        }
+        drop(db);
+
+        // Generate random 32-byte key
+        let mut key_bytes = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key_bytes);
+        let key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
+
+        // Store in KeePass
+        let mut db = self.write_and_save();
+        let mut entry = Entry::default();
+        entry.fields.insert("Title".to_string(), Value::unprotected("sqlite_encryption_key".to_string()));
+        entry.fields.insert("UserName".to_string(), Value::unprotected("dure".to_string()));
+        entry.fields.insert("Password".to_string(), Value::protected(key_base64.clone()));
+        entry.fields.insert("Notes".to_string(), Value::unprotected("Auto-generated SQLite database encryption key".to_string()));
+        db.root.entries.push(entry);
+
+        dure_info!("Generated and stored SQLite encryption key");
+        Ok(key_base64)
+    }
+
+    /// Get SQLite database encryption key from KeePass
+    ///
+    /// Retrieves the encryption key stored as "sqlite_encryption_key" entry.
+    ///
+    /// # Errors
+    /// Returns error if key entry not found
+    pub fn get_db_encryption_key(&self) -> Result<String> {
+        let db = self.read();
+        let entry = db.root.entries.iter()
+            .find(|e| {
+                e.fields.get("Title")
+                    .map(|v| v.get() == "sqlite_encryption_key")
+                    .unwrap_or(false)
+            })
+            .ok_or_else(|| anyhow::anyhow!("SQLite encryption key not found in keyring"))?;
+
+        let key = entry.fields.get("Password")
+            .ok_or_else(|| anyhow::anyhow!("SQLite encryption key entry has no password field"))?
+            .get()
+            .to_string();
+
+        Ok(key)
     }
 }
 
@@ -152,9 +271,10 @@ impl<'a> Drop for SaveGuard<'a> {
     fn drop(&mut self) {
         // Save while we still have write access
         let save_result = (|| -> Result<()> {
+            let key = self.handle.key.read().unwrap().clone();
             let mut file = File::create(&self.handle.kdbx_path)
                 .with_context(|| format!("Failed to create kdbx file: {}", self.handle.kdbx_path.display()))?;
-            self.guard.save(&mut file, self.handle.key.clone())
+            self.guard.save(&mut file, key)
                 .context("Failed to save database")?;
             file.sync_all()
                 .context("Failed to sync database to disk")?;

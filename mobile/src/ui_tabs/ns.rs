@@ -29,6 +29,10 @@ pub struct NsTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
 
+    /// Config file last modified time (to detect changes)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    config_last_modified: Option<std::time::SystemTime>,
+
     // Selected domain for record view (provider, domain)
     #[cfg_attr(feature = "serde", serde(skip))]
     selected_domain: Option<(String, String)>,
@@ -136,6 +140,7 @@ impl Default for NsTab {
             domain_rows: Vec::new(),
             loaded: false,
             load_error: None,
+            config_last_modified: None,
             selected_domain: None,
             show_add_provider_dialog: false,
             add_provider_type: "cloudflare".to_string(),
@@ -923,6 +928,39 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
 }
 
 impl NsTab {
+    /// Reset loaded flag to force config reload on next render
+    pub fn reset_loaded(&mut self) {
+        self.loaded = false;
+    }
+
+    /// Check if config file has changed since last load
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn should_reload_config(&self, profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // If never loaded, should reload
+        if self.config_last_modified.is_none() {
+            return true;
+        }
+
+        // Get current config file metadata
+        if let Ok(config_path) = get_config_path(profile) {
+            if let Ok(metadata) = std::fs::metadata(&config_path) {
+                if let Ok(current_modified) = metadata.modified() {
+                    // Compare with cached metadata
+                    return Some(current_modified) != self.config_last_modified;
+                }
+            }
+        }
+
+        // If we can't get metadata, don't reload (ponytail: fail safe)
+        false
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+        // WASM doesn't have config files
+        false
+    }
+
     /// Render the NS tab UI
     pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         // Check if profile is selected
@@ -1288,6 +1326,15 @@ impl NsTab {
                         "Loaded {} domains from config",
                         self.domain_rows.len()
                     ));
+
+                    // Cache config file metadata
+                    if let Ok(config_path) = get_config_path(&Some(profile.clone())) {
+                        if let Ok(metadata) = std::fs::metadata(&config_path) {
+                            if let Ok(modified) = metadata.modified() {
+                                self.config_last_modified = Some(modified);
+                            }
+                        }
+                    }
 
                     self.loaded = true;
                 }

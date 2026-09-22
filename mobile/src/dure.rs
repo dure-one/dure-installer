@@ -124,6 +124,8 @@ pub struct DureApp {
 
     // Tabs state (infrastructure management only)
     pub active_tab: crate::ui_tabs::Tab,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub previous_tab: Option<crate::ui_tabs::Tab>,
     pub scrolling_selected: usize,
     pub tab_platform: crate::ui_tabs::platform::PlatformTab,
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
@@ -247,6 +249,7 @@ impl Default for DureApp {
             viewmodel: None,
             // Tabs (infrastructure management only)
             active_tab: crate::ui_tabs::Tab::Platform,
+            previous_tab: None,
             scrolling_selected: 0,
             tab_platform: crate::ui_tabs::platform::PlatformTab::default(),
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
@@ -443,6 +446,29 @@ impl DureApp {
             3 => Tab::Site,
             _ => Tab::Platform,
         };
+
+        // Detect tab change and reload config only if file changed
+        if self.previous_tab != Some(self.active_tab) {
+            match self.active_tab {
+                Tab::Platform => {
+                    if self.tab_platform.should_reload_config(&self.current_profile) {
+                        self.tab_platform.reset_loaded();
+                    }
+                }
+                Tab::Ssh => {
+                    if self.tab_ssh.should_reload_config(&self.current_profile) {
+                        self.tab_ssh.reset_loaded();
+                    }
+                }
+                Tab::Ns => {
+                    if self.tab_ns.should_reload_config(&self.current_profile) {
+                        self.tab_ns.reset_loaded();
+                    }
+                }
+                Tab::Site => {} // Site tab doesn't use config loading pattern
+            }
+            self.previous_tab = Some(self.active_tab);
+        }
 
         ui.add_space(10.0);
 
@@ -969,6 +995,18 @@ impl DureApp {
                                         Some(&password),
                                     ) {
                                         Ok(handle) => {
+                                            // Load DB encryption key from keyring
+                                            match handle.get_db_encryption_key() {
+                                                Ok(db_key) => {
+                                                    crate::calc::db::set_db_encryption_key(db_key);
+                                                    dure_info!("SQLite encryption key loaded from keyring");
+                                                }
+                                                Err(e) => {
+                                                    dure_warn!("Failed to load DB encryption key (profile may predate encryption): {}", e);
+                                                    dure_warn!("Database will remain unencrypted. Consider migrating to encrypted DB.");
+                                                }
+                                            }
+
                                             self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
                                             self.current_profile = Some(ctx);
                                             dure_info!("Profile and keyring loaded successfully: {}", profile_name);
@@ -1041,6 +1079,20 @@ impl DureApp {
                             Some(&password),
                         ) {
                             Ok(handle) => {
+                                // Generate DB encryption key for new profile
+                                match handle.generate_db_encryption_key() {
+                                    Ok(db_key) => {
+                                        crate::calc::db::set_db_encryption_key(db_key);
+                                        dure_info!("Generated and stored SQLite encryption key for new profile");
+                                    }
+                                    Err(e) => {
+                                        dure_error!("Failed to generate DB encryption key: {}", e);
+                                        self.dlg_profile_create.set_error(format!("Profile created but encryption key generation failed: {}", e));
+                                        self.dlg_profile_create.confirmed = false;
+                                        return;
+                                    }
+                                }
+
                                 // Auto-login: load the newly created profile
                                 self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
                                 self.current_profile = Some(ctx);
