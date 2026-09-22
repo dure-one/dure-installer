@@ -206,6 +206,10 @@ pub struct GcpWizard {
     selected_ip_option: IpOption,
     #[cfg_attr(feature = "serde", serde(skip))]
     last_fetched_region: Option<String>,
+
+    /// Profile's keyring database handle
+    #[cfg_attr(feature = "serde", serde(skip))]
+    profile_kdbx_handle: Option<std::sync::Arc<keyring::DatabaseHandle>>,
 }
 
 impl Default for GcpWizard {
@@ -249,6 +253,7 @@ impl Default for GcpWizard {
             available_reserved_ips: Vec::new(),
             selected_ip_option: IpOption::Ephemeral,
             last_fetched_region: None,
+            profile_kdbx_handle: None,
         }
     }
 }
@@ -332,6 +337,11 @@ impl GcpWizard {
     }
 
     /// Show the wizard
+    /// Set profile keyring handle (must be called before VM creation)
+    pub fn set_profile_keyring(&mut self, handle: std::sync::Arc<keyring::DatabaseHandle>) {
+        self.profile_kdbx_handle = Some(handle);
+    }
+
     /// Show the wizard
     pub fn show(&mut self) {
         self.show = true;
@@ -1960,6 +1970,15 @@ impl GcpWizard {
             .map(|o| o.access_token.clone())
             .unwrap_or_default();
 
+        // Clone profile keyring handle to move into thread
+        let kdbx_handle = match &self.profile_kdbx_handle {
+            Some(h) => h.clone(),
+            None => {
+                self.state = WizardState::Error("No profile keyring loaded. Please select a profile first.".to_string());
+                return;
+            }
+        };
+
         self.create_promise = Some(Promise::spawn_thread("gcp_create_vm", move || {
             let client = GcpRestClient::new(access_token);
 
@@ -1972,8 +1991,8 @@ impl GcpWizard {
                 Self::generate_ssh_key_pair()
                     .map_err(|e| format!("Failed to generate SSH key: {}", e))?;
 
-            // Store private key in keyring
-            Self::store_ssh_key_in_keyring(&instance_name, &platform_name, &ssh_private_key)
+            // Store private key in profile's keyring
+            Self::store_ssh_key_in_keyring(&instance_name, &platform_name, &ssh_private_key, &kdbx_handle)
                 .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 
             // Create instance request with startup script
@@ -2255,28 +2274,21 @@ impl GcpWizard {
         instance_name: &str,
         platform_name: &str,
         private_key: &str,
+        kdbx_handle: &std::sync::Arc<keyring::DatabaseHandle>,
     ) -> Result<(), String> {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let domain = format!("gcp.{}.{}", platform_name, instance_name);
             let username = "root";
 
-            // Ensure KeePass database exists (will create KPKey if needed)
-            let kdbx_path = keyring::ensure_kdbx_exists()
-                .map_err(|e| format!("Failed to initialize keyring: {}", e))?;
-            let kpkey_path = keyring::get_default_kpkey_path()
-                .map_err(|e| format!("Failed to get KPKey path: {}", e))?;
-
-            // Store SSH key as binary attachment, not in password field
-            keyring::update_key_with_ssh(
-                &kdbx_path,
-                Some(&kpkey_path),
+            // Store SSH key as binary attachment using profile's keyring handle
+            keyring::add_key_to_handle(
+                kdbx_handle,
                 &domain,
                 username,
                 "",                             // Empty password field
                 Some(private_key.as_bytes()),   // SSH key as binary attachment
                 Some("GCP VM SSH private key"), // Notes
-                None,                           // db_password
             )
             .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 

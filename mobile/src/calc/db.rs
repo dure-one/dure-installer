@@ -100,11 +100,14 @@ pub mod sqlite {
 
             // Ensure parent directory exists before connecting
             if let Some(parent) = std::path::Path::new(&url).parent() {
-                if !parent.exists() {
-                    dure_warn!("Database parent directory doesn't exist: {}", parent.display());
-                    dure_warn!("This usually means the profile was deleted. Attempting to create directory...");
-                    std::fs::create_dir_all(parent)
-                        .unwrap_or_else(|e| panic!("Failed to create database directory {}: {}", parent.display(), e));
+                // Only create directory if path has a real parent (not empty/current dir)
+                if !parent.as_os_str().is_empty() && parent != std::path::Path::new(".") {
+                    if !parent.exists() {
+                        dure_warn!("Database parent directory doesn't exist: {}", parent.display());
+                        dure_warn!("This usually means the profile was deleted. Attempting to create directory...");
+                        std::fs::create_dir_all(parent)
+                            .unwrap_or_else(|e| panic!("Failed to create database directory {}: {}", parent.display(), e));
+                    }
                 }
             }
 

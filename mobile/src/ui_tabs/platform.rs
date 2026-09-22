@@ -1823,7 +1823,7 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_add_vm")))
                 {
-                    self.show_gcp_wizard(current_profile, platform_name);
+                    self.show_gcp_wizard(current_profile, current_profile_kdbx, platform_name);
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
@@ -2651,7 +2651,12 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn show_gcp_wizard(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
+    fn show_gcp_wizard(
+        &mut self,
+        profile: &crate::calc::profile::ProfileContext,
+        kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+        platform_name: String,
+    ) {
         // Try to load config and find platform with OAuth + project
         let mut wizard = if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
             // Find platform by name
@@ -2689,6 +2694,11 @@ impl PlatformTab {
             // Config load failed, use full wizard
             GcpWizard::new(platform_name)
         };
+
+        // Set profile keyring handle before showing wizard
+        if let Some(handle) = kdbx_handle {
+            wizard.set_profile_keyring(handle.clone());
+        }
 
         wizard.show();
         self.gcp_wizard = Some(wizard);
