@@ -460,7 +460,7 @@ fn load_private_key_from_keyring(domain: &str, username: &str) -> Result<String>
     let kdbx_path = keyring::get_default_kdbx_path().context("Failed to get kdbx path")?;
     let kpkey_path = keyring::get_default_kpkey_path().context("Failed to get KPKey path")?;
 
-    let keys = keyring::list_keys(&kdbx_path, Some(&kpkey_path))
+    let keys = keyring::list_keys(&kdbx_path, Some(&kpkey_path), None)
         .context("Failed to list keys from keyring")?;
 
     // Find the key with matching domain and username

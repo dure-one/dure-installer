@@ -6,6 +6,41 @@
 //! 3. Configure Server (region, machine type, etc.)
 //! 4. Create Server (VM instance creation)
 //! 5. Complete (show connection info)
+//!
+//! # Operation Logging Integration
+//!
+//! The platform tab should monitor the wizard state and create/update operation logs:
+//!
+//! ```rust,ignore
+//! // In platform tab update loop:
+//! if wizard.is_creating_vm() && wizard.get_operation_log_id().is_none() {
+//!     // Create operation log when VM creation starts
+//!     let log = NewOperationLog::new(wizard.get_project_id(), "create_vm", "gcp");
+//!     let log_id = create_log(conn, log)?;
+//!     wizard.set_operation_log_id(log_id);
+//! }
+//!
+//! // Check for completion
+//! if wizard.vm_creation_completed() {
+//!     if let Some(log_id) = wizard.get_operation_log_id() {
+//!         update_log_status(conn, log_id, OperationStatus::Success, None)?;
+//!     }
+//! }
+//!
+//! // Check for failure
+//! if let Some(error) = wizard.vm_creation_failed() {
+//!     if let Some(log_id) = wizard.get_operation_log_id() {
+//!         update_log_status(conn, log_id, OperationStatus::Failed, Some(error))?;
+//!     }
+//! }
+//!
+//! // Check if refresh needed
+//! if wizard.needs_refresh() {
+//!     // Trigger platform refresh to load new VM info
+//!     refresh_platform_status();
+//!     wizard.reset_refresh_flag();
+//! }
+//! ```
 
 use eframe::egui;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
@@ -22,6 +57,20 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 
 #[cfg(not(target_arch = "wasm32"))]
 use base64::Engine;
+
+/// External IP option for VM creation
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+enum IpOption {
+    Ephemeral,
+    Reserved(usize), // Index into available_reserved_ips
+}
+
+impl Default for IpOption {
+    fn default() -> Self {
+        IpOption::Ephemeral
+    }
+}
 
 /// GCP wizard state machine
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -137,6 +186,26 @@ pub struct GcpWizard {
 
     /// Whether to skip account/project steps
     skip_account_project_steps: bool,
+
+    /// Operation log ID for tracking create_vm operation
+    #[cfg_attr(feature = "serde", serde(skip))]
+    operation_log_id: Option<i64>,
+
+    /// Flag indicating VM creation completed successfully (triggers refresh)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    needs_refresh: bool,
+
+    /// Flag to track if operation log has been updated (prevents repeated updates)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    operation_log_updated: bool,
+
+    /// Reserved IP selection
+    #[cfg_attr(feature = "serde", serde(skip))]
+    available_reserved_ips: Vec<crate::api::gcp::Address>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    selected_ip_option: IpOption,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    last_fetched_region: Option<String>,
 }
 
 impl Default for GcpWizard {
@@ -174,6 +243,12 @@ impl Default for GcpWizard {
             image_promise: None,
             image_retry_count: 0,
             skip_account_project_steps: false,
+            operation_log_id: None,
+            needs_refresh: false,
+            operation_log_updated: false,
+            available_reserved_ips: Vec::new(),
+            selected_ip_option: IpOption::Ephemeral,
+            last_fetched_region: None,
         }
     }
 }
@@ -281,6 +356,57 @@ impl GcpWizard {
         self.show
     }
 
+    /// Set operation log ID (called by parent when operation log is created)
+    pub fn set_operation_log_id(&mut self, id: i64) {
+        self.operation_log_id = Some(id);
+    }
+
+    /// Get project ID for operation logging
+    pub fn get_project_id(&self) -> &str {
+        &self.selected_project_id
+    }
+
+    /// Check if refresh is needed after VM creation
+    pub fn needs_refresh(&self) -> bool {
+        self.needs_refresh
+    }
+
+    /// Reset refresh flag (called by parent after refresh)
+    pub fn reset_refresh_flag(&mut self) {
+        self.needs_refresh = false;
+    }
+
+    /// Get operation log ID if set
+    pub fn get_operation_log_id(&self) -> Option<i64> {
+        self.operation_log_id
+    }
+
+    /// Check if VM creation is in progress (for operation log tracking)
+    pub fn is_creating_vm(&self) -> bool {
+        matches!(self.state, WizardState::CreatingServer) && self.create_promise.is_some()
+    }
+
+    /// Check if VM creation just completed (state is Complete and operation log exists but not yet updated)
+    pub fn vm_creation_completed(&self) -> bool {
+        matches!(self.state, WizardState::Complete)
+            && self.operation_log_id.is_some()
+            && !self.operation_log_updated
+    }
+
+    /// Check if VM creation failed
+    pub fn vm_creation_failed(&self) -> Option<String> {
+        if let WizardState::Error(err) = &self.state {
+            Some(err.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Mark operation log as updated (prevents repeated updates)
+    pub fn mark_operation_log_updated(&mut self) {
+        self.operation_log_updated = true;
+    }
+
     /// Render the wizard UI
     pub fn ui(&mut self, ctx: &egui::Context) {
         if !self.show {
@@ -289,11 +415,11 @@ impl GcpWizard {
 
         let mut open = true;
 
-        egui::Window::new("GCP Server Setup")
+        egui::Window::new("Add VM")
             .open(&mut open)
             .resizable(true)
-            .default_width(600.0)
-            .default_height(500.0)
+            .default_width(450.0)
+            .default_height(450.0)
             .collapsible(false)
             .show(ctx, |ui| {
                 // Progress indicator
@@ -390,7 +516,7 @@ impl GcpWizard {
         if self.available_platforms.is_empty() {
             ui.colored_label(
                 egui::Color32::from_rgb(255, 152, 0),
-                "⚠ No connected Google Cloud platforms found",
+                "No connected Google Cloud platforms found",
             );
             ui.add_space(8.0);
 
@@ -404,9 +530,11 @@ impl GcpWizard {
 
             ui.add_space(16.0);
 
-            if ui.button("Cancel").clicked() {
-                self.hide();
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                    self.hide();
+                }
+            });
 
             return;
         }
@@ -430,9 +558,13 @@ impl GcpWizard {
 
         ui.add_space(16.0);
 
-        // Next button
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::filled("Next →")).clicked() {
+        // Right-bottom aligned buttons
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                self.hide();
+            }
+
+            if ui.add(MaterialButton::outlined("Next →")).clicked() {
                 // Load OAuth from selected platform and refresh if expired
                 if let Some(platform) = self
                     .available_platforms
@@ -476,12 +608,6 @@ impl GcpWizard {
                         }
                     }
                 }
-            }
-
-            ui.add_space(8.0);
-
-            if ui.button("Cancel").clicked() {
-                self.hide();
             }
         });
     }
@@ -731,13 +857,32 @@ impl GcpWizard {
         let has_load_error = self.projects_load_error.is_some();
         let is_new_project = self.create_new_project_selected;
 
-        ui.horizontal(|ui| {
-            if ui.button("← Back").clicked() {
-                self.state = WizardState::ConnectAccount;
+        // Back button on the left
+        if ui.button("← Back").clicked() {
+            self.state = WizardState::ConnectAccount;
+        }
+
+        ui.add_space(8.0);
+
+        if !can_proceed {
+            ui.label("Select or create a project");
+        } else if is_new_project {
+            ui.colored_label(
+                egui::Color32::from_rgb(100, 181, 246),
+                "Will create new project",
+            );
+        }
+
+        ui.add_space(8.0);
+
+        // Right-bottom aligned buttons
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                self.hide();
             }
 
             ui.add_enabled_ui(can_proceed, |ui| {
-                if ui.add(MaterialButton::filled("Next →")).clicked() {
+                if ui.add(MaterialButton::outlined("Next →")).clicked() {
                     // If we couldn't load projects due to API error, try to proceed anyway
                     // The project might exist even if we couldn't list it
                     if has_load_error && !is_new_project {
@@ -754,19 +899,6 @@ impl GcpWizard {
                     }
                 }
             });
-
-            if !can_proceed {
-                ui.label("⚠ Select or create a project");
-            } else if is_new_project {
-                ui.colored_label(
-                    egui::Color32::from_rgb(100, 181, 246),
-                    "ℹ Will create new project",
-                );
-            }
-
-            if ui.button("Cancel").clicked() {
-                self.hide();
-            }
         });
     }
 
@@ -812,20 +944,20 @@ impl GcpWizard {
         ui.horizontal(|ui| {
             ui.label("Instance Name:");
             ui.text_edit_singleline(&mut self.instance_name);
-        });
 
-        // Show validation hint
-        if !self.instance_name.is_empty() {
-            let is_valid = self.validate_instance_name(&self.instance_name);
-            if is_valid {
-                ui.colored_label(egui::Color32::from_rgb(72, 187, 120), "✓ Valid name");
-            } else {
-                ui.colored_label(
-                    egui::Color32::from_rgb(245, 101, 101),
-                    "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
-                );
+            // Show validation hint
+            if !self.instance_name.is_empty() {
+                let is_valid = self.validate_instance_name(&self.instance_name);
+                if is_valid {
+                    ui.label("✓ Valid name");
+                } else {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(245, 101, 101),
+                        "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
+                    );
+                }
             }
-        }
+        });
 
         ui.add_space(8.0);
 
@@ -897,6 +1029,7 @@ impl GcpWizard {
         ui.add_space(8.0);
 
         // Region selection
+        let prev_region = self.selected_region.clone();
         ui.horizontal(|ui| {
             ui.label("Region:");
             // Find current region to show friendly name
@@ -904,7 +1037,7 @@ impl GcpWizard {
                 .available_regions
                 .iter()
                 .find(|r| r.name == self.selected_region)
-                .map(|r| format!("{} ({})", r.location, r.name))
+                .map(|r| format!("{} ({})", r.name, r.location))
                 .unwrap_or_else(|| self.selected_region.clone());
 
             egui::ComboBox::from_id_salt("region_combo")
@@ -914,11 +1047,20 @@ impl GcpWizard {
                         ui.selectable_value(
                             &mut self.selected_region,
                             region.name.clone(),
-                            format!("{} ({})", region.location, region.name),
+                            format!("{} ({})", region.name, region.location),
                         );
                     }
                 });
         });
+
+        // Reset zone if region changed
+        if prev_region != self.selected_region {
+            if let Some(region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+                if let Some(first_zone) = region.zones.first() {
+                    self.selected_zone = first_zone.clone();
+                }
+            }
+        }
 
         // Zone selection (based on selected region)
         if let Some(region) = self
@@ -956,39 +1098,118 @@ impl GcpWizard {
                 });
         });
 
-        ui.add_space(16.0);
+        ui.add_space(8.0);
 
-        ui.horizontal(|ui| {
-            // Only show Back if came from full wizard
-            if !self.skip_account_project_steps {
-                if ui.button("← Back").clicked() {
-                    self.state = WizardState::SelectProject;
+        // Fetch reserved IPs when region is selected — once per region.
+        // Set last_fetched_region on BOTH success and error so an empty list
+        // or a failing API call doesn't refetch every frame.
+        if let Some(selected_region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+            if self.last_fetched_region.as_ref() != Some(&selected_region.name) {
+                if let Some(oauth) = &self.oauth_result {
+                    use crate::api::gcp::GcpRestClient;
+                    let client = GcpRestClient::new(oauth.access_token.clone());
+
+                    match client.list_addresses(&self.selected_project_id, &selected_region.name) {
+                        Ok(addresses) => {
+                            dure_info!("=== Fetched {} addresses for region {} ===", addresses.len(), selected_region.name);
+                            for addr in &addresses {
+                                dure_info!("  Address: {} = {} (status: {}, type: {})",
+                                    addr.name, addr.address, addr.status, addr.address_type);
+                            }
+                            self.available_reserved_ips = addresses
+                                .into_iter()
+                                .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
+                                .collect();
+                            dure_info!("  Filtered to {} RESERVED+EXTERNAL addresses", self.available_reserved_ips.len());
+                        }
+                        Err(e) => {
+                            dure_warn!("Failed to list reserved IPs for region {}: {}", selected_region.name, e);
+                            self.available_reserved_ips.clear();
+                        }
+                    }
+                    // Mark region attempted regardless of outcome; prevents per-frame refetch.
+                    self.last_fetched_region = Some(selected_region.name.clone());
                 }
             }
+        }
 
-            let can_create = !self.instance_name.is_empty()
-                && self.validate_instance_name(&self.instance_name)
-                && !self.selected_region.is_empty()
-                && !self.selected_zone.is_empty()
-                && !self.selected_machine_type.is_empty()
-                && validate_disk_size(&self.disk_size_gb).is_ok()
-                && (self.swap_size_gb.is_empty() || validate_swap_size(&self.swap_size_gb).is_ok())
-                && self.image_promise.is_none();
+        // External IP selection
+        ui.horizontal(|ui| {
+            ui.label("External IP:");
+            egui::ComboBox::from_label("")
+                .selected_text(match &self.selected_ip_option {
+                    IpOption::Ephemeral => "Ephemeral (auto-assigned)".to_string(),
+                    IpOption::Reserved(idx) => {
+                        if *idx < self.available_reserved_ips.len() {
+                            let addr = &self.available_reserved_ips[*idx];
+                            format!("Reserved: {} ({})", addr.address, addr.name)
+                        } else {
+                            "Ephemeral (auto-assigned)".to_string()
+                        }
+                    }
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.selected_ip_option,
+                        IpOption::Ephemeral,
+                        "Ephemeral (auto-assigned)"
+                    );
 
-            let create_button = MaterialButton::filled("Create Server");
+                    for (idx, addr) in self.available_reserved_ips.iter().enumerate() {
+                        ui.selectable_value(
+                            &mut self.selected_ip_option,
+                            IpOption::Reserved(idx),
+                            format!("Reserved: {} ({})", addr.address, addr.name)
+                        );
+                    }
+                });
+        });
+
+        if !self.available_reserved_ips.is_empty() {
+            ui.add_space(4.0);
+            if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+                let url = format!(
+                    "https://console.cloud.google.com/networking/addresses/list?project={}",
+                    self.selected_project_id
+                );
+                let _ = webbrowser::open(&url);
+            }
+            ui.add_space(16.0);
+        }
+
+        // Back button on the left (if applicable)
+        if !self.skip_account_project_steps {
+            if ui.button("← Back").clicked() {
+                self.state = WizardState::SelectProject;
+            }
+            ui.add_space(8.0);
+        }
+
+        let can_create = !self.instance_name.is_empty()
+            && self.validate_instance_name(&self.instance_name)
+            && !self.selected_region.is_empty()
+            && !self.selected_zone.is_empty()
+            && !self.selected_machine_type.is_empty()
+            && validate_disk_size(&self.disk_size_gb).is_ok()
+            && (self.swap_size_gb.is_empty() || validate_swap_size(&self.swap_size_gb).is_ok())
+            && self.image_promise.is_none();
+
+        if !can_create {
+            ui.label("Complete all fields");
+            ui.add_space(8.0);
+        }
+
+        // Right-bottom aligned buttons
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                self.hide();
+            }
+
             ui.add_enabled_ui(can_create, |ui| {
-                if ui.add(create_button).clicked() {
+                if ui.add(MaterialButton::outlined("Create Server")).clicked() {
                     self.start_server_creation();
                 }
             });
-
-            if !can_create {
-                ui.label("⚠ Complete all fields");
-            }
-
-            if ui.button("Cancel").clicked() {
-                self.hide();
-            }
         });
     }
 
@@ -1023,6 +1244,8 @@ impl GcpWizard {
                             .push("✓ Server created successfully!".to_string());
                         self.state = WizardState::Complete;
                         self.create_promise = None;
+                        // Signal that refresh is needed
+                        self.needs_refresh = true;
                     }
                     Err(e) => {
                         self.state = WizardState::Error(e.clone());
@@ -1034,7 +1257,7 @@ impl GcpWizard {
     }
 
     fn render_complete(&mut self, ui: &mut egui::Ui) {
-        ui.heading("✓ Setup Complete!");
+        ui.heading("Setup Complete");
         ui.add_space(8.0);
 
         if let Some(instance) = &self.created_instance {
@@ -1127,9 +1350,11 @@ impl GcpWizard {
 
         ui.add_space(16.0);
 
-        if ui.add(MaterialButton::filled("Close")).clicked() {
-            self.hide();
-        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+            if ui.add(MaterialButton::outlined("Close")).clicked() {
+                self.hide();
+            }
+        });
     }
 
     /// Save VM instance to config
@@ -1459,10 +1684,65 @@ impl GcpWizard {
         let kpkey_path = keyring::get_default_kpkey_path()
             .map_err(|e| format!("Failed to get KPKey path: {}", e))?;
 
-        keyring::update_key(&kdbx_path, Some(&kpkey_path), &domain, username, password)
+        keyring::update_key(&kdbx_path, Some(&kpkey_path), &domain, username, password, None)
             .map_err(|e| format!("Failed to store OAuth token: {}", e))?;
 
         Ok(())
+    }
+
+    /// Map GCP region name to human-readable location
+    fn map_region_to_location(region_name: &str) -> String {
+        match region_name {
+            // Americas
+            "us-west1" => "Oregon, USA",
+            "us-west2" => "Los Angeles, USA",
+            "us-west3" => "Salt Lake City, USA",
+            "us-west4" => "Las Vegas, USA",
+            "us-central1" => "Iowa, USA",
+            "us-east1" => "South Carolina, USA",
+            "us-east4" => "Northern Virginia, USA",
+            "us-east5" => "Columbus, USA",
+            "northamerica-northeast1" => "Montreal, Canada",
+            "northamerica-northeast2" => "Toronto, Canada",
+            "southamerica-east1" => "São Paulo, Brazil",
+            "southamerica-west1" => "Santiago, Chile",
+
+            // Europe
+            "europe-west1" => "Belgium",
+            "europe-west2" => "London, UK",
+            "europe-west3" => "Frankfurt, Germany",
+            "europe-west4" => "Netherlands",
+            "europe-west6" => "Zurich, Switzerland",
+            "europe-west8" => "Milan, Italy",
+            "europe-west9" => "Paris, France",
+            "europe-central2" => "Warsaw, Poland",
+            "europe-north1" => "Finland",
+            "europe-southwest1" => "Madrid, Spain",
+
+            // Asia Pacific
+            "asia-east1" => "Taiwan",
+            "asia-east2" => "Hong Kong",
+            "asia-northeast1" => "Tokyo, Japan",
+            "asia-northeast2" => "Osaka, Japan",
+            "asia-northeast3" => "Seoul, South Korea",
+            "asia-south1" => "Mumbai, India",
+            "asia-south2" => "Delhi, India",
+            "asia-southeast1" => "Singapore",
+            "asia-southeast2" => "Jakarta, Indonesia",
+            "australia-southeast1" => "Sydney, Australia",
+            "australia-southeast2" => "Melbourne, Australia",
+
+            // Middle East
+            "me-west1" => "Tel Aviv, Israel",
+            "me-central1" => "Doha, Qatar",
+
+            // Africa
+            "africa-south1" => "Johannesburg, South Africa",
+
+            // Default fallback
+            _ => region_name,
+        }
+        .to_string()
     }
 
     fn load_regions(&mut self) {
@@ -1476,7 +1756,7 @@ impl GcpWizard {
                         .into_iter()
                         .map(|r| Region {
                             name: r.name.clone(),
-                            location: r.description,
+                            location: Self::map_region_to_location(&r.name),
                             zones: r
                                 .zones
                                 .iter()
@@ -1653,6 +1933,27 @@ impl GcpWizard {
         let disk_size_gb = self.disk_size_gb.clone();
         let swap_size_gb = self.swap_size_gb.clone();
 
+        // Capture IP selection and network tier
+        let (selected_nat_ip, selected_network_tier) = match &self.selected_ip_option {
+            IpOption::Ephemeral => {
+                dure_info!("🔍 Static IP selection: Ephemeral (auto-assigned)");
+                (None, None)
+            }
+            IpOption::Reserved(idx) => {
+                dure_info!("🔍 Static IP selection: Reserved index={}, available_ips={}", idx, self.available_reserved_ips.len());
+                if *idx < self.available_reserved_ips.len() {
+                    let addr = &self.available_reserved_ips[*idx];
+                    let ip = addr.address.clone();
+                    let tier = addr.network_tier.clone();
+                    dure_info!("✅ Using static IP: {} ({}) with tier: {:?}", ip, addr.name, tier);
+                    (Some(ip), tier)
+                } else {
+                    dure_warn!("❌ Static IP index out of bounds: {} >= {}", idx, self.available_reserved_ips.len());
+                    (None, None)
+                }
+            }
+        };
+
         let access_token = self
             .oauth_result
             .as_ref()
@@ -1701,6 +2002,17 @@ impl GcpWizard {
                     value: startup_script,
                 }],
             });
+
+            // Update network interface with selected IP and network tier
+            use crate::api::gcp::compute::AccessConfig;
+            instance_req.network_interfaces[0].access_configs = Some(vec![AccessConfig {
+                type_: "ONE_TO_ONE_NAT".to_string(),
+                name: "External NAT".to_string(),
+                nat_ip: selected_nat_ip.clone(),
+                network_tier: selected_network_tier.clone(),
+            }]);
+
+            dure_info!("🌐 Network config: nat_ip = {:?}, network_tier = {:?}", selected_nat_ip, selected_network_tier);
 
             // Create the instance
             let operation = client
@@ -1964,6 +2276,7 @@ impl GcpWizard {
                 "",                             // Empty password field
                 Some(private_key.as_bytes()),   // SSH key as binary attachment
                 Some("GCP VM SSH private key"), // Notes
+                None,                           // db_password
             )
             .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 

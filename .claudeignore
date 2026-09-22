@@ -1,0 +1,94 @@
+# Rust build artifacts
+target/
+**/target/
+Cargo.lock
+*.rlib
+*.rmeta
+
+# Binary outputs
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# Android build
+mobile/build/
+mobile/.gradle/
+mobile/local.properties
+*.apk
+*.aab
+*.dex
+
+# WASM build
+mobile/pkg/
+*.wasm
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Environment/Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# Temporary
+*.tmp
+*.temp
+*.bak
+.cache/
+
+# Test coverage
+coverage/
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+
+# Documentation build
+target/doc/
+
+# Node (if used for WASM tooling)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Large media (examples - adjust as needed)
+*.mp4
+*.mov
+*.avi
+*.mkv
+screenshots/
+demos/
+
+# Git
+.git/
+.gitignore

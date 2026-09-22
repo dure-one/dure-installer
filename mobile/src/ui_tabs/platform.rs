@@ -2,7 +2,8 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
-use egui_material3::{MaterialButton, data_table};
+use egui_i18n::tr;
+use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize, notification, NotificationAlign};
 use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -163,6 +164,18 @@ pub struct PlatformTab {
     delete_vm_selected: Option<usize>,
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_vm_confirming: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_hard_delete: bool,
+
+    // Static IP detection and release
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_has_static_ip: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_ip_address: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_ip_name: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_vm_release_ip: bool,
 
     // Delete Platform dialog state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -225,6 +238,14 @@ pub struct PlatformTab {
     // Drawer state (for platform details drawer with tabs)
     #[cfg_attr(feature = "serde", serde(skip))]
     drawer_state: crate::viewmodel::platform::DrawerState,
+
+    // SSH creation notification state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_ssh_creation_notification: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_created_count: usize,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    ssh_creation_notification_time: Option<std::time::Instant>,
 }
 
 impl Default for PlatformTab {
@@ -257,6 +278,11 @@ impl Default for PlatformTab {
             delete_vm_list: Vec::new(),
             delete_vm_selected: None,
             delete_vm_confirming: false,
+            delete_vm_hard_delete: false,
+            delete_vm_has_static_ip: false,
+            delete_vm_ip_address: None,
+            delete_vm_ip_name: None,
+            delete_vm_release_ip: false,
             show_delete_platform_dialog: false,
             delete_platform_name: String::new(),
             delete_platform_vm_count: 0,
@@ -279,22 +305,28 @@ impl Default for PlatformTab {
             refresh_promises: std::collections::HashMap::new(),
             auto_refreshed_platforms: std::collections::HashSet::new(),
             drawer_state: crate::viewmodel::platform::DrawerState::new(),
+            show_ssh_creation_notification: false,
+            ssh_created_count: 0,
+            ssh_creation_notification_time: None,
         }
     }
 }
 
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
-fn get_config_path() -> Result<std::path::PathBuf, String> {
-        Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
+fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<std::path::PathBuf, String> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => Err("No active profile - please select or create a profile first".to_string()),
+    }
 }
 
 /// Load application config with V1 to V2 migration
 #[cfg(not(target_arch = "wasm32"))]
-fn load_config() -> Result<(AppConfig, std::path::PathBuf), String> {
+fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<(AppConfig, std::path::PathBuf), String> {
     use crate::config_migration::{AppConfigV1, backup_config, migrate_config_v1_to_v2};
 
-    let config_path = get_config_path()?;
+    let config_path = get_config_path(profile)?;
 
     if !config_path.exists() {
         // No config exists, create default
@@ -643,7 +675,7 @@ fn load_ssh_key_from_keyring(project_id: &str, keyring_domain: &Option<String>) 
         }
     };
 
-    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path)) {
+    let keys = match keyring::list_keys(&kdbx_path, Some(&kpkey_path), None) {
         Ok(k) => {
             dure_debug!(project_id = project_id, "Found {} keys in keyring", k.len());
             for key in &k {
@@ -810,7 +842,22 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
 impl PlatformTab {
     /// Render the platform tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(
+        &mut self,
+        current_profile: &Option<crate::calc::profile::ProfileContext>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+        ui: &mut egui::Ui,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        // Check if profile is selected
+        if current_profile.is_none() {
+            ui.label(tr!("no-profile-selected"));
+            return;
+        }
+
+        // Unwrap profile (safe after guard above)
+        let current_profile = current_profile.as_ref().unwrap();
+
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
             // Process events first
@@ -842,7 +889,12 @@ impl PlatformTab {
                         // Note: NO self.loaded = false! Incremental update only
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
-                        dure_info!("✅ VM {} restarted successfully", vm_name);
+                        // Log with project_id context for filtering
+                        crate::viewmodel::logs::append_log(
+                            &platform_name,
+                            crate::viewmodel::logs::LogLevel::Info,
+                            format!("✅ VM {} restarted successfully", vm_name)
+                        );
 
                         // Incremental update
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
@@ -917,7 +969,7 @@ impl PlatformTab {
                         }
 
                         // Keep config update and reload logic
-                        if let Ok((mut app_config, config_path)) = load_config() {
+                        if let Ok((mut app_config, config_path)) = load_config(&Some(current_profile.clone())) {
                             if let Some(platform) = app_config
                                 .platforms
                                 .iter_mut()
@@ -1142,13 +1194,6 @@ impl PlatformTab {
         // Request repaint to update UI when states auto-clear
         ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
 
-        ui.heading("Cloud Platforms");
-        ui.add_space(4.0);
-        ui.label(
-            "Manage cloud service platforms (GCP, Firebase, Supabase) for deployment and hosting.",
-        );
-        ui.add_space(8.0);
-
         // Poll SSH test promises (TODO: Replace with ViewModel event processing)
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -1192,16 +1237,9 @@ impl PlatformTab {
             }
         }
 
-        // Action buttons
-        if ui.add(MaterialButton::filled("Add Platform")).clicked() {
-            self.show_add_dialog = true;
-            self.add_platform_type = "gcp".to_string();
-        }
-        ui.add_space(8.0);
-
         // Table rendering
         if !self.loaded {
-            self.load_rows();
+            self.load_rows(&Some(current_profile.clone()));
         }
 
         // Auto-trigger refresh for rows with missing project count cache (once per platform)
@@ -1213,7 +1251,8 @@ impl PlatformTab {
                     && !self.refresh_promises.contains_key(&row.project_id)
                 {
                     if let Some(ref vm) = vm {
-                        if let Ok(_) = vm.refresh_platform(row.project_id.clone()) {
+                        let profile_config_path = current_profile.config_file.clone();
+                        if let Ok(_) = vm.refresh_platform(profile_config_path, row.project_id.clone()) {
                             // Mark as auto-refreshed to prevent repeat triggers
                             self.auto_refreshed_platforms.insert(row.project_id.clone());
                         } else {
@@ -1232,6 +1271,16 @@ impl PlatformTab {
         }
 
         if self.rows.is_empty() && self.load_error.is_none() {
+            ui.heading("Cloud Platforms");
+            ui.add_space(4.0);
+            ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+            ui.add_space(8.0);
+
+            if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                self.show_add_dialog = true;
+                self.add_platform_type = "gcp".to_string();
+            }
+            ui.add_space(8.0);
             ui.label("No platforms configured. Click 'Add Platform' to get started.");
         } else if !self.rows.is_empty() {
             // Calculate responsive column widths
@@ -1267,8 +1316,7 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .auto_row_height(true)      // Enable dynamic row heights
                 .min_row_height(70.0)       // Maintain MD3 minimum height
-                .column("Project", 150.0 * width_ratio, false)
-                .column("Type", 80.0 * width_ratio, false)
+                .column("Project", 230.0 * width_ratio, false)
                 .column("Operations", 510.0 * width_ratio, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
@@ -1277,8 +1325,20 @@ impl PlatformTab {
                 let row_for_actions = row.clone();
 
                 table = table.row(move |r| {
-                    r.cell(&row_for_cells.project_id)
-                        .cell(&row_for_cells.platform_type)
+                    r.cell_widget(move |ui| {
+                            ui.vertical(|ui| {
+                                ui.add(
+                                    badge(&row_for_cells.platform_type)
+                                        .color(BadgeColor::Primary)
+                                        .size(BadgeSize::Small)
+                                );
+                                let text_color = ui.style().visuals.text_color();
+                                ui.label(egui::RichText::new(&row_for_cells.project_id)
+                                    .size(16.0)
+                                    .strong()
+                                    .color(text_color));
+                            });
+                        })
                         .cell_widget(move |ui| {
                             // Calculate needed height for button wrapping
                             let column_width = 260.0 * width_ratio;
@@ -1299,11 +1359,10 @@ impl PlatformTab {
                             // Set minimum height before rendering
                             ui.set_min_height(needed_height);
 
-                            ui.horizontal_wrapped(|ui| {
+                            ui.vertical(|ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
-                                ui.spacing_mut().item_spacing.y = 2.0; // Add vertical spacing for wrapped rows
-                                ui.style_mut().spacing.button_padding =
-                                    egui::vec2(6.0, 2.0);
+                                ui.spacing_mut().item_spacing.y = 2.0;
+                                ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
                                 // Check if any operation in progress
                                 let operation_in_progress = matches!(
@@ -1311,178 +1370,191 @@ impl PlatformTab {
                                     OperationState::InProgress { .. }
                                 );
 
-                                // 0. Refresh (always enabled)
-                                if ui
-                                    .add(MaterialButton::outlined("Refresh").small())
-                                    .on_hover_text("Refresh platform data")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_refresh"),
-                                            row_for_actions.project_id.clone(),
-                                        )
-                                    });
+                                // Show progress indicator when operation in progress
+                                if operation_in_progress {
+                                    if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
+                                        ui.label(operation);
+                                    }
+                                    ui.add(
+                                        linear_progress()
+                                            .indeterminate(true)
+                                            .width(column_width - 20.0)
+                                            .height(4.0)
+                                            .four_color_enabled(true)
+                                    );
+                                    ui.add_space(4.0);
                                 }
 
-                                // Disable other buttons during operations
-                                ui.add_enabled_ui(!operation_in_progress, |ui| {
-                                // 1. Add VM
-                                #[cfg(not(any(
-                                    target_os = "android",
-                                    target_arch = "wasm32"
-                                )))]
-                                if ui
-                                    .add_enabled(
-                                        !row_for_actions.has_vm
-                                            && row_for_actions.project_selected,
-                                        MaterialButton::outlined("Add VM").small(),
-                                    )
-                                    .on_hover_text("Add VM")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_add_vm"),
-                                            row_for_actions.project_id.clone(),
-                                        )
-                                    });
-                                }
-
-                                // 1.5. Scan VMs
-                                if ui
-                                    .add_enabled(
-                                        row_for_actions.project_selected,
-                                        MaterialButton::outlined("Scan VMs").small(),
-                                    )
-                                    .on_hover_text("Scan and import existing VMs from GCP")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_scan_vms"),
-                                            row_for_actions.project_id.clone(),
-                                        )
-                                    });
-                                }
-
-                                // 2. Firewall
-                                if ui
-                                    .add_enabled(
-                                        row_for_actions.project_selected
-                                            && !row_for_actions.firewall_updated,
-                                        MaterialButton::outlined("Firewall").small(),
-                                    )
-                                    .on_hover_text("Update Firewall")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new(
-                                                "platform_action_update_firewall",
-                                            ),
-                                            row_for_actions.project_id.clone(),
-                                        )
-                                    });
-                                }
-
-                                // 3. Restart
-                                if ui
-                                    .add_enabled(
-                                        row_for_actions.has_vm,
-                                        MaterialButton::outlined("Restart").small(),
-                                    )
-                                    .on_hover_text("Restart VM")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_restart_vm"),
-                                            row_for_actions.project_id.clone(),
-                                        )
-                                    });
-                                }
-
-                                // 4. Del VM
-                                if ui
-                                    .add_enabled(
-                                        row_for_actions.has_vm,
-                                        MaterialButton::outlined("Del VM").small(),
-                                    )
-                                    .on_hover_text("Delete VM")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_delete_vm"),
-                                            (
-                                                row_for_actions.project_id.clone(),
-                                                row_for_actions
-                                                    .vm_name
-                                                    .clone()
-                                                    .unwrap_or_default(),
-                                                row_for_actions
-                                                    .vm_zone
-                                                    .clone()
-                                                    .unwrap_or_default(),
-                                            ),
-                                        )
-                                    });
-                                }
-
-                                // 5. Regen
-                                // if ui.add_enabled(row_for_actions.has_vm,
-                                //     MaterialButton::outlined("Regen").small()).on_hover_text("Regenerate VM").clicked() {
-                                //     ui.data_mut(|d| d.insert_temp(
-                                //         egui::Id::new("platform_action_regen_vm"),
-                                //         row_for_actions.project_id.clone()
-                                //     ));
-                                // }
-
-                                // 6. Billing
-                                #[cfg(not(any(
-                                    target_os = "android",
-                                    target_arch = "wasm32"
-                                )))]
-                                if ui
-                                    .add_enabled(
-                                        row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
-                                        MaterialButton::outlined("Billing").small(),
-                                    )
-                                    .on_hover_text("Estimated Billing")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("platform_action_billing_name"),
-                                            row_for_actions.project_id.clone(),
-                                        );
-                                        if let Some(project_id) = &row_for_actions.selected_project_id {
+                                // Row 1: Refresh, Billing, Delete
+                                ui.horizontal(|ui| {
+                                    // Refresh (always enabled)
+                                    if ui
+                                        .add(MaterialButton::outlined("Refresh").small())
+                                        .on_hover_text("Refresh platform data")
+                                        .clicked()
+                                    {
+                                        ui.data_mut(|d| {
                                             d.insert_temp(
-                                                egui::Id::new("platform_action_billing_project"),
-                                                project_id.clone(),
-                                            );
+                                                egui::Id::new("platform_action_refresh"),
+                                                row_for_actions.project_id.clone(),
+                                            )
+                                        });
+                                    }
+
+                                    ui.add_enabled_ui(!operation_in_progress, |ui| {
+                                        // Billing
+                                        #[cfg(not(any(
+                                            target_os = "android",
+                                            target_arch = "wasm32"
+                                        )))]
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
+                                                MaterialButton::outlined("Billing").small(),
+                                            )
+                                            .on_hover_text("Estimated Billing")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_billing_name"),
+                                                    row_for_actions.project_id.clone(),
+                                                );
+                                                if let Some(project_id) = &row_for_actions.selected_project_id {
+                                                    d.insert_temp(
+                                                        egui::Id::new("platform_action_billing_project"),
+                                                        project_id.clone(),
+                                                    );
+                                                }
+                                            });
+                                        }
+
+                                        // Delete
+                                        if ui
+                                            .add(MaterialButton::outlined("Delete").small())
+                                            .on_hover_text("Delete Platform")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new(
+                                                        "platform_action_delete_platform",
+                                                    ),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
                                         }
                                     });
-                                }
+                                });
 
-                                // 7. Delete
-                                if ui
-                                    .add(MaterialButton::outlined("Delete").small())
-                                    .on_hover_text("Delete Platform")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new(
-                                                "platform_action_delete_platform",
-                                            ),
-                                            row_for_actions.project_id.clone(),
-                                        )
+                                // Row 2: Add VM, Scan VMs, Firewall, Restart, DelVM
+                                ui.horizontal(|ui| {
+                                    ui.add_enabled_ui(!operation_in_progress, |ui| {
+                                        // Add VM
+                                        #[cfg(not(any(
+                                            target_os = "android",
+                                            target_arch = "wasm32"
+                                        )))]
+                                        if ui
+                                            .add_enabled(
+                                                !row_for_actions.has_vm
+                                                    && row_for_actions.project_selected,
+                                                MaterialButton::outlined("Add VM").small(),
+                                            )
+                                            .on_hover_text("Add VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_add_vm"),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
+                                        }
+
+                                        // Scan VMs
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected,
+                                                MaterialButton::outlined("Scan VMs").small(),
+                                            )
+                                            .on_hover_text("Scan and import existing VMs from GCP")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_scan_vms"),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
+                                        }
+
+                                        // Firewall
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.project_selected
+                                                    && !row_for_actions.firewall_updated,
+                                                MaterialButton::outlined("Firewall").small(),
+                                            )
+                                            .on_hover_text("Update Firewall")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new(
+                                                        "platform_action_update_firewall",
+                                                    ),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
+                                        }
+
+                                        // Restart
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.has_vm,
+                                                MaterialButton::outlined("Restart").small(),
+                                            )
+                                            .on_hover_text("Restart VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_restart_vm"),
+                                                    row_for_actions.project_id.clone(),
+                                                )
+                                            });
+                                        }
+
+                                        // Del VM
+                                        if ui
+                                            .add_enabled(
+                                                row_for_actions.has_vm,
+                                                MaterialButton::outlined("Del VM").small(),
+                                            )
+                                            .on_hover_text("Delete VM")
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("platform_action_delete_vm"),
+                                                    (
+                                                        row_for_actions.project_id.clone(),
+                                                        row_for_actions
+                                                            .vm_name
+                                                            .clone()
+                                                            .unwrap_or_default(),
+                                                        row_for_actions
+                                                            .vm_zone
+                                                            .clone()
+                                                            .unwrap_or_default(),
+                                                    ),
+                                                )
+                                            });
+                                        }
                                     });
-                                }
-                            }); // End add_enabled_ui
-                        }); // End horizontal_wrapped
+                                });
+                            });
                     })
                     .drawer(move |ui| {
                         render_drawer_content(ui, &row_for_drawer);
@@ -1491,6 +1563,17 @@ impl PlatformTab {
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading("Cloud Platforms");
+                ui.add_space(4.0);
+                ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+                ui.add_space(8.0);
+
+                if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                    self.show_add_dialog = true;
+                    self.add_platform_type = "gcp".to_string();
+                }
+                ui.add_space(8.0);
+
                 table.show(ui);
             });
 
@@ -1510,7 +1593,7 @@ impl PlatformTab {
                 // Refresh access token if expired (before making API calls)
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let Ok((mut app_config, config_path)) = load_config() {
+                    if let Ok((mut app_config, config_path)) = load_config(&Some(current_profile.clone())) {
                         if let Some((platform_idx, _)) = app_config
                             .platforms
                             .iter()
@@ -1528,7 +1611,8 @@ impl PlatformTab {
 
                 // Send RefreshPlatform command to ViewModel
                 if let Some(ref vm) = vm {
-                    if let Err(e) = vm.refresh_platform(platform_name.clone()) {
+                    let profile_config_path = current_profile.config_file.clone();
+                    if let Err(e) = vm.refresh_platform(profile_config_path, platform_name.clone()) {
                         dure_error!("Failed to send refresh command: {}", e);
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Failed {
@@ -1575,7 +1659,8 @@ impl PlatformTab {
                         };
                     }
 
-                    self.scan_vms(platform_name, vm.as_deref_mut());
+                    let profile_config_path = current_profile.config_file.clone();
+                    self.scan_vms(profile_config_path, platform_name, vm.as_deref_mut());
                     ui.data_mut(|d| {
                         d.remove::<String>(egui::Id::new("platform_action_scan_vms"))
                     });
@@ -1597,6 +1682,24 @@ impl PlatformTab {
                 }
                 ui.data_mut(|d| {
                     d.remove::<String>(egui::Id::new("drawer_action_refresh_logs"))
+                });
+            }
+
+            // Drawer action: Refresh operations
+            if let Some(project_id) = ui.data(|d| {
+                d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations"))
+            }) {
+                if let Some(ref vm) = vm {
+                    use crate::viewmodel::platform::DrawerCommand;
+                    if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadOperations {
+                        project_id: project_id.clone(),
+                        limit: 100,
+                    }) {
+                        dure_error!("Failed to send LoadOperations command: {}", e);
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_refresh_operations"))
                 });
             }
 
@@ -1651,7 +1754,7 @@ impl PlatformTab {
                         };
                     }
 
-                    self.show_delete_vm_confirmation(platform_name, vm_name, vm_zone);
+                    self.show_delete_vm_confirmation(&Some(current_profile.clone()), platform_name, vm_name, vm_zone);
                     ui.data_mut(|d| {
                         d.remove::<(String, String, String)>(egui::Id::new(
                             "platform_action_delete_vm",
@@ -1663,7 +1766,7 @@ impl PlatformTab {
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_regen_vm")))
                 {
                     // Find platform and get vm_name
-                    if let Ok((app_config, _)) = load_config() {
+                    if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
                         if let Some(platform) = app_config
                             .platforms
                             .iter()
@@ -1671,8 +1774,10 @@ impl PlatformTab {
                         {
                             if let Some(vm_cfg) = platform.vms.first() {
                                 self.regenerate_vm(
+                                    current_profile,
                                     platform_name,
                                     vm_cfg.name.clone(),
+                                    current_profile_kdbx.clone(),
                                     vm.as_deref_mut(),
                                 );
                             }
@@ -1693,7 +1798,7 @@ impl PlatformTab {
                     }
 
                     // Find platform and get vm_name and zone
-                    if let Ok((app_config, _)) = load_config() {
+                    if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
                         if let Some(platform) = app_config
                             .platforms
                             .iter()
@@ -1701,6 +1806,7 @@ impl PlatformTab {
                         {
                             if let Some(vm_config) = platform.vms.first() {
                                 self.restart_vm(
+                                    current_profile,
                                     platform_name.clone(),
                                     vm_config.name.clone(),
                                     vm_config.zone.clone(),
@@ -1717,7 +1823,7 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_add_vm")))
                 {
-                    self.show_gcp_wizard(platform_name);
+                    self.show_gcp_wizard(current_profile, platform_name);
                     ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_add_vm")));
                 }
 
@@ -1727,9 +1833,12 @@ impl PlatformTab {
                     if let Some(project_id) =
                         ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_project")))
                     {
-                        self.show_billing_dialog = true;
+                        // Reset billing state to force auto-discovery for each project
+                        self.billing_dataset.clear();
+                        self.billing_table.clear();
                         self.billing_project_id = project_id.clone();
-                        self.fetch_billing_data(vm.as_deref_mut(), Some(project_id));
+                        self.show_billing_dialog = true;
+                        self.fetch_billing_data(current_profile, vm.as_deref_mut(), Some(project_id));
                         ui.data_mut(|d| {
                             d.remove::<String>(egui::Id::new("platform_action_billing_name"));
                             d.remove::<String>(egui::Id::new("platform_action_billing_project"));
@@ -1741,7 +1850,7 @@ impl PlatformTab {
             if let Some(platform_name) =
                 ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_delete_platform")))
             {
-                self.show_delete_platform_confirmation(platform_name);
+                self.show_delete_platform_confirmation(current_profile, platform_name);
                 ui.data_mut(|d| {
                     d.remove::<String>(egui::Id::new("platform_action_delete_platform"))
                 });
@@ -1750,23 +1859,23 @@ impl PlatformTab {
 
         // Add platform dialog
         if self.show_add_dialog {
-            self.render_add_dialog(ui.ctx(), vm.as_deref_mut());
+            self.render_add_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Delete Platform dialog
         if self.show_delete_platform_dialog {
-            self.render_delete_platform_dialog(ui.ctx(), vm.as_deref_mut());
+            self.render_delete_platform_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Select Project dialog
         #[cfg(not(target_arch = "wasm32"))]
         if self.show_select_project_dialog {
-            self.render_select_project_dialog(ui.ctx(), vm.as_deref_mut());
+            self.render_select_project_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Delete VM dialog
         if self.show_delete_vm_dialog {
-            self.render_delete_vm_dialog(ui.ctx(), vm.as_deref_mut());
+            self.render_delete_vm_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Error dialog
@@ -1776,7 +1885,7 @@ impl PlatformTab {
 
         // Billing dialog
         if self.show_billing_dialog {
-            self.render_billing_dialog(ui.ctx(), vm.as_deref_mut());
+            self.render_billing_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Init progress display
@@ -1791,6 +1900,67 @@ impl PlatformTab {
 
             if let Some(wizard) = &mut self.gcp_wizard {
                 wizard.ui(ui.ctx());
+
+                // Operation logging integration
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    use crate::storage::models::opslog::{NewOperationLog, OperationStatus};
+
+                    // Create operation log when VM creation starts
+                    if wizard.is_creating_vm() && wizard.get_operation_log_id().is_none() {
+                        if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                            let log = NewOperationLog::new(
+                                wizard.get_project_id(),
+                                "create_vm",
+                                "gcp"
+                            );
+
+                            if let Ok(log_id) = crate::storage::models::opslog::create_log(&mut conn, log) {
+                                wizard.set_operation_log_id(log_id);
+                                dure_info!("Created operation log for VM creation: {}", log_id);
+                            }
+                        }
+                    }
+
+                    // Update operation log on completion
+                    if wizard.vm_creation_completed() {
+                        if let Some(log_id) = wizard.get_operation_log_id() {
+                            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                let _ = crate::storage::models::opslog::update_log_status(
+                                    &mut conn,
+                                    log_id,
+                                    OperationStatus::Success,
+                                    None
+                                );
+                                wizard.mark_operation_log_updated();
+                                dure_info!("Updated operation log {} to success", log_id);
+                            }
+                        }
+                    }
+
+                    // Update operation log on failure
+                    if let Some(error) = wizard.vm_creation_failed() {
+                        if let Some(log_id) = wizard.get_operation_log_id() {
+                            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                let _ = crate::storage::models::opslog::update_log_status(
+                                    &mut conn,
+                                    log_id,
+                                    OperationStatus::Failed,
+                                    Some(error)
+                                );
+                                wizard.mark_operation_log_updated();
+                                dure_info!("Updated operation log {} to failed", log_id);
+                            }
+                        }
+                    }
+
+                    // Trigger refresh when VM creation completes
+                    if wizard.needs_refresh() {
+                        dure_info!("VM creation completed, refreshing platform data");
+                        self.loaded = false;
+                        wizard.reset_refresh_flag();
+                    }
+                }
             }
 
             // Detect wizard closure - if it was open and now closed, refresh
@@ -1801,15 +1971,41 @@ impl PlatformTab {
 
             self.wizard_was_open = wizard_is_open;
         }
+
+        // SSH creation notification (auto-dismiss after 5 seconds)
+        if self.show_ssh_creation_notification {
+            if let Some(show_time) = self.ssh_creation_notification_time {
+                if show_time.elapsed() >= std::time::Duration::from_secs(5) {
+                    self.show_ssh_creation_notification = false;
+                }
+            }
+
+            let response = ui.add(
+                notification()
+                    .title("SSH Entries Created")
+                    .text(&format!(
+                        "Created {} new SSH entr{} from VM scan",
+                        self.ssh_created_count,
+                        if self.ssh_created_count == 1 { "y" } else { "ies" }
+                    ))
+                    .icon("check")
+                    .align(NotificationAlign::Center)
+                    .opened(true),
+            );
+
+            if response.clicked() {
+                self.show_ssh_creation_notification = false;
+            }
+        }
     }
 
-    fn load_rows(&mut self) {
+    fn load_rows(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>) {
         self.rows.clear();
         self.load_error = None;
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_config() {
+            match load_config(current_profile) {
                 Ok((mut app_config, config_path)) => {
                     // Iterate by index to avoid borrow checker issues
                     let platform_count = app_config.platforms.len();
@@ -1940,8 +2136,60 @@ impl PlatformTab {
                                 && !self.ssh_test_results.contains_key(&project_id)
                                 && !self.ssh_test_promises.contains_key(&project_id)
                             {
-                                self.execute_test_connection(project_id);
+                                self.execute_test_connection(current_profile.as_ref().unwrap(), project_id);
                             }
+                        }
+                    }
+
+                    // Auto-create SSH entries for VMs not in SSH hosts
+                    let mut new_ssh_hosts = Vec::new();
+                    for platform in &app_config.platforms {
+                        if platform.platform_type != "gcp" {
+                            continue;
+                        }
+
+                        let platform_name = platform.gcp_selected_project_id.clone()
+                            .unwrap_or_else(|| "unknown".to_string());
+
+                        for vm in &platform.vms {
+                            if let Some(external_ip) = &vm.external_ip {
+                                // Check if SSH host already exists with this IP
+                                let exists = app_config.ssh_hosts.iter().any(|ssh_host| {
+                                    // Parse host to extract IP (format: "root@IP" or "user@IP" or just "IP")
+                                    let host_ip = ssh_host.host.split('@').last().unwrap_or(&ssh_host.host);
+                                    host_ip == external_ip
+                                });
+
+                                if !exists {
+                                    new_ssh_hosts.push(crate::config::SshHostConfig {
+                                        host: format!("root@{}", external_ip),
+                                        password: None,
+                                        private_key_path: None,
+                                        keyring_domain: vm.ssh_key_name.clone(),
+                                        port: 22,
+                                        initialized: false,
+                                        last_status: None,
+                                        platform_name: Some(platform_name.clone()),
+                                        docker_containers: Vec::new(),
+                                        ansible_roles: Vec::new(),
+                                        dure_wss_config: None,
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // Add new SSH hosts to config and save
+                    if !new_ssh_hosts.is_empty() {
+                        app_config.ssh_hosts.extend(new_ssh_hosts.clone());
+                        if let Err(e) = app_config.save(&config_path) {
+                            dure_error!("Failed to save SSH hosts: {}", e);
+                        } else {
+                            // Show notification
+                            self.show_ssh_creation_notification = true;
+                            self.ssh_created_count = new_ssh_hosts.len();
+                            self.ssh_creation_notification_time = Some(std::time::Instant::now());
                         }
                     }
 
@@ -2092,6 +2340,7 @@ impl PlatformTab {
 
     fn render_add_dialog(
         &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -2281,7 +2530,7 @@ impl PlatformTab {
 
                     ui.add_enabled_ui(can_add, |ui| {
                         if ui.button("Add").clicked() {
-                            self.execute_add_platform(vm.as_deref_mut());
+                            self.execute_add_platform(current_profile, vm.as_deref_mut());
                             self.show_add_dialog = false;
                             self.add_platform_oauth_url = None;
                             self.add_platform_oauth_result = None;
@@ -2318,7 +2567,7 @@ impl PlatformTab {
         }
     }
 
-    fn execute_add_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_add_platform(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // Extract OAuth info if GCP
@@ -2358,7 +2607,11 @@ impl PlatformTab {
                 };
 
             if let Some(vm) = vm {
+                // Get config path from profile
+                let config_path = current_profile.config_file.clone();
+
                 match vm.add_platform(
+                    config_path,
                     self.add_platform_type.clone(),
                     oauth_access,
                     oauth_refresh,
@@ -2398,9 +2651,9 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn show_gcp_wizard(&mut self, platform_name: String) {
+    fn show_gcp_wizard(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
         // Try to load config and find platform with OAuth + project
-        let mut wizard = if let Ok((app_config, _)) = load_config() {
+        let mut wizard = if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
             // Find platform by name
             if let Some(platform) = app_config.platforms.iter()
                 .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
@@ -2420,17 +2673,17 @@ impl PlatformTab {
                     };
 
                     GcpWizard::with_platform_context(
-                        platform_name,
+                        platform_name.clone(),
                         project_id.clone(),
                         oauth_result,
                     )
                 } else {
                     // Missing OAuth or project, use full wizard
-                    GcpWizard::new(platform_name)
+                    GcpWizard::new(platform_name.clone())
                 }
             } else {
                 // Platform not found in config, use full wizard
-                GcpWizard::new(platform_name)
+                GcpWizard::new(platform_name.clone())
             }
         } else {
             // Config load failed, use full wizard
@@ -2444,6 +2697,7 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn restart_vm(
         &mut self,
+        profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -2451,8 +2705,9 @@ impl PlatformTab {
     ) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
-            // Send command to ViewModel
-            if let Err(e) = vm.restart_vm(platform_name, vm_name, zone) {
+            // Send command to ViewModel with profile-specific config path
+            let profile_config_path = profile.config_file.clone();
+            if let Err(e) = vm.restart_vm(profile_config_path, platform_name, vm_name, zone) {
                 self.load_error = Some(format!("Failed to start VM restart: {}", e));
             }
             // Note: UI will be updated by event processing when VMRestarted event arrives
@@ -2465,13 +2720,15 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn regenerate_vm(
         &mut self,
+        profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
         vm_name: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         if let Some(vm) = vm {
             // Get zone from config
-            let zone = match load_config() {
+            let zone = match load_config(&Some(profile.clone())) {
                 Ok((app_config, _)) => {
                     if let Some(platform) = app_config
                         .platforms
@@ -2495,7 +2752,8 @@ impl PlatformTab {
                 }
             };
 
-            if let Err(e) = vm.regenerate_vm(platform_name.clone(), vm_name.clone(), zone) {
+            let profile_config_path = profile.config_file.clone();
+            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, profile_kdbx) {
                 self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
             }
             // Result will be delivered via VMRegenerated event
@@ -2546,6 +2804,7 @@ impl PlatformTab {
 
     fn scan_vms(
         &mut self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -2553,8 +2812,8 @@ impl PlatformTab {
         if let Some(vm) = vm {
             dure_info!(" Scanning VMs for platform '{}'...", platform_name);
 
-            // Send command to ViewModel
-            if let Err(e) = vm.scan_existing_vms(platform_name) {
+            // Send command to ViewModel with profile-specific config path
+            if let Err(e) = vm.scan_existing_vms(profile_config_path, platform_name) {
                 self.load_error = Some(format!("Failed to start VM scan: {}", e));
             }
             // Note: UI will be updated when VMsScanned event arrives
@@ -2591,24 +2850,102 @@ impl PlatformTab {
 
     fn show_delete_vm_confirmation(
         &mut self,
+        profile: &Option<crate::calc::profile::ProfileContext>,
         platform_name: String,
         vm_name: String,
         zone: String,
     ) {
-        self.delete_vm_platform = platform_name;
+        self.delete_vm_platform = platform_name.clone();
         self.delete_vm_list.clear();
-        self.delete_vm_list.push((vm_name, zone, "".to_string()));
+        self.delete_vm_list.push((vm_name.clone(), zone.clone(), "".to_string()));
         self.delete_vm_selected = Some(0);
         self.delete_vm_confirming = true;
         self.show_delete_vm_dialog = true;
+
+        // Reset static IP state
+        self.delete_vm_has_static_ip = false;
+        self.delete_vm_ip_address = None;
+        self.delete_vm_ip_name = None;
+        self.delete_vm_release_ip = false;
+
+        // Check if VM has static IP (requires access token and config)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            dure_info!("=== Static IP Detection START for VM: {} ===", vm_name);
+            if let Ok((app_config, _)) = load_config(profile) {
+                dure_info!("✓ Config loaded");
+                if let Some(platform) = app_config.platforms.iter()
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                {
+                    dure_info!("✓ Platform found: {}", platform_name);
+                    if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
+                        dure_info!("✓ OAuth token exists");
+                        if let Some(vm) = platform.vms.iter()
+                            .find(|v| v.name == vm_name && v.zone == zone)
+                        {
+                            dure_info!("✓ VM found: {}", vm_name);
+                            if let Some(external_ip) = &vm.external_ip {
+                                dure_info!("✓ VM has external_ip: {}", external_ip);
+                                // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
+                                let region = zone.rsplitn(2, '-').nth(1)
+                                    .unwrap_or(&zone)
+                                    .to_string();
+                                dure_info!("  Region extracted from zone {}: {}", zone, region);
+
+                                // Query addresses to check if IP is static
+                                use crate::api::gcp::GcpRestClient;
+                                let client = GcpRestClient::new(token.clone());
+
+                                match client.list_addresses(&platform_name, &region) {
+                                    Ok(addresses) => {
+                                        dure_info!("✓ Addresses API returned {} addresses", addresses.len());
+                                        for addr in &addresses {
+                                            dure_info!("  Address: {} = {} (status: {}, type: {})",
+                                                addr.name, addr.address, addr.status, addr.address_type);
+                                        }
+                                        // Find address matching this IP
+                                        if let Some(addr) = addresses.iter()
+                                            .find(|a| &a.address == external_ip)
+                                        {
+                                            dure_info!("✓ MATCH FOUND: {} is static IP (name: {})", external_ip, addr.name);
+                                            self.delete_vm_has_static_ip = true;
+                                            self.delete_vm_ip_address = Some(addr.address.clone());
+                                            self.delete_vm_ip_name = Some(addr.name.clone());
+                                        } else {
+                                            dure_info!("✗ NO MATCH: {} not found in addresses list (ephemeral IP)", external_ip);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        dure_warn!("✗ Addresses API failed: {}", e);
+                                    }
+                                }
+                            } else {
+                                dure_info!("✗ VM has no external_ip field");
+                            }
+                        } else {
+                            dure_info!("✗ VM not found in config");
+                        }
+                    } else {
+                        dure_info!("✗ No OAuth token");
+                    }
+                } else {
+                    dure_info!("✗ Platform not found");
+                }
+            } else {
+                dure_info!("✗ Config load failed");
+            }
+            dure_info!("=== Static IP Detection END (has_static_ip={}) ===", self.delete_vm_has_static_ip);
+        }
     }
 
     fn render_delete_vm_dialog(
         &mut self,
+        profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         let mut open = self.show_delete_vm_dialog;
+        let mut should_clear_progress = false;
 
         egui::Window::new("Delete VM")
             .open(&mut open)
@@ -2617,7 +2954,7 @@ impl PlatformTab {
             .show(ctx, |ui| {
                 if self.delete_vm_confirming {
                     // Confirmation step
-                    ui.heading("⚠️ Confirm Deletion");
+                    ui.heading("Confirm Deletion");
                     ui.add_space(8.0);
 
                     if let Some(idx) = self.delete_vm_selected {
@@ -2631,19 +2968,56 @@ impl PlatformTab {
                             ui.add_space(4.0);
                             ui.label(format!("Zone: {}", zone));
 
+                            ui.add_space(8.0);
+
+                            // No graceful shutdown checkbox
+                            ui.checkbox(&mut self.delete_vm_hard_delete, "Skip graceful shutdown");
+                            ui.add_space(4.0);
+                            ui.colored_label(
+                                egui::Color32::GRAY,
+                                "VM will be terminated immediately without graceful shutdown",
+                            );
+
+                            // Static IP section
+                            if self.delete_vm_has_static_ip {
+                                ui.add_space(8.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.label(format!(
+                                    "Static IP: {}",
+                                    self.delete_vm_ip_address.as_ref().unwrap()
+                                ));
+                                ui.checkbox(
+                                    &mut self.delete_vm_release_ip,
+                                    "Release static IP address"
+                                );
+                                ui.label("(Default: Keep IP reserved for future use)");
+
+                                ui.add_space(8.0);
+                                if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+                                    let url = format!(
+                                        "https://console.cloud.google.com/networking/addresses/list?project={}",
+                                        self.delete_vm_platform
+                                    );
+                                    let _ = webbrowser::open(&url);
+                                }
+                            }
+
                             ui.add_space(12.0);
 
                             let name_clone = name.clone();
                             let zone_clone = zone.clone();
 
-                            ui.horizontal(|ui| {
-                                if ui.button("No, Cancel").clicked() {
-                                    self.delete_vm_confirming = false;
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                                if ui.add(MaterialButton::outlined("Yes, Delete")).clicked() {
+                                    self.execute_delete_vm(profile, name_clone, zone_clone, vm);
+                                    self.show_delete_vm_dialog = false;
                                 }
 
-                                if ui.add(MaterialButton::filled("Yes, Delete")).clicked() {
-                                    self.execute_delete_vm(name_clone, zone_clone, vm);
-                                    self.show_delete_vm_dialog = false;
+                                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                                    self.delete_vm_confirming = false;
+                                    should_clear_progress = true;
                                 }
                             });
                         }
@@ -2686,28 +3060,31 @@ impl PlatformTab {
 
                     ui.add_space(12.0);
 
-                    ui.horizontal(|ui| {
-                        if ui.button("Cancel").clicked() {
-                            self.show_delete_vm_dialog = false;
-                        }
-
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         let can_delete = self.delete_vm_selected.is_some();
                         ui.add_enabled_ui(can_delete, |ui| {
-                            if ui.add(MaterialButton::filled("Delete")).clicked() {
+                            if ui.add(MaterialButton::outlined("Next")).clicked() {
                                 self.delete_vm_confirming = true;
                             }
                         });
 
-                        if !can_delete {
-                            ui.label("⚠️ Select a VM");
+                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                            self.show_delete_vm_dialog = false;
+                            should_clear_progress = true;
                         }
                     });
                 }
             });
 
-        if !open {
+        if !open || should_clear_progress {
+            // Clear progress bar when dialog is closed or cancelled
+            if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == self.delete_vm_platform) {
+                row.operation_state = OperationState::Idle;
+            }
+
             self.show_delete_vm_dialog = false;
             self.delete_vm_confirming = false;
+            self.delete_vm_hard_delete = false;
         }
     }
 
@@ -2745,23 +3122,52 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn execute_delete_vm(
         &mut self,
+        profile: &crate::calc::profile::ProfileContext,
         instance_name: String,
         zone: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         // ViewModel-based implementation
         if let Some(vm) = vm {
-            // Send command to ViewModel
-            if let Err(e) =
-                vm.delete_vm(self.delete_vm_platform.clone(), instance_name.clone(), zone)
-            {
+            // Send command to ViewModel with profile-specific config path
+            let profile_config_path = profile.config_file.clone();
+            let force = self.delete_vm_hard_delete;
+
+            // Build release_ip payload so the actor can release the IP AFTER
+            // GCP confirms VM deletion (delete_instance is async; releasing the
+            // address before wait_for_operation returns gives resourceInUseByAnotherResource).
+            let release_ip = if self.delete_vm_release_ip {
+                match (self.delete_vm_ip_name.clone(), self.delete_vm_list.get(0)) {
+                    (Some(addr_name), Some((_, zone_s, _))) => {
+                        // Region = zone with trailing "-<letter>" stripped (e.g. us-central1-a -> us-central1)
+                        let region = zone_s
+                            .rsplitn(2, '-')
+                            .nth(1)
+                            .unwrap_or(zone_s)
+                            .to_string();
+                        Some((region, addr_name))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
+            if let Err(e) = vm.delete_vm(
+                profile_config_path,
+                self.delete_vm_platform.clone(),
+                instance_name.clone(),
+                zone.clone(),
+                force,
+                release_ip,
+            ) {
                 self.load_error = Some(format!("Failed to start VM deletion: {}", e));
                 return;
             }
 
             // Record audit event
             // TODO: This should be moved to the actor/calc layer
-            if let Ok((app_config, _)) = load_config() {
+            if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
                 if let Some(platform) = app_config
                     .platforms
                     .iter()
@@ -2854,9 +3260,9 @@ impl PlatformTab {
 
     /// Execute SSH connection test for a platform's VM
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_test_connection(&mut self, platform_name: String) {
+    fn execute_test_connection(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
         // Load config and find the VM for this platform (platform_name is actually project_id)
-        let (vm_host, keyring_domain) = match load_config() {
+        let (vm_host, keyring_domain) = match load_config(&Some(profile.clone())) {
             Ok((app_config, _)) => {
                 let platform = app_config
                     .platforms
@@ -2909,6 +3315,7 @@ impl PlatformTab {
             docker_containers: Vec::new(),
             ansible_roles: Vec::new(),
             dure_wss_config: None,
+            ..Default::default()
         };
 
         // Spawn connection test in background thread
@@ -2962,13 +3369,14 @@ impl PlatformTab {
 
     /// Execute status refresh for a platform
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_refresh(&mut self, project_id: String) {
+    fn execute_refresh(&mut self, profile: &crate::calc::profile::ProfileContext, project_id: String) {
         use crate::api::gcp::{GcpRestClient, get_current_ip};
 
         let project_id_clone = project_id.clone();
+        let profile_clone = profile.clone();
         let promise = poll_promise::Promise::spawn_thread("refresh_status", move || {
             // Load config
-            let (mut config, config_path) = load_config()
+            let (mut config, config_path) = load_config(&Some(profile_clone))
                 .map_err(|e| format!("Failed to load config: {}", e))?;
 
             // Find platform
@@ -3050,13 +3458,13 @@ impl PlatformTab {
         // WASM not supported
     }
 
-    fn show_delete_platform_confirmation(&mut self, platform_name: String) {
+    fn show_delete_platform_confirmation(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
         self.delete_platform_name = platform_name.clone();
 
         // Count VMs for this platform
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Ok((app_config, _)) = load_config() {
+            if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
                 if let Some(platform) = app_config
                     .platforms
                     .iter()
@@ -3072,6 +3480,7 @@ impl PlatformTab {
 
     fn render_delete_platform_dialog(
         &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -3136,7 +3545,7 @@ impl PlatformTab {
                         .add(MaterialButton::filled("Yes, Delete Platform"))
                         .clicked()
                     {
-                        self.execute_delete_platform(vm.as_deref_mut());
+                        self.execute_delete_platform(current_profile, vm.as_deref_mut());
                         self.show_delete_platform_dialog = false;
                         self.delete_platform_delete_vms = false;
                         self.delete_platform_delete_project = false;
@@ -3154,6 +3563,7 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn render_select_project_dialog(
         &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -3213,7 +3623,7 @@ impl PlatformTab {
                     };
 
                     if ui.add(select_button).clicked() {
-                        self.execute_select_project(vm);
+                        self.execute_select_project(current_profile, vm);
                         self.show_select_project_dialog = false;
                     }
                 });
@@ -3225,14 +3635,15 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_select_project(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_select_project(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {
                 let (project_id, _) = &self.select_project_list[selected_idx];
                 let platform_name = self.select_project_platform_name.clone();
 
                 if let Some(vm) = vm {
-                    if let Err(e) = vm.select_project(platform_name.clone(), project_id.clone()) {
+                    let config_path = current_profile.config_file.clone();
+                    if let Err(e) = vm.select_project(config_path, platform_name.clone(), project_id.clone()) {
                         self.load_error = Some(format!("Failed to select project: {}", e));
                     }
                     // Result will be delivered via ProjectSelected event
@@ -3244,13 +3655,14 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_platform(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_platform(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
         if let Some(vm) = vm {
+            let config_path = current_profile.config_file.clone();
             let delete_options = crate::viewmodel::platform::DeleteOptions {
                 delete_vms: self.delete_platform_delete_vms,
                 delete_project: self.delete_platform_delete_project,
             };
-            match vm.delete_platform(self.delete_platform_name.clone(), delete_options) {
+            match vm.delete_platform(config_path, self.delete_platform_name.clone(), delete_options) {
                 Ok(_) => {
                     dure_info!(" Platform delete command sent");
                 }
@@ -3303,17 +3715,25 @@ impl PlatformTab {
         }
     }
 
-    fn fetch_billing_data(&mut self, vm: Option<&mut crate::viewmodel::ViewModel>, project_id_param: Option<String>) {
+    fn fetch_billing_data(&mut self, profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>, project_id_param: Option<String>) {
+        dure_debug!("[BILLING] fetch_billing_data called, project_id_param={:?}", project_id_param);
+
         // ViewModel-based implementation
         if let Some(vm) = vm {
+            dure_debug!("[BILLING] Setting billing_loading = true");
             self.billing_loading = true;
             self.billing_error = None;
             self.billing_data = None;
 
             // Load config to get GCP platform with OAuth
-            let (mut app_config, config_path) = match load_config() {
-                Ok(config) => config,
+            dure_debug!("[BILLING] Loading config...");
+            let (mut app_config, config_path) = match load_config(&Some(profile.clone())) {
+                Ok(config) => {
+                    dure_debug!("[BILLING] Config loaded successfully");
+                    config
+                },
                 Err(e) => {
+                    dure_error!("[BILLING] Failed to load config: {}", e);
                     self.billing_error = Some(format!("Failed to load config: {}", e));
                     self.billing_loading = false;
                     return;
@@ -3371,15 +3791,18 @@ impl PlatformTab {
 
             // Auto-discover billing table if not configured
             if self.billing_dataset.is_empty() || self.billing_table.is_empty() {
+                dure_info!("[BILLING] Auto-discovering billing table for project: {}", project_id);
                 let client = crate::api::gcp::GcpRestClient::new(access_token.clone());
 
                 match client.discover_billing_table(&project_id) {
                     Ok((dataset, table)) => {
+                        dure_info!("[BILLING] Auto-discovery succeeded: dataset={}, table={}", dataset, table);
                         self.billing_dataset = dataset;
                         self.billing_table = table;
                         self.billing_project_id = project_id.clone();
                     }
                     Err(e) => {
+                        dure_warn!("[BILLING] Auto-discovery failed: {}", e);
                         // Fall back to default names
                         self.billing_dataset = "billing_export".to_string();
                         self.billing_table =
@@ -3389,10 +3812,13 @@ impl PlatformTab {
                             "Auto-discovery failed: {}\n\nUsing default names. Please configure below if different.",
                             e
                         ));
+                        dure_error!("[BILLING] Setting billing_loading = false (auto-discovery failed)");
                         self.billing_loading = false;
                         return;
                     }
                 }
+            } else {
+                dure_debug!("[BILLING] Using existing dataset={}, table={}", self.billing_dataset, self.billing_table);
             }
 
             if self.billing_project_id.is_empty() {
@@ -3400,17 +3826,24 @@ impl PlatformTab {
             }
 
             // Send command to ViewModel
+            dure_info!("[BILLING] Sending fetch_billing command: project={}, dataset={}, table={}",
+                project_id, self.billing_dataset, self.billing_table);
             if let Err(e) = vm.fetch_billing(
+                profile.config_file.clone(),
                 project_id.clone(),  // Use project_id as platform identifier
                 project_id,
                 self.billing_dataset.clone(),
                 self.billing_table.clone(),
             ) {
+                dure_error!("[BILLING] Failed to send fetch_billing command: {}", e);
                 self.billing_error = Some(format!("Failed to start billing fetch: {}", e));
                 self.billing_loading = false;
+            } else {
+                dure_info!("[BILLING] fetch_billing command sent successfully");
             }
-            // Note: billing_data will be set by event processing when BillingFetched event arrives
+            // Note: billing_data and billing_loading will be updated by BillingFetched or Error event handlers
         } else {
+            dure_warn!("[BILLING] No ViewModel available");
             // Fallback: no ViewModel available (shouldn't happen in normal operation)
             self.billing_error = Some("ViewModel not available".to_string());
             self.billing_loading = false;
@@ -3419,10 +3852,11 @@ impl PlatformTab {
 
     fn render_billing_dialog(
         &mut self,
+        profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        egui::Window::new("Monthly Billing")
+        egui::Window::new("Estimated Billing")
             .collapsible(false)
             .resizable(true)
             .default_width(600.0)
@@ -3430,24 +3864,17 @@ impl PlatformTab {
                 ui.heading("Monthly Total Cost (Last 3 Months)");
                 ui.add_space(8.0);
 
-                // Configuration section
+                // Project ID display with GCP console link
                 ui.horizontal(|ui| {
                     ui.label("Project ID:");
-                    ui.text_edit_singleline(&mut self.billing_project_id);
+                    ui.label(&self.billing_project_id);
+                    ui.add_space(8.0);
+                    if ui.add(badge("GCP Console").color(BadgeColor::Primary).size(BadgeSize::Regular)).clicked() {
+                        let url = format!("https://console.cloud.google.com/billing?project={}",
+                                         self.billing_project_id);
+                        let _ = webbrowser::open(&url);
+                    }
                 });
-                ui.horizontal(|ui| {
-                    ui.label("Dataset:");
-                    ui.text_edit_singleline(&mut self.billing_dataset);
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Table:");
-                    ui.text_edit_singleline(&mut self.billing_table);
-                });
-                ui.add_space(4.0);
-                ui.colored_label(
-                    egui::Color32::GRAY,
-                    "💡 Leave empty to auto-discover billing export table",
-                );
                 ui.add_space(8.0);
                 ui.separator();
                 ui.add_space(8.0);
@@ -3605,13 +4032,14 @@ impl PlatformTab {
                 ui.separator();
                 ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data(vm, None);
-                    }
-
+                // Right-bottom aligned buttons
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
                     if ui.add(MaterialButton::outlined("Close")).clicked() {
                         self.show_billing_dialog = false;
+                    }
+
+                    if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+                        self.fetch_billing_data(profile, vm, None);
                     }
                 });
             });

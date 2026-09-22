@@ -45,7 +45,7 @@ pub fn generate_ssh_keypair() -> Result<(String, Vec<u8>)> {
 /// Delete a VM instance
 pub fn delete_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String> {
     // Call GCP API to delete instance
-    let operation = client.delete_instance(&vm.gcp_project_id, &vm.zone, &vm.name)?;
+    let operation = client.delete_instance(&vm.gcp_project_id, &vm.zone, &vm.name, false)?;
 
     // Poll operation status until complete (60 second timeout)
     client.wait_for_operation(&vm.gcp_project_id, &vm.zone, &operation.name, 60)?;
@@ -69,6 +69,7 @@ pub fn regenerate_vm(
     client: &GcpRestClient,
     platform: &mut CloudPlatformConfig,
     zone: &str,
+    handle: &std::sync::Arc<crate::calc::keyring::DatabaseHandle>,
 ) -> Result<String> {
     use crate::api::gcp::compute::{
         AccessConfig, AttachedDisk, InitializeParams, InstanceRequest, Metadata, MetadataItem,
@@ -98,39 +99,17 @@ pub fn regenerate_vm(
         .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
     let keyring_domain = format!("gcp.{}.{}", project_id, vm_name);
 
-    // Store private key in keyring
-    dure_debug!("Initializing keyring for SSH key storage...");
-
-    // Ensure KeePass database exists (will create KPKey if needed)
-    let kdbx_path = match keyring::ensure_kdbx_exists() {
-        Ok(path) => {
-            dure_debug!("KeePass database ready at: {}", path.display());
-            path
-        }
-        Err(e) => {
-            dure_debug!("Failed to initialize KeePass database: {}", e);
-            return Err(e).context("Failed to initialize KeePass database");
-        }
-    };
-
-    let kpkey_path = keyring::get_default_kpkey_path()?;
-    dure_debug!("KPKey path: {}", kpkey_path.display());
-    dure_debug!("Storing SSH key with domain: {}", keyring_domain);
-
-    keyring::add_key_with_ssh(
-        &kdbx_path,
-        Some(&kpkey_path),
+    // Store private key in profile keyring
+    dure_debug!("Storing SSH key in profile keyring: {}", keyring_domain);
+    keyring::add_key_to_handle(
+        handle,
         &keyring_domain,
         "generated_user",
         "",
         Some(&private_key_bytes),
         Some(&format!("SSH key for GCP VM {}", vm_name)),
     )
-    .map_err(|e| {
-        dure_debug!("Failed to add key to keyring: {}", e);
-        e
-    })
-    .context("Failed to store SSH key")?;
+    .context("Failed to store SSH key in profile keyring")?;
 
     // Create VM instance request
     let machine_type = format!("zones/{}/machineTypes/e2-micro", zone);
@@ -150,6 +129,8 @@ pub fn regenerate_vm(
             access_configs: Some(vec![AccessConfig {
                 type_: "ONE_TO_ONE_NAT".to_string(),
                 name: "External NAT".to_string(),
+                nat_ip: None,
+                network_tier: None,
             }]),
         }],
         tags: None,

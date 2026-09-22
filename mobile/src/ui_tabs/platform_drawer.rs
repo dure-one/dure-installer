@@ -282,6 +282,27 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
 /// Render Operations tab (operation logs from SQLite)
 fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
+    // Auto-refresh: trigger operation reload every 2 seconds (not every frame)
+    if let Some(ref project_id) = drawer_state.project_id {
+        let refresh_id = egui::Id::new("drawer_ops_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 2)
+                .unwrap_or(true)
+        });
+
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("drawer_action_refresh_operations"),
+                    project_id.clone(),
+                );
+            });
+        }
+    }
+
     ui.heading("Operation History");
     ui.add_space(8.0);
 
@@ -296,8 +317,13 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         return;
     }
 
-    // Render operations table with 30px row height
-    render_operations_table(ui, &drawer_state.operations);
+    // Scrollable operations table - fixed 500px height (matches Logs tab)
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            render_operations_table(ui, &drawer_state.operations);
+        });
 }
 
 /// Render operations table with simple grid layout (30px rows)
@@ -307,14 +333,14 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
     TableBuilder::new(ui)
         .striped(true)
         .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(80.0))  // Time
+        .column(Column::auto().at_least(130.0)) // Date
         .column(Column::auto().at_least(120.0)) // Operation
         .column(Column::auto().at_least(80.0))  // System
         .column(Column::auto().at_least(80.0))  // Status
         .column(Column::auto().at_least(60.0))  // Duration
         .column(Column::remainder())             // Error
         .header(20.0, |mut header| {
-            header.col(|ui| { ui.heading("Time"); });
+            header.col(|ui| { ui.heading("Date"); });
             header.col(|ui| { ui.heading("Operation"); });
             header.col(|ui| { ui.heading("System"); });
             header.col(|ui| { ui.heading("Status"); });
@@ -324,11 +350,11 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
         .body(|mut body| {
             for op in operations {
                 body.row(30.0, |mut row| {
-                    // Time
+                    // Date
                     row.col(|ui| {
                         let dt = chrono::DateTime::from_timestamp(op.started_at, 0)
-                            .map(|dt| dt.format("%H:%M:%S").to_string())
-                            .unwrap_or_else(|| "??:??:??".to_string());
+                            .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
+                            .unwrap_or_else(|| "???????? ??:??".to_string());
                         ui.label(dt);
                     });
 

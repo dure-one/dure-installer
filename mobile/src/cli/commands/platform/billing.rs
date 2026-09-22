@@ -32,6 +32,7 @@ pub async fn execute_billing_inner(
 
     let event = runner
         .execute_command(PlatformCommand::FetchBilling {
+            profile_config_path: PathBuf::from("test_config.yml"),
             platform_name: project_id.clone(),
             project_id: project_id.clone(),
             dataset: "billing_export".to_string(),
@@ -90,6 +91,7 @@ pub fn execute_billing_command(name: String) -> Result<()> {
 
         let event = runner
             .execute_command(PlatformCommand::FetchBilling {
+                profile_config_path: get_config_path()?,
                 platform_name: project_id.clone(),
                 project_id: project_id.clone(),
                 dataset,

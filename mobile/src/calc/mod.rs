@@ -16,6 +16,7 @@ pub mod keyring;
 pub mod ns;
 pub mod platform;
 pub mod platform_gcp;
+pub mod profile;
 pub mod session;
 pub mod site;
 pub mod ssh;

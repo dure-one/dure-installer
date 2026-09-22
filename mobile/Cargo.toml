@@ -43,6 +43,7 @@ path = "src/main.rs"
 # Core dependencies
 log = { version = "0.4", default-features = false }
 anyhow = "1.0"
+thiserror = "2.0"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -89,9 +90,6 @@ sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
 keepass = { version = "0.10", features = ["save_kdbx4"] }
-
-# WebSocket server/client
-ws = { path = "../crates/ws" }
 
 # YAML parsing (still needed for other purposes)
 serde_yaml = "0.9"
@@ -172,7 +170,6 @@ libsqlite3-hotbundle = { git = "https://github.com/nikescar/libsqlite3-hotbundle
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-installer = { path = "../crates/windows-installer" }
 windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Console",

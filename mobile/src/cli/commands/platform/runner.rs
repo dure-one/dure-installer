@@ -41,28 +41,34 @@ impl PlatformCliRunner {
                 )?;
             }
             PlatformCommand::DeleteVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
+                force,
+                ..
             } => {
                 self.vm
-                    .delete_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+                    .delete_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), *force, None)?;
             }
             PlatformCommand::RestartVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
             } => {
                 self.vm
-                    .restart_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+                    .restart_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone())?;
             }
             PlatformCommand::RegenerateVM {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
+                profile_kdbx,
             } => {
                 self.vm
-                    .regenerate_vm(platform_name.clone(), vm_name.clone(), zone.clone())?;
+                    .regenerate_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), profile_kdbx.clone())?;
             }
             PlatformCommand::UpdateFirewall {
                 platform_name,
@@ -72,12 +78,14 @@ impl PlatformCliRunner {
                     .update_firewall(platform_name.clone(), allow_ip.clone())?;
             }
             PlatformCommand::FetchBilling {
+                profile_config_path,
                 platform_name,
                 project_id,
                 dataset,
                 table,
             } => {
                 self.vm.fetch_billing(
+                    profile_config_path.clone(),
                     platform_name.clone(),
                     project_id.clone(),
                     dataset.clone(),

@@ -17,6 +17,7 @@ pub enum PlatformCommand {
         auth_code: String,
     },
     AddPlatform {
+        profile_config_path: std::path::PathBuf,
         platform_type: String,
         oauth_access_token: Option<String>,
         oauth_refresh_token: Option<String>,
@@ -25,6 +26,7 @@ pub enum PlatformCommand {
         selected_project_id: Option<String>,
     },
     DeletePlatform {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         delete_options: DeleteOptions,
     },
@@ -34,6 +36,7 @@ pub enum PlatformCommand {
         platform_name: String,
     },
     SelectProject {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
     },
@@ -43,6 +46,7 @@ pub enum PlatformCommand {
         platform_name: String,
     },
     ScanExistingVMs {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
     CreateVM {
@@ -52,19 +56,27 @@ pub enum PlatformCommand {
         machine_type: String,
     },
     DeleteVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
+        force: bool,
+        /// If Some((region, address_name)), release this reserved static IP
+        /// after VM deletion completes on GCP.
+        release_ip: Option<(String, String)>,
     },
     RestartVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
     },
     RegenerateVM {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     // Firewall Operations
@@ -75,6 +87,7 @@ pub enum PlatformCommand {
 
     // Billing Operations
     FetchBilling {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
         dataset: String,
@@ -83,6 +96,7 @@ pub enum PlatformCommand {
 
     // Refresh Operation
     RefreshPlatform {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
 
@@ -107,6 +121,7 @@ mod tests {
     #[test]
     fn test_delete_platform_with_options() {
         let cmd = PlatformCommand::DeletePlatform {
+            profile_config_path: std::path::PathBuf::from("test.yml"),
             platform_name: "test-platform".to_string(),
             delete_options: DeleteOptions {
                 delete_vms: true,
@@ -115,6 +130,7 @@ mod tests {
         };
         match cmd {
             PlatformCommand::DeletePlatform {
+                profile_config_path: _,
                 platform_name,
                 delete_options,
             } => {

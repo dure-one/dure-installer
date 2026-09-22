@@ -36,17 +36,17 @@ static MIGRATIONS_RAN: Mutex<bool> = Mutex::new(false);
 /// Set the database path to use for connections
 #[cfg(not(target_family = "wasm"))]
 pub fn set_db_path(path: String) {
-    let mut db_path = DB_PATH.lock().unwrap();
+    let mut db_path = DB_PATH.lock().expect("DB_PATH lock poisoned");
     *db_path = Some(path);
     // Reset migrations flag when database path changes
-    let mut migrations_ran = MIGRATIONS_RAN.lock().unwrap();
+    let mut migrations_ran = MIGRATIONS_RAN.lock().expect("MIGRATIONS_RAN lock poisoned");
     *migrations_ran = false;
 }
 
 /// Get the current database path
 #[cfg(not(target_family = "wasm"))]
 pub fn get_db_path() -> String {
-    let db_path = DB_PATH.lock().unwrap();
+    let db_path = DB_PATH.lock().expect("DB_PATH lock poisoned");
     db_path.as_deref().unwrap_or("dure.db").to_string()
 }
 
@@ -76,7 +76,7 @@ pub mod sqlite {
     pub fn establish_connection() -> SqliteConnection {
         #[cfg(target_family = "wasm")]
         {
-            let (vfs, once) = &*VFS.lock().unwrap();
+            let (vfs, once) = &*VFS.lock().expect("VFS lock poisoned");
             let url = match vfs {
                 0 => "dure.db",
                 1 => "file:dure.db?vfs=opfs-sahpool",
@@ -95,11 +95,21 @@ pub mod sqlite {
         #[cfg(not(target_family = "wasm"))]
         {
             // Get the database path from the static or use default
-            let db_path = DB_PATH.lock().unwrap();
+            let db_path = DB_PATH.lock().expect("DB_PATH lock poisoned");
             let url = db_path.as_deref().unwrap_or("dure.db").to_string();
 
+            // Ensure parent directory exists before connecting
+            if let Some(parent) = std::path::Path::new(&url).parent() {
+                if !parent.exists() {
+                    dure_warn!("Database parent directory doesn't exist: {}", parent.display());
+                    dure_warn!("This usually means the profile was deleted. Attempting to create directory...");
+                    std::fs::create_dir_all(parent)
+                        .unwrap_or_else(|e| panic!("Failed to create database directory {}: {}", parent.display(), e));
+                }
+            }
+
             let mut conn = SqliteConnection::establish(&url)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", url));
+                .unwrap_or_else(|e| panic!("Error connecting to {}: {}", url, e));
 
             // Enable WAL mode for better concurrent access
             diesel::sql_query("PRAGMA journal_mode=WAL;")

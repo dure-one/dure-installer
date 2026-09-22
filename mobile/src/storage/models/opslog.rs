@@ -262,7 +262,7 @@ pub fn list_by_project(
         "SELECT id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
          FROM operation_logs
          WHERE project_id = ?1
-         ORDER BY started_at DESC
+         ORDER BY started_at ASC
          LIMIT ?2",
     )
     .bind::<Text, _>(project_id)

@@ -280,3 +280,24 @@ tab-products = 상품
 tab-orders = 주문
 tab-email = 이메일
 tab-client = 클라이언트
+
+# Profile Selector
+profile = 프로필:
+none = 없음
+create-new-profile = + 새 프로필 생성
+delete-profile = 프로필 삭제
+
+# Profile Login Dialog
+profile-login-title = 프로필 로그인
+profile-login-heading = 프로필 비밀번호 입력
+password = 비밀번호:
+password-hint = 비밀번호 입력
+
+# Profile Create Dialog
+profile-create-title = 새 프로필 생성
+profile-create-heading = 새로운 프로필 생성
+profile-name = 프로필 이름:
+profile-name-hint = 프로필 이름 입력 (a-z, A-Z, 0-9, -, _)
+password-confirm = 비밀번호 확인:
+password-confirm-hint = 비밀번호 확인
+create = 생성

@@ -8,6 +8,10 @@ use std::sync::Arc;
 #[cfg(feature = "gui")]
 use crate::viewmodel::ViewModel;
 
+// Profile management
+#[cfg(feature = "gui")]
+use crate::calc::profile::ProfileContext;
+
 #[doc(hidden)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -32,6 +36,13 @@ pub struct DureApp {
     // Dialog states
     pub dlg_settings: crate::ui_dlg::DlgSettings,
     pub dlg_about: crate::ui_dlg::DlgAbout,
+
+    // Profile state (gui feature-gated)
+    #[cfg(feature = "gui")]
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub current_profile: Option<ProfileContext>,
+    #[cfg(feature = "gui")]
+    pub pending_profile_name: Option<String>,
 
     // Installation status (desktop only)
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -95,6 +106,10 @@ impl Default for DureApp {
             settings: Settings::default(),
             dlg_settings: crate::ui_dlg::DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
+            #[cfg(feature = "gui")]
+            current_profile: None,
+            #[cfg(feature = "gui")]
+            pending_profile_name: None,
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: InstallStatus::default(),
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -121,5 +136,80 @@ impl Default for DureApp {
             #[cfg(feature = "gui")]
             viewmodel: None,
         }
+    }
+}
+
+#[cfg(all(test, feature = "gui"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dure_app_default_initialization() {
+        // Arrange & Act
+        let app = DureApp::default();
+
+        // Assert
+        assert_eq!(app.title, "DureApp Window");
+        assert!(!app.title_bar);
+        assert!(!app.collapsible);
+        assert!(!app.resizable);
+        assert!(!app.constrain);
+        assert!(app.anchored);
+    }
+
+    #[test]
+    fn test_profile_state_default_none() {
+        // Arrange & Act
+        let app = DureApp::default();
+
+        // Assert - profile state should be None
+        assert!(app.current_profile.is_none(), "current_profile should be None on default");
+        assert!(app.pending_profile_name.is_none(), "pending_profile_name should be None on default");
+    }
+
+    #[test]
+    fn test_profile_state_fields_exist() {
+        // Arrange & Act
+        let mut app = DureApp::default();
+
+        // Assert - can set profile state
+        app.current_profile = ProfileContext::new("test-profile").ok();
+        app.pending_profile_name = Some("test-profile".to_string());
+
+        // Verify we can read them back
+        assert!(app.current_profile.is_some());
+        assert!(app.pending_profile_name.is_some());
+        assert_eq!(app.pending_profile_name.as_ref().unwrap(), "test-profile");
+    }
+
+    #[test]
+    fn test_profile_state_option_types() {
+        // Arrange & Act
+        let app = DureApp::default();
+
+        // Assert - types are Options
+        // These would fail at compile time if the types were wrong,
+        // but we test the runtime behavior here
+        assert!(app.current_profile.as_ref().is_none());
+        assert!(app.pending_profile_name.as_ref().is_none());
+
+        // Test that they can be used with Option combinators
+        let name = app.pending_profile_name.as_deref();
+        assert!(name.is_none());
+    }
+
+    #[test]
+    fn test_profile_state_independence() {
+        // Arrange
+        let mut app1 = DureApp::default();
+        let mut app2 = DureApp::default();
+
+        // Act
+        app1.pending_profile_name = Some("profile1".to_string());
+        app2.pending_profile_name = Some("profile2".to_string());
+
+        // Assert - ensure state is independent per instance
+        assert_eq!(app1.pending_profile_name.as_ref().unwrap(), "profile1");
+        assert_eq!(app2.pending_profile_name.as_ref().unwrap(), "profile2");
     }
 }

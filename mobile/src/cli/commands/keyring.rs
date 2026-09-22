@@ -109,7 +109,7 @@ pub fn execute_key_status() -> Result<()> {
     let kpkey_path = get_default_kpkey_path()?;
 
     // List all keys
-    let keys = list_keys(&kdbx_path, Some(&kpkey_path))?;
+    let keys = list_keys(&kdbx_path, Some(&kpkey_path), None)?;
 
     if keys.is_empty() {
         dure_info!("No keys found in keyring.");
@@ -158,7 +158,7 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
     let kpkey_path = get_default_kpkey_path()?;
 
     // Add the key
-    add_key(&kdbx_path, Some(&kpkey_path), &domain, &username, &password)?;
+    add_key(&kdbx_path, Some(&kpkey_path), &domain, &username, &password, None)?;
 
     dure_info!("");
     dure_info!(" Key added successfully");
@@ -185,7 +185,7 @@ pub fn execute_key_del(domain: String) -> Result<()> {
     let kpkey_path = get_default_kpkey_path()?;
 
     // Delete the key
-    let deleted = delete_key(&kdbx_path, Some(&kpkey_path), &domain)?;
+    let deleted = delete_key(&kdbx_path, Some(&kpkey_path), &domain, None)?;
 
     if deleted {
         dure_info!("");
