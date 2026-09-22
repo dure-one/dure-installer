@@ -640,7 +640,7 @@ fn derive_public_key_from_raw(raw_bytes: &[u8]) -> Option<String> {
 ///
 /// Returns (private_key, public_key)
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ssh_key_from_keyring(
+pub fn load_ssh_key_from_keyring(
     project_id: &str,
     keyring_domain: &Option<String>,
     kdbx_handle: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
@@ -767,7 +767,11 @@ fn format_project_count_display(count: Option<usize>) -> String {
 }
 
 /// Render drawer content showing platform hierarchy
-fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
+fn render_drawer_content(
+    ui: &mut egui::Ui,
+    row: &PlatformRow,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) {
     use crate::ui_tabs::platform_drawer;
     use crate::viewmodel::platform::{DrawerState, DrawerTab};
 
@@ -804,7 +808,7 @@ fn render_drawer_content(ui: &mut egui::Ui, row: &PlatformRow) {
 
     let mut tab_switch: Option<DrawerTab> = None;
 
-    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch);
+    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch, current_profile_kdbx);
 
     // Persist tab switch and trigger auto-load
     if let Some(new_tab) = tab_switch {
@@ -1319,6 +1323,7 @@ impl PlatformTab {
                 let row_for_cells = row.clone();
                 let row_for_drawer = row.clone();
                 let row_for_actions = row.clone();
+                let kdbx_for_drawer = current_profile_kdbx.clone();
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
@@ -1553,7 +1558,7 @@ impl PlatformTab {
                             });
                     })
                     .drawer(move |ui| {
-                        render_drawer_content(ui, &row_for_drawer);
+                        render_drawer_content(ui, &row_for_drawer, &kdbx_for_drawer);
                     })
                 });
             }
@@ -2060,17 +2065,8 @@ impl PlatformTab {
                                 false
                             };
 
-                        // Load SSH private key from profile keyring if VM exists
-                        let (ssh_private_key, ssh_public_key, ssh_keyring_domain) =
-                            if let Some(vm) = platform.vms.first() {
-                                let keyring_domain = vm.ssh_key_name.clone();
-                                let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("__global__");
-                                let (private_key, public_key) =
-                                    load_ssh_key_from_keyring(project_id, &keyring_domain, current_profile_kdbx);
-                                (private_key, public_key, keyring_domain)
-                            } else {
-                                (None, None, None)
-                            };
+                        // Store keyring domain only (no blocking I/O during rendering)
+                        let ssh_keyring_domain = platform.vms.first().and_then(|vm| vm.ssh_key_name.clone());
 
                         let row = PlatformRow {
                             // NEW: Use project_id as identifier
@@ -2100,8 +2096,8 @@ impl PlatformTab {
                             vm_external_ip: platform.cached_vm_external_ip.clone()
                                 .or_else(|| platform.vms.first().and_then(|vm| vm.external_ip.clone())),
 
-                            ssh_private_key,
-                            ssh_public_key,
+                            ssh_private_key: None,  // Loaded on-demand in drawer
+                            ssh_public_key: None,
                             ssh_keyring_domain,
 
                             // Use cached firewall status

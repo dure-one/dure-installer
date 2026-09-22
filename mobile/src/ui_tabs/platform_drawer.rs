@@ -12,6 +12,7 @@ pub fn render_drawer(
     row: &PlatformRow,
     drawer_state: &DrawerState,
     on_tab_switch: &mut Option<DrawerTab>,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) {
     // Tab bar at top
     ui.horizontal(|ui| {
@@ -30,14 +31,19 @@ pub fn render_drawer(
 
     // Content area
     match drawer_state.active_tab {
-        DrawerTab::Status => render_status_tab(ui, row, drawer_state),
+        DrawerTab::Status => render_status_tab(ui, row, drawer_state, current_profile_kdbx),
         DrawerTab::Logs => render_logs_tab(ui, drawer_state),
         DrawerTab::Operations => render_operations_tab(ui, drawer_state),
     }
 }
 
 /// Render Status tab (existing drawer content)
-fn render_status_tab(ui: &mut egui::Ui, row: &PlatformRow, _drawer_state: &DrawerState) {
+fn render_status_tab(
+    ui: &mut egui::Ui,
+    row: &PlatformRow,
+    _drawer_state: &DrawerState,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) {
     use crate::ui_components::ActionMenu;
     use egui_twemoji::EmojiLabel as TwemojiLabel;
 
@@ -125,39 +131,67 @@ fn render_status_tab(ui: &mut egui::Ui, row: &PlatformRow, _drawer_state: &Drawe
 
     ui.add_space(8.0);
 
-    // SSH action menu (if available)
-    if let (Some(external_ip), Some(private_key)) =
-        (&row.vm_external_ip, &row.ssh_private_key)
-    {
-        ui.add_space(8.0);
+    // SSH action menu - load key on-demand when drawer is shown
+    if let Some(external_ip) = &row.vm_external_ip {
+        if let Some(keyring_domain) = &row.ssh_keyring_domain {
+            // Cache key per (project_id, keyring_domain) to avoid repeated loads
+            let cache_key = format!("ssh_key_{}_{}", row.project_id, keyring_domain);
+            let cache_id = egui::Id::new(&cache_key);
 
-        let ssh_command = format!(
-            "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
-            private_key.trim(),
-            external_ip
-        );
+            let cached_key: Option<String> = ui.data(|d| d.get_temp(cache_id));
 
-        let mut menu = ActionMenu::new("💻SSH");
-        menu.add_action("Copy SSH Command");
-        menu.add_action("Copy Private Key");
-        menu.add_action("Copy IP Address");
+            let private_key = if let Some(key) = cached_key {
+                Some(key)
+            } else if let Some(handle) = current_profile_kdbx {
+                // Load key once when drawer opens (not in load_rows render loop)
+                let project_id = row.selected_project_id.as_deref().unwrap_or("__global__");
+                let (loaded_key, _) = super::platform::load_ssh_key_from_keyring(
+                    project_id,
+                    &Some(keyring_domain.clone()),
+                    &Some(handle.clone()),
+                );
 
-        if let Some(action_idx) = menu.show(ui) {
-            let text_to_copy = match action_idx {
-                0 => &ssh_command,
-                1 => private_key,
-                2 => external_ip,
-                _ => return,
+                if let Some(ref key) = loaded_key {
+                    ui.data_mut(|d| d.insert_temp(cache_id, key.clone()));
+                }
+
+                loaded_key
+            } else {
+                None
             };
 
-            ui.ctx().copy_text(text_to_copy.to_string());
+            if let Some(private_key) = private_key {
+                ui.add_space(8.0);
+
+                let ssh_command = format!(
+                    "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
+                    private_key.trim(),
+                    external_ip
+                );
+
+                let mut menu = ActionMenu::new("💻SSH");
+                menu.add_action("Copy SSH Command");
+                menu.add_action("Copy Private Key");
+                menu.add_action("Copy IP Address");
+
+                if let Some(action_idx) = menu.show(ui) {
+                    let text_to_copy = match action_idx {
+                        0 => &ssh_command,
+                        1 => &private_key,
+                        2 => external_ip,
+                        _ => return,
+                    };
+
+                    ui.ctx().copy_text(text_to_copy.to_string());
+                }
+            } else {
+                ui.add_space(8.0);
+                TwemojiLabel::new(
+                    egui::RichText::new("⚠️ SSH key not found in keyring")
+                        .color(egui::Color32::from_rgb(255, 152, 0))
+                ).show(ui);
+            }
         }
-    } else if row.vm_external_ip.is_some() && row.ssh_keyring_domain.is_some() {
-        ui.add_space(8.0);
-        TwemojiLabel::new(
-            egui::RichText::new("⚠️ SSH key not found in keyring")
-                .color(egui::Color32::from_rgb(255, 152, 0))
-        ).show(ui);
     }
 }
 
