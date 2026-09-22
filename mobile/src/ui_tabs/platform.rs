@@ -1409,20 +1409,8 @@ impl PlatformTab {
                                     OperationState::InProgress { .. }
                                 );
 
-                                // Show progress indicator when operation in progress
-                                if operation_in_progress {
-                                    if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
-                                        ui.label(operation);
-                                    }
-                                    ui.add(
-                                        linear_progress()
-                                            .indeterminate(true)
-                                            .width(column_width - 20.0)
-                                            .height(4.0)
-                                            .four_color_enabled(true)
-                                    );
-                                    ui.add_space(4.0);
-                                }
+                                // Store top position for foreground overlay
+                                let overlay_pos = ui.cursor().min;
 
                                 // Row 1: Refresh, Billing, Delete
                                 ui.horizontal(|ui| {
@@ -1593,6 +1581,44 @@ impl PlatformTab {
                                         }
                                     });
                                 });
+
+                                // Render progress indicator on foreground layer (overlay)
+                                if operation_in_progress {
+                                    let current_area_id = ui.layer_id().id;
+                                    let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
+
+                                    ui.with_layer_id(foreground_layer, |ui| {
+                                        // Position at stored overlay position
+                                        let progress_rect = egui::Rect::from_min_size(
+                                            overlay_pos,
+                                            egui::vec2(column_width, 30.0)
+                                        );
+
+                                        // Semi-transparent background
+                                        ui.painter().rect_filled(
+                                            progress_rect,
+                                            egui::Rounding::same(4),
+                                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240)
+                                        );
+
+                                        // Draw progress label and bar
+                                        ui.allocate_ui_at_rect(progress_rect, |ui| {
+                                            ui.add_space(2.0);
+
+                                            if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
+                                                ui.label(operation);
+                                            }
+
+                                            ui.add(
+                                                linear_progress()
+                                                    .indeterminate(true)
+                                                    .width(column_width - 20.0)
+                                                    .height(4.0)
+                                                    .four_color_enabled(true)
+                                            );
+                                        });
+                                    });
+                                }
                             });
                     })
                     .drawer(move |ui| {
@@ -3931,11 +3957,11 @@ impl PlatformTab {
                     ui.label("Project ID:");
                     ui.label(&self.billing_project_id);
                     ui.add_space(8.0);
-                    if ui.add(badge("GCP Console").color(BadgeColor::Primary).size(BadgeSize::Regular)).clicked() {
-                        let url = format!("https://console.cloud.google.com/billing?project={}",
-                                         self.billing_project_id);
-                        let _ = webbrowser::open(&url);
-                    }
+                    ui.hyperlink_to(
+                        "GCP Console",
+                        format!("https://console.cloud.google.com/billing?project={}",
+                               self.billing_project_id)
+                    );
                 });
                 ui.add_space(8.0);
                 ui.separator();

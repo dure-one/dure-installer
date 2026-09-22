@@ -22,7 +22,7 @@ on:
 
 env:
   RUST_VERSION: nightly
-  BIN_NAME: "dure-desktop"
+  BIN_NAME: "dure-installer"
   PACKAGE_NAME: "dure"
 
 jobs:
@@ -35,46 +35,34 @@ jobs:
         # Set platforms you want to build your binaries on
         platform:
           # Linux
-          - name: Linux x86_64 Headless
+          - name: Linux x86_64
             target: x86_64-unknown-linux-musl
-            build-args: "--release --bin dure-desktop --no-default-features"
-            rustflags: "-C link-arg=-lm"
-            platform_type: linux
-
-          - name: Linux x86_64 GUI
-            target: x86_64-unknown-linux-musl
-            build-args: "--release --bin dure-desktop"
+            build-args: "--release --bin dure-installer"
             rustflags: "-C target-feature=-crt-static -C link-arg=-lm"
-            platform_type: linux
-
-          - name: Linux aarch64 Headless
-            target: aarch64-unknown-linux-musl
-            build-args: "--release --bin dure-desktop --no-default-features"
-            rustflags: "-C link-arg=-lm -C link-arg=-lpthread -C link-arg=-ldl -C link-arg=-lc"
             platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux x86
           #   target: i686-unknown-linux-musl
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux armv7hf
           #   target: armv7-unknown-linux-musleabihf
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux armv6
           #   target: arm-unknown-linux-musleabihf
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   platform_type: linux
 
           # FreeBSD (disabled)
           # - name: FreeBSD x86_64
           #   target: x86_64-unknown-freebsd
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   freebsd_version: "14.2"
           #   platform_type: freebsd
 
@@ -87,45 +75,45 @@ jobs:
           # Disabled - reduce build time
           # - name: Android aarch64
           #   target: aarch64-linux-android
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   platform_type: android
 
           # Disabled - reduce build time
           # - name: Android armv7
           #   target: armv7-linux-androideabi
-          #   build-args: "--release --bin dure-desktop"
+          #   build-args: "--release --bin dure-installer"
           #   platform_type: android
 
           # Mac OS
           - name: MacOS x86_64
             os: macos-latest
             target: x86_64-apple-darwin
-            build-args: "--release --bin dure-desktop"
+            build-args: "--release --bin dure-installer"
             platform_type: macos
 
           - name: MacOS aarch64
             os: macos-latest
             target: aarch64-apple-darwin
-            build-args: "--release --bin dure-desktop"
+            build-args: "--release --bin dure-installer"
             platform_type: macos
 
           # Windows
           - name: Windows x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-desktop"
+            build-args: "--profile release-with-symbols --bin dure-installer"
             platform_type: windows
 
           - name: Windows x86
             os: windows-latest
             target: i686-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-desktop"
+            build-args: "--profile release-with-symbols --bin dure-installer"
             platform_type: windows
 
           - name: Windows aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-desktop"
+            build-args: "--profile release-with-symbols --bin dure-installer"
             platform_type: windows
 
     steps:
@@ -374,7 +362,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # Finally, we store the binary as GitHub artifact for later usage
-          name: ${{ env.BIN_NAME }}-${{ matrix.platform.target }}${{ contains(matrix.platform.name, 'Headless') && '-headless' || '' }}
+          name: ${{ env.BIN_NAME }}-${{ matrix.platform.target }}
           path: ${{ contains(matrix.platform.target, 'freebsd') && format('target/{0}/release/{1}*', matrix.platform.target, env.BIN_NAME) || format('target/release{0}/{1}*', contains(matrix.platform.target, 'windows') && '-with-symbols' || '', env.BIN_NAME) }}
           retention-days: 1
 
@@ -423,12 +411,9 @@ jobs:
           FOUND=0
           for file in \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
-            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
-            # ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe; do
@@ -464,12 +449,9 @@ jobs:
           python .github/scripts/virustotal_scan.py \
             "${{ secrets.VT_API_KEY }}" \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
-            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl-headless/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
-            # ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe

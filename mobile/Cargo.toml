@@ -1,7 +1,7 @@
 [package]
-name = "dure"
+name = "mobile"
 build = "build.rs"
-default-run = "dure-desktop"
+default-run = "dure-installer"
 version.workspace = true
 license.workspace = true
 edition.workspace = true
