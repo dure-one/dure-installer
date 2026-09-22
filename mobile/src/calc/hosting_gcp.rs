@@ -130,7 +130,7 @@ pub fn regenerate_vm(
                 type_: "ONE_TO_ONE_NAT".to_string(),
                 name: "External NAT".to_string(),
                 nat_ip: None,
-                network_tier: None,
+                network_tier: Some("STANDARD".to_string()),
             }]),
         }],
         tags: None,

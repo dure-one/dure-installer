@@ -1937,7 +1937,7 @@ impl GcpWizard {
         let (selected_nat_ip, selected_network_tier) = match &self.selected_ip_option {
             IpOption::Ephemeral => {
                 dure_info!("🔍 Static IP selection: Ephemeral (auto-assigned)");
-                (None, None)
+                (None, Some("STANDARD".to_string()))
             }
             IpOption::Reserved(idx) => {
                 dure_info!("🔍 Static IP selection: Reserved index={}, available_ips={}", idx, self.available_reserved_ips.len());
