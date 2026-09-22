@@ -295,12 +295,16 @@ pub fn get_common_regions() -> Vec<Region> {
 // ============================================================================
 
 pub mod compute;
+pub mod compute_addresses;
 pub mod resourcemanager;
 pub mod billing;
 pub mod bigquery;
 pub mod serviceusage;
 pub mod dns;
 pub mod oauth;
+
+// Re-export commonly used types
+pub use compute_addresses::{Address, AddressList};
 
 // Re-export commonly used types for convenience
 // (Uncomment as types are migrated)

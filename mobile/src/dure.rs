@@ -3,7 +3,7 @@
 //! This module provides the main eframe application UI that works across all platforms.
 //! Platform-specific functionality is injected via traits.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_info, dure_debug, dure_trace, dure_warn, dure_error};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::api::desktop::check_user_mismatch;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -66,6 +66,16 @@ pub struct DureApp {
     // Dialog states
     pub dlg_settings: DlgSettings,
     pub dlg_about: crate::ui_dlg::DlgAbout,
+    pub dlg_profile_login: crate::ui_dlg::DlgProfileLogin,
+    pub dlg_profile_create: crate::ui_dlg::DlgProfileCreate,
+    pub dlg_profile_delete: crate::ui_dlg::DlgProfileDelete,
+
+    // Profile state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub current_profile: Option<crate::calc::profile::ProfileContext>,
+    pub pending_profile_name: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub current_profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 
     // Installation status (desktop only)
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -123,8 +133,9 @@ pub struct DureApp {
 
 impl Default for DureApp {
     fn default() -> Self {
-        let config = Config::new().ok();
-        info!("Config creation result: {:?}", config.is_some());
+        // Do NOT load config at startup - wait for profile selection
+        let config: Option<Config> = None;
+        info!("App starting without config - waiting for profile selection");
 
         // Check for user mismatch (desktop user vs runtime user) - desktop only
         #[cfg(not(target_arch = "wasm32"))]
@@ -200,6 +211,13 @@ impl Default for DureApp {
             // Dialog states
             dlg_settings: DlgSettings::default(),
             dlg_about: crate::ui_dlg::DlgAbout::default(),
+            dlg_profile_login: crate::ui_dlg::DlgProfileLogin::new(),
+            dlg_profile_create: crate::ui_dlg::DlgProfileCreate::new(),
+            dlg_profile_delete: crate::ui_dlg::DlgProfileDelete::new(),
+            // Profile state
+            current_profile: None,
+            pending_profile_name: None,
+            current_profile_kdbx: None,
             // Installation status (desktop only)
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             install_status: install::check_install(),
@@ -240,7 +258,7 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        dure_debug!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+        dure_trace!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
 
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
@@ -300,12 +318,15 @@ impl eframe::App for DureApp {
         // Show install dialog (desktop only)
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         self.show_install_dialog(ctx);
+
+        // Profile dialogs coordination
+        self.handle_profile_dialogs(ctx);
     }
 }
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
-        dure_debug!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+        dure_trace!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
 
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
@@ -318,6 +339,68 @@ impl DureApp {
                 ui.colored_label(egui::Color32::from_rgb(255, 165, 0), warning);
             });
         }
+
+        // Profile selector (top-left)
+        ui.horizontal(|ui| {
+            ui.label(tr!("profile"));
+
+            // Get list of available profiles
+            let profiles = crate::calc::profile::ProfileManager::list_profiles()
+                .unwrap_or_else(|e| {
+                    dure_warn!("Failed to list profiles: {}", e);
+                    Vec::new()
+                });
+
+            // Find current profile index in the profiles list
+            let mut selected_profile_idx: Option<usize> = self.current_profile
+                .as_ref()
+                .and_then(|p| profiles.iter().position(|name| name == &p.name));
+
+            let previous_selection = selected_profile_idx;
+
+            // Build select with profile options
+            let mut profile_select = egui_material3::select(&mut selected_profile_idx)
+                .variant(egui_material3::SelectVariant::Outlined)
+                .label(tr!("profile"))
+                .placeholder(tr!("none"))
+                .compact(true)
+                .width(220.0)
+                .menu_max_height(300.0);
+
+            // Add profile options
+            for (idx, profile_name) in profiles.iter().enumerate() {
+                profile_select = profile_select.option(idx, profile_name.clone());
+            }
+
+            ui.add(profile_select);
+
+            // Handle profile selection change
+            if selected_profile_idx != previous_selection {
+                if let Some(idx) = selected_profile_idx {
+                    if let Some(profile_name) = profiles.get(idx) {
+                        dure_info!("Profile selected: {}", profile_name);
+                        self.pending_profile_name = Some(profile_name.clone());
+                    }
+                }
+            }
+
+            // Add "+ Create New Profile" button
+            if ui.add(egui_material3::MaterialButton::outlined(tr!("create-new-profile")).small()).clicked() {
+                dure_info!("Create new profile clicked");
+                self.dlg_profile_create.open();
+            }
+
+            // Add "Delete Profile 'name'" button (only when a profile is selected)
+            if let Some(ref profile) = self.current_profile {
+                let delete_text = format!("{} '{}'", tr!("delete-profile"), profile.name);
+                if ui.add(egui_material3::MaterialButton::outlined(delete_text).small()).clicked() {
+                    dure_info!("Delete profile clicked: {}", profile.name);
+                    self.dlg_profile_delete.open(profile.name.clone());
+                }
+            }
+        });
+
+        ui.add_space(10.0);
 
         // Tabs navigation
         #[cfg(not(target_arch = "wasm32"))]
@@ -364,12 +447,12 @@ impl DureApp {
         ui.add_space(10.0);
 
         // Render active tab content
-        dure_debug!("🔥 RENDERING TAB: {:?}", self.active_tab);
+        dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
-            Tab::Platform => self.tab_platform.ui(ui, self.viewmodel.as_mut()),
-            Tab::Ssh => self.tab_ssh.ui(ui, self.viewmodel.as_mut()),
-            Tab::Ns => self.tab_ns.ui(ui, self.viewmodel.as_mut()),
-            Tab::Site => self.tab_site.ui(ui),
+            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
+            Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Site => self.tab_site.ui(&self.current_profile, ui),
         }
     }
 
@@ -835,5 +918,221 @@ impl DureApp {
         // Reset the in-progress flag
         self.install_in_progress = false;
         self.install_dialog_open = true;
+    }
+
+    /// Handle profile dialogs coordination
+    ///
+    /// Manages the flow between profile selection, login, create, and delete dialogs.
+    fn handle_profile_dialogs(&mut self, ctx: &egui::Context) {
+        // Handle pending profile selection → trigger login dialog
+        if let Some(profile_name) = self.pending_profile_name.take() {
+            // Only open dialog if not already open (avoid repeated logging)
+            if !self.dlg_profile_login.open {
+                dure_info!("Opening login dialog for profile: {}", profile_name);
+                self.dlg_profile_login.open();
+            }
+            // Store the profile name for login processing
+            self.pending_profile_name = Some(profile_name);
+        }
+
+        // Show and handle login dialog
+        let was_open = self.dlg_profile_login.open;
+        if self.dlg_profile_login.open {
+            self.dlg_profile_login.show(ctx);
+
+            // Process login result
+            if self.dlg_profile_login.confirmed {
+                if let Some(profile_name) = self.pending_profile_name.take() {
+                    let password = self.dlg_profile_login.password.clone();
+
+                    // Verify password
+                    match crate::calc::profile::ProfileManager::verify_password(&profile_name, &password) {
+                        Ok(()) => {
+                            dure_info!("Password verified for profile: {}", profile_name);
+
+                            // Load profile context
+                            match crate::calc::profile::ProfileContext::new(&profile_name) {
+                                Ok(ctx) => {
+                                    // Update database path to profile's database
+                                    let db_path = ctx.db_path.to_string_lossy().to_string();
+                                    crate::calc::db::set_db_path(db_path);
+                                    dure_info!("Database path updated to: {}", ctx.db_path.display());
+
+                                    // Reload config from profile's config directory
+                                    self.config = Config::new(Some(ctx.config_dir.clone())).ok();
+                                    dure_info!("Config reloaded from profile: {}", ctx.config_file.display());
+
+                                    // Open KeePass database handle
+                                    match crate::calc::keyring::DatabaseHandle::open(
+                                        ctx.kdbx_path.clone(),
+                                        ctx.kpkey_path.clone(),
+                                        Some(&password),
+                                    ) {
+                                        Ok(handle) => {
+                                            self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
+                                            self.current_profile = Some(ctx);
+                                            dure_info!("Profile and keyring loaded successfully: {}", profile_name);
+
+                                            // Clear screen and reload profile configs
+                                            self.clear_and_reload_profile();
+
+                                            self.dlg_profile_login.reset();
+                                        }
+                                        Err(e) => {
+                                            dure_error!("Failed to open keyring: {}", e);
+                                            self.dlg_profile_login.set_error(format!("Failed to open keyring: {}", e));
+                                            self.dlg_profile_login.confirmed = false;
+                                            self.dlg_profile_login.open = true;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    dure_error!("Failed to load profile context: {}", e);
+                                    self.dlg_profile_login.set_error(format!("Failed to load profile: {}", e));
+                                    self.dlg_profile_login.confirmed = false;
+                                    self.dlg_profile_login.open = true; // Reopen dialog to show error
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            dure_warn!("Password verification failed: {}", e);
+                            self.dlg_profile_login.set_error("Incorrect password".to_string());
+                            self.dlg_profile_login.confirmed = false;
+                            self.dlg_profile_login.open = true; // Reopen dialog to show error
+                        }
+                    }
+                }
+            }
+        }
+
+        // Handle cancel: if dialog was open but is now closed and not confirmed, clear pending profile
+        if was_open && !self.dlg_profile_login.open && !self.dlg_profile_login.confirmed {
+            dure_info!("Login dialog cancelled, clearing pending profile");
+            self.pending_profile_name = None;
+        }
+
+        // Show and handle create dialog
+        if self.dlg_profile_create.open {
+            self.dlg_profile_create.show(ctx);
+
+            // Process create result
+            if self.dlg_profile_create.confirmed {
+                let profile_name = self.dlg_profile_create.profile_name.clone();
+                let password = self.dlg_profile_create.password.clone();
+
+                // Create profile
+                match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password) {
+                    Ok(ctx) => {
+                        dure_info!("Profile created successfully: {}", profile_name);
+
+                        // Update database path to profile's database
+                        let db_path = ctx.db_path.to_string_lossy().to_string();
+                        crate::calc::db::set_db_path(db_path);
+                        dure_info!("Database path updated to: {}", ctx.db_path.display());
+
+                        // Reload config from profile's config directory
+                        self.config = Config::new(Some(ctx.config_dir.clone())).ok();
+                        dure_info!("Config reloaded from profile: {}", ctx.config_file.display());
+
+                        // Open KeePass database handle
+                        match crate::calc::keyring::DatabaseHandle::open(
+                            ctx.kdbx_path.clone(),
+                            ctx.kpkey_path.clone(),
+                            Some(&password),
+                        ) {
+                            Ok(handle) => {
+                                // Auto-login: load the newly created profile
+                                self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
+                                self.current_profile = Some(ctx);
+
+                                // Clear screen and reload profile configs
+                                self.clear_and_reload_profile();
+
+                                self.dlg_profile_create.reset();
+                                dure_info!("Auto-logged in to new profile: {}", profile_name);
+                            }
+                            Err(e) => {
+                                dure_error!("Failed to open keyring for new profile: {}", e);
+                                self.dlg_profile_create.set_error(format!("Profile created but failed to open keyring: {}", e));
+                                self.dlg_profile_create.confirmed = false;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        dure_error!("Failed to create profile: {}", e);
+                        self.dlg_profile_create.set_error(format!("Failed to create profile: {}", e));
+                        self.dlg_profile_create.confirmed = false;
+                    }
+                }
+            }
+        }
+
+        // Show and handle delete dialog
+        if self.dlg_profile_delete.open {
+            self.dlg_profile_delete.show(ctx);
+
+            // Process delete result
+            if self.dlg_profile_delete.confirmed {
+                let profile_name = self.dlg_profile_delete.profile_name.clone();
+
+                // Check if deleting the currently active profile
+                let is_active = self.current_profile
+                    .as_ref()
+                    .map(|p| p.name == profile_name)
+                    .unwrap_or(false);
+
+                // Delete profile
+                match crate::calc::profile::ProfileManager::delete_profile(&profile_name) {
+                    Ok(()) => {
+                        dure_info!("Profile deleted successfully: {}", profile_name);
+
+                        // Unload profile if it was active
+                        if is_active {
+                            self.current_profile_kdbx = None;
+                            self.current_profile = None;
+
+                            // Clear config - no profile means no config
+                            self.config = None;
+                            dure_info!("Config cleared - no active profile");
+
+                            // Clear screen since active profile is deleted
+                            self.clear_and_reload_profile();
+                        }
+
+                        self.dlg_profile_delete.reset();
+                    }
+                    Err(e) => {
+                        dure_error!("Failed to delete profile: {}", e);
+                        // Note: Delete dialog doesn't have error display, just log
+                        self.dlg_profile_delete.reset();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Clear screen and reload profile configurations
+    ///
+    /// Called when switching profiles to ensure clean state.
+    fn clear_and_reload_profile(&mut self) {
+        dure_info!("Clearing screen and reloading profile configs");
+
+        // Reset all tabs to clear cached data
+        self.tab_platform = crate::ui_tabs::platform::PlatformTab::default();
+        self.tab_ssh = crate::ui_tabs::ssh::SshTab::default();
+        self.tab_ns = crate::ui_tabs::ns::NsTab::default();
+        self.tab_site = crate::ui_tabs::site::SiteTab::default();
+
+        // Reset ViewModel to force re-initialization with new profile data
+        self.viewmodel = None;
+
+        // Reset config to reload from new profile's config file
+        self.config = None;
+
+        // Reset active tab to Platform (first tab)
+        self.active_tab = crate::ui_tabs::Tab::Platform;
+        self.scrolling_selected = 0;
+
+        dure_info!("Screen cleared and ready for profile reload");
     }
 }

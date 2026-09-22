@@ -99,7 +99,9 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
 pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> Result<()> {
     let mut vm = ViewModel::new_headless();
 
-    vm.delete_vm(platform_name.clone(), vm_name.clone(), zone)?;
+    // Use default config path for CLI
+    let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
+    vm.delete_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, false, None)?;
 
     println!("Deleting VM '{}'...", vm_name);
 

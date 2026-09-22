@@ -110,7 +110,7 @@ impl DrawerActor {
 
         let logs = self.repository.get_project_logs(&project_id, limit).await?;
 
-        dure_info!(
+        dure_debug!(
             "DrawerActor: loaded {} operation logs for project {}",
             logs.len(),
             project_id

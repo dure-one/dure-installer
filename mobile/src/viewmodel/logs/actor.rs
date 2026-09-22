@@ -12,7 +12,7 @@ pub async fn log_actor_loop(
     while let Ok(cmd) = cmd_rx.recv().await {
         match cmd {
             LogCommand::AppendLog { project_id, level, message } => {
-                log::debug!("[LOG_ACTOR] Received AppendLog - project_id='{}', level={:?}, msg='{}'", project_id, level, message);
+                log::trace!("[LOG_ACTOR] Received AppendLog - project_id='{}', level={:?}, msg='{}'", project_id, level, message);
                 let buffer = buffers.entry(project_id.clone()).or_insert_with(LogBuffer::new);
 
                 // Add timestamp (HH:MM:SS)
@@ -21,19 +21,19 @@ pub async fn log_actor_loop(
                 let formatted_line = format!("{} [{}] {}", timestamp, level.as_str(), message);
 
                 buffer.push(formatted_line);
-                log::debug!("[LOG_ACTOR] ✓ Stored log for project '{}', buffer now has {} lines", project_id, buffer.len());
-                log::debug!("[LOG_ACTOR] Current buffers: {:?}", buffers.keys().collect::<Vec<_>>());
+                log::trace!("[LOG_ACTOR] ✓ Stored log for project '{}', buffer now has {} lines", project_id, buffer.len());
+                log::trace!("[LOG_ACTOR] Current buffers: {:?}", buffers.keys().collect::<Vec<_>>());
             }
             LogCommand::GetLogs { project_id } => {
-                log::debug!("[LOG_ACTOR] Received GetLogs - project_id='{}'", project_id);
-                log::debug!("[LOG_ACTOR] Available buffers: {:?}", buffers.keys().collect::<Vec<_>>());
+                log::trace!("[LOG_ACTOR] Received GetLogs - project_id='{}'", project_id);
+                log::trace!("[LOG_ACTOR] Available buffers: {:?}", buffers.keys().collect::<Vec<_>>());
 
                 let lines = buffers
                     .get(&project_id)
                     .map(|b| b.get_lines())
                     .unwrap_or_default();
 
-                log::debug!("[LOG_ACTOR] Returning {} lines for project '{}'", lines.len(), project_id);
+                log::trace!("[LOG_ACTOR] Returning {} lines for project '{}'", lines.len(), project_id);
 
                 let _ = event_tx.send(ViewModelEvent::Logs(LogEvent::LogsRetrieved {
                     project_id,

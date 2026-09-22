@@ -56,6 +56,10 @@ pub struct AccessConfig {
     #[serde(rename = "type")]
     pub type_: String, // "ONE_TO_ONE_NAT"
     pub name: String, // "External NAT"
+    #[serde(rename = "natIP", skip_serializing_if = "Option::is_none")]
+    pub nat_ip: Option<String>, // Static IP address to attach
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_tier: Option<String>, // "PREMIUM" or "STANDARD"
 }
 
 #[derive(Debug, Serialize)]
@@ -378,6 +382,8 @@ impl InstanceRequest {
                 access_configs: Some(vec![AccessConfig {
                     type_: "ONE_TO_ONE_NAT".to_string(),
                     name: "External NAT".to_string(),
+                    nat_ip: None,
+                    network_tier: None,
                 }]),
             }],
             tags: Some(Tags {
@@ -433,6 +439,7 @@ impl GcpRestClient {
         );
 
         let body = serde_json::to_string(instance)?;
+        dure_info!("📤 GCP Request Body: {}", body);
         let response = self.post(&url, &body)?;
 
         if response.status() != 200 {
@@ -531,13 +538,18 @@ impl GcpRestClient {
         project_id: &str,
         zone: &str,
         instance_name: &str,
+        force: bool,
     ) -> Result<Operation> {
-        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {}", instance_name, zone);
+        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {} (noGracefulShutdown={})", instance_name, zone, force);
 
-        let url = format!(
+        let mut url = format!(
             "{}/projects/{}/zones/{}/instances/{}",
             GCP_COMPUTE_API_BASE, project_id, zone, instance_name
         );
+
+        if force {
+            url.push_str("?noGracefulShutdown=true");
+        }
 
         let response = self.delete(&url)?;
         let operation: Operation = response.into_json()?;

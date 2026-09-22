@@ -27,14 +27,8 @@ pub fn android_main(app: AndroidApp) {
 
     dure_info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));
 
-    // Initialize application configuration and database
-    let config = crate::Config::new().unwrap_or_else(|e| {
-        dure_error!("Failed to initialize application config: {}", e);
-        std::panic::panic_any("Failed to initialize config");
-    });
-    let db_path = config.data_dir.join("dure.db");
-    crate::calc::db::set_db_path(db_path.to_string_lossy().to_string());
-    dure_info!("Database path set to: {}", db_path.display());
+    // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
+    // See mobile/src/dure.rs profile login/create handlers for config/DB initialization
 
     // Set up panic handler
     std::panic::set_hook(Box::new(|panic_info| {

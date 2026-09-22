@@ -174,7 +174,7 @@ mod tests {
 pub fn log_to_actor(project_id: impl Into<String>, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
     let pid = project_id.into();
     let msg = message.into();
-    log::debug!("[LOG_ROUTE] Routing log to actor - project_id='{}', level={:?}, msg='{}'", pid, level, msg);
+    log::trace!("[LOG_ROUTE] Routing log to actor - project_id='{}', level={:?}, msg='{}'", pid, level, msg);
     crate::viewmodel::logs::append_log(pid, level, msg);
 }
 
@@ -192,6 +192,23 @@ macro_rules! dure_info {
         {
             log::info!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
             $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+        }
+    };
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[macro_export]
+macro_rules! dure_trace {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
+        {
+            log::trace!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
+            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+        }
+    };
+    ($($arg:tt)*) => {
+        {
+            log::trace!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
+            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
 }
@@ -265,6 +282,27 @@ macro_rules! dure_info {
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
             $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+        }
+    };
+}
+
+#[cfg(target_family = "wasm")]
+#[macro_export]
+macro_rules! dure_trace {
+    (project_id = $project_id:expr, $($arg:tt)*) => {
+        {
+            web_sys::console::debug_1(
+                &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
+            );
+            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+        }
+    };
+    ($($arg:tt)*) => {
+        {
+            web_sys::console::debug_1(
+                &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
+            );
+            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
 }

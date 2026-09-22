@@ -2,6 +2,7 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
@@ -79,7 +80,13 @@ impl Default for SiteTab {
 
 impl SiteTab {
     /// Render the site tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui) {
+        // Check if profile is selected
+        if current_profile.is_none() {
+            ui.label(tr!("no-profile-selected"));
+            return;
+        }
+
         ui.heading("Site Management");
         ui.add_space(4.0);
         ui.label("Manage sites for site-to-site communication via WebSocket.");

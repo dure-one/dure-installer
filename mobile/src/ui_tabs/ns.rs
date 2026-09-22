@@ -2,11 +2,13 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 
 use crate::calc::audit;
 use crate::calc::ns::{NsConfig, RecordType};
+use crate::calc::profile::ProfileContext;
 #[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
 use std::path::PathBuf;
@@ -324,6 +326,7 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
 /// Render domains table with drawer-based records
 fn render_domains_table(
     ns_tab: &mut NsTab,
+    current_profile: &ProfileContext,
     ui: &mut egui::Ui,
     vm: Option<&mut crate::viewmodel::ViewModel>
 ) {
@@ -376,25 +379,34 @@ fn render_domains_table(
         });
 
     // Process action triggers
-    ns_tab.process_action_triggers(ui, vm);
+    ns_tab.process_action_triggers(current_profile, ui, vm);
 }
 
 /// Get config file path (Desktop)
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-fn get_config_path() -> Result<PathBuf, String> {
-    Ok(crate::get_app_config_dir().map_err(|e| e.to_string())?.join("config.yml"))
+fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => Err("No active profile - please select or create a profile first".to_string()),
+    }
 }
 
 /// Get config file path (Android)
 #[cfg(target_os = "android")]
-fn get_config_path() -> Result<PathBuf, String> {
-    Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
+fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => Err("No active profile - please select or create a profile first".to_string()),
+    }
 }
 
 /// Get config file path (WASM uses browser storage path)
 #[cfg(target_arch = "wasm32")]
-fn get_config_path() -> Result<PathBuf, String> {
-    Ok(PathBuf::from(".dure/config.yml"))
+fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+    match profile {
+        Some(ctx) => Ok(ctx.config_file.clone()),
+        None => Err("No active profile - please select or create a profile first".to_string()),
+    }
 }
 
 /// Parse Porkbun credentials from combined token format
@@ -411,8 +423,8 @@ fn parse_porkbun_credentials(token: &str) -> Option<(String, String)> {
 
 /// Load NS config from YAML
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ns_config() -> Result<NsConfig, String> {
-    let config_path = get_config_path()?;
+fn load_ns_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<NsConfig, String> {
+    let config_path = get_config_path(profile)?;
 
     if !config_path.exists() {
         return Ok(NsConfig::default());
@@ -435,8 +447,8 @@ fn load_ns_config() -> Result<NsConfig, String> {
 
 /// Save NS config to YAML
 #[cfg(not(target_arch = "wasm32"))]
-fn save_ns_config(ns_config: &NsConfig) -> Result<(), String> {
-    let config_path = get_config_path()?;
+fn save_ns_config(profile: &Option<crate::calc::profile::ProfileContext>, ns_config: &NsConfig) -> Result<(), String> {
+    let config_path = get_config_path(profile)?;
 
     if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent)
@@ -469,13 +481,14 @@ fn save_ns_config(ns_config: &NsConfig) -> Result<(), String> {
 /// Add GCP account to config
 #[cfg(not(target_arch = "wasm32"))]
 fn add_gcp_account_to_config(
+    profile: &ProfileContext,
     oauth: &crate::api::gcp::oauth::OAuthResult,
     email: &str,
     project_id: &str,
 ) -> Result<(), String> {
     use crate::calc::ns::GcpAccount;
 
-    let mut config = load_ns_config().map_err(|e| format!("Failed to load config: {}", e))?;
+    let mut config = load_ns_config(&Some(profile.clone())).map_err(|e| format!("Failed to load config: {}", e))?;
 
     let account = GcpAccount {
         access_token: oauth.access_token.clone(),
@@ -490,14 +503,14 @@ fn add_gcp_account_to_config(
         .add_gcp_account(account)
         .map_err(|e| format!("Failed to add GCP account: {}", e))?;
 
-    save_ns_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+    save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Failed to save config: {}", e))?;
 
     Ok(())
 }
 
 /// Execute add provider in blocking mode (for background thread)
 #[cfg(not(target_arch = "wasm32"))]
-fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<String>, String> {
+fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, token: String) -> Result<Vec<String>, String> {
     use crate::api::{ns_cloudflare, ns_porkbun};
     use crate::calc::ns::{NsConfig, RecordType};
 
@@ -517,7 +530,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             log.push(format!("API call successful, found {} zones", zones.len()));
 
             let mut config =
-                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
+                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -594,7 +607,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -626,7 +639,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             ));
 
             let mut config =
-                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
+                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -701,7 +714,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -719,14 +732,14 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             log.push("DuckDNS domains cannot be auto-discovered. Saving provider for manual domain addition.".to_string());
 
             let mut config =
-                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
+                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
 
             let placeholder = format!("{} (provider)", provider);
             config
                 .add_domain(provider.clone(), placeholder.clone(), token.clone())
                 .map_err(|e| format!("Failed to add provider: {}", e))?;
 
-            save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
+            save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
 
             let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
             log.push(format!(
@@ -765,7 +778,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
             ));
 
             let mut config =
-                load_ns_config().map_err(|e| format!("Error loading config: {}", e))?;
+                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -881,7 +894,7 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -911,7 +924,16 @@ fn execute_add_provider_blocking(provider: String, token: String) -> Result<Vec<
 
 impl NsTab {
     /// Render the NS tab UI
-    pub fn ui(&mut self, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+        // Check if profile is selected
+        if current_profile.is_none() {
+            ui.label(tr!("no-profile-selected"));
+            return;
+        }
+
+        // Unwrap profile (safe after guard above)
+        let current_profile = current_profile.as_ref().unwrap();
+
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
@@ -929,13 +951,13 @@ impl NsTab {
 
                         // Update config
                         #[cfg(not(target_arch = "wasm32"))]
-                        if let Ok(mut config) = load_ns_config() {
+                        if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
                             // Note: Record details already in config from UI,
                             // this event confirms API succeeded
-                            if let Err(e) = save_ns_config(&config) {
+                            if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
                                 self.add_progress(format!("Error saving config: {}", e));
                             } else {
-                                self.load_data();
+                                self.load_data(current_profile);
                             }
                         }
                     }
@@ -949,7 +971,7 @@ impl NsTab {
                         // Save domains to config
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            if let Ok(mut config) = load_ns_config() {
+                            if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
                                 let api_token = if name == "porkbun" {
                                     format!("{}::{}", self.add_token, self.add_secret_key)
                                 } else {
@@ -974,14 +996,14 @@ impl NsTab {
                                     }
                                 }
 
-                                if let Err(e) = save_ns_config(&config) {
+                                if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
                                     self.add_progress(format!("Error saving config: {}", e));
                                 } else {
                                     self.add_progress(format!(
                                         "✓ Configuration saved ({} domains)",
                                         added_count
                                     ));
-                                    self.load_data();
+                                    self.load_data(current_profile);
                                 }
                             }
                         }
@@ -1011,7 +1033,7 @@ impl NsTab {
                                 let name = parts[0];
                                 let record_type = parts[1];
 
-                                if let Ok(mut config) = load_ns_config() {
+                                if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
                                     if let Some(domain_entry) =
                                         config.get_domain_mut(&provider_name, &domain)
                                     {
@@ -1021,13 +1043,13 @@ impl NsTab {
                                                     == record_type.to_lowercase())
                                         });
 
-                                        if let Err(e) = save_ns_config(&config) {
+                                        if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
                                             self.add_progress(format!(
                                                 "Error saving config: {}",
                                                 e
                                             ));
                                         } else {
-                                            self.load_data();
+                                            self.load_data(current_profile);
                                         }
                                     }
                                 }
@@ -1043,7 +1065,7 @@ impl NsTab {
                         // Remove domain from config
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            if let Ok(mut config) = load_ns_config() {
+                            if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
                                 let _ = config.remove_domain(&provider_name, &domain);
 
                                 // Handle GCP placeholder logic
@@ -1063,7 +1085,7 @@ impl NsTab {
                                     }
                                 }
 
-                                if let Err(e) = save_ns_config(&config) {
+                                if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
                                     self.add_progress(format!("Error saving config: {}", e));
                                 } else {
                                     if let Some((sel_prov, sel_dom)) = &self.selected_domain {
@@ -1071,7 +1093,7 @@ impl NsTab {
                                             self.selected_domain = None;
                                         }
                                     }
-                                    self.load_data();
+                                    self.load_data(current_profile);
                                 }
                             }
                         }
@@ -1109,7 +1131,7 @@ impl NsTab {
                         self.add_progress(msg);
                     }
                     self.add_progress("Reloading UI data...".to_string());
-                    self.load_data();
+                    self.load_data(current_profile);
                     self.add_progress("✓ UI refreshed".to_string());
                 }
                 Err(err_msg) => {
@@ -1126,7 +1148,7 @@ impl NsTab {
 
         // Load data on first render
         if !self.loaded {
-            self.load_data();
+            self.load_data(current_profile);
         }
 
         // Show error if any
@@ -1155,14 +1177,14 @@ impl NsTab {
             }
 
             if ui.add(MaterialButton::text("Refresh")).clicked() {
-                self.refresh_from_api();
+                self.refresh_from_api(current_profile);
             }
         });
 
         ui.add_space(8.0);
 
         // Domain table with drawer-based records
-        render_domains_table(self, ui, vm.as_deref_mut());
+        render_domains_table(self, current_profile, ui, vm.as_deref_mut());
 
         // Progress log
         if !self.progress_log.is_empty() {
@@ -1181,9 +1203,9 @@ impl NsTab {
         }
 
         // Dialogs
-        self.show_add_provider_dialog(ui.ctx(), vm.as_deref_mut());
-        self.show_add_domain_dialog(ui.ctx());
-        self.show_add_record_dialog(ui.ctx(), vm);
+        self.show_add_provider_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        self.show_add_domain_dialog(current_profile, ui.ctx());
+        self.show_add_record_dialog(current_profile, ui.ctx(), vm);
         self.show_error_dialog(ui.ctx());
         self.show_nameservers_dialog(ui.ctx());
     }
@@ -1191,6 +1213,7 @@ impl NsTab {
     /// Process action triggers from operations buttons
     fn process_action_triggers(
         &mut self,
+        profile: &ProfileContext,
         ui: &mut egui::Ui,
         mut vm: Option<&mut crate::viewmodel::ViewModel>
     ) {
@@ -1215,7 +1238,7 @@ impl NsTab {
             if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(view_ns_id)) {
                 ui.data_mut(|d| d.remove::<(String, String)>(view_ns_id));
 
-                self.show_nameservers(&provider, &domain);
+                self.show_nameservers(profile, &provider, &domain);
             }
 
             // Delete Domain trigger
@@ -1223,7 +1246,7 @@ impl NsTab {
             if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(delete_domain_id)) {
                 ui.data_mut(|d| d.remove::<(String, String)>(delete_domain_id));
 
-                self.execute_delete_domain(&domain, vm.as_deref_mut());
+                self.execute_delete_domain(profile, &domain, vm.as_deref_mut());
             }
 
             // Delete Record triggers (check all record indices)
@@ -1252,12 +1275,12 @@ impl NsTab {
     }
 
     /// Load domain data from config
-    fn load_data(&mut self) {
+    fn load_data(&mut self, profile: &ProfileContext) {
         self.load_error = None;
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            match load_ns_config() {
+            match load_ns_config(&Some(profile.clone())) {
                 Ok(config) => {
                     self.domain_rows = build_domain_rows(&config);
 
@@ -1284,6 +1307,7 @@ impl NsTab {
     /// Show add nameserver provider dialog
     fn show_add_provider_dialog(
         &mut self,
+        profile: &ProfileContext,
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -1523,7 +1547,7 @@ impl NsTab {
                     };
 
                     if ui.add(add_button).clicked() {
-                        self.start_add_provider_background(vm.as_deref_mut());
+                        self.start_add_provider_background(profile, vm.as_deref_mut());
                         self.show_add_provider_dialog = false;
                     }
 
@@ -1561,14 +1585,14 @@ impl NsTab {
     }
 
     /// Show add domain dialog (for manually adding domains to providers)
-    fn show_add_domain_dialog(&mut self, ctx: &egui::Context) {
+    fn show_add_domain_dialog(&mut self, profile: &ProfileContext, ctx: &egui::Context) {
         if !self.show_add_domain_dialog {
             return;
         }
 
         // Load existing GCP accounts once when dialog opens
         if self.add_domain_existing_gcp_accounts.is_empty() {
-            if let Ok(config) = load_ns_config() {
+            if let Ok(config) = load_ns_config(&Some(profile.clone())) {
                 self.add_domain_existing_gcp_accounts = config
                     .gcp_accounts
                     .iter()
@@ -1685,7 +1709,7 @@ impl NsTab {
                     };
 
                     if ui.add(add_button).clicked() {
-                        self.execute_add_domain_manual();
+                        self.execute_add_domain_manual(profile);
                         self.show_add_domain_dialog = false;
                         // Reset GCP accounts list for next open
                         self.add_domain_existing_gcp_accounts.clear();
@@ -1709,6 +1733,7 @@ impl NsTab {
     /// Show add record dialog
     fn show_add_record_dialog(
         &mut self,
+        profile: &ProfileContext,
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -1756,7 +1781,7 @@ impl NsTab {
                 ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.execute_add_record(vm);
+                        self.execute_add_record(profile, vm);
                         self.show_add_record_dialog = false;
                     }
 
@@ -1799,7 +1824,7 @@ impl NsTab {
     }
 
     /// Start add nameserver provider in background (non-blocking)
-    fn start_add_provider_background(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn start_add_provider_background(&mut self, profile: &ProfileContext, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let provider = self.add_provider_type.clone();
@@ -1861,7 +1886,7 @@ impl NsTab {
                         domains: Vec::new(),
                     };
 
-                    match load_ns_config() {
+                    match load_ns_config(&Some(profile.clone())) {
                         Ok(mut config) => {
                             // Add account if doesn't exist
                             if config.get_gcp_account(&email).is_none() {
@@ -1873,7 +1898,7 @@ impl NsTab {
                                     return;
                                 }
 
-                                if let Err(e) = save_ns_config(&config) {
+                                if let Err(e) = save_ns_config(&Some(profile.clone()), &config) {
                                     self.add_progress(format!(
                                         "Error: Failed to save config: {}",
                                         e
@@ -1920,8 +1945,9 @@ impl NsTab {
             ));
 
             // Spawn background task
+            let profile_clone = profile.clone();
             let promise = Promise::spawn_thread("add-provider", move || {
-                execute_add_provider_blocking(provider_id, token)
+                execute_add_provider_blocking(&profile_clone, provider_id, token)
             });
 
             self.add_provider_promise = Some(promise);
@@ -1929,7 +1955,7 @@ impl NsTab {
     }
 
     /// Execute add nameserver provider (fetches domains from provider API)
-    fn execute_add_provider(&mut self) {
+    fn execute_add_provider(&mut self, profile: &ProfileContext) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::api::{ns_cloudflare, ns_porkbun};
@@ -1969,7 +1995,7 @@ impl NsTab {
                             ));
 
                             // Fetch DNS records for each zone and add them to config
-                            match load_ns_config() {
+                            match load_ns_config(&Some(profile.clone())) {
                                 Ok(mut config) => {
                                     self.add_progress(format!(
                                         "Loaded config with {} existing domains",
@@ -2065,7 +2091,7 @@ impl NsTab {
 
                                     if added_count > 0 {
                                         self.add_progress("Saving config...".to_string());
-                                        match save_ns_config(&config) {
+                                        match save_ns_config(&Some(profile.clone()), &config) {
                                             Ok(_) => {
                                                 self.add_progress(
                                                     "✓ Config saved successfully".to_string(),
@@ -2088,7 +2114,7 @@ impl NsTab {
                                                 self.add_progress(
                                                     "Reloading UI data...".to_string(),
                                                 );
-                                                self.load_data();
+                                                self.load_data(profile);
                                                 self.add_progress("✓ UI refreshed".to_string());
                                             }
                                             Err(e) => {
@@ -2126,7 +2152,7 @@ impl NsTab {
                     );
 
                     // Add provider entry with placeholder so token is saved
-                    match load_ns_config() {
+                    match load_ns_config(&Some(profile.clone())) {
                         Ok(mut config) => {
                             let placeholder = format!("{} (provider)", provider);
                             match config.add_domain(
@@ -2134,7 +2160,7 @@ impl NsTab {
                                 placeholder.clone(),
                                 token.clone(),
                             ) {
-                                Ok(_) => match save_ns_config(&config) {
+                                Ok(_) => match save_ns_config(&Some(profile.clone()), &config) {
                                     Ok(_) => {
                                         let _ = audit::push_gui(
                                             "system",
@@ -2146,7 +2172,7 @@ impl NsTab {
                                             "✓ Added {} provider (add domains manually)",
                                             provider
                                         ));
-                                        self.load_data();
+                                        self.load_data(profile);
                                     }
                                     Err(e) => {
                                         self.add_progress(format!("❌ Error saving config: {}", e));
@@ -2170,7 +2196,7 @@ impl NsTab {
                     );
 
                     // Add provider entry with placeholder so token is saved
-                    match load_ns_config() {
+                    match load_ns_config(&Some(profile.clone())) {
                         Ok(mut config) => {
                             let placeholder = format!("{} (provider)", provider);
                             match config.add_domain(
@@ -2178,7 +2204,7 @@ impl NsTab {
                                 placeholder.clone(),
                                 token.clone(),
                             ) {
-                                Ok(_) => match save_ns_config(&config) {
+                                Ok(_) => match save_ns_config(&Some(profile.clone()), &config) {
                                     Ok(_) => {
                                         let _ = audit::push_gui(
                                             "system",
@@ -2190,7 +2216,7 @@ impl NsTab {
                                             "✓ Added {} provider (add domains manually)",
                                             provider
                                         ));
-                                        self.load_data();
+                                        self.load_data(profile);
                                     }
                                     Err(e) => {
                                         self.add_progress(format!("❌ Error saving config: {}", e));
@@ -2232,7 +2258,7 @@ impl NsTab {
                             ));
 
                             // Fetch DNS records for each domain and add them to config
-                            match load_ns_config() {
+                            match load_ns_config(&Some(profile.clone())) {
                                 Ok(mut config) => {
                                     self.add_progress(format!(
                                         "Loaded config with {} existing domains",
@@ -2328,7 +2354,7 @@ impl NsTab {
 
                                     if added_count > 0 {
                                         self.add_progress("Saving config...".to_string());
-                                        match save_ns_config(&config) {
+                                        match save_ns_config(&Some(profile.clone()), &config) {
                                             Ok(_) => {
                                                 self.add_progress(
                                                     "✓ Config saved successfully".to_string(),
@@ -2351,7 +2377,7 @@ impl NsTab {
                                                 self.add_progress(
                                                     "Reloading UI data...".to_string(),
                                                 );
-                                                self.load_data();
+                                                self.load_data(profile);
                                                 self.add_progress("✓ UI refreshed".to_string());
                                             }
                                             Err(e) => {
@@ -2390,7 +2416,7 @@ impl NsTab {
     }
 
     /// Execute add domain manually
-    fn execute_add_domain_manual(&mut self) {
+    fn execute_add_domain_manual(&mut self, profile: &ProfileContext) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::dns;
@@ -2413,7 +2439,7 @@ impl NsTab {
             }
 
             // Find existing provider token from config
-            match load_ns_config() {
+            match load_ns_config(&Some(profile.clone())) {
                 Ok(mut config) => {
                     // For GCP: use existing account or add new one
                     let provider = if provider == "gcloud" {
@@ -2497,7 +2523,7 @@ impl NsTab {
 
                     // Save config to persist refreshed token
                     if provider.starts_with("gcloud:") {
-                        if let Err(e) = save_ns_config(&config) {
+                        if let Err(e) = save_ns_config(&Some(profile.clone()), &config) {
                             dure_debug!("Warning: Failed to save refreshed token: {}", e);
                         }
                     }
@@ -2741,7 +2767,7 @@ impl NsTab {
                                 }
                             }
 
-                            match save_ns_config(&config) {
+                            match save_ns_config(&Some(profile.clone()), &config) {
                                 Ok(_) => {
                                     // Record audit event
                                     let _ = audit::push_gui("system", "desktop", "ns add", &domain);
@@ -2755,7 +2781,7 @@ impl NsTab {
                                         "✓ Added domain: {} ({}) with {} records",
                                         domain, provider, record_count
                                     ));
-                                    self.load_data();
+                                    self.load_data(profile);
                                 }
                                 Err(e) => {
                                     self.add_progress(format!("Error saving config: {}", e));
@@ -2775,7 +2801,7 @@ impl NsTab {
     }
 
     /// Refresh domains and records from API
-    fn refresh_from_api(&mut self) {
+    fn refresh_from_api(&mut self, profile: &ProfileContext) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::api::{ns_cloudflare, ns_porkbun};
@@ -2783,7 +2809,7 @@ impl NsTab {
 
             self.add_progress("Refreshing from API...".to_string());
 
-            match load_ns_config() {
+            match load_ns_config(&Some(profile.clone())) {
                 Ok(mut config) => {
                     let mut updated_count = 0;
 
@@ -3141,10 +3167,10 @@ impl NsTab {
 
                     if updated_count > 0 {
                         // Save updated config
-                        match save_ns_config(&config) {
+                        match save_ns_config(&Some(profile.clone()), &config) {
                             Ok(_) => {
                                 self.add_progress(format!("✓ Refreshed {} domains", updated_count));
-                                self.load_data();
+                                self.load_data(profile);
                             }
                             Err(e) => {
                                 self.add_progress(format!("❌ Error saving config: {}", e));
@@ -3152,7 +3178,7 @@ impl NsTab {
                         }
                     } else {
                         self.add_progress("No domains to refresh".to_string());
-                        self.load_data(); // Still reload UI from config
+                        self.load_data(profile); // Still reload UI from config
                     }
                 }
                 Err(e) => {
@@ -3165,6 +3191,7 @@ impl NsTab {
     /// Execute delete domain
     fn execute_delete_domain(
         &mut self,
+        profile: &ProfileContext,
         domain: &str,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -3175,7 +3202,7 @@ impl NsTab {
                 p.clone()
             } else {
                 // If no selection, try to find it in loaded data
-                match load_ns_config() {
+                match load_ns_config(&Some(profile.clone())) {
                     Ok(config) => {
                         if let Some((prov, _)) = config.get_domain_any_provider(domain) {
                             prov.to_string()
@@ -3206,7 +3233,7 @@ impl NsTab {
     }
 
     /// Execute add record
-    fn execute_add_record(&mut self, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_add_record(&mut self, profile: &ProfileContext, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let name = self.add_record_name.trim().to_string();
@@ -3250,7 +3277,7 @@ impl NsTab {
                         ) {
                             Ok(_) => {
                                 // Add to config optimistically
-                                match load_ns_config() {
+                                match load_ns_config(&Some(profile.clone())) {
                                     Ok(mut config) => {
                                         if let Ok(_) = config.add_record(
                                             &provider,
@@ -3292,7 +3319,7 @@ impl NsTab {
                     }
                 } else {
                     // Not applying - just save to config (no API call)
-                    match load_ns_config() {
+                    match load_ns_config(&Some(profile.clone())) {
                         Ok(mut config) => {
                             match config.add_record(
                                 &provider,
@@ -3301,7 +3328,7 @@ impl NsTab {
                                 normalized_name.clone(),
                                 value.clone(),
                             ) {
-                                Ok(_) => match save_ns_config(&config) {
+                                Ok(_) => match save_ns_config(&Some(profile.clone()), &config) {
                                     Ok(_) => {
                                         let record_desc = format!(
                                             "{} {} {} {}",
@@ -3322,7 +3349,7 @@ impl NsTab {
                                             value
                                         ));
 
-                                        self.load_data();
+                                        self.load_data(profile);
                                     }
                                     Err(e) => {
                                         self.error_message =
@@ -3388,7 +3415,7 @@ impl NsTab {
     }
 
     /// Show nameservers for a domain
-    fn show_nameservers(&mut self, provider: &str, domain: &str) {
+    fn show_nameservers(&mut self, profile: &ProfileContext, provider: &str, domain: &str) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::calc::dns;
@@ -3411,7 +3438,7 @@ impl NsTab {
             }
 
             // Fetch provider NS records
-            match load_ns_config() {
+            match load_ns_config(&Some(profile.clone())) {
                 Ok(config) => {
                     // Extract base provider name (strip email for gcloud)
                     let base_provider = if provider.starts_with("gcloud:") {
