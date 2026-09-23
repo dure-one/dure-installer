@@ -36,7 +36,7 @@ name = "dure"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "dure-desktop"
+name = "dure-installer"
 path = "src/main.rs"
 
 [dependencies]
