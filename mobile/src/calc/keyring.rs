@@ -25,9 +25,9 @@
 //! - KPKey: `~/.config/dure/id_ed25519`
 //! - KPPubKey: `~/.config/dure/id_ed25519.pub`
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::dure_info;
 use anyhow::{Context, Result};
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use directories::ProjectDirs;
 use keepass::{
     Database, DatabaseKey,

@@ -2,12 +2,12 @@
 #![allow(clippy::manual_range_contains)]
 #![recursion_limit = "2048"]
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use directories::ProjectDirs;
 
 // Force linkage of libsqlite3-hotbundle for encryption support
@@ -60,7 +60,7 @@ pub mod ui_tabs;
 pub mod viewmodel;
 
 // Desktop-only modules
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod cli;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub mod install;
