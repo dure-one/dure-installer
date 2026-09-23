@@ -647,8 +647,9 @@ impl SshActor {
         // Test connection (async operation - russh uses tokio internally)
         dure_debug!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port
         );
+        // TODO: Pass profile keyring handle when SSH Actor has profile context
         let result =
-            async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await;
+            async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config, None)).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
         dure_debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms

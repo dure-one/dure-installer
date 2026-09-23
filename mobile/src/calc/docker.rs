@@ -102,19 +102,19 @@ pub async fn install_docker_daemon(host_config: &SshHostConfig) -> Result<Vec<St
     let mut progress = Vec::new();
 
     progress.push("Downloading Docker installer...".to_string());
-    ssh::execute_command(host_config, "curl -fsSL https://get.docker.com -o get-docker.sh").await?;
+    ssh::execute_command(host_config, "curl -fsSL https://get.docker.com -o get-docker.sh", None).await?;
 
     progress.push("Installing Docker...".to_string());
-    ssh::execute_command(host_config, "sudo sh get-docker.sh").await?;
+    ssh::execute_command(host_config, "sudo sh get-docker.sh", None).await?;
 
     progress.push("Enabling Docker service...".to_string());
-    ssh::execute_command(host_config, "sudo systemctl enable docker").await?;
+    ssh::execute_command(host_config, "sudo systemctl enable docker", None).await?;
 
     progress.push("Starting Docker service...".to_string());
-    ssh::execute_command(host_config, "sudo systemctl start docker").await?;
+    ssh::execute_command(host_config, "sudo systemctl start docker", None).await?;
 
     progress.push("Adding user to docker group...".to_string());
-    ssh::execute_command(host_config, "sudo usermod -aG docker $USER").await?;
+    ssh::execute_command(host_config, "sudo usermod -aG docker $USER", None).await?;
 
     progress.push("Docker installed successfully".to_string());
 
@@ -123,7 +123,7 @@ pub async fn install_docker_daemon(host_config: &SshHostConfig) -> Result<Vec<St
 
 /// Check if Docker is installed and running
 pub async fn is_docker_installed(host_config: &SshHostConfig) -> Result<bool> {
-    match ssh::execute_command(host_config, "which docker").await {
+    match ssh::execute_command(host_config, "which docker", None).await {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     }
@@ -136,11 +136,11 @@ pub async fn run_docker_container(
 ) -> Result<String> {
     // Pull image
     let pull_cmd = format!("docker pull {}:{}", config.image, config.tag);
-    ssh::execute_command(host_config, &pull_cmd).await?;
+    ssh::execute_command(host_config, &pull_cmd, None).await?;
 
     // Build and execute docker run command
     let run_cmd = build_docker_run_command(config);
-    ssh::execute_command(host_config, &run_cmd).await
+    ssh::execute_command(host_config, &run_cmd, None).await
 }
 
 /// Stop and remove Docker container
@@ -150,11 +150,11 @@ pub async fn remove_docker_container(
 ) -> Result<String> {
     // Stop container (ignore errors if already stopped)
     let stop_cmd = format!("docker stop {}", container_name);
-    let _ = ssh::execute_command(host_config, &stop_cmd).await;
+    let _ = ssh::execute_command(host_config, &stop_cmd, None).await;
 
     // Remove container
     let rm_cmd = format!("docker rm {}", container_name);
-    ssh::execute_command(host_config, &rm_cmd).await
+    ssh::execute_command(host_config, &rm_cmd, None).await
 }
 
 /// List running containers
@@ -164,6 +164,7 @@ pub async fn list_docker_containers(
     let output = ssh::execute_command(
         host_config,
         "docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}'",
+        None,
     )
     .await?;
 

@@ -39,7 +39,14 @@ impl client::Handler for Client {
 }
 
 /// Connect to SSH host and verify connection
-pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectionResult> {
+///
+/// # Arguments
+/// * `host_config` - SSH host configuration
+/// * `profile_keyring` - Optional profile keyring handle for loading SSH keys
+pub async fn test_connection(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<SshConnectionResult> {
     let (username, hostname) = parse_ssh_host(&host_config.host)?;
     let addr = format!("{}:{}", hostname, host_config.port);
 
@@ -61,7 +68,7 @@ pub async fn test_connection(host_config: &SshHostConfig) -> Result<SshConnectio
         .context("Failed to connect")?;
 
     // Authenticate
-    authenticate(&mut session, &username, host_config).await?;
+    authenticate(&mut session, &username, host_config, profile_keyring).await?;
 
     session
         .disconnect(russh::Disconnect::ByApplication, "", "")
@@ -153,7 +160,16 @@ pub async fn test_connection_simple(
 }
 
 /// Execute SSH command on remote host
-pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Result<String> {
+///
+/// # Arguments
+/// * `host_config` - SSH host configuration
+/// * `command` - Command to execute
+/// * `profile_keyring` - Optional profile keyring handle for loading SSH keys
+pub async fn execute_command(
+    host_config: &SshHostConfig,
+    command: &str,
+    profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
     let (username, hostname) = parse_ssh_host(&host_config.host)?;
     let addr = format!("{}:{}", hostname, host_config.port);
 
@@ -175,7 +191,7 @@ pub async fn execute_command(host_config: &SshHostConfig, command: &str) -> Resu
         .context("Failed to connect")?;
 
     // Authenticate
-    authenticate(&mut session, &username, host_config).await?;
+    authenticate(&mut session, &username, host_config, profile_keyring).await?;
 
     // Execute command
     let mut channel = session.channel_open_session().await?;
@@ -353,6 +369,7 @@ async fn authenticate(
     session: &mut Handle<Client>,
     username: &str,
     host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<()> {
     let mut attempted_methods = Vec::new();
     let mut errors = Vec::new();
@@ -362,7 +379,7 @@ async fn authenticate(
     if let Some(ref keyring_domain) = host_config.keyring_domain {
         attempted_methods.push("keyring".to_string());
 
-        match load_private_key_from_keyring(keyring_domain, username) {
+        match load_private_key_from_keyring(keyring_domain, username, profile_keyring) {
             Ok(private_key_pem) => match russh_keys::decode_secret_key(&private_key_pem, None) {
                 Ok(key_pair) => {
                     let auth_res = session
@@ -454,20 +471,31 @@ async fn authenticate(
 
 /// Load private key from keyring
 #[cfg(not(target_arch = "wasm32"))]
-fn load_private_key_from_keyring(domain: &str, username: &str) -> Result<String> {
+fn load_private_key_from_keyring(
+    domain: &str,
+    username: &str,
+    profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
     use crate::calc::keyring;
 
-    // Ensure keyring exists (creates if missing)
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        keyring::ensure_kdbx_exists().context("Failed to initialize keyring")?;
-    }
+    // Use profile keyring if provided, otherwise fall back to global keyring
+    let keys = if let Some(handle) = profile_keyring {
+        // Use profile keyring (preferred)
+        keyring::list_keys_from_handle(handle)
+            .context("Failed to list keys from profile keyring")?
+    } else {
+        // Fall back to global keyring (deprecated, for backward compatibility)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            keyring::ensure_kdbx_exists().context("Failed to initialize global keyring")?;
+        }
 
-    let kdbx_path = keyring::get_default_kdbx_path().context("Failed to get kdbx path")?;
-    let kpkey_path = keyring::get_default_kpkey_path().context("Failed to get KPKey path")?;
+        let kdbx_path = keyring::get_default_kdbx_path().context("Failed to get kdbx path")?;
+        let kpkey_path = keyring::get_default_kpkey_path().context("Failed to get KPKey path")?;
 
-    let keys = keyring::list_keys(&kdbx_path, Some(&kpkey_path), None)
-        .context("Failed to list keys from keyring")?;
+        keyring::list_keys(&kdbx_path, Some(&kpkey_path), None)
+            .context("Failed to list keys from global keyring")?
+    };
 
     // Find the key with matching domain and username
     let key_entry = keys

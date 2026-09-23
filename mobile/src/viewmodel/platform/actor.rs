@@ -1568,13 +1568,25 @@ impl PlatformActor {
         {
             // Derive profile-specific keyring paths from profile_config_path
             let profile_dir = profile_config_path.parent();
-            let (profile_kdbx_path, profile_kpkey_path) = if let Some(dir) = profile_dir {
-                (
-                    Some(dir.join("key.kdbx")),
-                    Some(dir.join("id_ed25519")),
-                )
+            let profile_keyring = if let Some(dir) = profile_dir {
+                let kdbx_path = dir.join("key.kdbx");
+                let kpkey_path = dir.join("id_ed25519");
+
+                // Try to open profile keyring
+                if kdbx_path.exists() && kpkey_path.exists() {
+                    match crate::calc::keyring::DatabaseHandle::open(kdbx_path, kpkey_path, None) {
+                        Ok(handle) => Some(std::sync::Arc::new(handle)),
+                        Err(e) => {
+                            dure_warn!("Failed to open profile keyring: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    dure_debug!("Profile keyring not found at {:?}", dir);
+                    None
+                }
             } else {
-                (None, None)
+                None
             };
 
             // Build SSH host config
@@ -1592,12 +1604,12 @@ impl PlatformActor {
                 dure_wss_config: None,
             };
 
-            // Run test connection
+            // Run test connection with profile keyring
             let project_id_clone = project_id.to_string();
             let project_id_clone2 = project_id.to_string();
             match runtime::unblock(move || {
                 smol::block_on(async {
-                    async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config)).await
+                    async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config, profile_keyring.as_ref())).await
                 })
             })
             .await
