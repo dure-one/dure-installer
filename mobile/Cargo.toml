@@ -94,6 +94,12 @@ keepass = { version = "0.10", features = ["save_kdbx4"] }
 # YAML parsing (still needed for other purposes)
 serde_yaml = "0.9"
 
+# Cross-platform utilities (used in both desktop and Android)
+urlencoding = "2.1"
+russh-keys = "0.45"
+hostname = "0.4"
+shellexpand = "3.1"
+
 # Desktop-only dependencies (all desktop platforms including OpenBSD)
 [target.'cfg(not(any(target_os = "android", target_arch = "wasm32")))'.dependencies]
 tao = { version = "0.33", optional = true }
@@ -104,7 +110,6 @@ env_logger = { version = "0.11", default-features = false }
 directories = "5.0"
 opener = "0.7"
 dirs = "5.0"
-hostname = "0.4"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 tar = "0.4"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
@@ -140,14 +145,11 @@ rustls-native-certs = "0.8"
 url = "2.5"
 # SSH support for remote server management (pure Rust, no OpenSSL)
 russh = "0.45"
-russh-keys = "0.45"
 async-trait = "0.1"  # Required for russh Handler trait
-shellexpand = "3.1"
 # WebAuthn server-side support
 # - Linux/Windows/macOS: go-webauthn (pure Rust + Go, no OpenSSL)
 # - OpenBSD: webauthn-rs (requires OpenSSL, but monoio/rust2go don't support OpenBSD)
 uuid = { version = "1.11", features = ["v4", "serde"] }
-urlencoding = "2.1"
 
 # Desktop dependencies (excluding OpenBSD - tray-icon/muda lack OpenBSD support)
 [target.'cfg(all(not(any(target_os = "android", target_arch = "wasm32")), not(target_os = "openbsd")))'.dependencies]

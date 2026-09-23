@@ -457,6 +457,12 @@ async fn authenticate(
 fn load_private_key_from_keyring(domain: &str, username: &str) -> Result<String> {
     use crate::calc::keyring;
 
+    // Ensure keyring exists (creates if missing)
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        keyring::ensure_kdbx_exists().context("Failed to initialize keyring")?;
+    }
+
     let kdbx_path = keyring::get_default_kdbx_path().context("Failed to get kdbx path")?;
     let kpkey_path = keyring::get_default_kpkey_path().context("Failed to get KPKey path")?;
 
