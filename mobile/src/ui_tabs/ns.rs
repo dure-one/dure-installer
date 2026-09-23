@@ -9,8 +9,6 @@ use poll_promise::Promise;
 use crate::calc::audit;
 use crate::calc::ns::{NsConfig, RecordType};
 use crate::calc::profile::ProfileContext;
-#[cfg(not(target_arch = "wasm32"))]
-use directories::ProjectDirs;
 use std::path::PathBuf;
 
 /// NS tab state

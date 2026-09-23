@@ -123,7 +123,6 @@ impl DlgAbout {
                         ui.heading(tr!("about-rust-libraries"));
                         ui.add_space(4.0);
                         ui.add(egui::Label::new("• egui - Immediate mode GUI library (MIT/Apache-2.0)").wrap());
-                        ui.add(egui::Label::new("• directories - Platform-specific directory paths (MIT/Apache-2.0)").wrap());
                         ui.add(egui::Label::new("• diesel - Type-safe ORM and query builder (MIT/Apache-2.0)").wrap());
                         ui.add(egui::Label::new("• tray-icon - Cross-platform system tray library (MIT/Apache-2.0)").wrap());
                         ui.add(egui::Label::new("• winit - Cross-platform window creation and management (Apache-2.0)").wrap());
