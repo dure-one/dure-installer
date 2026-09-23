@@ -1290,7 +1290,7 @@ impl PlatformTab {
                 {
                     if let Some(ref vm) = vm {
                         let profile_config_path = current_profile.config_file.clone();
-                        if let Ok(_) = vm.refresh_platform(profile_config_path, row.project_id.clone()) {
+                        if let Ok(_) = vm.refresh_platform(profile_config_path, row.project_id.clone(), current_profile_kdbx.clone()) {
                             // Mark as auto-refreshed to prevent repeat triggers
                             self.auto_refreshed_platforms.insert(row.project_id.clone());
                         } else {
@@ -1677,7 +1677,7 @@ impl PlatformTab {
                 // Send RefreshPlatform command to ViewModel
                 if let Some(ref vm) = vm {
                     let profile_config_path = current_profile.config_file.clone();
-                    if let Err(e) = vm.refresh_platform(profile_config_path, platform_name.clone()) {
+                    if let Err(e) = vm.refresh_platform(profile_config_path, platform_name.clone(), current_profile_kdbx.clone()) {
                         dure_error!("Failed to send refresh command: {}", e);
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Failed {

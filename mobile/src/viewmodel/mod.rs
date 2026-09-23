@@ -432,9 +432,18 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn refresh_platform(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
+    pub fn refresh_platform(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::RefreshPlatform { profile_config_path, platform_name })
+            .send_blocking(platform::PlatformCommand::RefreshPlatform {
+                profile_config_path,
+                platform_name,
+                profile_kdbx,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

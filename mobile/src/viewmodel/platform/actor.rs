@@ -152,8 +152,8 @@ impl PlatformActor {
                 platform_name,
                 delete_options,
             } => self.delete_platform(profile_config_path, platform_name, delete_options).await,
-            PlatformCommand::RefreshPlatform { profile_config_path, platform_name } => {
-                self.refresh_platform(profile_config_path, platform_name).await
+            PlatformCommand::RefreshPlatform { profile_config_path, platform_name, profile_kdbx } => {
+                self.refresh_platform(profile_config_path, platform_name, profile_kdbx).await
             }
             _ => {
                 // Unimplemented commands
@@ -1331,7 +1331,12 @@ impl PlatformActor {
         .await
     }
 
-    async fn refresh_platform(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
+    async fn refresh_platform(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         dure_info!(project_id = &platform_name, "🔄 Refreshing platform: {}", platform_name);
 
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -1352,7 +1357,7 @@ impl PlatformActor {
             let firewall_status = self.check_firewall_status(&platform).await;
 
             // Step 3: Test SSH connection
-            let ssh_status = self.test_ssh_connection(&platform, &profile_config_path).await;
+            let ssh_status = self.test_ssh_connection(&platform, &profile_config_path, profile_kdbx.as_ref()).await;
 
             // Step 4: Fetch project count and cache to profile-specific config
             let project_count = self.fetch_and_cache_project_count(&profile_config_path, &platform_name, &platform).await;
@@ -1532,6 +1537,7 @@ impl PlatformActor {
         &self,
         platform: &crate::config::CloudPlatformConfig,
         profile_config_path: &std::path::Path,
+        profile_kdbx: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> super::SshStatus {
         use super::SshStatus;
 
@@ -1566,28 +1572,8 @@ impl PlatformActor {
         // Test SSH connection
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
-            // Derive profile-specific keyring paths from profile_config_path
-            let profile_dir = profile_config_path.parent();
-            let profile_keyring = if let Some(dir) = profile_dir {
-                let kdbx_path = dir.join("key.kdbx");
-                let kpkey_path = dir.join("id_ed25519");
-
-                // Try to open profile keyring
-                if kdbx_path.exists() && kpkey_path.exists() {
-                    match crate::calc::keyring::DatabaseHandle::open(kdbx_path, kpkey_path, None) {
-                        Ok(handle) => Some(std::sync::Arc::new(handle)),
-                        Err(e) => {
-                            dure_warn!("Failed to open profile keyring: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    dure_debug!("Profile keyring not found at {:?}", dir);
-                    None
-                }
-            } else {
-                None
-            };
+            // Use provided profile keyring handle (already opened by UI with password)
+            let profile_keyring = profile_kdbx;
 
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
