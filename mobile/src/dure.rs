@@ -366,6 +366,7 @@ impl DureApp {
                 .variant(egui_material3::SelectVariant::Outlined)
                 .label(tr!("profile"))
                 .placeholder(tr!("none"))
+                .compact(true)
                 .width(220.0)
                 .menu_max_height(300.0);
 
