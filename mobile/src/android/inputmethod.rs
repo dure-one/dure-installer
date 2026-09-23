@@ -22,13 +22,42 @@ pub fn show_soft_input() -> std::io::Result<()> {
         )
     })?;
 
-    let activity = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
+    let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
         std::io::Error::new(
             std::io::ErrorKind::Other,
             "Failed to attach current thread",
         )
     })?;
+
+    // Verify the context is an Activity (not Application)
+    // ndk_context might give us Application context instead of Activity
+    let activity_class = env
+        .find_class("android/app/Activity")
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to find Activity class: {}", e),
+            )
+        })?;
+
+    let is_activity = env
+        .is_instance_of(&context, &activity_class)
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to check if context is Activity: {}", e),
+            )
+        })?;
+
+    if !is_activity {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Context is not an Activity - cannot show keyboard without Activity context",
+        ));
+    }
+
+    let activity = context;
 
     // Get InputMethodManager via getSystemService
     // First, get the INPUT_METHOD_SERVICE constant
@@ -90,7 +119,7 @@ pub fn show_soft_input() -> std::io::Result<()> {
         ));
     }
 
-    // Get the activity's window
+    // Get the activity's window (safe now because we verified it's an Activity)
     let window = env
         .call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])
         .map_err(|e| {
@@ -171,13 +200,41 @@ pub fn hide_soft_input() -> std::io::Result<()> {
         )
     })?;
 
-    let activity = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
+    let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
         std::io::Error::new(
             std::io::ErrorKind::Other,
             "Failed to attach current thread",
         )
     })?;
+
+    // Verify the context is an Activity (not Application)
+    let activity_class = env
+        .find_class("android/app/Activity")
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to find Activity class: {}", e),
+            )
+        })?;
+
+    let is_activity = env
+        .is_instance_of(&context, &activity_class)
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to check if context is Activity: {}", e),
+            )
+        })?;
+
+    if !is_activity {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Context is not an Activity - cannot hide keyboard without Activity context",
+        ));
+    }
+
+    let activity = context;
 
     // Get InputMethodManager
     let context_class = env
@@ -237,7 +294,7 @@ pub fn hide_soft_input() -> std::io::Result<()> {
         ));
     }
 
-    // Get the activity's window
+    // Get the activity's window (safe now because we verified it's an Activity)
     let window = env
         .call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])
         .map_err(|e| {
@@ -338,13 +395,41 @@ pub fn toggle_soft_input() -> std::io::Result<()> {
         )
     })?;
 
-    let activity = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
+    let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
         std::io::Error::new(
             std::io::ErrorKind::Other,
             "Failed to attach current thread",
         )
     })?;
+
+    // Verify the context is an Activity (not Application)
+    let activity_class = env
+        .find_class("android/app/Activity")
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to find Activity class: {}", e),
+            )
+        })?;
+
+    let is_activity = env
+        .is_instance_of(&context, &activity_class)
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to check if context is Activity: {}", e),
+            )
+        })?;
+
+    if !is_activity {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Context is not an Activity - cannot toggle keyboard without Activity context",
+        ));
+    }
+
+    let activity = context;
 
     let context_class = env
         .find_class("android/content/Context")

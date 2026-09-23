@@ -27,8 +27,6 @@
 
 use crate::{dure_info, dure_debug, dure_error};
 use anyhow::{Context, Result};
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use directories::ProjectDirs;
 use keepass::{
     Database, DatabaseKey,
     db::{Entry, Group, Value},

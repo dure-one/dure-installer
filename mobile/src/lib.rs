@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use directories::ProjectDirs;
-
 // Force linkage of libsqlite3-hotbundle for encryption support
 #[cfg(not(target_arch = "wasm32"))]
 extern crate libsqlite3_hotbundle;
@@ -117,7 +114,9 @@ pub fn get_app_config_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/files"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("files"))
     }
 }
 
@@ -140,7 +139,9 @@ pub fn get_profiles_base_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/profiles"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("profiles"))
     }
 }
 
@@ -170,7 +171,9 @@ pub fn get_app_cache_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/cache"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("cache"))
     }
 }
 
