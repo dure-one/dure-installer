@@ -746,8 +746,8 @@ pub fn docker_run(
     _host_config: &SshHostConfig,
     _image: &str,
     _container_name: &str,
-    _ports: &[(u16, u16)],
-    _env: &[(&str, &str)],
+    _ports: &Vec<(u16, u16)>,
+    _env: &Vec<(String, String)>,
 ) -> Result<()> {
     anyhow::bail!("Docker run not supported on this platform")
 }
