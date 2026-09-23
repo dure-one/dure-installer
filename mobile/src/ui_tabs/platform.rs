@@ -3403,7 +3403,6 @@ impl PlatformTab {
         let ip = host.split('@').last().unwrap_or(&host).to_string();
 
         // Spawn connection test in background thread
-        let platform_name_clone = platform_name.clone();
         let promise = poll_promise::Promise::spawn_thread("ssh_test_platform", move || {
             use crate::calc::ssh;
             smol::block_on(async {

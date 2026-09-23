@@ -63,23 +63,27 @@ mod desktop_impl {
     ) -> Result<()> {
         let address = format!("{}:{}", host_ip, port);
         let socket_addrs: Vec<_> = address.to_socket_addrs()?.collect();
-        let socket_addr = socket_addrs.first()
+        let socket_addr = *socket_addrs.first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
+        let private_key_pem = private_key_pem.to_string();
 
-        let config = Arc::new(russh::client::Config::default());
-        let mut session = russh::client::connect(config, socket_addr, Client).await?;
+        async_compat::Compat::new(async move {
+            let config = Arc::new(russh::client::Config::default());
+            let mut session = russh::client::connect(config, socket_addr, Client).await?;
 
-        let key_pair = russh_keys::decode_secret_key(private_key_pem, None)?;
+            let key_pair = russh_keys::decode_secret_key(&private_key_pem, None)?;
 
-        session
-            .authenticate_publickey("root", Arc::new(key_pair))
-            .await?;
+            session
+                .authenticate_publickey("root", Arc::new(key_pair))
+                .await?;
 
-        session
-            .disconnect(russh::Disconnect::ByApplication, "", "")
-            .await?;
+            session
+                .disconnect(russh::Disconnect::ByApplication, "", "")
+                .await?;
 
-        Ok(())
+            Ok(())
+        })
+        .await
     }
 
     /// Test SSH connection with profile keyring
@@ -94,31 +98,37 @@ mod desktop_impl {
             .to_socket_addrs()
             .context("Failed to resolve SSH hostname")?
             .collect();
-        let socket_addr = socket_addrs
+        let socket_addr = *socket_addrs
             .first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
 
-        let config = Arc::new(russh::client::Config::default());
-        let mut session = russh::client::connect(config, socket_addr, Client)
-            .await
-            .context("Failed to connect to SSH server")?;
+        let host_config = host_config.clone();
+        let profile_keyring = profile_keyring.cloned();
 
-        match authenticate(&mut session, &username, host_config, profile_keyring).await {
-            Ok(_) => {
-                session
-                    .disconnect(russh::Disconnect::ByApplication, "", "")
-                    .await
-                    .ok();
-                Ok(SshConnectionResult {
-                    success: true,
-                    message: format!("Successfully connected to {}", host_config.host),
-                })
+        async_compat::Compat::new(async move {
+            let config = Arc::new(russh::client::Config::default());
+            let mut session = russh::client::connect(config, socket_addr, Client)
+                .await
+                .context("Failed to connect to SSH server")?;
+
+            match authenticate(&mut session, &username, &host_config, profile_keyring.as_ref()).await {
+                Ok(_) => {
+                    session
+                        .disconnect(russh::Disconnect::ByApplication, "", "")
+                        .await
+                        .ok();
+                    Ok(SshConnectionResult {
+                        success: true,
+                        message: format!("Successfully connected to {}", host_config.host),
+                    })
+                }
+                Err(e) => Ok(SshConnectionResult {
+                    success: false,
+                    message: format!("{}", e),
+                }),
             }
-            Err(e) => Ok(SshConnectionResult {
-                success: false,
-                message: format!("{}", e),
-            }),
-        }
+        })
+        .await
     }
 
     /// Execute command over SSH
@@ -131,43 +141,50 @@ mod desktop_impl {
 
         let address = format!("{}:{}", hostname, host_config.port);
         let socket_addrs: Vec<_> = address.to_socket_addrs()?.collect();
-        let socket_addr = socket_addrs
+        let socket_addr = *socket_addrs
             .first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
 
-        let config = Arc::new(russh::client::Config::default());
-        let mut session = russh::client::connect(config, socket_addr, Client).await?;
+        let host_config = host_config.clone();
+        let command = command.to_string();
+        let profile_keyring = profile_keyring.cloned();
 
-        authenticate(&mut session, &username, host_config, profile_keyring).await?;
+        async_compat::Compat::new(async move {
+            let config = Arc::new(russh::client::Config::default());
+            let mut session = russh::client::connect(config, socket_addr, Client).await?;
 
-        let mut channel = session.channel_open_session().await?;
-        channel.exec(true, command).await?;
+            authenticate(&mut session, &username, &host_config, profile_keyring.as_ref()).await?;
 
-        let mut output = String::new();
-        loop {
-            let Some(msg) = channel.wait().await else {
-                break;
-            };
-            use russh::ChannelMsg::*;
-            match msg {
-                Data { ref data } => {
-                    output.push_str(&String::from_utf8_lossy(data));
-                }
-                ExitStatus { exit_status } => {
-                    if exit_status != 0 {
-                        anyhow::bail!("Command failed with exit status {}", exit_status);
-                    }
+            let mut channel = session.channel_open_session().await?;
+            channel.exec(true, command.as_str()).await?;
+
+            let mut output = String::new();
+            loop {
+                let Some(msg) = channel.wait().await else {
                     break;
+                };
+                use russh::ChannelMsg::*;
+                match msg {
+                    Data { ref data } => {
+                        output.push_str(&String::from_utf8_lossy(data));
+                    }
+                    ExitStatus { exit_status } => {
+                        if exit_status != 0 {
+                            anyhow::bail!("Command failed with exit status {}", exit_status);
+                        }
+                        break;
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
-        }
 
-        session
-            .disconnect(russh::Disconnect::ByApplication, "", "")
-            .await?;
+            session
+                .disconnect(russh::Disconnect::ByApplication, "", "")
+                .await?;
 
-        Ok(output)
+            Ok(output)
+        })
+        .await
     }
 
     /// Initialize SSH host (install swap, nftables, dure server)
@@ -765,4 +782,25 @@ pub fn port_open(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> R
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
 pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
     anyhow::bail!("Port management not supported on this platform")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+    fn test_ssh_async_compat_does_not_panic_without_tokio_runtime() {
+        let handle = std::thread::spawn(|| {
+            smol::block_on(async {
+                // Must not panic with 'There is no reactor running'
+                let result = test_connection_simple("127.0.0.1", "fake-key", 65534, 100).await;
+                assert!(result.is_err());
+            });
+        });
+        assert!(
+            handle.join().is_ok(),
+            "Thread panicked (likely missing Tokio reactor)"
+        );
+    }
 }

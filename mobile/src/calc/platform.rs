@@ -378,7 +378,7 @@ pub fn list_gcp_regions() -> Result<Vec<GcpRegion>> {
 /// Create GCP OAuth client
 ///
 /// This should run:
-/// ```
+/// ```text
 /// gcloud iam oauth-clients create [APP_OAUTH_CLIENT_ID] \
 ///     --project=[PROJECT_ID] \
 ///     --location=global \

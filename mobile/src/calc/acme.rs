@@ -505,7 +505,7 @@ impl DnsProviderType {
 ///     provider_type: DnsProviderType::Cloudflare,
 ///     api_token: "your_api_token".to_string(),
 /// };
-/// set_a_record(&provider, "example.com", "1.2.3.4")?;
+/// set_a_record(&provider, "example.com", "@", "1.2.3.4")?;
 /// # Ok(())
 /// # }
 /// ```
