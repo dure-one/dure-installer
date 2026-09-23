@@ -34,15 +34,19 @@ static DB_PATH: Mutex<Option<String>> = Mutex::new(None);
 static DB_ENCRYPTION_KEY: Mutex<Option<String>> = Mutex::new(None);
 #[cfg(not(target_family = "wasm"))]
 static MIGRATIONS_RAN: Mutex<bool> = Mutex::new(false);
+#[cfg(not(target_family = "wasm"))]
+static ENCRYPTION_LOGGED: Mutex<bool> = Mutex::new(false);
 
 /// Set the database path to use for connections
 #[cfg(not(target_family = "wasm"))]
 pub fn set_db_path(path: String) {
     let mut db_path = DB_PATH.lock().expect("DB_PATH lock poisoned");
     *db_path = Some(path);
-    // Reset migrations flag when database path changes
+    // Reset flags when database path changes
     let mut migrations_ran = MIGRATIONS_RAN.lock().expect("MIGRATIONS_RAN lock poisoned");
     *migrations_ran = false;
+    let mut encryption_logged = ENCRYPTION_LOGGED.lock().expect("ENCRYPTION_LOGGED lock poisoned");
+    *encryption_logged = false;
 }
 
 /// Get the current database path
@@ -143,7 +147,12 @@ pub mod sqlite {
                     .execute(&mut conn)
                     .expect("Failed to set encryption key");
 
-                dure_info!("SQLite encryption enabled (AES-256-CBC)");
+                // Log encryption only once
+                let mut encryption_logged = ENCRYPTION_LOGGED.lock().unwrap();
+                if !*encryption_logged {
+                    dure_info!("SQLite encryption enabled (AES-256-CBC)");
+                    *encryption_logged = true;
+                }
             }
             drop(db_key); // Release lock
 
