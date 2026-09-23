@@ -1572,8 +1572,8 @@ impl PlatformActor {
         // Test SSH connection
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
-            // Use provided profile keyring handle (already opened by UI with password)
-            let profile_keyring = profile_kdbx;
+            // Clone Arc for move into closure (convert Option<&Arc> to Option<Arc>)
+            let profile_keyring = profile_kdbx.cloned();
 
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
