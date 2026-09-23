@@ -20,8 +20,27 @@ impl DrawerRepository {
     }
 
     /// Initialize the operation logs table (idempotent)
+    ///
+    /// Returns Ok(()) if no profile is loaded yet (database will be initialized later)
     pub async fn init(&self) -> Result<()> {
         smol::unblock(|| {
+            // Check if database path is set (profile loaded)
+            // On Android, the database path is only set after profile login/creation
+            #[cfg(not(target_family = "wasm"))]
+            {
+                use crate::dure_debug;
+                let db_path_str = db::get_db_path();
+
+                // If it's the default "dure.db", no profile is loaded yet
+                // (actual profiles use absolute paths like /data/.../profiles/NAME/dure.db)
+                if db_path_str == "dure.db" {
+                    // No profile loaded yet - skip initialization
+                    // Table will be created when profile is actually loaded
+                    dure_debug!("DrawerRepository: Skipping init - no profile loaded yet (db_path={})", db_path_str);
+                    return Ok(());
+                }
+            }
+
             let mut conn = db::establish_connection();
             init_operation_logs_table(&mut conn)
         })
