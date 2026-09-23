@@ -286,6 +286,7 @@ profile = 프로필:
 none = 없음
 create-new-profile = + 새 프로필 생성
 delete-profile = 프로필 삭제
+close-profile = 프로필 닫기
 
 # Profile Login Dialog
 profile-login-title = 프로필 로그인

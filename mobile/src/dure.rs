@@ -400,6 +400,16 @@ impl DureApp {
                     dure_info!("Delete profile clicked: {}", profile.name);
                     self.dlg_profile_delete.open(profile.name.clone());
                 }
+
+                // Add "Close Profile" button
+                if ui.add(egui_material3::MaterialButton::outlined(tr!("close-profile")).small()).clicked() {
+                    dure_info!("Close profile clicked: {}", profile.name);
+                    // Clear current profile and keyring
+                    self.current_profile = None;
+                    self.current_profile_kdbx = None;
+                    // Clear and reload to reset UI
+                    self.clear_and_reload_profile();
+                }
             }
         });
 

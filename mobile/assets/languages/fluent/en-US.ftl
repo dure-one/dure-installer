@@ -286,6 +286,7 @@ profile = Profile:
 none = None
 create-new-profile = + Create New Profile
 delete-profile = Delete Profile
+close-profile = Close Profile
 
 # Profile Login Dialog
 profile-login-title = Login Profile
