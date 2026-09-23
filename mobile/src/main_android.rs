@@ -7,9 +7,62 @@
 
 use android_activity::AndroidApp;
 use eframe::NativeOptions;
+use jni::JNIEnv;
 
 use crate::dure::DureApp;
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
+
+/// Get Android internal files directory using JNI
+fn get_android_files_dir(app: &AndroidApp) -> Option<String> {
+    unsafe {
+        // Get the Activity from AndroidApp
+        let activity = app.activity_as_ptr();
+        if activity.is_null() {
+            dure_error!("Activity pointer is null");
+            return None;
+        }
+
+        // Initialize ndk-context
+        ndk_context::initialize_android_context(
+            app.vm_as_ptr() as *mut _,
+            activity as *mut _,
+        );
+
+        // Get JNI environment
+        let vm_ptr = app.vm_as_ptr() as *mut jni::sys::JavaVM;
+        let vm = jni::JavaVM::from_raw(vm_ptr).ok()?;
+        let mut env = vm.get_env().ok()?;
+
+        // Get the Activity object
+        let activity_obj = jni::objects::JObject::from_raw(activity as jni::sys::jobject);
+
+        // Call getFilesDir() on the Activity
+        let files_dir = env.call_method(
+            &activity_obj,
+            "getFilesDir",
+            "()Ljava/io/File;",
+            &[]
+        ).ok()?;
+
+        // Get the File object
+        let file_obj = files_dir.l().ok()?;
+
+        // Call getAbsolutePath() on the File object
+        let path_result = env.call_method(
+            &file_obj,
+            "getAbsolutePath",
+            "()Ljava/lang/String;",
+            &[]
+        ).ok()?;
+
+        // Get the String object
+        let path_jstring = path_result.l().ok()?;
+        let jstring = jni::objects::JString::from(path_jstring);
+        let path_string = env.get_string(&jstring).ok()?;
+
+        Some(path_string.to_string_lossy().to_string())
+    }
+}
 
 /// Android entry point
 ///
@@ -27,15 +80,19 @@ pub fn android_main(app: AndroidApp) {
 
     dure_info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));
 
-    // Get Android internal data path and set it as an environment variable
+    // Get Android internal files directory using JNI and set it as an environment variable
     // so the rest of the app can access it via get_profiles_base_dir() and similar functions
-    if let Some(internal_data_path) = app.internal_data_path() {
-        dure_info!("Android internal data path: {:?}", internal_data_path);
+    if let Some(files_dir) = get_android_files_dir(&app) {
+        dure_info!("Android files directory: {}", files_dir);
         // Set environment variable for the app's data directory
         // This will be used by get_profiles_base_dir() and other path functions
-        std::env::set_var("ANDROID_INTERNAL_DATA_PATH", internal_data_path.to_string_lossy().to_string());
+        std::env::set_var("ANDROID_INTERNAL_DATA_PATH", files_dir);
     } else {
-        dure_error!("Failed to get Android internal data path!");
+        dure_error!("Failed to get Android files directory via JNI!");
+        // Fallback: try to use a reasonable default
+        let fallback_path = "/data/data/app.dure.installer/files";
+        dure_warn!("Using fallback path: {}", fallback_path);
+        std::env::set_var("ANDROID_INTERNAL_DATA_PATH", fallback_path);
     }
 
     // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
