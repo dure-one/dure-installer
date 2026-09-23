@@ -15,7 +15,7 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name="app.dure.installer.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
