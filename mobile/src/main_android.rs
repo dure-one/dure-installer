@@ -27,6 +27,15 @@ pub fn android_main(app: AndroidApp) {
 
     dure_info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));
 
+    // Get Android internal data path and set it as an environment variable
+    // so the rest of the app can access it via get_profiles_base_dir() and similar functions
+    let internal_data_path = app.internal_data_path();
+    dure_info!("Android internal data path: {:?}", internal_data_path);
+
+    // Set environment variable for the app's data directory
+    // This will be used by get_profiles_base_dir() and other path functions
+    std::env::set_var("ANDROID_INTERNAL_DATA_PATH", internal_data_path.to_string_lossy().to_string());
+
     // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
     // See mobile/src/dure.rs profile login/create handlers for config/DB initialization
 

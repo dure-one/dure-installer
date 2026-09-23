@@ -117,7 +117,9 @@ pub fn get_app_config_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/files"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("files"))
     }
 }
 
@@ -140,7 +142,9 @@ pub fn get_profiles_base_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/profiles"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("profiles"))
     }
 }
 
@@ -170,7 +174,9 @@ pub fn get_app_cache_dir() -> Result<PathBuf> {
 
     #[cfg(target_os = "android")]
     {
-        Ok(PathBuf::from("/data/data/app.dure.installer/cache"))
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("cache"))
     }
 }
 
