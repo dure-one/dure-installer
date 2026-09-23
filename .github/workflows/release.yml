@@ -23,7 +23,7 @@ on:
 env:
   RUST_VERSION: nightly
   BIN_NAME: "dure-installer"
-  PACKAGE_NAME: "dure"
+  PACKAGE_NAME: "mobile"
 
 jobs:
   build:
