@@ -415,35 +415,13 @@ impl DureApp {
         ui.add_space(10.0);
 
         // Tabs navigation
-        #[cfg(not(target_arch = "wasm32"))]
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                // .tab(tr!("tab-client"))
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
                 .tab(tr!("tab-domains"))
-                .tab(tr!("tab-site"))
-                // .tab(tr!("tab-roles"))
-                // .tab(tr!("tab-members"))
-                // .tab(tr!("tab-channel"))
-                // .tab(tr!("tab-dm"))
-                // .tab(tr!("tab-products"))
-                // .tab(tr!("tab-orders"))
-                // .tab(tr!("tab-email")),
-        );
-        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-        ui.add(
-            tabs_primary(&mut self.scrolling_selected)
-                .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
-                .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                .tab(tr!("tab-site")),
         );
 
         // Sync scrolling_selected with active_tab enum
