@@ -327,7 +327,7 @@ impl SshActor {
                 // Step 1: Pull the image
                 let pull_cmd = format!("docker pull {}", full_image);
                 let host_config_clone = host_config.clone();
-                match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd, None)).await {
+                match crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd, None).await {
                     Ok(output) => {
                         dure_debug!(" SSH Actor: Image pulled successfully");
                         dure_debug!(" Pull output: {}", output);
@@ -345,7 +345,7 @@ impl SshActor {
                 // Step 2: Get image history
                 let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
                 dure_debug!(" SSH Actor: Running command: {}", history_cmd);
-                let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd, None)).await {
+                let history_output = match crate::calc::ssh::execute_command(&host_config, &history_cmd, None).await {
                     Ok(output) => output,
                     Err(e) => {
                         dure_error!(" SSH Actor: Failed to get image history: {}", e);
@@ -404,7 +404,7 @@ impl SshActor {
                 let mut failed = Vec::new();
 
                 for container_name in container_names {
-                    match async_compat::Compat::new(docker::remove_docker_container(&host_config, &container_name)).await {
+                    match docker::remove_docker_container(&host_config, &container_name).await {
                         Ok(_) => {
                             dure_info!(" SSH Actor: Removed container '{}'", container_name);
                             removed.push(container_name.clone());
@@ -649,7 +649,7 @@ impl SshActor {
         );
         // TODO: Pass profile keyring handle when SSH Actor has profile context
         let result =
-            async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config, None)).await;
+            crate::calc::ssh::test_connection(&host_config, None).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
         dure_debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms
@@ -708,7 +708,7 @@ impl SshActor {
 
         // Initialize host (async operation - russh uses tokio internally)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::initialize_host(&host_config)).await;
+            crate::calc::ssh::initialize_host(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -998,7 +998,7 @@ impl SshActor {
 
         // Get status (async operation - russh uses tokio internally)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::get_linux_status(&host_config)).await;
+            crate::calc::ssh::get_linux_status(&host_config).await;
 
         match result {
             Ok(status) => {
@@ -1058,7 +1058,7 @@ impl SshActor {
 
         // Install Docker (async operation)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::install_docker(&host_config)).await;
+            crate::calc::ssh::install_docker(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1109,11 +1109,11 @@ impl SshActor {
 
         // Check Docker status (async operations)
         let installed =
-            async_compat::Compat::new(crate::calc::ssh::check_docker_installed(&host_config))
+            crate::calc::ssh::check_docker_installed(&host_config)
                 .await?;
 
         let running = if installed {
-            async_compat::Compat::new(crate::calc::ssh::check_docker_running(&host_config)).await?
+            crate::calc::ssh::check_docker_running(&host_config).await?
         } else {
             false
         };
@@ -1157,7 +1157,7 @@ impl SshActor {
 
         // Uninstall Docker (async operation)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::uninstall_docker(&host_config)).await;
+            crate::calc::ssh::uninstall_docker(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1209,7 +1209,7 @@ impl SshActor {
 
         // Install Ansible (async operation)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::install_ansible(&host_config)).await;
+            crate::calc::ssh::install_ansible(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1261,7 +1261,7 @@ impl SshActor {
 
         // Check Ansible status (async operation)
         let installed =
-            async_compat::Compat::new(crate::calc::ssh::check_ansible_installed(&host_config))
+            crate::calc::ssh::check_ansible_installed(&host_config)
                 .await?;
 
         self.send_progress("get_ansible_status", 1.0, "Status retrieved")
@@ -1300,7 +1300,7 @@ impl SshActor {
 
         // Uninstall Ansible (async operation)
         let result =
-            async_compat::Compat::new(crate::calc::ssh::uninstall_ansible(&host_config)).await;
+            crate::calc::ssh::uninstall_ansible(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1366,7 +1366,7 @@ impl SshActor {
             return Ok(());
         }
 
-        match async_compat::Compat::new(docker::is_docker_installed(&host_config)).await
+        match docker::is_docker_installed(&host_config).await
         {
             Ok(true) => {
                 // Docker installed, proceed
@@ -1382,7 +1382,7 @@ impl SshActor {
                     status: "Installing Docker daemon...".to_string(),
                 }).await;
 
-                match async_compat::Compat::new(docker::install_docker_daemon(&host_config)).await
+                match docker::install_docker_daemon(&host_config).await
                 {
                     Ok(_) => {
                         self.send_event(SshEvent::DockerDaemonInstalled {
@@ -1422,10 +1422,10 @@ impl SshActor {
             status: "running".to_string(),
         };
 
-        match async_compat::Compat::new(docker::run_docker_container(
+        match docker::run_docker_container(
             &host_config,
             &container_config,
-        ))
+        )
         .await
         {
             Ok(_) => {
@@ -1468,10 +1468,10 @@ impl SshActor {
             }
         };
 
-        match async_compat::Compat::new(docker::remove_docker_container(
+        match docker::remove_docker_container(
             &host_config,
             &container_name,
-        ))
+        )
         .await
         {
             Ok(_) => {

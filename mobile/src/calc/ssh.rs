@@ -735,3 +735,34 @@ pub async fn install_dure_wss(_host_config: &SshHostConfig) -> Result<()> {
 pub async fn uninstall_dure_wss(_host_config: &SshHostConfig) -> Result<()> {
     anyhow::bail!("Dure-WSS uninstallation not supported on this platform")
 }
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub fn docker_pull(_host_config: &SshHostConfig, _image: &str) -> Result<()> {
+    anyhow::bail!("Docker pull not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub fn docker_run(
+    _host_config: &SshHostConfig,
+    _image: &str,
+    _container_name: &str,
+    _ports: &[(u16, u16)],
+    _env: &[(&str, &str)],
+) -> Result<()> {
+    anyhow::bail!("Docker run not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub fn docker_stop(_host_config: &SshHostConfig, _container_name: &str) -> Result<()> {
+    anyhow::bail!("Docker stop not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub fn port_open(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
+    anyhow::bail!("Port management not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
+    anyhow::bail!("Port management not supported on this platform")
+}

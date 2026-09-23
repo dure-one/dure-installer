@@ -1595,7 +1595,7 @@ impl PlatformActor {
             let project_id_clone2 = project_id.to_string();
             match runtime::unblock(move || {
                 smol::block_on(async {
-                    async_compat::Compat::new(crate::calc::ssh::test_connection(&host_config, profile_keyring.as_ref())).await
+                    crate::calc::ssh::test_connection(&host_config, profile_keyring.as_ref()).await
                 })
             })
             .await
