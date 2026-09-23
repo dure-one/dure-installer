@@ -22,13 +22,7 @@ fn get_android_files_dir(app: &AndroidApp) -> Option<String> {
             return None;
         }
 
-        // Initialize ndk-context
-        ndk_context::initialize_android_context(
-            app.vm_as_ptr() as *mut _,
-            activity as *mut _,
-        );
-
-        // Get JNI environment
+        // Get JNI environment (ndk-context is already initialized by android-activity)
         let vm_ptr = app.vm_as_ptr() as *mut jni::sys::JavaVM;
         let vm = jni::JavaVM::from_raw(vm_ptr).ok()?;
         let mut env = vm.get_env().ok()?;
