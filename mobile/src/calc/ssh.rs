@@ -379,27 +379,6 @@ table inet filter {
             }
         }
 
-        // Try SSH agent if available (fallback)
-        attempted_methods.push("SSH agent".to_string());
-        let keys = russh_keys::agent::client::AgentClient::connect_env()
-            .await
-            .ok()
-            .and_then(|agent| futures::executor::block_on(async { agent.request_identities().await.ok() }));
-
-        if let Some(keys) = keys {
-            for key in keys {
-                let auth_res = session
-                    .authenticate_publickey(username, key)
-                    .await;
-                if auth_res.is_ok() {
-                    return Ok(());
-                }
-            }
-            errors.push("SSH agent: No valid keys".to_string());
-        } else {
-            errors.push("SSH agent: Not available".to_string());
-        }
-
         // All methods failed
         anyhow::bail!(
             "Authentication failed for {}@host\nAttempted methods: {}\nErrors:\n  - {}",
@@ -423,9 +402,8 @@ table inet filter {
                 .context("Failed to list keys from profile keyring")?
         } else {
             // Fall back to global keyring
-            let kdbx_path = keyring::get_default_kdbx_path()?;
+            let kdbx_path = keyring::ensure_kdbx_exists()?;
             let kpkey_path = keyring::get_default_kpkey_path()?;
-            keyring::ensure_kdbx_exists(&kdbx_path, &kpkey_path)?;
             keyring::list_keys(&kdbx_path, Some(&kpkey_path), None)
                 .context("Failed to list keys from keyring")?
         };
@@ -607,6 +585,48 @@ table inet filter {
     pub async fn uninstall_dure_wss(_host_config: &SshHostConfig) -> Result<()> {
         anyhow::bail!("Dure-WSS uninstallation not yet implemented")
     }
+
+    /// Docker pull (stub implementation)
+    pub fn docker_pull(_config: &SshHostConfig, _image: &str) -> Result<()> {
+        anyhow::bail!("Docker pull not yet implemented")
+    }
+
+    /// Docker run (stub implementation)
+    pub fn docker_run(
+        _config: &SshHostConfig,
+        _image: &str,
+        _container_name: &str,
+        _ports: &[(u16, u16)],
+        _env: &[(String, String)],
+    ) -> Result<()> {
+        anyhow::bail!("Docker run not yet implemented")
+    }
+
+    /// Docker stop (stub implementation)
+    pub fn docker_stop(
+        _config: &SshHostConfig,
+        _container_name: &str,
+    ) -> Result<()> {
+        anyhow::bail!("Docker stop not yet implemented")
+    }
+
+    /// Port open (stub implementation)
+    pub fn port_open(
+        _config: &SshHostConfig,
+        _port: u16,
+        _protocol: &str,
+    ) -> Result<()> {
+        anyhow::bail!("Port open not yet implemented")
+    }
+
+    /// Port close (stub implementation)
+    pub fn port_close(
+        _config: &SshHostConfig,
+        _port: u16,
+        _protocol: &str,
+    ) -> Result<()> {
+        anyhow::bail!("Port close not yet implemented")
+    }
 }
 
 // Re-export desktop implementation
@@ -671,7 +691,7 @@ pub async fn check_docker_installed(_host_config: &SshHostConfig) -> Result<bool
     Ok(false)
 }
 
-#[cfg(any(target_os = "android"), target_arch = "wasm32"))]
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
 pub async fn check_docker_running(_host_config: &SshHostConfig) -> Result<bool> {
     Ok(false)
 }

@@ -2,7 +2,7 @@
 #![allow(clippy::manual_range_contains)]
 #![recursion_limit = "2048"]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

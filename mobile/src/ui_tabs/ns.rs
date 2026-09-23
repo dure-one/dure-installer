@@ -1,13 +1,13 @@
 //! NS tab - Domain and DNS record management
 
-use crate::dure_info;
+use crate::{dure_info, dure_debug};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 
 use crate::calc::audit;
-use crate::calc::ns::RecordType;
+use crate::calc::ns::{NsConfig, RecordType};
 use crate::calc::profile::ProfileContext;
 use std::path::PathBuf;
 

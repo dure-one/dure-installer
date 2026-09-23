@@ -25,7 +25,7 @@
 //! - KPKey: `~/.config/dure/id_ed25519`
 //! - KPPubKey: `~/.config/dure/id_ed25519.pub`
 
-use crate::dure_info;
+use crate::{dure_info, dure_debug, dure_error};
 use anyhow::{Context, Result};
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use directories::ProjectDirs;
