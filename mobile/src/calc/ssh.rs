@@ -238,13 +238,13 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
 
     // Step 1: Test connection
     progress_log.push("Testing SSH connection...".to_string());
-    test_connection(host_config).await?;
+    test_connection(host_config, None).await?;
     progress_log.push("✓ SSH connection successful".to_string());
 
     // Step 2: Check and install swap if needed
     progress_log.push("Checking swap memory...".to_string());
     let swap_output =
-        execute_command(host_config, "free -m | grep Swap | awk '{print $2}'").await?;
+        execute_command(host_config, "free -m | grep Swap | awk '{print $2}'", None).await?;
     let swap_mb: u32 = swap_output.trim().parse().unwrap_or(0);
 
     if swap_mb < 8000 {
@@ -262,7 +262,7 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
         ];
 
         for cmd in swap_commands {
-            execute_command(host_config, cmd)
+            execute_command(host_config, cmd, None)
                 .await
                 .context(format!("Failed to execute: {}", cmd))?;
         }
@@ -282,7 +282,7 @@ pub async fn initialize_host(host_config: &SshHostConfig) -> Result<Vec<String>>
     ];
 
     for cmd in nft_commands {
-        execute_command(host_config, cmd)
+        execute_command(host_config, cmd, None)
             .await
             .context(format!("Failed to execute: {}", cmd))?;
     }
@@ -328,8 +328,8 @@ table inet filter {
 "#;
 
     let write_nft_config = format!("echo '{}' | sudo tee /etc/nftables.conf", nft_rules);
-    execute_command(host_config, &write_nft_config).await?;
-    execute_command(host_config, "sudo nft -f /etc/nftables.conf").await?;
+    execute_command(host_config, &write_nft_config, None).await?;
+    execute_command(host_config, "sudo nft -f /etc/nftables.conf", None).await?;
 
     progress_log.push("✓ nftables configured".to_string());
 
@@ -589,6 +589,7 @@ pub async fn detect_os(host_config: &SshHostConfig) -> Result<String> {
     if let Ok(output) = execute_command(
         host_config,
         "cat /etc/os-release | grep '^ID=' | cut -d= -f2 | tr -d '\"'",
+        None,
     )
     .await
     {
@@ -599,7 +600,7 @@ pub async fn detect_os(host_config: &SshHostConfig) -> Result<String> {
     }
 
     // Fallback to uname
-    if let Ok(output) = execute_command(host_config, "uname -s").await {
+    if let Ok(output) = execute_command(host_config, "uname -s", None).await {
         let os = output.trim().to_lowercase();
         if !os.is_empty() {
             return Ok(os);
@@ -612,19 +613,19 @@ pub async fn detect_os(host_config: &SshHostConfig) -> Result<String> {
 /// Get comprehensive Linux system status via SSH
 pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus> {
     // Execute multiple commands - use unwrap_or for resilience
-    let uptime = execute_command(host_config, "uptime -p")
+    let uptime = execute_command(host_config, "uptime -p", None)
         .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
         .to_string();
 
-    let external_ip = execute_command(host_config, "curl -s ifconfig.me")
+    let external_ip = execute_command(host_config, "curl -s ifconfig.me", None)
         .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
         .to_string();
 
-    let load = execute_command(host_config, "cat /proc/loadavg | awk '{print $1, $2, $3}'")
+    let load = execute_command(host_config, "cat /proc/loadavg | awk '{print $1, $2, $3}'", None)
         .await
         .unwrap_or_else(|_| "unknown".to_string())
         .trim()
@@ -633,6 +634,7 @@ pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus
     let memory = execute_command(
         host_config,
         "free -h | grep Mem | awk '{print $3 \" / \" $2}'",
+        None,
     )
     .await
     .unwrap_or_else(|_| "unknown".to_string())
@@ -642,6 +644,7 @@ pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus
     let disk = execute_command(
         host_config,
         "df -h / | tail -1 | awk '{print $3 \" / \" $2 \" (\" $5 \")\"}}'",
+        None,
     )
     .await
     .unwrap_or_else(|_| "unknown".to_string())
@@ -651,6 +654,7 @@ pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus
     let processes_output = execute_command(
         host_config,
         "ps aux --sort=-%mem | head -6 | tail -5 | awk '{print $11}'",
+        None,
     )
     .await
     .unwrap_or_else(|_| "".to_string());
@@ -673,24 +677,24 @@ pub async fn get_linux_status(host_config: &SshHostConfig) -> Result<LinuxStatus
 
 /// Check if Docker is installed via SSH
 pub async fn check_docker_installed(host_config: &SshHostConfig) -> Result<bool> {
-    let result = execute_command(host_config, "command -v docker").await;
+    let result = execute_command(host_config, "command -v docker", None).await;
     Ok(result.is_ok() && !result.unwrap().trim().is_empty())
 }
 
 /// Check if Docker daemon is running via SSH
 pub async fn check_docker_running(host_config: &SshHostConfig) -> Result<bool> {
-    let result = execute_command(host_config, "systemctl is-active docker").await;
+    let result = execute_command(host_config, "systemctl is-active docker", None).await;
     Ok(result.is_ok() && result.unwrap().trim() == "active")
 }
 
 /// Install Docker via convenience script
 pub async fn install_docker(host_config: &SshHostConfig) -> Result<()> {
     // Download and execute Docker install script
-    execute_command(host_config, "curl -fsSL https://get.docker.com | sh").await?;
+    execute_command(host_config, "curl -fsSL https://get.docker.com | sh", None).await?;
 
     // Enable and start Docker service
-    execute_command(host_config, "systemctl enable docker").await?;
-    execute_command(host_config, "systemctl start docker").await?;
+    execute_command(host_config, "systemctl enable docker", None).await?;
+    execute_command(host_config, "systemctl start docker", None).await?;
 
     Ok(())
 }
@@ -698,12 +702,13 @@ pub async fn install_docker(host_config: &SshHostConfig) -> Result<()> {
 /// Uninstall Docker
 pub async fn uninstall_docker(host_config: &SshHostConfig) -> Result<()> {
     // Stop and disable service
-    let _ = execute_command(host_config, "systemctl stop docker").await;
-    let _ = execute_command(host_config, "systemctl disable docker").await;
+    let _ = execute_command(host_config, "systemctl stop docker", None).await;
+    let _ = execute_command(host_config, "systemctl disable docker", None).await;
 
     // Remove packages (Debian/Ubuntu)
     execute_command(host_config,
-        "apt-get remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+        "apt-get remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+        None
     ).await?;
 
     Ok(())
@@ -711,7 +716,7 @@ pub async fn uninstall_docker(host_config: &SshHostConfig) -> Result<()> {
 
 /// Check if Ansible is installed
 pub async fn check_ansible_installed(host_config: &SshHostConfig) -> Result<bool> {
-    let result = execute_command(host_config, "command -v ansible").await;
+    let result = execute_command(host_config, "command -v ansible", None).await;
     Ok(result.is_ok() && !result.unwrap().trim().is_empty())
 }
 
@@ -727,7 +732,7 @@ pub async fn uninstall_ansible(_host_config: &SshHostConfig) -> Result<()> {
 
 /// Check if Dure-WSS is installed
 pub async fn check_dure_wss_installed(host_config: &SshHostConfig) -> Result<bool> {
-    let result = execute_command(host_config, "command -v dure").await;
+    let result = execute_command(host_config, "command -v dure", None).await;
     Ok(result.is_ok() && !result.unwrap().trim().is_empty())
 }
 

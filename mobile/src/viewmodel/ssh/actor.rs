@@ -327,7 +327,7 @@ impl SshActor {
                 // Step 1: Pull the image
                 let pull_cmd = format!("docker pull {}", full_image);
                 let host_config_clone = host_config.clone();
-                match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd)).await {
+                match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config_clone, &pull_cmd, None)).await {
                     Ok(output) => {
                         dure_debug!(" SSH Actor: Image pulled successfully");
                         dure_debug!(" Pull output: {}", output);
@@ -345,7 +345,7 @@ impl SshActor {
                 // Step 2: Get image history
                 let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
                 dure_debug!(" SSH Actor: Running command: {}", history_cmd);
-                let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd)).await {
+                let history_output = match async_compat::Compat::new(crate::calc::ssh::execute_command(&host_config, &history_cmd, None)).await {
                     Ok(output) => output,
                     Err(e) => {
                         dure_error!(" SSH Actor: Failed to get image history: {}", e);
