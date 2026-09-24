@@ -144,6 +144,7 @@ export ANDROID_HOME=$HOME/.android
 export ANDROID_NDK_HOME=$HOME/.android/ndk/android-ndk-r28c/
 export NDK_HOME=$HOME/.android/ndk/android-ndk-r28c/
 export ANDROID_NDK_ROOT=$HOME/.android/ndk
+export PATH=$PATH:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 export ANDROID_CMDLINE_TOOLS=$HOME/.android/cmdline-tools/latest/bin
 export ANDROID_TOOLS=$HOME/.android/tools/bin
 export ANDROID_PLATFORM_TOOLS=$HOME/.android/platform-tools
@@ -239,10 +240,10 @@ fi
 # generate keystore.properties file
 # Disable C2 compiler to avoid SIGILL in QEMU/Alpine
 export JAVA_OPTS="-XX:TieredStopAtLevel=1 -Xmx2g"
-ANDROID_SPLIT_BUILD=1 gradle build
-# ANDROID_SPLIT_BUILD=1 gradle bundleDebug
+ANDROID_SPLIT_BUILD=1 ./gradlew build
+# ANDROID_SPLIT_BUILD=1 ./gradlew bundleDebug
 if [[ -n "${GITHUB_ACTIONS}" ]] || [[ -n "${CI}" ]]; then
-    ANDROID_SPLIT_BUILD=1 gradle bundleRelease
+    ANDROID_SPLIT_BUILD=1 ./gradlew bundleRelease
 fi
 
 # adb commands

@@ -285,7 +285,15 @@ impl eframe::App for DureApp {
             self.dlg_about.open();
         }
 
+        // Apply top padding on Android to avoid content under status bar
         egui::CentralPanel::default().show(ctx, |ui| {
+            #[cfg(target_os = "android")]
+            {
+                // Use 51px top spacing to avoid status bar overlap
+                // (JNI reports 151px but actual visible spacing needed is 51px)
+                ui.add_space(51.0);
+            }
+
             self.ui(ui);
         });
 
