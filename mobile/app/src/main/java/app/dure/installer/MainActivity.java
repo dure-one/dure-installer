@@ -1,24 +1,16 @@
 package app.dure.installer;
 
 import android.app.NativeActivity;
-import android.os.Bundle;
-import androidx.core.view.WindowCompat;
 
 /**
- * Custom NativeActivity that forces the window to respect system bars.
+ * Custom NativeActivity for Dure Installer.
  *
- * This Activity extends android.app.NativeActivity and disables edge-to-edge mode
- * by calling WindowCompat.setDecorFitsSystemWindows(window, true), which tells
- * the system to layout content within the safe area (below status bar, above navigation bar).
+ * This Activity extends android.app.NativeActivity and uses fullscreen theme
+ * for immersive edge-to-edge design. The Rust code queries window insets via JNI
+ * and applies padding to the egui layout to prevent content from being obscured
+ * by the status bar.
  */
 public class MainActivity extends NativeActivity {
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-
-        // Force the window to respect system bars and NOT draw under them
-        // This tells Android to automatically inset the content area
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
-    }
+    // Native activity - no additional setup needed
+    // Window insets are queried and applied in Rust via JNI
 }

@@ -285,7 +285,24 @@ impl eframe::App for DureApp {
             self.dlg_about.open();
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        // Apply top padding on Android to avoid content under status bar
+        let mut central_panel = egui::CentralPanel::default();
+
+        #[cfg(target_os = "android")]
+        {
+            if let Ok(height_str) = std::env::var("ANDROID_STATUS_BAR_HEIGHT") {
+                if let Ok(height) = height_str.parse::<f32>() {
+                    let mut frame = egui::Frame::default();
+                    frame.inner_margin = egui::Margin {
+                        top: height,
+                        ..Default::default()
+                    };
+                    central_panel = central_panel.frame(frame);
+                }
+            }
+        }
+
+        central_panel.show(ctx, |ui| {
             self.ui(ui);
         });
 
