@@ -98,6 +98,7 @@ pub enum PlatformCommand {
     RefreshPlatform {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     // Refresh all platform data

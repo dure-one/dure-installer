@@ -187,9 +187,7 @@ fn main() -> Result<()> {
             // GUI mode (explicitly requested via --gui flag)
             dure_info!("Running in GUI mode (--gui flag)");
 
-            // Hide console window on Windows
-            #[cfg(target_os = "windows")]
-            windows_installer::hide_console();
+            // Note: Console window remains visible on Windows
 
             run_gui_mode()?;
         }
@@ -209,9 +207,7 @@ fn main() -> Result<()> {
             // Tray mode (explicitly requested via --tray flag)
             dure_info!("Running in tray mode (--tray flag)");
 
-            // Hide console window on Windows
-            #[cfg(target_os = "windows")]
-            windows_installer::hide_console();
+            // Note: Console window remains visible on Windows
 
             // Start tray mode on separate thread
             dure_info!("*** Starting tray mode on separate thread ***");
@@ -269,9 +265,7 @@ fn main() -> Result<()> {
             // Tray mode (default for double-click on Windows - no terminal, no flags)
             dure_info!("Running in tray mode (default - no terminal detected)");
 
-            // Hide console window on Windows
-            #[cfg(target_os = "windows")]
-            windows_installer::hide_console();
+            // Note: Console window remains visible on Windows
 
             // Start tray mode on separate thread
             dure_info!("*** Starting tray mode on separate thread ***");

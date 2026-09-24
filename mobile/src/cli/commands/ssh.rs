@@ -85,7 +85,7 @@ pub fn execute_ssh_status() -> Result<()> {
 
         // Test connection (russh uses tokio, wrap with async-compat)
         eprint!("   Status: ");
-        match smol::block_on(async { async_compat::Compat::new(ssh::test_connection(host)).await })
+        match smol::block_on(async { ssh::test_connection(host, None).await })
         {
             Ok(result) => {
                 if result.success {
@@ -142,7 +142,7 @@ pub fn execute_ssh_add(
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
     dure_info!("Testing SSH connection to {}...", host);
-    match smol::block_on(async { async_compat::Compat::new(ssh::test_connection(&ssh_host)).await })
+    match smol::block_on(async { ssh::test_connection(&ssh_host, None).await })
     {
         Ok(result) => {
             if result.success {
@@ -213,7 +213,7 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
 
     // Run initialization (russh uses tokio, wrap with async-compat)
     let progress_log = smol::block_on(async {
-        async_compat::Compat::new(ssh::initialize_host(host_config)).await
+        ssh::initialize_host(host_config).await
     })?;
 
     // Print progress

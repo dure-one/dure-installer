@@ -58,6 +58,118 @@ fn get_android_files_dir(app: &AndroidApp) -> Option<String> {
     }
 }
 
+/// Get Android status bar height via JNI
+fn get_status_bar_height(app: &AndroidApp) -> f32 {
+    unsafe {
+        let activity = app.activity_as_ptr();
+        if activity.is_null() {
+            dure_warn!("Activity pointer is null - cannot get status bar height");
+            return 0.0;
+        }
+
+        let vm_ptr = app.vm_as_ptr() as *mut jni::sys::JavaVM;
+        let vm = match jni::JavaVM::from_raw(vm_ptr) {
+            Ok(vm) => vm,
+            Err(e) => {
+                dure_warn!("Failed to get JavaVM: {:?}", e);
+                return 0.0;
+            }
+        };
+
+        let mut env = match vm.get_env() {
+            Ok(env) => env,
+            Err(e) => {
+                dure_warn!("Failed to get JNI env: {:?}", e);
+                return 0.0;
+            }
+        };
+
+        let activity_obj = jni::objects::JObject::from_raw(activity as jni::sys::jobject);
+
+        // Get Resources: activity.getResources()
+        let resources = match env.call_method(&activity_obj, "getResources", "()Landroid/content/res/Resources;", &[]) {
+            Ok(r) => match r.l() {
+                Ok(obj) => obj,
+                Err(e) => {
+                    dure_warn!("Failed to get Resources object: {:?}", e);
+                    return 0.0;
+                }
+            },
+            Err(e) => {
+                dure_warn!("Failed to call getResources(): {:?}", e);
+                return 0.0;
+            }
+        };
+
+        // Get resource ID: resources.getIdentifier("status_bar_height", "dimen", "android")
+        let name = match env.new_string("status_bar_height") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
+        let def_type = match env.new_string("dimen") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
+        let def_package = match env.new_string("android") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
+
+        let resource_id = match env.call_method(
+            &resources,
+            "getIdentifier",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I",
+            &[
+                jni::objects::JValue::Object(&name),
+                jni::objects::JValue::Object(&def_type),
+                jni::objects::JValue::Object(&def_package),
+            ]
+        ) {
+            Ok(id) => match id.i() {
+                Ok(i) => i,
+                Err(e) => {
+                    dure_warn!("Failed to get resource ID: {:?}", e);
+                    return 0.0;
+                }
+            },
+            Err(e) => {
+                dure_warn!("Failed to call getIdentifier(): {:?}", e);
+                return 0.0;
+            }
+        };
+
+        if resource_id == 0 {
+            dure_warn!("❌ status_bar_height resource not found");
+            return 0.0;
+        }
+
+        dure_info!("📏 status_bar_height resource_id: {}", resource_id);
+
+        // Get dimension in pixels: resources.getDimensionPixelSize(resource_id)
+        let height_px = match env.call_method(
+            &resources,
+            "getDimensionPixelSize",
+            "(I)I",
+            &[jni::objects::JValue::Int(resource_id)]
+        ) {
+            Ok(h) => match h.i() {
+                Ok(i) => i,
+                Err(e) => {
+                    dure_warn!("Failed to get height: {:?}", e);
+                    return 0.0;
+                }
+            },
+            Err(e) => {
+                dure_warn!("Failed to call getDimensionPixelSize(): {:?}", e);
+                return 0.0;
+            }
+        };
+
+        dure_info!("✅ Status bar height: {} px", height_px);
+        height_px as f32
+    }
+}
+
 /// Android entry point
 ///
 /// # Safety
@@ -91,6 +203,11 @@ pub fn android_main(app: AndroidApp) {
 
     // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
     // See mobile/src/dure.rs profile login/create handlers for config/DB initialization
+
+    // Get status bar height for applying top padding in egui
+    let status_bar_height = get_status_bar_height(&app);
+    dure_info!("Status bar height: {} px", status_bar_height);
+    std::env::set_var("ANDROID_STATUS_BAR_HEIGHT", status_bar_height.to_string());
 
     // Set up panic handler
     std::panic::set_hook(Box::new(|panic_info| {

@@ -103,16 +103,16 @@ pub async fn install_ansible(host_config: &SshHostConfig) -> Result<Vec<String>>
     let mut progress = Vec::new();
 
     progress.push("Updating package list...".to_string());
-    ssh::execute_command(host_config, "sudo apt-get update").await?;
+    ssh::execute_command(host_config, "sudo apt-get update", None).await?;
 
     progress.push("Installing prerequisites...".to_string());
-    ssh::execute_command(host_config, "sudo apt-get install -y software-properties-common").await?;
+    ssh::execute_command(host_config, "sudo apt-get install -y software-properties-common", None).await?;
 
     progress.push("Adding Ansible PPA...".to_string());
-    ssh::execute_command(host_config, "sudo add-apt-repository --yes --update ppa:ansible/ansible").await?;
+    ssh::execute_command(host_config, "sudo add-apt-repository --yes --update ppa:ansible/ansible", None).await?;
 
     progress.push("Installing Ansible...".to_string());
-    ssh::execute_command(host_config, "sudo apt-get install -y ansible").await?;
+    ssh::execute_command(host_config, "sudo apt-get install -y ansible", None).await?;
 
     progress.push("Ansible installed successfully".to_string());
 
@@ -121,7 +121,7 @@ pub async fn install_ansible(host_config: &SshHostConfig) -> Result<Vec<String>>
 
 /// Check if Ansible is installed
 pub async fn is_ansible_installed(host_config: &SshHostConfig) -> Result<bool> {
-    match ssh::execute_command(host_config, "which ansible").await {
+    match ssh::execute_command(host_config, "which ansible", None).await {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     }
@@ -134,7 +134,7 @@ pub async fn install_ansible_role(
 ) -> Result<String> {
     // Install role from Galaxy
     let install_cmd = format!("ansible-galaxy install {}", config.galaxy_name);
-    ssh::execute_command(host_config, &install_cmd).await?;
+    ssh::execute_command(host_config, &install_cmd, None).await?;
 
     // Generate playbook with variables
     let playbook = generate_playbook(config)?;
@@ -142,11 +142,11 @@ pub async fn install_ansible_role(
 
     // Write playbook to remote host
     let write_cmd = format!("cat > {} <<'PLAYBOOK_EOF'\n{}\nPLAYBOOK_EOF", playbook_path, playbook);
-    ssh::execute_command(host_config, &write_cmd).await?;
+    ssh::execute_command(host_config, &write_cmd, None).await?;
 
     // Run playbook
     let run_cmd = format!("ansible-playbook {}", playbook_path);
-    ssh::execute_command(host_config, &run_cmd).await
+    ssh::execute_command(host_config, &run_cmd, None).await
 }
 
 /// Remove Ansible role
@@ -155,14 +155,14 @@ pub async fn remove_ansible_role(
     galaxy_name: &str,
 ) -> Result<String> {
     let remove_cmd = format!("ansible-galaxy remove {}", galaxy_name);
-    ssh::execute_command(host_config, &remove_cmd).await
+    ssh::execute_command(host_config, &remove_cmd, None).await
 }
 
 /// List installed roles
 pub async fn list_ansible_roles(
     host_config: &SshHostConfig,
 ) -> Result<Vec<String>> {
-    let output = ssh::execute_command(host_config, "ansible-galaxy list").await?;
+    let output = ssh::execute_command(host_config, "ansible-galaxy list", None).await?;
 
     let roles: Vec<String> = output
         .lines()

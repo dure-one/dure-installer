@@ -37,32 +37,31 @@ jobs:
           # Linux
           - name: Linux x86_64
             target: x86_64-unknown-linux-musl
-            build-args: "--release --bin dure-installer"
-            rustflags: "-C target-feature=-crt-static -C link-arg=-lm"
+            build-args: "--release"
             platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux x86
           #   target: i686-unknown-linux-musl
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux armv7hf
           #   target: armv7-unknown-linux-musleabihf
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   platform_type: linux
 
           # Disabled - reduce build time
           # - name: Linux armv6
           #   target: arm-unknown-linux-musleabihf
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   platform_type: linux
 
           # FreeBSD (disabled)
           # - name: FreeBSD x86_64
           #   target: x86_64-unknown-freebsd
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   freebsd_version: "14.2"
           #   platform_type: freebsd
 
@@ -75,45 +74,45 @@ jobs:
           # Disabled - reduce build time
           # - name: Android aarch64
           #   target: aarch64-linux-android
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   platform_type: android
 
           # Disabled - reduce build time
           # - name: Android armv7
           #   target: armv7-linux-androideabi
-          #   build-args: "--release --bin dure-installer"
+          #   build-args: "--release"
           #   platform_type: android
 
           # Mac OS
           - name: MacOS x86_64
             os: macos-latest
             target: x86_64-apple-darwin
-            build-args: "--release --bin dure-installer"
+            build-args: "--release"
             platform_type: macos
 
           - name: MacOS aarch64
             os: macos-latest
             target: aarch64-apple-darwin
-            build-args: "--release --bin dure-installer"
+            build-args: "--release"
             platform_type: macos
 
           # Windows
           - name: Windows x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-installer"
+            build-args: "--profile release-with-symbols"
             platform_type: windows
 
           - name: Windows x86
             os: windows-latest
             target: i686-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-installer"
+            build-args: "--profile release-with-symbols"
             platform_type: windows
 
           - name: Windows aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            build-args: "--profile release-with-symbols --bin dure-installer"
+            build-args: "--profile release-with-symbols"
             platform_type: windows
 
     steps:
@@ -283,7 +282,7 @@ jobs:
           echo "Checking for build output..."
           Get-ChildItem -Path target -Recurse -Filter "*.exe" | Format-Table FullName
 
-          $EXE_PATH = "target/release-with-symbols/${{ env.BIN_NAME }}.exe"
+          $EXE_PATH = "target/${{ matrix.platform.target }}/release-with-symbols/${{ env.BIN_NAME }}.exe"
           if (-Not (Test-Path $EXE_PATH)) {
             echo "::error:: Executable not found at $EXE_PATH"
             echo "Listing target directory contents:"
@@ -345,8 +344,9 @@ jobs:
             "aarch64-*" { "aarch64" }
             default     { "${{ matrix.platform.target }}" }
           }
-          $src = "target/release-with-symbols/${{ env.BIN_NAME }}.exe"
-          $dst = "target/release-with-symbols/${{ env.BIN_NAME }}-$arch.exe"
+          $targetDir = "target/${{ matrix.platform.target }}/release-with-symbols"
+          $src = "$targetDir/${{ env.BIN_NAME }}.exe"
+          $dst = "$targetDir/${{ env.BIN_NAME }}-$arch.exe"
           if (Test-Path $src) {
             Move-Item -Force $src $dst
             echo "Renamed $src -> $dst"
@@ -363,7 +363,7 @@ jobs:
         with:
           # Finally, we store the binary as GitHub artifact for later usage
           name: ${{ env.BIN_NAME }}-${{ matrix.platform.target }}
-          path: ${{ contains(matrix.platform.target, 'freebsd') && format('target/{0}/release/{1}*', matrix.platform.target, env.BIN_NAME) || format('target/release{0}/{1}*', contains(matrix.platform.target, 'windows') && '-with-symbols' || '', env.BIN_NAME) }}
+          path: ${{ contains(matrix.platform.target, 'freebsd') && format('target/{0}/release/{1}*', matrix.platform.target, env.BIN_NAME) || (contains(matrix.platform.target, 'windows') && format('target/{0}/release-with-symbols/{1}*', matrix.platform.target, env.BIN_NAME) || format('target/release/{0}*', env.BIN_NAME)) }}
           retention-days: 1
 
       - name: Android - Upload APK Artifact

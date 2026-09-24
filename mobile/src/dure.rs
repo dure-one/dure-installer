@@ -285,7 +285,15 @@ impl eframe::App for DureApp {
             self.dlg_about.open();
         }
 
+        // Apply top padding on Android to avoid content under status bar
         egui::CentralPanel::default().show(ctx, |ui| {
+            #[cfg(target_os = "android")]
+            {
+                // Use 51px top spacing to avoid status bar overlap
+                // (JNI reports 151px but actual visible spacing needed is 51px)
+                ui.add_space(51.0);
+            }
+
             self.ui(ui);
         });
 
@@ -366,6 +374,7 @@ impl DureApp {
                 .variant(egui_material3::SelectVariant::Outlined)
                 .label(tr!("profile"))
                 .placeholder(tr!("none"))
+                .compact(true)
                 .width(220.0)
                 .menu_max_height(300.0);
 
@@ -399,41 +408,29 @@ impl DureApp {
                     dure_info!("Delete profile clicked: {}", profile.name);
                     self.dlg_profile_delete.open(profile.name.clone());
                 }
+
+                // Add "Close Profile" button
+                if ui.add(egui_material3::MaterialButton::outlined(tr!("close-profile")).small()).clicked() {
+                    dure_info!("Close profile clicked: {}", profile.name);
+                    // Clear current profile and keyring
+                    self.current_profile = None;
+                    self.current_profile_kdbx = None;
+                    // Clear and reload to reset UI
+                    self.clear_and_reload_profile();
+                }
             }
         });
 
         ui.add_space(10.0);
 
         // Tabs navigation
-        #[cfg(not(target_arch = "wasm32"))]
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
                 .id_salt("scrolling_primary")
-                // .tab(tr!("tab-client"))
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
                 .tab(tr!("tab-domains"))
-                .tab(tr!("tab-site"))
-                // .tab(tr!("tab-roles"))
-                // .tab(tr!("tab-members"))
-                // .tab(tr!("tab-channel"))
-                // .tab(tr!("tab-dm"))
-                // .tab(tr!("tab-products"))
-                // .tab(tr!("tab-orders"))
-                // .tab(tr!("tab-email")),
-        );
-        #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-        ui.add(
-            tabs_primary(&mut self.scrolling_selected)
-                .id_salt("scrolling_primary")
-                .tab(tr!("tab-client"))
-                .tab(tr!("tab-roles"))
-                .tab(tr!("tab-members"))
-                .tab(tr!("tab-channel"))
-                .tab(tr!("tab-dm"))
-                .tab(tr!("tab-products"))
-                .tab(tr!("tab-orders"))
-                .tab(tr!("tab-email")),
+                .tab(tr!("tab-site")),
         );
 
         // Sync scrolling_selected with active_tab enum

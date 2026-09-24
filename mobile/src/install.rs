@@ -712,141 +712,18 @@ exec "$DIR/{}-bin" --tray "$@"
 }
 
 #[cfg(target_os = "windows")]
-fn install_windows(paths: &InstallPaths, current_exe: &PathBuf) -> Result<String, String> {
-    dure_info!("Starting Windows installation...");
-    dure_info!("Current exe: {}", current_exe.display());
-    dure_info!("Target directory: {}", paths.bin_dir.display());
+fn install_windows(_paths: &InstallPaths, _current_exe: &PathBuf) -> Result<String, String> {
+    dure_info!("Checking for updates...");
 
-    // Clean up old installations
-    dure_info!("Cleaning up old installations...");
-    cleanup_old_installations(paths, None)?;
+    let current_version = CURRENT_VERSION;
+    dure_info!("Current version: {}", current_version);
 
-    let binary_dest = paths
-        .bin_dir
-        .join(format!("{}.exe", get_versioned_app_name()));
-    dure_info!("Installing to: {}", binary_dest.display());
-
-    // Copy binary
-    dure_info!("Copying binary...");
-    fs::copy(current_exe, &binary_dest).map_err(|e| format!("Failed to copy binary: {}", e))?;
-    dure_info!("Binary copied successfully");
-
-    // Add uninstall registry entry
-    if let Some(ref key) = paths.uninstall_key {
-        use std::os::windows::process::CommandExt;
-        use std::process::Command;
-
-        dure_info!("Adding registry entries for uninstaller...");
-
-        // Calculate estimated size in KB
-        let estimated_size = fs::metadata(&binary_dest)
-            .map(|m| (m.len() / 1024).to_string())
-            .unwrap_or_else(|_| "0".to_string());
-
-        // Define registry entries to add (name, type, value)
-        let reg_entries: Vec<(&str, &str, String)> = vec![
-            ("DisplayName", "REG_SZ", "Dure".to_string()),
-            ("DisplayVersion", "REG_SZ", CURRENT_VERSION.to_string()),
-            ("Publisher", "REG_SZ", "nikescar".to_string()),
-            (
-                "UninstallString",
-                "REG_SZ",
-                format!("\"{}\" --uninstall", binary_dest.display()),
-            ),
-            (
-                "InstallLocation",
-                "REG_SZ",
-                paths.bin_dir.display().to_string(),
-            ),
-            ("DisplayIcon", "REG_SZ", binary_dest.display().to_string()),
-            ("EstimatedSize", "REG_DWORD", estimated_size),
-            (
-                "URLInfoAbout",
-                "REG_SZ",
-                "https://dure.pages.dev".to_string(),
-            ),
-            ("NoModify", "REG_DWORD", "1".to_string()),
-            ("NoRepair", "REG_DWORD", "1".to_string()),
-        ];
-
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        for (i, (value_name, value_type, value_data)) in reg_entries.iter().enumerate() {
-            dure_debug!(
-                "Adding registry entry {}/{}: {} = {} ({})",
-                i + 1,
-                reg_entries.len(),
-                value_name,
-                value_data,
-                value_type
-            );
-
-            // Call reg.exe directly with separate arguments (not through cmd)
-            let output = Command::new("reg")
-                .args([
-                    "add", key, "/v", value_name, "/t", value_type, "/d", value_data, "/f",
-                ])
-                .creation_flags(CREATE_NO_WINDOW)
-                .output();
-
-            match output {
-                Ok(out) => {
-                    if !out.status.success() {
-                        dure_warn!(
-                            "Registry command failed (non-critical) for {}: {}",
-                            value_name,
-                            String::from_utf8_lossy(&out.stderr)
-                        );
-                    } else {
-                        dure_debug!("Registry entry '{}' added successfully", value_name);
-                    }
-                }
-                Err(e) => dure_warn!(
-                    "Failed to run registry command for {} (non-critical): {}",
-                    value_name,
-                    e
-                ),
-            }
-        }
-        dure_info!("Registry entries added");
-    }
-
-    // Create Start Menu shortcut
-    if let Some(ref start_menu) = paths.start_menu_entry {
-        dure_info!("Creating Start Menu shortcut: {}", start_menu.display());
-        if let Some(parent) = start_menu.parent() {
-            dure_debug!("Creating Start Menu directory: {}", parent.display());
-            let _ = fs::create_dir_all(parent);
-        }
-        create_windows_shortcut(&binary_dest, start_menu)?;
-        dure_info!("Start Menu shortcut created successfully");
-    }
-
-    // Create Desktop shortcut
-    if let Some(ref desktop) = paths.desktop_shortcut {
-        dure_info!("Creating Desktop shortcut: {}", desktop.display());
-        match create_windows_shortcut(&binary_dest, desktop) {
-            Ok(_) => dure_info!("Desktop shortcut created successfully"),
-            Err(e) => dure_warn!("Failed to create desktop shortcut (non-critical): {}", e),
-        }
-    }
-
-    dure_info!("Installation completed successfully");
     Ok(format!(
-        "Successfully installed to {}",
-        binary_dest.display()
+        "Current version: {}\n\nTo update, please download the latest version from:\nhttps://github.com/dure-one/dure-installer/releases/latest",
+        current_version
     ))
 }
 
-#[cfg(target_os = "windows")]
-fn create_windows_shortcut(target: &PathBuf, shortcut_path: &PathBuf) -> Result<(), String> {
-    windows_installer::create_shortcut(
-        target,
-        shortcut_path,
-        "--tray",
-        "Dure - Universal Android Debloater",
-    )
-}
 
 /// Uninstall the application
 pub fn do_uninstall() -> InstallResult {
@@ -1421,31 +1298,10 @@ fn replace_binary(
             Err(e) => dure_warn!("Failed to clean up old installations (non-critical): {}", e),
         }
 
-        // Update shortcuts to point to new binary
+        // Windows: No automatic updates - user downloads manually
         #[cfg(target_os = "windows")]
         {
-            dure_info!("Updating Windows shortcuts...");
-
-            if let Some(ref start_menu) = paths.start_menu_entry {
-                dure_info!("Updating Start Menu shortcut: {}", start_menu.display());
-                match create_windows_shortcut(&dest, start_menu) {
-                    Ok(_) => dure_info!("Start Menu shortcut updated successfully"),
-                    Err(e) => {
-                        dure_error!("Failed to update Start Menu shortcut: {}", e);
-                        return Err(format!("Failed to update Start Menu shortcut: {}", e));
-                    }
-                }
-            }
-
-            if let Some(ref desktop) = paths.desktop_shortcut {
-                dure_info!("Updating Desktop shortcut: {}", desktop.display());
-                match create_windows_shortcut(&dest, desktop) {
-                    Ok(_) => dure_info!("Desktop shortcut updated successfully"),
-                    Err(e) => dure_warn!("Failed to update Desktop shortcut (non-critical): {}", e),
-                }
-            }
-
-            dure_info!("Shortcuts updated successfully");
+            dure_info!("Windows: Skipping shortcut updates (manual installation required)");
         }
 
         #[cfg(target_os = "linux")]

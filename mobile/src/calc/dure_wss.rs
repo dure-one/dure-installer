@@ -21,7 +21,7 @@ pub async fn install_dure_wss(
          DURE_CHANNEL={} DURE_VARIANT={} sh",
         config.channel, config.variant
     );
-    ssh::execute_command(host_config, &install_cmd).await?;
+    ssh::execute_command(host_config, &install_cmd, None).await?;
 
     // Configure domain and email
     progress.push("Configuring Dure-WSS...".to_string());
@@ -29,11 +29,11 @@ pub async fn install_dure_wss(
         "dure wss config --domain {} --email {}",
         config.domain, config.email
     );
-    ssh::execute_command(host_config, &config_cmd).await?;
+    ssh::execute_command(host_config, &config_cmd, None).await?;
 
     // Start service
     progress.push("Starting Dure-WSS service...".to_string());
-    ssh::execute_command(host_config, "dure wss start").await?;
+    ssh::execute_command(host_config, "dure wss start", None).await?;
 
     progress.push("Dure-WSS installed and started".to_string());
 
@@ -42,32 +42,32 @@ pub async fn install_dure_wss(
 
 /// Get Dure-WSS service status
 pub async fn get_dure_wss_status(host_config: &SshHostConfig) -> Result<String> {
-    ssh::execute_command(host_config, "dure wss status").await
+    ssh::execute_command(host_config, "dure wss status", None).await
 }
 
 /// Start Dure-WSS service
 pub async fn start_dure_wss(host_config: &SshHostConfig) -> Result<String> {
-    ssh::execute_command(host_config, "dure wss start").await
+    ssh::execute_command(host_config, "dure wss start", None).await
 }
 
 /// Stop Dure-WSS service
 pub async fn stop_dure_wss(host_config: &SshHostConfig) -> Result<String> {
-    ssh::execute_command(host_config, "dure wss stop").await
+    ssh::execute_command(host_config, "dure wss stop", None).await
 }
 
 /// Restart Dure-WSS service
 pub async fn restart_dure_wss(host_config: &SshHostConfig) -> Result<String> {
-    ssh::execute_command(host_config, "dure wss restart").await
+    ssh::execute_command(host_config, "dure wss restart", None).await
 }
 
 /// Uninstall Dure-WSS
 pub async fn uninstall_dure_wss(host_config: &SshHostConfig) -> Result<String> {
     // Stop service (ignore errors if already stopped)
-    let _ = ssh::execute_command(host_config, "dure wss stop").await;
+    let _ = ssh::execute_command(host_config, "dure wss stop", None).await;
 
     // Remove binary and config
-    ssh::execute_command(host_config, "sudo rm -f /usr/local/bin/dure").await?;
-    ssh::execute_command(host_config, "sudo rm -rf ~/.config/dure").await?;
+    ssh::execute_command(host_config, "sudo rm -f /usr/local/bin/dure", None).await?;
+    ssh::execute_command(host_config, "sudo rm -rf ~/.config/dure", None).await?;
 
     Ok("Dure-WSS uninstalled".to_string())
 }

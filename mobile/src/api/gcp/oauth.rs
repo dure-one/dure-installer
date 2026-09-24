@@ -106,8 +106,14 @@ impl OAuthHandler {
 
         let redirect_uri = format!("http://localhost:{}/oauth/callback", port);
 
-        // Build OAuth URL
-        let state = uuid::Uuid::new_v4().to_string();
+        // Build OAuth URL with random state for CSRF protection
+        let state = format!(
+            "{:x}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
         let auth_url = self.build_auth_url(&redirect_uri, &state)?;
 
         // Open browser

@@ -332,9 +332,13 @@ impl ProfileManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_profile_context_new() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         std::env::set_var("DURE_TEST_PROFILES_DIR", "/tmp/test");
 
         let profile = ProfileContext::new("test-profile").unwrap();
@@ -377,6 +381,7 @@ mod tests {
 
     #[test]
     fn test_list_profiles_empty() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -402,6 +407,7 @@ mod tests {
 
     #[test]
     fn test_create_profile_success() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -443,6 +449,7 @@ mod tests {
 
     #[test]
     fn test_create_profile_invalid_name() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
 
         // Use temporary directory for test
@@ -469,6 +476,7 @@ mod tests {
 
     #[test]
     fn test_verify_password_correct() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -497,6 +505,7 @@ mod tests {
 
     #[test]
     fn test_verify_password_incorrect() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -531,6 +540,7 @@ mod tests {
 
     #[test]
     fn test_delete_profile() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -568,6 +578,7 @@ mod tests {
 
     #[test]
     fn test_delete_profile_not_found() {
+        let _lock = TEST_MUTEX.lock().unwrap();
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
