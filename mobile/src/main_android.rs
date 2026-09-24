@@ -102,9 +102,18 @@ fn get_status_bar_height(app: &AndroidApp) -> f32 {
         };
 
         // Get resource ID: resources.getIdentifier("status_bar_height", "dimen", "android")
-        let name = env.new_string("status_bar_height").ok()?;
-        let def_type = env.new_string("dimen").ok()?;
-        let def_package = env.new_string("android").ok()?;
+        let name = match env.new_string("status_bar_height") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
+        let def_type = match env.new_string("dimen") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
+        let def_package = match env.new_string("android") {
+            Ok(s) => s,
+            Err(_) => return 0.0,
+        };
 
         let resource_id = match env.call_method(
             &resources,
@@ -130,9 +139,11 @@ fn get_status_bar_height(app: &AndroidApp) -> f32 {
         };
 
         if resource_id == 0 {
-            dure_warn!("status_bar_height resource not found");
+            dure_warn!("❌ status_bar_height resource not found");
             return 0.0;
         }
+
+        dure_info!("📏 status_bar_height resource_id: {}", resource_id);
 
         // Get dimension in pixels: resources.getDimensionPixelSize(resource_id)
         let height_px = match env.call_method(
