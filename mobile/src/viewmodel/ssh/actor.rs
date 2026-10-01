@@ -481,7 +481,7 @@ impl SshActor {
             }
 
             // Operation commands (new)
-            SshCommand::OpRefresh { host } => {
+            SshCommand::Refresh { host } => {
                 self.send_event(SshEvent::RefreshCompleted {
                     host: host.clone(),
                     ssh_connected: false,
@@ -491,7 +491,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpSshCheck { host } => {
+            SshCommand::SshCheck { host } => {
                 self.send_event(SshEvent::SshCheckCompleted {
                     host: host.clone(),
                     connected: false,
@@ -499,7 +499,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpCheckBase { host } => {
+            SshCommand::CheckBase { host } => {
                 self.send_event(SshEvent::BaseCheckCompleted {
                     host: host.clone(),
                     installed: false,
@@ -507,7 +507,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpInstallBase { host } => {
+            SshCommand::InstallBase { host } => {
                 self.send_event(SshEvent::BaseInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -515,7 +515,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpCheckDocker { host } => {
+            SshCommand::CheckDocker { host } => {
                 self.send_event(SshEvent::DockerCheckCompleted {
                     host: host.clone(),
                     installed: false,
@@ -523,7 +523,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpInstallDockerDaemon { host } => {
+            SshCommand::InstallDockerDaemon { host } => {
                 self.send_event(SshEvent::DockerInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -531,7 +531,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpRemoveDocker { host } => {
+            SshCommand::RemoveDocker { host } => {
                 self.send_event(SshEvent::DockerRemoveCompleted {
                     host: host.clone(),
                     success: false,
@@ -539,7 +539,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpCheckDure { host } => {
+            SshCommand::CheckDure { host } => {
                 self.send_event(SshEvent::DureCheckCompleted {
                     host: host.clone(),
                     installed: false,
@@ -548,7 +548,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpInstallDure { host, env_config: _ } => {
+            SshCommand::InstallDure { host, env_config: _ } => {
                 self.send_event(SshEvent::DureInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -556,7 +556,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::OpRemoveDure { host } => {
+            SshCommand::RemoveDure { host } => {
                 self.send_event(SshEvent::DureRemoveCompleted {
                     host: host.clone(),
                     success: false,

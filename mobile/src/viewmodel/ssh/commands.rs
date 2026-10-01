@@ -173,44 +173,44 @@ pub enum SshCommand {
 
     // Operation commands
     /// Refresh host status (SSH, Base, Docker, Dure)
-    OpRefresh {
+    Refresh {
         host: String,
     },
     /// Check if SSH connection is available
-    OpSshCheck {
+    SshCheck {
         host: String,
     },
     /// Check if base packages are installed
-    OpCheckBase {
+    CheckBase {
         host: String,
     },
     /// Install base packages
-    OpInstallBase {
+    InstallBase {
         host: String,
     },
     /// Check if Docker is installed
-    OpCheckDocker {
+    CheckDocker {
         host: String,
     },
     /// Install Docker daemon
-    OpInstallDockerDaemon {
+    InstallDockerDaemon {
         host: String,
     },
     /// Remove Docker daemon
-    OpRemoveDocker {
+    RemoveDocker {
         host: String,
     },
     /// Check if Dure is installed
-    OpCheckDure {
+    CheckDure {
         host: String,
     },
     /// Install Dure with environment configuration
-    OpInstallDure {
+    InstallDure {
         host: String,
         env_config: HashMap<String, String>,
     },
     /// Remove Dure
-    OpRemoveDure {
+    RemoveDure {
         host: String,
     },
 

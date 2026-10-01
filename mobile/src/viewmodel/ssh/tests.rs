@@ -45,35 +45,35 @@ mod tests {
     #[test]
     fn test_operation_commands_exist() {
         // Verify all operation commands compile and can be constructed
-        let _cmd1 = super::super::SshCommand::OpRefresh {
+        let _cmd1 = super::super::SshCommand::Refresh {
             host: "test-host".to_string(),
         };
-        let _cmd2 = super::super::SshCommand::OpSshCheck {
+        let _cmd2 = super::super::SshCommand::SshCheck {
             host: "test-host".to_string(),
         };
-        let _cmd3 = super::super::SshCommand::OpCheckBase {
+        let _cmd3 = super::super::SshCommand::CheckBase {
             host: "test-host".to_string(),
         };
-        let _cmd4 = super::super::SshCommand::OpInstallBase {
+        let _cmd4 = super::super::SshCommand::InstallBase {
             host: "test-host".to_string(),
         };
-        let _cmd5 = super::super::SshCommand::OpCheckDocker {
+        let _cmd5 = super::super::SshCommand::CheckDocker {
             host: "test-host".to_string(),
         };
-        let _cmd6 = super::super::SshCommand::OpInstallDockerDaemon {
+        let _cmd6 = super::super::SshCommand::InstallDockerDaemon {
             host: "test-host".to_string(),
         };
-        let _cmd7 = super::super::SshCommand::OpRemoveDocker {
+        let _cmd7 = super::super::SshCommand::RemoveDocker {
             host: "test-host".to_string(),
         };
-        let _cmd8 = super::super::SshCommand::OpCheckDure {
+        let _cmd8 = super::super::SshCommand::CheckDure {
             host: "test-host".to_string(),
         };
-        let _cmd9 = super::super::SshCommand::OpInstallDure {
+        let _cmd9 = super::super::SshCommand::InstallDure {
             host: "test-host".to_string(),
             env_config: std::collections::HashMap::new(),
         };
-        let _cmd10 = super::super::SshCommand::OpRemoveDure {
+        let _cmd10 = super::super::SshCommand::RemoveDure {
             host: "test-host".to_string(),
         };
     }
@@ -143,11 +143,11 @@ mod tests {
 
     #[test]
     fn test_operation_commands_debug() {
-        let cmd = super::super::SshCommand::OpRefresh {
+        let cmd = super::super::SshCommand::Refresh {
             host: "example.com".to_string(),
         };
         let debug_str = format!("{:?}", cmd);
-        assert!(debug_str.contains("OpRefresh"));
+        assert!(debug_str.contains("Refresh"));
         assert!(debug_str.contains("example.com"));
     }
 
