@@ -545,29 +545,49 @@ table inet filter {
     }
 
     /// Install Docker via convenience script
-    pub async fn install_docker(host_config: &SshHostConfig) -> Result<()> {
-        // Download and execute Docker install script
-        execute_command(host_config, "curl -fsSL https://get.docker.com | sh", None).await?;
+    /// Install Docker (enhanced with user setup and extrepo)
+    pub async fn install_docker(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<()> {
+        dure_info!("Installing Docker on {}", host_config.host);
 
-        // Enable and start Docker service
-        execute_command(host_config, "systemctl enable docker", None).await?;
-        execute_command(host_config, "systemctl start docker", None).await?;
+        // Enable docker-ce repository via extrepo
+        execute_command(host_config, "extrepo enable docker-ce", profile_keyring).await?;
+
+        // Update and install docker-ce
+        execute_command(host_config, "apt-get update && apt-get install -y docker-ce", profile_keyring).await?;
+
+        // Create docker user
+        let user_setup = r#"
+useradd -m -s /bin/bash docker 2>/dev/null || true
+usermod -aG docker docker
+"#;
+        execute_command(host_config, user_setup, profile_keyring).await?;
+
+        // Configure docker to run as docker user (rootless mode setup)
+        // This follows https://docs.docker.com/engine/install/linux-postinstall/
+        execute_command(
+            host_config,
+            "systemctl enable docker && systemctl start docker",
+            profile_keyring,
+        ).await?;
 
         Ok(())
     }
 
-    /// Uninstall Docker
+    /// Uninstall/Remove Docker
     pub async fn uninstall_docker(host_config: &SshHostConfig) -> Result<()> {
-        // Stop and disable service
-        let _ = execute_command(host_config, "systemctl stop docker", None).await;
-        let _ = execute_command(host_config, "systemctl disable docker", None).await;
+        remove_docker(host_config, None).await
+    }
 
-        // Remove packages (Debian/Ubuntu)
-        execute_command(host_config,
-            "apt-get remove -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
-            None
-        ).await?;
-
+    /// Remove Docker (alias for uninstall_docker)
+    pub async fn remove_docker(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<()> {
+        dure_info!("Removing Docker from {}", host_config.host);
+        execute_command(host_config, "apt-get purge -y docker-ce docker-ce-cli containerd.io", profile_keyring).await?;
         Ok(())
     }
 
@@ -643,6 +663,228 @@ table inet filter {
         _protocol: &str,
     ) -> Result<()> {
         anyhow::bail!("Port close not yet implemented")
+    }
+
+    // ========== Base Package Management ==========
+
+    /// Check if base packages are installed
+    pub async fn check_base_packages(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<bool> {
+        let packages = vec!["extrepo", "git", "iptables", "nftables", "bpfcc-tools", "moreutils"];
+
+        for pkg in &packages {
+            let cmd = format!("dpkg -l {} 2>/dev/null | grep -q '^ii'", pkg);
+            match execute_command(host_config, &cmd, profile_keyring).await {
+                Ok(_) => continue,
+                Err(_) => return Ok(false),
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Install base packages and configure network logging
+    pub async fn install_base_packages(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<()> {
+        dure_info!("Installing base packages on {}", host_config.host);
+
+        // Install packages
+        let install_cmd = "apt-get update && apt-get install -y extrepo git iptables nftables linux-headers-$(uname -r) bpfcc-tools moreutils";
+        execute_command(host_config, install_cmd, profile_keyring).await?;
+
+        // Create log file
+        execute_command(host_config, "touch /var/log/dure-network.log", profile_keyring).await?;
+
+        // Setup network logging via rc.local
+        let rc_local_content = r#"#!/bin/bash
+# dure network logging
+nohup tcpconnect-bpfcc 2>&1 | ts '%Y-%m-%d %H:%M:%S' >> /var/log/dure-network.log &
+exit 0
+"#;
+
+        let setup_cmd = format!(
+            "cat > /etc/rc.local <<'EOF'\n{}\nEOF\nchmod +x /etc/rc.local",
+            rc_local_content
+        );
+        execute_command(host_config, &setup_cmd, profile_keyring).await?;
+
+        // Start logging immediately
+        execute_command(
+            host_config,
+            "nohup tcpconnect-bpfcc 2>&1 | ts '%Y-%m-%d %H:%M:%S' >> /var/log/dure-network.log &",
+            profile_keyring,
+        ).await?;
+
+        Ok(())
+    }
+
+    // ========== Docker Management ==========
+
+    /// Check if Docker is installed
+    pub async fn check_docker(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<bool> {
+        let cmd = "dpkg -l docker-ce 2>/dev/null | grep -q '^ii'";
+        Ok(execute_command(host_config, cmd, profile_keyring).await.is_ok())
+    }
+
+    // ========== Dure Management ==========
+
+    /// Check if Dure is installed
+    pub async fn check_dure(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<bool> {
+        // Check if /srv/dure-mycart exists
+        let dir_check = execute_command(
+            host_config,
+            "test -d /srv/dure-mycart && echo 'exists' || echo 'missing'",
+            profile_keyring,
+        ).await?;
+
+        if dir_check.trim() != "exists" {
+            return Ok(false);
+        }
+
+        // Check docker compose status
+        let compose_check = execute_command(
+            host_config,
+            "cd /srv/dure-mycart/xmpp-proxy-stack && docker compose ps --format json 2>/dev/null",
+            profile_keyring,
+        ).await;
+
+        Ok(compose_check.is_ok())
+    }
+
+    /// Install Dure with environment configuration
+    pub async fn install_dure(
+        host_config: &SshHostConfig,
+        env_content: &str,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<()> {
+        dure_info!("Installing Dure on {}", host_config.host);
+
+        // Clone dure-mycart repository as docker user
+        execute_command(
+            host_config,
+            "sudo -u docker git clone https://github.com/dure-one/dure-mycart.git /srv/dure-mycart",
+            profile_keyring,
+        ).await?;
+
+        // Write .env file
+        let env_setup = format!(
+            "cat > /srv/dure-mycart/xmpp-proxy-stack/.env <<'ENVEOF'\n{}\nENVEOF",
+            env_content
+        );
+        execute_command(host_config, &env_setup, profile_keyring).await?;
+
+        // Fix ownership
+        execute_command(
+            host_config,
+            "chown -R docker:docker /srv/dure-mycart",
+            profile_keyring,
+        ).await?;
+
+        // Start docker compose as docker user
+        execute_command(
+            host_config,
+            "cd /srv/dure-mycart/xmpp-proxy-stack && sudo -u docker docker compose up -d",
+            profile_keyring,
+        ).await?;
+
+        Ok(())
+    }
+
+    /// Remove Dure
+    pub async fn remove_dure(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<()> {
+        dure_info!("Removing Dure from {}", host_config.host);
+
+        // Stop docker compose
+        execute_command(
+            host_config,
+            "cd /srv/dure-mycart/xmpp-proxy-stack && sudo -u docker docker compose down",
+            profile_keyring,
+        ).await?;
+
+        Ok(())
+    }
+
+    // ========== Status Queries ==========
+
+    /// Get network log from /var/log/dure-network.log (last 50 lines)
+    pub async fn get_network_log(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<Vec<String>> {
+        let output = execute_command(
+            host_config,
+            "tail -n 50 /var/log/dure-network.log 2>/dev/null || echo 'Log file not found'",
+            profile_keyring,
+        ).await?;
+
+        Ok(output.lines().map(|s| s.to_string()).collect())
+    }
+
+    /// Get Docker container list (docker ps -a)
+    pub async fn get_docker_ps(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<Vec<crate::viewmodel::ssh::ContainerInfo>> {
+        let output = execute_command(
+            host_config,
+            "docker ps -a --format '{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}'",
+            profile_keyring,
+        ).await?;
+
+        let mut containers = Vec::new();
+        for line in output.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() >= 4 {
+                containers.push(crate::viewmodel::ssh::ContainerInfo {
+                    name: parts[0].to_string(),
+                    image: parts[1].to_string(),
+                    status: parts[2].to_string(),
+                    ports: parts[3].split(',').map(|s| s.trim().to_string()).collect(),
+                });
+            }
+        }
+
+        Ok(containers)
+    }
+
+    /// Get Dure docker compose status
+    pub async fn get_dure_compose_status(
+        host_config: &SshHostConfig,
+        profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> Result<Vec<crate::viewmodel::ssh::ContainerInfo>> {
+        let output = execute_command(
+            host_config,
+            "cd /srv/dure-mycart/xmpp-proxy-stack && docker compose ps --format '{{.Service}}|{{.Image}}|{{.Status}}|{{.Ports}}'",
+            profile_keyring,
+        ).await?;
+
+        let mut services = Vec::new();
+        for line in output.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() >= 4 {
+                services.push(crate::viewmodel::ssh::ContainerInfo {
+                    name: parts[0].to_string(),
+                    image: parts[1].to_string(),
+                    status: parts[2].to_string(),
+                    ports: parts[3].split(',').map(|s| s.trim().to_string()).collect(),
+                });
+            }
+        }
+
+        Ok(services)
     }
 }
 
@@ -782,6 +1024,88 @@ pub fn port_open(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> R
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
 pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
     anyhow::bail!("Port management not supported on this platform")
+}
+
+// New function stubs for Android/WASM
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_base_packages(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<bool> {
+    Ok(false)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn install_base_packages(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<()> {
+    anyhow::bail!("Base package installation not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_docker(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<bool> {
+    Ok(false)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn remove_docker(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<()> {
+    anyhow::bail!("Docker removal not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_dure(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<bool> {
+    Ok(false)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn install_dure(
+    _host_config: &SshHostConfig,
+    _env_content: &str,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<()> {
+    anyhow::bail!("Dure installation not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn remove_dure(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<()> {
+    anyhow::bail!("Dure removal not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_network_log(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Vec<String>> {
+    Ok(Vec::new())
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_docker_ps(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Vec<crate::viewmodel::ssh::ContainerInfo>> {
+    Ok(Vec::new())
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_dure_compose_status(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Vec<crate::viewmodel::ssh::ContainerInfo>> {
+    Ok(Vec::new())
 }
 
 #[cfg(test)]

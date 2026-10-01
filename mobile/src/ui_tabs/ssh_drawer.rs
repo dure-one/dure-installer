@@ -43,7 +43,7 @@ pub fn render_drawer(
         });
 }
 
-/// Render Status tab
+/// Render Status tab (simplified - no action buttons)
 fn render_status_tab(ui: &mut egui::Ui, row: &SshRow, _drawer_state: &DrawerState) {
     use crate::ui_components::ActionMenu;
     use egui_twemoji::EmojiLabel as TwemojiLabel;
@@ -54,53 +54,40 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow, _drawer_state: &DrawerStat
     TwemojiLabel::new(format!("🌐 IP: {}", row.host)).show(ui);
     ui.add_space(4.0);
 
-    // SSH connection status
-    let ssh_text = match row.ssh_connected {
-        true => ("🔑 SSH: Connected".to_string(), ui.style().visuals.text_color()),
-        false => (
-            "🔑 SSH: Disconnected".to_string(),
-            egui::Color32::from_rgb(244, 67, 54),
-        ),
+    // Base packages status
+    let base_text = if row.base_installed {
+        ("📦 Base: Installed".to_string(), ui.style().visuals.text_color())
+    } else {
+        (
+            "📦 Base: Not Installed".to_string(),
+            egui::Color32::from_rgb(255, 152, 0),
+        )
     };
-    TwemojiLabel::new(egui::RichText::new(ssh_text.0).color(ssh_text.1)).show(ui);
+    TwemojiLabel::new(egui::RichText::new(base_text.0).color(base_text.1)).show(ui);
     ui.add_space(4.0);
 
     // Docker status
     let docker_text = if row.docker_installed {
-        format!("🐳 Docker: Installed")
+        ("🐳 Docker: Installed".to_string(), ui.style().visuals.text_color())
     } else {
-        "🐳 Docker: Not Installed".to_string()
+        (
+            "🐳 Docker: Not Installed".to_string(),
+            egui::Color32::from_rgb(255, 152, 0),
+        )
     };
-    TwemojiLabel::new(&docker_text).show(ui);
+    TwemojiLabel::new(egui::RichText::new(docker_text.0).color(docker_text.1)).show(ui);
     ui.add_space(4.0);
-
-    if row.docker_installed {
-        if ui.button("Uninstall Docker").clicked() {
-            // TODO: Trigger Docker uninstall
-        }
-    } else if ui.button("Install Docker").clicked() {
-        // TODO: Trigger Docker install
-    }
-
-    ui.add_space(8.0);
 
     // Dure status
     let dure_text = if row.dure_installed {
-        "📦 Dure: Installed".to_string()
+        ("🚀 Dure: Installed".to_string(), ui.style().visuals.text_color())
     } else {
-        "📦 Dure: Not Installed".to_string()
+        (
+            "🚀 Dure: Not Installed".to_string(),
+            egui::Color32::from_rgb(255, 152, 0),
+        )
     };
-    TwemojiLabel::new(&dure_text).show(ui);
-    ui.add_space(4.0);
-
-    if row.dure_installed {
-        if ui.button("Uninstall Dure").clicked() {
-            // TODO: Trigger Dure uninstall
-        }
-    } else if ui.button("Install Dure").clicked() {
-        // TODO: Trigger Dure install
-    }
-
+    TwemojiLabel::new(egui::RichText::new(dure_text.0).color(dure_text.1)).show(ui);
     ui.add_space(8.0);
 
     // SSH action menu (copy key like platform tab)
@@ -113,7 +100,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow, _drawer_state: &DrawerStat
             row.host
         );
 
-        let mut menu = ActionMenu::new("💻SSH");
+        let mut menu = ActionMenu::new("💻 SSH");
         menu.add_action("Copy SSH Command");
         menu.add_action("Copy Private Key");
         menu.add_action("Copy IP Address");
@@ -348,67 +335,102 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
 /// Render Host tab (system information)
 fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
+    // Auto-refresh: trigger log reload every 2 seconds
+    if let Some(ref ssh_host) = drawer_state.ssh_host {
+        let refresh_id = egui::Id::new("host_log_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 2)
+                .unwrap_or(true)
+        });
 
-    ui.heading("Host Information");
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("host_action_refresh_network_log"),
+                    ssh_host.clone(),
+                );
+            });
+        }
+    }
+
+    ui.heading("/var/log/dure-network.log");
     ui.add_space(8.0);
 
     if drawer_state.loading {
         ui.spinner();
-        ui.label("Loading host information...");
+        ui.label("Loading network log...");
         return;
     }
 
+    if drawer_state.ssh_host.is_none() {
+        ui.label("No SSH host selected");
+        return;
+    }
+
+    // Show network log from host_info (reusing existing field temporarily)
+    // TODO: Add dedicated network_log field to DrawerState
     if let Some(ref info) = drawer_state.host_info {
-        TwemojiLabel::new(format!("💻 OS: {}", info.os)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("🕐 Uptime: {}", info.uptime)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("🌐 External IP: {}", info.external_ip)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("📊 Load Average: {}", info.load_average)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("💾 Memory: {}", info.memory_usage)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("💿 Disk: {}", info.disk_usage)).show(ui);
-        ui.add_space(8.0);
-
         if !info.top_processes.is_empty() {
-            ui.heading("Top Processes");
-            ui.add_space(4.0);
-
+            // Temporarily using top_processes to store log lines
             egui::ScrollArea::vertical()
-                .max_height(200.0)
+                .auto_shrink([false, false])
+                .max_height(500.0)
                 .show(ui, |ui| {
                     ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
-                    for process in &info.top_processes {
-                        ui.label(process);
+
+                    for line in &info.top_processes {
+                        ui.label(line);
                     }
                 });
+        } else {
+            ui.label("No network log entries");
         }
     } else {
-        ui.label("No host information available");
-        if ui.button("Load Host Info").clicked() {
-            // TODO: Trigger host info load
-        }
+        ui.label("Network log not loaded");
+        ui.add_space(8.0);
+        ui.label("Click Refresh in the operations column to load the latest network activity log.");
     }
 }
 
-/// Render Docker tab
+/// Render Docker tab (docker ps -a output)
 fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     use egui_twemoji::EmojiLabel as TwemojiLabel;
 
-    ui.heading("Docker Status");
+    // Auto-refresh: trigger docker ps reload every 2 seconds
+    if let Some(ref ssh_host) = drawer_state.ssh_host {
+        let refresh_id = egui::Id::new("docker_ps_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 2)
+                .unwrap_or(true)
+        });
+
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("docker_action_refresh_ps"),
+                    ssh_host.clone(),
+                );
+            });
+        }
+    }
+
+    ui.heading("Docker Containers (docker ps -a)");
     ui.add_space(8.0);
 
     if drawer_state.loading {
         ui.spinner();
-        ui.label("Loading Docker information...");
+        ui.label("Loading Docker containers...");
+        return;
+    }
+
+    if drawer_state.ssh_host.is_none() {
+        ui.label("No SSH host selected");
         return;
     }
 
@@ -422,12 +444,10 @@ fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
                 ui.add_space(8.0);
             }
 
-            // Container list
+            // Container list from docker ps -a
             if !drawer_state.containers.is_empty() {
-                ui.heading("Containers");
-                ui.add_space(4.0);
-
                 egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
                     .max_height(400.0)
                     .show(ui, |ui| {
                         use egui_extras::{Column, TableBuilder};
@@ -496,18 +516,46 @@ fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     use egui_twemoji::EmojiLabel as TwemojiLabel;
 
-    ui.heading("Dure WSS Status");
+    // Auto-refresh: trigger docker compose ps reload every 2 seconds
+    if let Some(ref ssh_host) = drawer_state.ssh_host {
+        let refresh_id = egui::Id::new("dure_compose_last_refresh");
+        let now = std::time::Instant::now();
+        let should_refresh = ui.data(|d| {
+            d.get_temp::<std::time::Instant>(refresh_id)
+                .map(|last| now.duration_since(last).as_secs() >= 2)
+                .unwrap_or(true)
+        });
+
+        if should_refresh {
+            ui.data_mut(|d| {
+                d.insert_temp(refresh_id, now);
+                d.insert_temp(
+                    egui::Id::new("dure_action_refresh_compose"),
+                    ssh_host.clone(),
+                );
+            });
+        }
+    }
+
+    ui.heading("Dure Docker Compose Status");
+    ui.add_space(4.0);
+    ui.label("Location: /srv/dure-mycart/xmpp-proxy-stack");
     ui.add_space(8.0);
 
     if drawer_state.loading {
         ui.spinner();
-        ui.label("Loading Dure information...");
+        ui.label("Loading Dure status...");
+        return;
+    }
+
+    if drawer_state.ssh_host.is_none() {
+        ui.label("No SSH host selected");
         return;
     }
 
     if let Some(ref status) = drawer_state.dure_status {
         if status.installed {
-            TwemojiLabel::new("📦 Dure: Installed").show(ui);
+            TwemojiLabel::new("🚀 Dure: Installed").show(ui);
             ui.add_space(4.0);
 
             if let Some(ref version) = status.version {
@@ -518,26 +566,67 @@ fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
             let running_text = if status.running {
                 ("✅ Status: Running".to_string(), egui::Color32::from_rgb(76, 175, 80))
             } else {
-                ("❌ Status: Stopped".to_string(), egui::Color32::from_rgb(244, 67, 54))
+                ("⚠️ Status: Stopped".to_string(), egui::Color32::from_rgb(255, 152, 0))
             };
             TwemojiLabel::new(egui::RichText::new(running_text.0).color(running_text.1)).show(ui);
             ui.add_space(8.0);
 
-            if status.running {
-                if ui.button("Stop Dure").clicked() {
-                    // TODO: Trigger Dure stop
-                }
-            } else if ui.button("Start Dure").clicked() {
-                // TODO: Trigger Dure start
+            // Show docker compose ps output (stored in containers list)
+            // TODO: Backend should populate with compose service status
+            if !drawer_state.containers.is_empty() {
+                ui.heading("Services");
+                ui.add_space(4.0);
+
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(400.0)
+                    .show(ui, |ui| {
+                        use egui_extras::{Column, TableBuilder};
+
+                        TableBuilder::new(ui)
+                            .striped(true)
+                            .column(Column::auto().resizable(true)) // Service
+                            .column(Column::auto().resizable(true)) // Status
+                            .column(Column::remainder())            // Ports
+                            .header(20.0, |mut header| {
+                                header.col(|ui| {
+                                    ui.strong("Service");
+                                });
+                                header.col(|ui| {
+                                    ui.strong("Status");
+                                });
+                                header.col(|ui| {
+                                    ui.strong("Ports");
+                                });
+                            })
+                            .body(|mut body| {
+                                for container in &drawer_state.containers {
+                                    body.row(20.0, |mut row| {
+                                        row.col(|ui| {
+                                            ui.label(&container.name);
+                                        });
+                                        row.col(|ui| {
+                                            ui.label(&container.status);
+                                        });
+                                        row.col(|ui| {
+                                            ui.label(container.ports.join(", "));
+                                        });
+                                    });
+                                }
+                            });
+                    });
+            } else {
+                ui.label("No services found");
             }
         } else {
-            TwemojiLabel::new("📦 Dure: Not Installed").show(ui);
+            TwemojiLabel::new("🚀 Dure: Not Installed").show(ui);
+            ui.add_space(8.0);
+            ui.label("Use the Install Dure button in the operations column to set up Dure.");
         }
     } else {
-        ui.label("No Dure information available");
-        if ui.button("Load Dure Info").clicked() {
-            // TODO: Trigger Dure info load
-        }
+        ui.label("Dure status not loaded");
+        ui.add_space(8.0);
+        ui.label("Click Refresh in the operations column to check Dure installation status.");
     }
 }
 
