@@ -11,10 +11,6 @@ use crate::viewmodel::ssh::{DrawerState, DrawerTab};
 const BUTTON_VERTICAL_SPACING: f32 = 4.0;
 const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
 
-// Button spacing matching Platform tab
-const BUTTON_VERTICAL_SPACING: f32 = 4.0;
-const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
-
 /// Operation state for visual feedback with timestamps
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationState {
@@ -248,14 +244,18 @@ fn render_operations_column(
 
 /// Render host column with platform badge
 fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
-    use egui_material3::badge::{self, BadgeColor, BadgeSize};
+    use egui_material3::{badge, BadgeColor, BadgeSize};
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
 
         // Line 1: Platform badge (if connected)
-        if let Some(_platform_id) = &row.platform_id {
-            badge::show(ui, _platform_id, BadgeColor::Primary, BadgeSize::Small);
+        if let Some(platform_id) = &row.platform_id {
+            ui.add(
+                badge(platform_id)
+                    .color(BadgeColor::Primary)
+                    .size(BadgeSize::Small)
+            );
         }
 
         // Line 2: Host IP
