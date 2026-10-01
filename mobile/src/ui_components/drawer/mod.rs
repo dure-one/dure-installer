@@ -2,6 +2,8 @@
 
 mod tab_bar;
 mod status_utils;
+mod logs_renderer;
 
 pub use tab_bar::{DrawerTabTrait, TabBar};
 pub use status_utils::{StatusLine, format_elapsed, staleness_color};
+pub use logs_renderer::LogsRenderer;
