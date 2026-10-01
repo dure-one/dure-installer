@@ -3,7 +3,8 @@
 use eframe::egui;
 
 use crate::storage::models::opslog::OperationLog;
-use crate::ui_tabs::ssh::SshRow;
+use crate::ui_components::drawer::{StatusLine, TabBar};
+use crate::ui_tabs::ssh::{SshRow, OperationState};
 use crate::viewmodel::ssh::{DrawerTab, DrawerState};
 
 /// Render the SSH drawer with tabs
@@ -13,27 +14,20 @@ pub fn render_drawer(
     drawer_state: &DrawerState,
     on_tab_switch: &mut Option<DrawerTab>,
 ) {
-    // Tab bar at top
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-
-        for tab in DrawerTab::all() {
-            let is_selected = drawer_state.active_tab == tab;
-
-            if ui.selectable_label(is_selected, tab.as_str()).clicked() && !is_selected {
-                *on_tab_switch = Some(tab);
-            }
-        }
-    });
+    // Tab bar (using shared component)
+    let tab_bar = TabBar::<DrawerTab>::new();
+    if let Some(new_tab) = tab_bar.show(ui, drawer_state.active_tab) {
+        *on_tab_switch = Some(new_tab);
+    }
 
     ui.separator();
 
-    // Content area with static height
+    // Content area (500px from recent commit)
     egui::ScrollArea::vertical()
         .max_height(500.0)
         .show(ui, |ui| {
             match drawer_state.active_tab {
-                DrawerTab::Status => render_status_tab(ui, row, drawer_state),
+                DrawerTab::Status => render_status_tab(ui, row),
                 DrawerTab::Logs => render_logs_tab(ui, drawer_state),
                 DrawerTab::Operations => render_operations_tab(ui, drawer_state),
                 DrawerTab::Host => render_host_tab(ui, drawer_state),
@@ -44,66 +38,93 @@ pub fn render_drawer(
 }
 
 /// Render Status tab
-fn render_status_tab(ui: &mut egui::Ui, row: &SshRow, _drawer_state: &DrawerState) {
+fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     use crate::ui_components::ActionMenu;
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
 
     ui.add_space(8.0);
 
-    // IP address
-    TwemojiLabel::new(format!("🌐 IP: {}", row.host)).show(ui);
-    ui.add_space(4.0);
+    // IP Address (no emoji)
+    StatusLine::new("IP", &row.host).show(ui);
 
-    // SSH connection status
-    let ssh_text = match row.ssh_connected {
-        true => ("🔑 SSH: Connected".to_string(), ui.style().visuals.text_color()),
-        false => (
-            "🔑 SSH: Disconnected".to_string(),
-            egui::Color32::from_rgb(244, 67, 54),
-        ),
-    };
-    TwemojiLabel::new(egui::RichText::new(ssh_text.0).color(ssh_text.1)).show(ui);
-    ui.add_space(4.0);
-
-    // Docker status
-    let docker_text = if row.docker_installed {
-        format!("🐳 Docker: Installed")
-    } else {
-        "🐳 Docker: Not Installed".to_string()
-    };
-    TwemojiLabel::new(&docker_text).show(ui);
-    ui.add_space(4.0);
-
-    if row.docker_installed {
-        if ui.button("Uninstall Docker").clicked() {
-            // TODO: Trigger Docker uninstall
+    // SSH Connection Status (inline error display)
+    if let Some(check_result) = &row.last_ssh_check {
+        if check_result.connected {
+            StatusLine::new("SSH", "Connected").show(ui);
+        } else if let Some(error) = &check_result.error {
+            StatusLine::new("SSH", &format!("Failed ({})", error))
+                .error()
+                .show(ui);
+        } else {
+            StatusLine::new("SSH", "Disconnected")
+                .warning()
+                .show(ui);
         }
-    } else if ui.button("Install Docker").clicked() {
-        // TODO: Trigger Docker install
+    } else {
+        StatusLine::new("SSH", "Not checked").show(ui);
     }
 
-    ui.add_space(8.0);
+    // Base Packages Status
+    let base_status = if row.base_installed { "Installed" } else { "Not Installed" };
+    let mut base_line = StatusLine::new("Base", base_status);
+    if !row.base_installed {
+        base_line = base_line.warning();
+    }
+    base_line.show(ui);
 
-    // Dure status
-    let dure_text = if row.dure_installed {
-        "📦 Dure: Installed".to_string()
-    } else {
-        "📦 Dure: Not Installed".to_string()
-    };
-    TwemojiLabel::new(&dure_text).show(ui);
-    ui.add_space(4.0);
-
-    if row.dure_installed {
-        if ui.button("Uninstall Dure").clicked() {
-            // TODO: Trigger Dure uninstall
+    // Show missing packages
+    if let Some(check_result) = &row.last_base_check {
+        if !check_result.missing_packages.is_empty() {
+            ui.label(format!("  Missing: {}", check_result.missing_packages.join(", ")));
         }
-    } else if ui.button("Install Dure").clicked() {
-        // TODO: Trigger Dure install
     }
 
+    // Docker Status
+    let docker_status = if row.docker_installed { "Installed" } else { "Not Installed" };
+    let mut docker_line = StatusLine::new("Docker", docker_status);
+    if !row.docker_installed {
+        docker_line = docker_line.warning();
+    }
+    docker_line.show(ui);
+
+    // Show docker version
+    if let Some(check_result) = &row.last_docker_check {
+        if let Some(version) = &check_result.version {
+            ui.label(format!("  Version: {}", version));
+        }
+    }
+
+    // Dure Status
+    let dure_status = if row.dure_installed { "Installed" } else { "Not Installed" };
+    let mut dure_line = StatusLine::new("Dure", dure_status);
+    if !row.dure_installed {
+        dure_line = dure_line.warning();
+    }
+    dure_line.show(ui);
+
     ui.add_space(8.0);
 
-    // SSH action menu (copy key like platform tab)
+    // Operation State
+    match &row.operation_state {
+        OperationState::InProgress { operation, started_at } => {
+            let elapsed = chrono::Utc::now().timestamp() - started_at;
+            StatusLine::new("Operation", &format!("{} ({}s)", operation, elapsed))
+                .show(ui);
+        }
+        OperationState::Failed { operation, error, .. } => {
+            StatusLine::new("Last Operation", &format!("{} failed", operation))
+                .error()
+                .show(ui);
+            ui.label(format!("  Error: {}", error));
+        }
+        OperationState::Completed { operation, completed_at } => {
+            let ago = chrono::Utc::now().timestamp() - completed_at;
+            StatusLine::new("Last Operation", &format!("{} completed ({}s ago)", operation, ago))
+                .show(ui);
+        }
+        OperationState::Idle => {}
+    }
+
+    // SSH action menu (copy key, etc.)
     if let Some(private_key) = &row.ssh_private_key {
         ui.add_space(8.0);
 
@@ -113,7 +134,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow, _drawer_state: &DrawerStat
             row.host
         );
 
-        let mut menu = ActionMenu::new("💻SSH");
+        let mut menu = ActionMenu::new("SSH");
         menu.add_action("Copy SSH Command");
         menu.add_action("Copy Private Key");
         menu.add_action("Copy IP Address");

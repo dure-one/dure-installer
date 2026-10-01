@@ -112,6 +112,7 @@ pub struct SshRow {
     pub ssh_connected: bool,
 
     // Service flags
+    pub base_installed: bool,
     pub docker_installed: bool,
     pub dure_installed: bool,
 
@@ -244,6 +245,7 @@ impl SshTab {
                             host: host_config.host.clone(),
                             port: host_config.port,
                             ssh_connected: false, // TODO: Determine from actual connection state
+                            base_installed: false, // TODO: Determine from actual check
                             docker_installed: !host_config.docker_containers.is_empty(),
                             dure_installed: host_config.dure_wss_config.is_some(),
                             ssh_private_key: None, // TODO: Load from keyring
@@ -859,6 +861,7 @@ mod operation_state_tests {
             host: "192.168.1.1".to_string(),
             port: 22,
             ssh_connected: false,
+            base_installed: false,
             docker_installed: false,
             dure_installed: false,
             ssh_private_key: None,
@@ -898,6 +901,7 @@ mod operation_state_tests {
             host: "192.168.1.1".to_string(),
             port: 22,
             ssh_connected: true,
+            base_installed: false,
             docker_installed: true,
             dure_installed: false,
             ssh_private_key: None,
