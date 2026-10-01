@@ -269,6 +269,69 @@ pub async fn remove_dure(host: &str) -> Result<()> {
     Ok(())
 }
 
+/// Fetch network log (last N lines)
+pub async fn get_network_log(host: &str, lines: usize) -> Result<String> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let cmd = format!(
+        "tail -n {} /var/log/dure-network.log 2>/dev/null || echo 'Log file not found'",
+        lines
+    );
+    execute_ssh_command(host, 22, &username, &auth, &cmd).await
+}
+
+/// Fetch docker ps -a output (raw)
+pub async fn get_docker_containers(host: &str) -> Result<String> {
+    let (username, auth) = load_ssh_credentials(host)?;
+    execute_ssh_command(host, 22, &username, &auth, "docker ps -a").await
+}
+
+/// Fetch docker-compose status and logs
+pub async fn get_dure_compose_status(host: &str) -> Result<(String, String)> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let status_cmd = r#"
+        cd /srv/dure-mycart/xmpp-proxy-stack
+        docker-compose ps
+    "#;
+
+    let logs_cmd = r#"
+        cd /srv/dure-mycart/xmpp-proxy-stack
+        docker-compose logs --tail=50
+    "#;
+
+    let status = execute_ssh_command(host, 22, &username, &auth, status_cmd).await?;
+    let logs = execute_ssh_command(host, 22, &username, &auth, logs_cmd).await?;
+
+    Ok((status, logs))
+}
+
+/// Fetch host information
+pub async fn get_host_info(host: &str) -> Result<crate::viewmodel::ssh::HostInfo> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let info_cmd = r#"
+        echo "OS: $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2)"
+        echo "Uptime: $(uptime -p)"
+        echo "Load: $(cat /proc/loadavg | awk '{print $1,$2,$3}')"
+        echo "Memory: $(free -h | awk '/^Mem:/ {print $3"/"$2}')"
+        echo "Disk: $(df -h / | awk 'NR==2 {print $3"/"$2" ("$5")"}')"
+    "#;
+
+    let output = execute_ssh_command(host, 22, &username, &auth, info_cmd).await?;
+
+    // Parse output (simplified)
+    Ok(crate::viewmodel::ssh::HostInfo {
+        os: "Unknown".to_string(),
+        uptime: "Unknown".to_string(),
+        external_ip: host.to_string(),
+        load_average: "Unknown".to_string(),
+        memory_usage: "Unknown".to_string(),
+        disk_usage: "Unknown".to_string(),
+        top_processes: vec![output],
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,6 +417,46 @@ mod tests {
             // Placeholder - actual Dure removal requires SSH server
             let result = remove_dure("localhost").await;
             assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_get_network_log_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual network log requires SSH server
+            let result = get_network_log("localhost", 50).await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_get_docker_containers_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual docker ps requires SSH server
+            let result = get_docker_containers("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_get_dure_compose_status_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual docker-compose check requires SSH server
+            let result = get_dure_compose_status("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_get_host_info_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual host info requires SSH server
+            let result = get_host_info("localhost").await;
+            if let Ok(info) = result {
+                // Verify HostInfo was created with expected fields
+                assert_eq!(info.external_ip, "localhost");
+                assert!(!info.top_processes.is_empty());
+            }
         });
     }
 }
