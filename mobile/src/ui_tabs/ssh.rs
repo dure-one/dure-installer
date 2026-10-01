@@ -68,6 +68,39 @@ impl Default for OperationState {
     }
 }
 
+/// SSH connection check result
+#[derive(Clone, Debug)]
+pub struct SshCheckResult {
+    pub connected: bool,
+    pub error: Option<String>,
+    pub checked_at: i64,
+}
+
+/// Base system check result
+#[derive(Clone, Debug)]
+pub struct BaseCheckResult {
+    pub installed: bool,
+    pub missing_packages: Vec<String>,
+    pub checked_at: i64,
+}
+
+/// Docker installation check result
+#[derive(Clone, Debug)]
+pub struct DockerCheckResult {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub checked_at: i64,
+}
+
+/// Dure service check result
+#[derive(Clone, Debug)]
+pub struct DureCheckResult {
+    pub installed: bool,
+    pub running: bool,
+    pub services: Vec<String>,
+    pub checked_at: i64,
+}
+
 /// SSH row data for data table
 #[derive(Clone, Debug)]
 pub struct SshRow {
@@ -88,6 +121,15 @@ pub struct SshRow {
     // Drawer state
     pub drawer_open: bool,
     pub drawer_state: DrawerState,
+
+    // Operation state tracking
+    pub operation_state: OperationState,
+
+    // Last check results
+    pub last_ssh_check: Option<SshCheckResult>,
+    pub last_base_check: Option<BaseCheckResult>,
+    pub last_docker_check: Option<DockerCheckResult>,
+    pub last_dure_check: Option<DureCheckResult>,
 }
 
 /// Actions that can be triggered from SSH table rows
@@ -207,6 +249,11 @@ impl SshTab {
                             ssh_private_key: None, // TODO: Load from keyring
                             drawer_open: false,
                             drawer_state,
+                            operation_state: OperationState::Idle,
+                            last_ssh_check: None,
+                            last_base_check: None,
+                            last_docker_check: None,
+                            last_dure_check: None,
                         });
                     }
                     self.loaded = true;
@@ -697,5 +744,224 @@ mod operation_state_tests {
         state.reset();
 
         assert_eq!(state, OperationState::Idle);
+    }
+
+    #[test]
+    fn test_ssh_check_result_creation() {
+        let result = SshCheckResult {
+            connected: true,
+            error: None,
+            checked_at: 1234567890,
+        };
+
+        assert!(result.connected);
+        assert!(result.error.is_none());
+        assert_eq!(result.checked_at, 1234567890);
+    }
+
+    #[test]
+    fn test_ssh_check_result_with_error() {
+        let result = SshCheckResult {
+            connected: false,
+            error: Some("Connection refused".to_string()),
+            checked_at: 1234567890,
+        };
+
+        assert!(!result.connected);
+        assert_eq!(result.error, Some("Connection refused".to_string()));
+    }
+
+    #[test]
+    fn test_base_check_result_creation() {
+        let result = BaseCheckResult {
+            installed: true,
+            missing_packages: vec![],
+            checked_at: 1234567890,
+        };
+
+        assert!(result.installed);
+        assert!(result.missing_packages.is_empty());
+        assert_eq!(result.checked_at, 1234567890);
+    }
+
+    #[test]
+    fn test_base_check_result_with_missing_packages() {
+        let result = BaseCheckResult {
+            installed: false,
+            missing_packages: vec!["curl".to_string(), "jq".to_string()],
+            checked_at: 1234567890,
+        };
+
+        assert!(!result.installed);
+        assert_eq!(result.missing_packages.len(), 2);
+        assert!(result.missing_packages.contains(&"curl".to_string()));
+        assert!(result.missing_packages.contains(&"jq".to_string()));
+    }
+
+    #[test]
+    fn test_docker_check_result_creation() {
+        let result = DockerCheckResult {
+            installed: true,
+            version: Some("24.0.0".to_string()),
+            checked_at: 1234567890,
+        };
+
+        assert!(result.installed);
+        assert_eq!(result.version, Some("24.0.0".to_string()));
+        assert_eq!(result.checked_at, 1234567890);
+    }
+
+    #[test]
+    fn test_docker_check_result_no_version() {
+        let result = DockerCheckResult {
+            installed: false,
+            version: None,
+            checked_at: 1234567890,
+        };
+
+        assert!(!result.installed);
+        assert!(result.version.is_none());
+    }
+
+    #[test]
+    fn test_dure_check_result_creation() {
+        let result = DureCheckResult {
+            installed: true,
+            running: true,
+            services: vec!["api".to_string(), "worker".to_string()],
+            checked_at: 1234567890,
+        };
+
+        assert!(result.installed);
+        assert!(result.running);
+        assert_eq!(result.services.len(), 2);
+        assert!(result.services.contains(&"api".to_string()));
+    }
+
+    #[test]
+    fn test_dure_check_result_not_running() {
+        let result = DureCheckResult {
+            installed: true,
+            running: false,
+            services: vec![],
+            checked_at: 1234567890,
+        };
+
+        assert!(result.installed);
+        assert!(!result.running);
+        assert!(result.services.is_empty());
+    }
+
+    #[test]
+    fn test_ssh_row_new_fields_initialized() {
+        let drawer_state = DrawerState::new();
+        let row = SshRow {
+            host: "192.168.1.1".to_string(),
+            port: 22,
+            ssh_connected: false,
+            docker_installed: false,
+            dure_installed: false,
+            ssh_private_key: None,
+            drawer_open: false,
+            drawer_state,
+            operation_state: OperationState::Idle,
+            last_ssh_check: None,
+            last_base_check: None,
+            last_docker_check: None,
+            last_dure_check: None,
+        };
+
+        assert_eq!(row.host, "192.168.1.1");
+        assert_eq!(row.port, 22);
+        assert_eq!(row.operation_state, OperationState::Idle);
+        assert!(row.last_ssh_check.is_none());
+        assert!(row.last_base_check.is_none());
+        assert!(row.last_docker_check.is_none());
+        assert!(row.last_dure_check.is_none());
+    }
+
+    #[test]
+    fn test_ssh_row_with_check_results() {
+        let drawer_state = DrawerState::new();
+        let ssh_check = SshCheckResult {
+            connected: true,
+            error: None,
+            checked_at: 1234567890,
+        };
+        let docker_check = DockerCheckResult {
+            installed: true,
+            version: Some("24.0.0".to_string()),
+            checked_at: 1234567890,
+        };
+
+        let row = SshRow {
+            host: "192.168.1.1".to_string(),
+            port: 22,
+            ssh_connected: true,
+            docker_installed: true,
+            dure_installed: false,
+            ssh_private_key: None,
+            drawer_open: false,
+            drawer_state,
+            operation_state: OperationState::Completed {
+                operation: "ssh_check".to_string(),
+                completed_at: 1234567890,
+            },
+            last_ssh_check: Some(ssh_check),
+            last_base_check: None,
+            last_docker_check: Some(docker_check),
+            last_dure_check: None,
+        };
+
+        assert!(row.last_ssh_check.is_some());
+        assert!(row.last_docker_check.is_some());
+        assert!(row.last_base_check.is_none());
+        assert!(row.last_dure_check.is_none());
+
+        if let Some(ssh_check) = &row.last_ssh_check {
+            assert!(ssh_check.connected);
+        }
+    }
+
+    #[test]
+    fn test_operation_state_transitions() {
+        // Idle -> InProgress -> Completed
+        let mut state = OperationState::Idle;
+        state = OperationState::start("check");
+        assert!(matches!(state, OperationState::InProgress { .. }));
+
+        state = state.complete();
+        assert!(matches!(state, OperationState::Completed { .. }));
+
+        // Can reset from Completed
+        state.reset();
+        assert_eq!(state, OperationState::Idle);
+    }
+
+    #[test]
+    fn test_operation_state_fail_from_progress() {
+        let state = OperationState::start("check");
+        let state = state.fail("timeout");
+        assert!(matches!(state, OperationState::Failed { .. }));
+    }
+
+    #[test]
+    fn test_operation_state_complete_from_idle_is_noop() {
+        let state = OperationState::Idle;
+        let state = state.complete();
+        // Should remain Idle since we can't transition from Idle
+        assert_eq!(state, OperationState::Idle);
+    }
+
+    #[test]
+    fn test_check_result_clone() {
+        let result = SshCheckResult {
+            connected: true,
+            error: None,
+            checked_at: 1234567890,
+        };
+        let cloned = result.clone();
+        assert_eq!(result.connected, cloned.connected);
+        assert_eq!(result.checked_at, cloned.checked_at);
     }
 }
