@@ -14,10 +14,14 @@ pub struct SshRow {
     pub host: String, // IP address (row key)
     pub port: u16,
 
+    // Platform relationship
+    pub platform_id: Option<String>, // GCP project_id if connected to platform
+
     // Connection state
     pub ssh_connected: bool,
 
-    // Service flags
+    // Service status flags (cached, requires Refresh)
+    pub base_installed: bool,     // Base packages installed
     pub docker_installed: bool,
     pub dure_installed: bool,
 
@@ -32,9 +36,18 @@ pub struct SshRow {
 /// Actions that can be triggered from SSH table rows
 #[derive(Debug, Clone)]
 enum SshAction {
-    Refresh(String),      // host
-    Delete(String),       // host
-    RestartDocker(String), // host
+    Refresh(String),       // host - full status refresh
+    SshCheck(String),      // host - SSH connection check only
+    Edit(String),          // host - open edit dialog
+    Delete(String),        // host
+    CheckBase(String),     // host - check base packages
+    InstallBase(String),   // host - install base packages
+    CheckDocker(String),   // host - check docker installed
+    InstallDocker(String), // host - install docker
+    RemoveDocker(String),  // host - remove docker
+    CheckDure(String),     // host - check dure installed
+    InstallDure(String),   // host - install dure (with .env dialog)
+    RemoveDure(String),    // host - remove dure
 }
 
 /// SSH tab state
@@ -54,9 +67,15 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     config_last_modified: Option<std::time::SystemTime>,
 
-    // Add host dialog
+    // Add/Edit host dialog
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_dialog: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_mode: bool, // true = edit existing, false = add new
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_original_host: String, // Original host when editing
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_host: String,
@@ -75,6 +94,16 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_use_private_key: bool,
+
+    // Install Dure dialog (for .env configuration)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_install_dure_dialog: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_host: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_env_content: String, // .env file content
 }
 
 impl Default for SshTab {
@@ -85,12 +114,17 @@ impl Default for SshTab {
             load_error: None,
             config_last_modified: None,
             show_add_dialog: false,
+            edit_mode: false,
+            edit_original_host: String::new(),
             add_host: String::new(),
             add_password: String::new(),
             add_private_key_path: String::new(),
             add_port: "22".to_string(),
             add_use_password: false,
             add_use_private_key: false,
+            show_install_dure_dialog: false,
+            install_dure_host: String::new(),
+            install_dure_env_content: String::new(),
         }
     }
 }
@@ -137,10 +171,19 @@ impl SshTab {
                         let mut drawer_state = DrawerState::new();
                         drawer_state.set_ssh_host(host_config.host.clone());
 
+                        // Look up platform_id from platform_name (matches gcp_selected_project_id)
+                        let platform_id = host_config.platform_name.as_ref().and_then(|name| {
+                            app_config.platforms.iter()
+                                .find(|cfg| cfg.gcp_selected_project_id.as_deref() == Some(name.as_str()))
+                                .and_then(|cfg| cfg.gcp_selected_project_id.clone())
+                        });
+
                         self.rows.push(SshRow {
                             host: host_config.host.clone(),
                             port: host_config.port,
+                            platform_id,
                             ssh_connected: false, // TODO: Determine from actual connection state
+                            base_installed: false, // TODO: Check from status cache
                             docker_installed: !host_config.docker_containers.is_empty(),
                             dure_installed: host_config.dure_wss_config.is_some(),
                             ssh_private_key: None, // TODO: Load from keyring
@@ -281,8 +324,11 @@ impl SshTab {
         // SSH host table (header is inside render_table)
         self.render_table(ui, profile);
 
-        // Add host dialog
+        // Add/Edit host dialog
         self.render_add_dialog(ui, profile);
+
+        // Install Dure dialog (.env configuration)
+        self.render_install_dure_dialog(ui, profile);
     }
 
     /// Render SSH hosts table with drawer
@@ -305,7 +351,7 @@ impl SshTab {
             .id(table_id)
             .allow_selection(false)
             .allow_drawer(true)
-            .min_row_height(68.0)
+            .min_row_height(100.0)  // Increased for 3 rows of buttons
             .drawer_row_height(500.0)
             .column("Host", 230.0 * width_ratio, false)
             .column("Operations", 510.0 * width_ratio, false);
@@ -317,38 +363,106 @@ impl SshTab {
 
             table = table.row(move |r| {
                 r.cell_widget(move |ui| {
-                        ui.label(&row_for_cells.host);
+                        use egui_material3::{badge, BadgeColor, BadgeSize};
+
+                        ui.horizontal(|ui| {
+                            ui.label(&row_for_cells.host);
+
+                            // Show platform badge if connected
+                            if let Some(ref platform_id) = row_for_cells.platform_id {
+                                ui.add_space(4.0);
+                                ui.add(badge(platform_id).color(BadgeColor::Primary).size(BadgeSize::Small));
+                            }
+                        });
                     })
                     .cell_widget(move |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.add(MaterialButton::outlined("Refresh").small()).clicked() {
-                                ui.data_mut(|d| {
-                                    d.insert_temp(
-                                        egui::Id::new("ssh_action_refresh"),
-                                        row_for_actions.host.clone(),
-                                    )
-                                });
-                            }
-
-                            if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
-                                ui.data_mut(|d| {
-                                    d.insert_temp(
-                                        egui::Id::new("ssh_action_delete"),
-                                        row_for_actions.host.clone(),
-                                    )
-                                });
-                            }
-
-                            if row_for_actions.docker_installed {
-                                if ui.add(MaterialButton::outlined("Restart Docker").small()).clicked() {
+                        ui.vertical(|ui| {
+                            // Row 1: Basic operations
+                            ui.horizontal(|ui| {
+                                if ui.add(MaterialButton::outlined("Refresh").small()).clicked() {
                                     ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("ssh_action_restart_docker"),
-                                            row_for_actions.host.clone(),
-                                        )
+                                        d.insert_temp(egui::Id::new("ssh_action_refresh"), row_for_actions.host.clone())
                                     });
                                 }
-                            }
+                                if ui.add(MaterialButton::outlined("SSH Check").small()).clicked() {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(egui::Id::new("ssh_action_ssh_check"), row_for_actions.host.clone())
+                                    });
+                                }
+                                if ui.add(MaterialButton::outlined("Edit").small()).clicked() {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(egui::Id::new("ssh_action_edit"), row_for_actions.host.clone())
+                                    });
+                                }
+                                if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(egui::Id::new("ssh_action_delete"), row_for_actions.host.clone())
+                                    });
+                                }
+                            });
+
+                            ui.add_space(2.0);
+
+                            // Row 2: Base and Docker operations
+                            ui.horizontal(|ui| {
+                                if !row_for_actions.base_installed {
+                                    if ui.add(MaterialButton::outlined("Check Base").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_check_base"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                    if ui.add(MaterialButton::outlined("Install Base").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_install_base"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                } else {
+                                    ui.add_enabled(false, MaterialButton::outlined("Base OK").small());
+                                }
+
+                                if !row_for_actions.docker_installed {
+                                    if ui.add(MaterialButton::outlined("Check Docker").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_check_docker"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                    if ui.add(MaterialButton::outlined("Install Docker").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_install_docker"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                } else {
+                                    if ui.add(MaterialButton::outlined("Remove Docker").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_remove_docker"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                }
+                            });
+
+                            ui.add_space(2.0);
+
+                            // Row 3: Dure operations
+                            ui.horizontal(|ui| {
+                                if !row_for_actions.dure_installed {
+                                    if ui.add(MaterialButton::outlined("Check Dure").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_check_dure"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                    if ui.add(MaterialButton::outlined("Install Dure").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_install_dure"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                } else {
+                                    if ui.add(MaterialButton::outlined("Remove Dure").small()).clicked() {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(egui::Id::new("ssh_action_remove_dure"), row_for_actions.host.clone())
+                                        });
+                                    }
+                                }
+                            });
                         });
                     })
                     .drawer(move |ui| {
@@ -388,8 +502,17 @@ impl SshTab {
         // Handle pending actions
         if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_refresh"))) {
             ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_refresh")));
-            // Refresh action - toggle drawer or reload data
-            dure_info!("Refreshing SSH host: {}", host);
+            self.handle_refresh(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_ssh_check"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_ssh_check")));
+            self.handle_ssh_check(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_edit"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_edit")));
+            self.show_edit_dialog(&host, profile);
         }
 
         if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_delete"))) {
@@ -397,9 +520,45 @@ impl SshTab {
             self.delete_host(&host, profile);
         }
 
-        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_restart_docker"))) {
-            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_restart_docker")));
-            self.restart_docker(&host, profile);
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_check_base"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_check_base")));
+            self.handle_check_base(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_install_base"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_install_base")));
+            self.handle_install_base(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_check_docker"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_check_docker")));
+            self.handle_check_docker(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_install_docker"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_install_docker")));
+            self.handle_install_docker(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_remove_docker"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_remove_docker")));
+            self.handle_remove_docker(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_check_dure"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_check_dure")));
+            self.handle_check_dure(&host);
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_install_dure"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_install_dure")));
+            self.show_install_dure_dialog = true;
+            self.install_dure_host = host;
+        }
+
+        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_remove_dure"))) {
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_remove_dure")));
+            self.handle_remove_dure(&host);
         }
 
         // Handle drawer tab switch
@@ -417,7 +576,7 @@ impl SshTab {
         }
     }
 
-    /// Render add host dialog
+    /// Render add/edit host dialog
     fn render_add_dialog(
         &mut self,
         ui: &mut egui::Ui,
@@ -428,17 +587,27 @@ impl SshTab {
         }
 
         let mut open = self.show_add_dialog;
+        let title = if self.edit_mode { "Edit SSH Host" } else { "Add SSH Host" };
+        let button_text = if self.edit_mode { "Save" } else { "Add" };
 
-        egui::Window::new("Add SSH Host")
+        egui::Window::new(title)
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .show(ui.ctx(), |ui| {
-                ui.label("Configure a new SSH host connection:");
+                let description = if self.edit_mode {
+                    "Edit SSH host connection settings:"
+                } else {
+                    "Configure a new SSH host connection:"
+                };
+                ui.label(description);
                 ui.add_space(8.0);
 
                 ui.label("Host (IP or domain):");
-                ui.text_edit_singleline(&mut self.add_host);
+                ui.add_enabled(!self.edit_mode, egui::TextEdit::singleline(&mut self.add_host));
+                if self.edit_mode {
+                    ui.label("(Host cannot be changed when editing)");
+                }
                 ui.add_space(8.0);
 
                 ui.label("Port:");
@@ -460,8 +629,12 @@ impl SshTab {
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.add_host_action(profile);
+                    if ui.add(MaterialButton::filled(button_text)).clicked() {
+                        if self.edit_mode {
+                            self.save_edit_host_action(profile);
+                        } else {
+                            self.add_host_action(profile);
+                        }
                     }
                     if ui.add(MaterialButton::outlined("Cancel")).clicked() {
                         self.show_add_dialog = false;
@@ -472,6 +645,7 @@ impl SshTab {
 
         if !open {
             self.show_add_dialog = false;
+            self.reset_add_dialog();
         }
     }
 
@@ -545,8 +719,10 @@ impl SshTab {
         }
     }
 
-    /// Reset add dialog fields
+    /// Reset add/edit dialog fields
     fn reset_add_dialog(&mut self) {
+        self.edit_mode = false;
+        self.edit_original_host.clear();
         self.add_host.clear();
         self.add_password.clear();
         self.add_private_key_path.clear();
@@ -579,14 +755,221 @@ impl SshTab {
         }
     }
 
-    /// Restart Docker on SSH host
-    fn restart_docker(
+    /// Show edit dialog for existing host
+    fn show_edit_dialog(&mut self, host: &str, profile: &Option<crate::calc::profile::ProfileContext>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            match load_config(profile) {
+                Ok((app_config, _)) => {
+                    if let Some(host_config) = app_config.ssh_hosts.iter().find(|h| h.host == host) {
+                        self.edit_mode = true;
+                        self.edit_original_host = host.to_string();
+                        self.add_host = host_config.host.clone();
+                        self.add_port = host_config.port.to_string();
+                        self.add_password = host_config.password.clone().unwrap_or_default();
+                        self.add_private_key_path = host_config.private_key_path.clone().unwrap_or_default();
+                        self.add_use_password = host_config.password.is_some();
+                        self.add_use_private_key = host_config.private_key_path.is_some();
+                        self.show_add_dialog = true;
+                    }
+                }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Save edited host configuration
+    fn save_edit_host_action(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let port = match self.add_port.parse::<u16>() {
+                Ok(p) => p,
+                Err(e) => {
+                    self.load_error = Some(format!("Invalid port '{}': {}", self.add_port, e));
+                    return;
+                }
+            };
+
+            match load_config(profile) {
+                Ok((mut app_config, config_path)) => {
+                    if let Some(host_config) = app_config.ssh_hosts.iter_mut()
+                        .find(|h| h.host == self.edit_original_host)
+                    {
+                        host_config.port = port;
+                        host_config.password = if self.add_use_password {
+                            Some(self.add_password.clone())
+                        } else {
+                            None
+                        };
+                        host_config.private_key_path = if self.add_use_private_key {
+                            Some(self.add_private_key_path.clone())
+                        } else {
+                            None
+                        };
+
+                        if let Err(e) = app_config.save(&config_path) {
+                            self.load_error = Some(format!("Failed to save config: {}", e));
+                            return;
+                        }
+
+                        dure_info!("Updated SSH host: {}", self.edit_original_host);
+                        self.loaded = false;
+                        self.show_add_dialog = false;
+                        self.reset_add_dialog();
+                    }
+                }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Render Install Dure dialog (.env configuration)
+    fn render_install_dure_dialog(
         &mut self,
-        host: &str,
+        ui: &mut egui::Ui,
         _profile: &Option<crate::calc::profile::ProfileContext>,
     ) {
-        dure_info!("Restarting Docker on {}", host);
-        // TODO: Send command to SSH actor to restart Docker
+        if !self.show_install_dure_dialog {
+            return;
+        }
+
+        let mut open = self.show_install_dure_dialog;
+
+        egui::Window::new("Install Dure - Configure .env")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(600.0)
+            .show(ui.ctx(), |ui| {
+                ui.label(format!("Configure environment variables for Dure on {}", self.install_dure_host));
+                ui.add_space(8.0);
+
+                ui.label(".env file content:");
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.install_dure_env_content)
+                        .desired_rows(15)
+                        .code_editor()
+                        .desired_width(f32::INFINITY)
+                );
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.add(MaterialButton::filled("Install")).clicked() {
+                        self.handle_install_dure_with_env(&self.install_dure_host.clone());
+                        self.show_install_dure_dialog = false;
+                        self.install_dure_env_content.clear();
+                    }
+                    if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                        self.show_install_dure_dialog = false;
+                        self.install_dure_env_content.clear();
+                    }
+                });
+            });
+
+        if !open {
+            self.show_install_dure_dialog = false;
+            self.install_dure_env_content.clear();
+        }
+    }
+
+    // Action handlers
+
+    /// Handle Refresh action - full status check
+    fn handle_refresh(&mut self, host: &str) {
+        dure_info!("Refreshing all status for SSH host: {}", host);
+        // TODO: Trigger SSH actor to:
+        // 1. SSH connection check
+        // 2. Base packages check
+        // 3. Docker installation check
+        // 4. Dure operation check
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle SSH Check action - connection test only
+    fn handle_ssh_check(&mut self, host: &str) {
+        dure_info!("Checking SSH connection to: {}", host);
+        // TODO: Trigger SSH connection test (existing functionality)
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Check Base - check base packages
+    fn handle_check_base(&mut self, host: &str) {
+        dure_info!("Checking base packages on: {}", host);
+        // TODO: Call calc::ssh::check_base_packages(host)
+        // Check: extrepo, git, iptables, nftables, bpfcc-tools, moreutils
+        // Update row.base_installed
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Install Base - install base packages
+    fn handle_install_base(&mut self, host: &str) {
+        dure_info!("Installing base packages on: {}", host);
+        // TODO: Call calc::ssh::install_base_packages(host)
+        // Install: extrepo, git, iptables, nftables, linux-headers, bpfcc-tools, moreutils
+        // Setup: tcpconnect-bpfcc logging to /var/log/dure-network.log
+        // Add to rc.local: tcpconnect-bpfcc | ts '%Y-%m-%d %H:%M:%S' >> /var/log/dure-network.log
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Check Docker - check docker installed
+    fn handle_check_docker(&mut self, host: &str) {
+        dure_info!("Checking Docker on: {}", host);
+        // TODO: Call calc::ssh::check_docker(host)
+        // Check: docker-ce package installed
+        // Update row.docker_installed
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Install Docker - install docker
+    fn handle_install_docker(&mut self, host: &str) {
+        dure_info!("Installing Docker on: {}", host);
+        // TODO: Call calc::ssh::install_docker(host)
+        // Steps:
+        // 1. extroot enable docker-ce
+        // 2. apt update && apt install docker-ce
+        // 3. Add docker user
+        // 4. Configure docker user permissions
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Remove Docker - uninstall docker
+    fn handle_remove_docker(&mut self, host: &str) {
+        dure_info!("Removing Docker from: {}", host);
+        // TODO: Call calc::ssh::remove_docker(host)
+        // Run: apt purge docker-ce
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Check Dure - check dure installed
+    fn handle_check_dure(&mut self, host: &str) {
+        dure_info!("Checking Dure on: {}", host);
+        // TODO: Call calc::ssh::check_dure(host)
+        // Check: /srv/dure-mycart exists
+        // Check: docker compose status in xmpp-proxy-stack
+        // Update row.dure_installed
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Install Dure with .env configuration
+    fn handle_install_dure_with_env(&mut self, host: &str) {
+        dure_info!("Installing Dure on: {} with .env", host);
+        // TODO: Call calc::ssh::install_dure(host, env_content)
+        // Steps:
+        // 1. git clone dure-mycart to /srv/dure-mycart
+        // 2. Write .env to /srv/dure-mycart/xmpp-proxy-stack/.env
+        // 3. docker compose up -d
+        // TODO: Log audit with audit::push_gui()
+    }
+
+    /// Handle Remove Dure - uninstall dure
+    fn handle_remove_dure(&mut self, host: &str) {
+        dure_info!("Removing Dure from: {}", host);
+        // TODO: Call calc::ssh::remove_dure(host)
+        // Run: docker compose down in /srv/dure-mycart/xmpp-proxy-stack
         // TODO: Log audit with audit::push_gui()
     }
 }
