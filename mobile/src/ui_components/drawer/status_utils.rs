@@ -42,11 +42,14 @@ pub fn format_elapsed(seconds: i64) -> String {
     if seconds < 60 {
         "just now".to_string()
     } else if seconds < 3600 {
-        format!("{} min ago", seconds / 60)
+        let mins = seconds / 60;
+        format!("{} min{} ago", mins, if mins == 1 { "" } else { "s" })
     } else if seconds < 86400 {
-        format!("{} hours ago", seconds / 3600)
+        let hours = seconds / 3600;
+        format!("{} hour{} ago", hours, if hours == 1 { "" } else { "s" })
     } else {
-        format!("{} days ago", seconds / 86400)
+        let days = seconds / 86400;
+        format!("{} day{} ago", days, if days == 1 { "" } else { "s" })
     }
 }
 
@@ -66,7 +69,7 @@ mod tests {
     #[test]
     fn test_format_elapsed() {
         assert_eq!(format_elapsed(30), "just now");
-        assert_eq!(format_elapsed(120), "2 min ago");
+        assert_eq!(format_elapsed(120), "2 mins ago");
         assert_eq!(format_elapsed(7200), "2 hours ago");
         assert_eq!(format_elapsed(172800), "2 days ago");
     }
@@ -78,13 +81,13 @@ mod tests {
         // Exactly 60 seconds
         assert_eq!(format_elapsed(60), "1 min ago");
         // Just under 1 hour
-        assert_eq!(format_elapsed(3599), "59 min ago");
+        assert_eq!(format_elapsed(3599), "59 mins ago");
         // Exactly 1 hour
-        assert_eq!(format_elapsed(3600), "1 hours ago");
+        assert_eq!(format_elapsed(3600), "1 hour ago");
         // Just under 1 day
         assert_eq!(format_elapsed(86399), "23 hours ago");
         // Exactly 1 day
-        assert_eq!(format_elapsed(86400), "1 days ago");
+        assert_eq!(format_elapsed(86400), "1 day ago");
     }
 
     #[test]
