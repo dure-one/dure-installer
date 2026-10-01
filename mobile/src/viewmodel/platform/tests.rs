@@ -17,6 +17,7 @@ mod tests {
             // Send command
             cmd_tx
                 .send(super::super::PlatformCommand::ListVMs {
+                    profile_config_path: std::path::PathBuf::from("/tmp/test"),
                     platform_name: "test-platform".to_string(),
                 })
                 .await

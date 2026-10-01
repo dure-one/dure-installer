@@ -95,6 +95,8 @@ diesel::table! {
 diesel::table! {
     operation_logs (id) {
         id -> Nullable<Integer>,
+        operation_source -> Nullable<Text>,
+        relevant_id -> Nullable<Text>,
         project_id -> Text,
         operation_type -> Text,
         external_system -> Text,
