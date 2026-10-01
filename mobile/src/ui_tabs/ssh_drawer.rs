@@ -169,196 +169,153 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
 /// Render Host tab (system information)
 fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
-
-    ui.heading("Host Information");
-    ui.add_space(8.0);
-
-    if drawer_state.loading {
-        ui.spinner();
-        ui.label("Loading host information...");
-        return;
-    }
-
-    if let Some(ref info) = drawer_state.host_info {
-        TwemojiLabel::new(format!("💻 OS: {}", info.os)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("🕐 Uptime: {}", info.uptime)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("🌐 External IP: {}", info.external_ip)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("📊 Load Average: {}", info.load_average)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("💾 Memory: {}", info.memory_usage)).show(ui);
-        ui.add_space(4.0);
-
-        TwemojiLabel::new(format!("💿 Disk: {}", info.disk_usage)).show(ui);
+    ui.horizontal(|ui| {
+        ui.heading("Host Information");
         ui.add_space(8.0);
 
-        if !info.top_processes.is_empty() {
-            ui.heading("Top Processes");
-            ui.add_space(4.0);
+        if ui.button("Refresh").clicked() {
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("ssh_drawer_action_refresh_host"),
+                    drawer_state.ssh_host.clone().unwrap_or_default(),
+                );
+            });
+        }
+    });
 
-            egui::ScrollArea::vertical()
-                .max_height(200.0)
-                .show(ui, |ui| {
-                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
-                    for process in &info.top_processes {
-                        ui.label(process);
-                    }
-                });
-        }
+    ui.separator();
+
+    if let Some(host_info) = &drawer_state.host_info {
+        ui.label(format!("OS: {}", host_info.os));
+        ui.label(format!("Uptime: {}", host_info.uptime));
+        ui.label(format!("External IP: {}", host_info.external_ip));
+        ui.label(format!("Load: {}", host_info.load_average));
+        ui.label(format!("Memory: {}", host_info.memory_usage));
+        ui.label(format!("Disk: {}", host_info.disk_usage));
+
+        ui.add_space(8.0);
+        ui.separator();
+        ui.heading("Network Log (last 100 lines)");
+        ui.separator();
+
+        egui::ScrollArea::vertical()
+            .max_height(300.0)
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
+                for line in &drawer_state.network_log {
+                    ui.label(line);
+                }
+            });
     } else {
-        ui.label("No host information available");
-        if ui.button("Load Host Info").clicked() {
-            // TODO: Trigger host info load
-        }
+        ui.label("Loading host information...");
     }
 }
 
 /// Render Docker tab
 fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
+    ui.horizontal(|ui| {
+        ui.heading("Docker Containers");
+        ui.add_space(8.0);
 
-    ui.heading("Docker Status");
-    ui.add_space(8.0);
+        if ui.button("Refresh").clicked() {
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("ssh_drawer_action_refresh_docker"),
+                    drawer_state.ssh_host.clone().unwrap_or_default(),
+                );
+            });
+        }
+    });
 
-    if drawer_state.loading {
-        ui.spinner();
-        ui.label("Loading Docker information...");
-        return;
-    }
+    ui.separator();
 
-    if let Some(ref status) = drawer_state.docker_status {
-        if status.installed {
-            TwemojiLabel::new("🐳 Docker: Installed").show(ui);
-            ui.add_space(4.0);
-
-            if let Some(ref version) = status.version {
-                TwemojiLabel::new(format!("📌 Version: {}", version)).show(ui);
-                ui.add_space(8.0);
+    if let Some(docker_status) = &drawer_state.docker_status {
+        if docker_status.installed {
+            if let Some(version) = &docker_status.version {
+                ui.label(format!("Docker Version: {}", version));
             }
 
-            // Container list
-            if !drawer_state.containers.is_empty() {
-                ui.heading("Containers");
-                ui.add_space(4.0);
+            ui.add_space(8.0);
+            ui.separator();
 
-                egui::ScrollArea::vertical()
-                    .max_height(400.0)
-                    .show(ui, |ui| {
-                        use egui_extras::{Column, TableBuilder};
+            // Raw docker ps -a output (monospace)
+            egui::ScrollArea::vertical()
+                .max_height(400.0)
+                .show(ui, |ui| {
+                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
 
-                        TableBuilder::new(ui)
-                            .striped(true)
-                            .column(Column::auto().resizable(true)) // Name
-                            .column(Column::auto().resizable(true)) // Image
-                            .column(Column::auto().resizable(true)) // Status
-                            .column(Column::remainder())            // Ports
-                            .header(20.0, |mut header| {
-                                header.col(|ui| {
-                                    ui.strong("Name");
-                                });
-                                header.col(|ui| {
-                                    ui.strong("Image");
-                                });
-                                header.col(|ui| {
-                                    ui.strong("Status");
-                                });
-                                header.col(|ui| {
-                                    ui.strong("Ports");
-                                });
-                            })
-                            .body(|mut body| {
-                                for container in &drawer_state.containers {
-                                    body.row(20.0, |mut row| {
-                                        row.col(|ui| {
-                                            ui.label(&container.name);
-                                        });
-                                        row.col(|ui| {
-                                            ui.label(&container.image);
-                                        });
-                                        row.col(|ui| {
-                                            let color = if container.status.contains("running") {
-                                                egui::Color32::from_rgb(76, 175, 80)
-                                            } else {
-                                                ui.style().visuals.text_color()
-                                            };
-                                            ui.label(
-                                                egui::RichText::new(&container.status).color(color),
-                                            );
-                                        });
-                                        row.col(|ui| {
-                                            ui.label(container.ports.join(", "));
-                                        });
-                                    });
-                                }
-                            });
-                    });
-            } else {
-                ui.label("No containers running");
-            }
+                    if let Some(raw_output) = &drawer_state.docker_ps_raw {
+                        ui.label(raw_output);
+                    }
+                });
         } else {
-            TwemojiLabel::new("🐳 Docker: Not Installed").show(ui);
+            ui.label("Docker is not installed on this host.");
         }
     } else {
-        ui.label("No Docker information available");
-        if ui.button("Load Docker Info").clicked() {
-            // TODO: Trigger Docker info load
-        }
+        ui.label("Loading docker information...");
     }
 }
 
 /// Render Dure tab
 fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
+    ui.horizontal(|ui| {
+        ui.heading("Dure (mycart) Status");
+        ui.add_space(8.0);
 
-    ui.heading("Dure WSS Status");
-    ui.add_space(8.0);
+        if ui.button("Refresh").clicked() {
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("ssh_drawer_action_refresh_dure"),
+                    drawer_state.ssh_host.clone().unwrap_or_default(),
+                );
+            });
+        }
+    });
 
-    if drawer_state.loading {
-        ui.spinner();
-        ui.label("Loading Dure information...");
-        return;
-    }
+    ui.separator();
 
-    if let Some(ref status) = drawer_state.dure_status {
-        if status.installed {
-            TwemojiLabel::new("📦 Dure: Installed").show(ui);
-            ui.add_space(4.0);
+    if let Some(dure_status) = &drawer_state.dure_status {
+        if dure_status.installed {
+            ui.label(format!("Installed: Yes"));
+            ui.label(format!("Running: {}", if dure_status.running { "Yes" } else { "No" }));
 
-            if let Some(ref version) = status.version {
-                TwemojiLabel::new(format!("📌 Version: {}", version)).show(ui);
-                ui.add_space(4.0);
-            }
-
-            let running_text = if status.running {
-                ("✅ Status: Running".to_string(), egui::Color32::from_rgb(76, 175, 80))
-            } else {
-                ("❌ Status: Stopped".to_string(), egui::Color32::from_rgb(244, 67, 54))
-            };
-            TwemojiLabel::new(egui::RichText::new(running_text.0).color(running_text.1)).show(ui);
             ui.add_space(8.0);
+            ui.separator();
+            ui.heading("docker-compose ps");
+            ui.separator();
 
-            if status.running {
-                if ui.button("Stop Dure").clicked() {
-                    // TODO: Trigger Dure stop
-                }
-            } else if ui.button("Start Dure").clicked() {
-                // TODO: Trigger Dure start
-            }
+            egui::ScrollArea::vertical()
+                .max_height(150.0)
+                .show(ui, |ui| {
+                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
+
+                    if let Some(status) = &drawer_state.dure_compose_status {
+                        ui.label(status);
+                    }
+                });
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.heading("docker-compose logs (last 50 lines)");
+            ui.separator();
+
+            egui::ScrollArea::vertical()
+                .max_height(200.0)
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
+
+                    for line in &drawer_state.dure_compose_logs {
+                        ui.label(line);
+                    }
+                });
         } else {
-            TwemojiLabel::new("📦 Dure: Not Installed").show(ui);
+            ui.label("Dure is not installed on this host.");
+            ui.label("Use 'Install Dure' button in the operations column.");
         }
     } else {
-        ui.label("No Dure information available");
-        if ui.button("Load Dure Info").clicked() {
-            // TODO: Trigger Dure info load
-        }
+        ui.label("Loading dure information...");
     }
 }
 
