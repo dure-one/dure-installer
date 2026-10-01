@@ -7,6 +7,14 @@ use egui_material3::MaterialButton;
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
 
+// Button spacing matching Platform tab
+const BUTTON_VERTICAL_SPACING: f32 = 4.0;
+const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
+
+// Button spacing matching Platform tab
+const BUTTON_VERTICAL_SPACING: f32 = 4.0;
+const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
+
 /// Operation state for visual feedback with timestamps
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationState {
@@ -107,6 +115,7 @@ pub struct SshRow {
     // Identity
     pub host: String, // IP address (row key)
     pub port: u16,
+    pub platform_id: Option<String>, // Connected platform ID (if applicable)
 
     // Connection state
     pub ssh_connected: bool,
@@ -136,9 +145,122 @@ pub struct SshRow {
 /// Actions that can be triggered from SSH table rows
 #[derive(Debug, Clone)]
 enum SshAction {
-    Refresh(String),      // host
-    Delete(String),       // host
-    RestartDocker(String), // host
+    Refresh(String),       // host
+    SshCheck(String),      // host
+    Edit(String),          // host
+    Delete(String),        // host
+    CheckBase(String),     // host
+    InstallBase(String),   // host
+    CheckDocker(String),   // host
+    InstallDocker(String), // host
+    RemoveDocker(String),  // host
+    CheckDure(String),     // host
+    InstallDure(String),   // host (triggers .env dialog)
+    RemoveDure(String),    // host
+}
+
+/// Render operations column with 3 rows of conditional buttons
+fn render_operations_column(
+    ui: &mut egui::Ui,
+    row: &SshRow,
+    action_trigger: &mut Option<SshAction>,
+) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
+        ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+
+        // Row 1: Basic operations
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+
+            if ui.button("Refresh").clicked() {
+                *action_trigger = Some(SshAction::Refresh(row.host.clone()));
+            }
+
+            if ui.button("SSH Check").clicked() {
+                *action_trigger = Some(SshAction::SshCheck(row.host.clone()));
+            }
+
+            if ui.button("Edit").clicked() {
+                *action_trigger = Some(SshAction::Edit(row.host.clone()));
+            }
+
+            if ui.button("Delete").clicked() {
+                *action_trigger = Some(SshAction::Delete(row.host.clone()));
+            }
+        });
+
+        // Row 2: Base and Docker
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+
+            // Check Base (always)
+            if ui.button("Check Base").clicked() {
+                *action_trigger = Some(SshAction::CheckBase(row.host.clone()));
+            }
+
+            // Install Base (only when NOT installed)
+            if !row.base_installed {
+                if ui.button("Install Base").clicked() {
+                    *action_trigger = Some(SshAction::InstallBase(row.host.clone()));
+                }
+            }
+
+            // Check Docker (always)
+            if ui.button("Check Docker").clicked() {
+                *action_trigger = Some(SshAction::CheckDocker(row.host.clone()));
+            }
+
+            // Install/Remove Docker (conditional)
+            if !row.docker_installed {
+                if ui.button("Install Docker").clicked() {
+                    *action_trigger = Some(SshAction::InstallDocker(row.host.clone()));
+                }
+            } else {
+                if ui.button("Remove Docker").clicked() {
+                    *action_trigger = Some(SshAction::RemoveDocker(row.host.clone()));
+                }
+            }
+        });
+
+        // Row 3: Dure operations
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+
+            // Check Dure (always)
+            if ui.button("Check Dure").clicked() {
+                *action_trigger = Some(SshAction::CheckDure(row.host.clone()));
+            }
+
+            // Install/Remove Dure (conditional)
+            if !row.dure_installed {
+                if ui.button("Install Dure").clicked() {
+                    *action_trigger = Some(SshAction::InstallDure(row.host.clone()));
+                }
+            } else {
+                if ui.button("Remove Dure").clicked() {
+                    *action_trigger = Some(SshAction::RemoveDure(row.host.clone()));
+                }
+            }
+        });
+    });
+}
+
+/// Render host column with platform badge
+fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
+    use egui_material3::badge::{self, BadgeColor, BadgeSize};
+
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 2.0;
+
+        // Line 1: Platform badge (if connected)
+        if let Some(_platform_id) = &row.platform_id {
+            badge::show(ui, _platform_id, BadgeColor::Primary, BadgeSize::Small);
+        }
+
+        // Line 2: Host IP
+        ui.label(&row.host);
+    });
 }
 
 /// SSH tab state
@@ -244,6 +366,7 @@ impl SshTab {
                         self.rows.push(SshRow {
                             host: host_config.host.clone(),
                             port: host_config.port,
+                            platform_id: host_config.platform_name.clone(), // Platform connection (if any)
                             ssh_connected: false, // TODO: Determine from actual connection state
                             base_installed: false, // TODO: Determine from actual check
                             docker_installed: !host_config.docker_containers.is_empty(),
@@ -860,6 +983,7 @@ mod operation_state_tests {
         let row = SshRow {
             host: "192.168.1.1".to_string(),
             port: 22,
+            platform_id: None,
             ssh_connected: false,
             base_installed: false,
             docker_installed: false,
@@ -876,6 +1000,7 @@ mod operation_state_tests {
 
         assert_eq!(row.host, "192.168.1.1");
         assert_eq!(row.port, 22);
+        assert!(row.platform_id.is_none());
         assert_eq!(row.operation_state, OperationState::Idle);
         assert!(row.last_ssh_check.is_none());
         assert!(row.last_base_check.is_none());
@@ -900,6 +1025,7 @@ mod operation_state_tests {
         let row = SshRow {
             host: "192.168.1.1".to_string(),
             port: 22,
+            platform_id: None,
             ssh_connected: true,
             base_installed: false,
             docker_installed: true,
