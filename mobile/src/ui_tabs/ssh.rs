@@ -7,6 +7,67 @@ use egui_material3::MaterialButton;
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
 
+/// Operation state for visual feedback with timestamps
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationState {
+    Idle,
+    InProgress {
+        operation: String,
+        started_at: i64, // Unix timestamp
+    },
+    Completed {
+        operation: String,
+        completed_at: i64,
+    },
+    Failed {
+        operation: String,
+        error: String,
+        failed_at: i64,
+    },
+}
+
+impl OperationState {
+    pub fn start(operation: impl Into<String>) -> Self {
+        Self::InProgress {
+            operation: operation.into(),
+            started_at: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn complete(self) -> Self {
+        if let Self::InProgress { operation, .. } = self {
+            Self::Completed {
+                operation,
+                completed_at: chrono::Utc::now().timestamp(),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn fail(self, error: impl Into<String>) -> Self {
+        if let Self::InProgress { operation, .. } = self {
+            Self::Failed {
+                operation,
+                error: error.into(),
+                failed_at: chrono::Utc::now().timestamp(),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::Idle;
+    }
+}
+
+impl Default for OperationState {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
 /// SSH row data for data table
 #[derive(Clone, Debug)]
 pub struct SshRow {
@@ -588,5 +649,53 @@ impl SshTab {
         dure_info!("Restarting Docker on {}", host);
         // TODO: Send command to SSH actor to restart Docker
         // TODO: Log audit with audit::push_gui()
+    }
+}
+
+#[cfg(test)]
+mod operation_state_tests {
+    use super::*;
+
+    #[test]
+    fn test_operation_state_lifecycle() {
+        let state = OperationState::start("test_op");
+
+        match &state {
+            OperationState::InProgress { operation, .. } => {
+                assert_eq!(operation, "test_op");
+            }
+            _ => panic!("Expected InProgress state"),
+        }
+
+        let state = state.complete();
+
+        match &state {
+            OperationState::Completed { operation, .. } => {
+                assert_eq!(operation, "test_op");
+            }
+            _ => panic!("Expected Completed state"),
+        }
+    }
+
+    #[test]
+    fn test_operation_state_failure() {
+        let state = OperationState::start("failing_op");
+        let state = state.fail("connection timeout");
+
+        match &state {
+            OperationState::Failed { operation, error, .. } => {
+                assert_eq!(operation, "failing_op");
+                assert_eq!(error, "connection timeout");
+            }
+            _ => panic!("Expected Failed state"),
+        }
+    }
+
+    #[test]
+    fn test_operation_state_reset() {
+        let mut state = OperationState::start("test_op");
+        state.reset();
+
+        assert_eq!(state, OperationState::Idle);
     }
 }
