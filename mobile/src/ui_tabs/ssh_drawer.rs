@@ -3,7 +3,7 @@
 use eframe::egui;
 
 use crate::storage::models::opslog::OperationLog;
-use crate::ui_components::drawer::{StatusLine, TabBar};
+use crate::ui_components::drawer::{StatusLine, TabBar, LogsRenderer, OperationsRenderer};
 use crate::ui_tabs::ssh::{SshRow, OperationState};
 use crate::viewmodel::ssh::{DrawerTab, DrawerState};
 
@@ -154,217 +154,17 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
 
 /// Render Logs tab (stdout logs filtered by SSH host)
 fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    // Auto-refresh: trigger log reload every 1 second (not every frame)
-    if let Some(ref ssh_host) = drawer_state.ssh_host {
-        let refresh_id = egui::Id::new("ssh_drawer_log_last_refresh");
-        let now = std::time::Instant::now();
-        let should_refresh = ui.data(|d| {
-            d.get_temp::<std::time::Instant>(refresh_id)
-                .map(|last| now.duration_since(last).as_secs() >= 1)
-                .unwrap_or(true)
-        });
+    let renderer = LogsRenderer::new("SSH Host Logs")
+        .refresh_interval(1);  // 1 second auto-refresh
 
-        if should_refresh {
-            ui.data_mut(|d| {
-                d.insert_temp(refresh_id, now);
-                d.insert_temp(
-                    egui::Id::new("ssh_drawer_action_refresh_logs"),
-                    ssh_host.clone(),
-                );
-            });
-        }
-    }
-
-    ui.horizontal(|ui| {
-        ui.heading("SSH Host Logs");
-        ui.add_space(8.0);
-
-        // New logs indicator
-        let log_count_id = egui::Id::new("ssh_drawer_prev_log_count");
-        let current_count = drawer_state.logs.len();
-        let prev_count = ui.data(|d| d.get_temp::<usize>(log_count_id)).unwrap_or(0);
-
-        if current_count > prev_count {
-            ui.label(
-                egui::RichText::new("🆕 NEW")
-                    .color(egui::Color32::from_rgb(76, 175, 80))
-                    .strong(),
-            );
-            ui.ctx().request_repaint();
-        }
-
-        ui.data_mut(|d| d.insert_temp(log_count_id, current_count));
-
-        ui.add_space(8.0);
-
-        // Log level filter
-        ui.label("Level:");
-        let filter_id = egui::Id::new("ssh_log_level_filter");
-        let mut log_level_filter = ui
-            .data(|d| d.get_temp::<String>(filter_id))
-            .unwrap_or_else(|| "All".to_string());
-
-        egui::ComboBox::from_label("")
-            .selected_text(&log_level_filter)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
-                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
-                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
-                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
-                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
-            });
-
-        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
-    });
-
-    ui.add_space(8.0);
-
-    if drawer_state.loading {
-        ui.spinner();
-        ui.label("Loading logs...");
-        return;
-    }
-
-    if drawer_state.ssh_host.is_none() {
-        ui.label("No SSH host selected");
-        return;
-    }
-
-    if drawer_state.logs.is_empty() {
-        ui.label("No logs available");
-        return;
-    }
-
-    // Filter logs by level
-    let log_level_filter = ui
-        .data(|d| d.get_temp::<String>(egui::Id::new("ssh_log_level_filter")))
-        .unwrap_or_else(|| "All".to_string());
-
-    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
-        drawer_state.logs.iter().collect()
-    } else {
-        let filter_str = format!("[{}]", log_level_filter);
-        drawer_state
-            .logs
-            .iter()
-            .filter(|line| line.contains(&filter_str))
-            .collect()
-    };
-
-    // Scrollable log view - 500px height
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
-
-            for line in filtered_logs {
-                ui.label(line);
-            }
-        });
+    let refresh_id = egui::Id::new("ssh_drawer_action_refresh_logs");
+    renderer.show(ui, &drawer_state.logs, refresh_id);
 }
 
 /// Render Operations tab (operation logs from SQLite)
 fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    // Auto-refresh: trigger operation reload every 2 seconds
-    if let Some(ref ssh_host) = drawer_state.ssh_host {
-        let refresh_id = egui::Id::new("ssh_drawer_ops_last_refresh");
-        let now = std::time::Instant::now();
-        let should_refresh = ui.data(|d| {
-            d.get_temp::<std::time::Instant>(refresh_id)
-                .map(|last| now.duration_since(last).as_secs() >= 2)
-                .unwrap_or(true)
-        });
-
-        if should_refresh {
-            ui.data_mut(|d| {
-                d.insert_temp(refresh_id, now);
-                d.insert_temp(
-                    egui::Id::new("ssh_drawer_action_refresh_operations"),
-                    ssh_host.clone(),
-                );
-            });
-        }
-    }
-
-    ui.heading("Operations History");
-    ui.add_space(8.0);
-
-    if drawer_state.loading {
-        ui.spinner();
-        ui.label("Loading operations...");
-        return;
-    }
-
-    if drawer_state.ssh_host.is_none() {
-        ui.label("No SSH host selected");
-        return;
-    }
-
-    if drawer_state.operations.is_empty() {
-        ui.label("No operations recorded");
-        return;
-    }
-
-    // Operations table
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            use egui_extras::{Column, TableBuilder};
-
-            TableBuilder::new(ui)
-                .striped(true)
-                .column(Column::auto().resizable(true)) // Operation
-                .column(Column::auto().resizable(true)) // Status
-                .column(Column::auto().resizable(true)) // Started
-                .column(Column::remainder())            // Details
-                .header(20.0, |mut header| {
-                    header.col(|ui| {
-                        ui.strong("Operation");
-                    });
-                    header.col(|ui| {
-                        ui.strong("Status");
-                    });
-                    header.col(|ui| {
-                        ui.strong("Started");
-                    });
-                    header.col(|ui| {
-                        ui.strong("Details");
-                    });
-                })
-                .body(|mut body| {
-                    for op in &drawer_state.operations {
-                        body.row(20.0, |mut row| {
-                            row.col(|ui| {
-                                ui.label(&op.operation_type);
-                            });
-                            row.col(|ui| {
-                                let color = match op.status.as_str() {
-                                    "success" => egui::Color32::from_rgb(76, 175, 80),
-                                    "failed" => egui::Color32::from_rgb(244, 67, 54),
-                                    _ => ui.style().visuals.text_color(),
-                                };
-                                ui.label(egui::RichText::new(&op.status).color(color));
-                            });
-                            row.col(|ui| {
-                                let time = format_timestamp(op.started_at);
-                                ui.label(time);
-                            });
-                            row.col(|ui| {
-                                if let Some(details) = &op.details {
-                                    ui.label(details);
-                                } else if let Some(error) = &op.error_message {
-                                    ui.label(
-                                        egui::RichText::new(error)
-                                            .color(egui::Color32::from_rgb(244, 67, 54)),
-                                    );
-                                }
-                            });
-                        });
-                    }
-                });
-        });
+    let renderer = OperationsRenderer::new();
+    renderer.show(ui, &drawer_state.operations);
 }
 
 /// Render Host tab (system information)
@@ -562,11 +362,3 @@ fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     }
 }
 
-/// Format Unix timestamp to human-readable string
-fn format_timestamp(timestamp: i64) -> String {
-    use chrono::{TimeZone, Utc};
-    Utc.timestamp_opt(timestamp, 0)
-        .single()
-        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-        .unwrap_or_else(|| "Unknown".to_string())
-}
