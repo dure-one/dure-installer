@@ -1,6 +1,7 @@
 //! Drawer types for SSH host tab management and operation logging
 
 use crate::storage::models::opslog::OperationLog;
+use crate::ui_components::drawer::DrawerTabTrait;
 use serde::{Deserialize, Serialize};
 
 /// Active tab in the SSH drawer
@@ -40,6 +41,23 @@ impl DrawerTab {
             DrawerTab::Host,
             DrawerTab::Docker,
             DrawerTab::Dure,
+        ]
+    }
+}
+
+impl DrawerTabTrait for DrawerTab {
+    fn as_str(&self) -> &'static str {
+        DrawerTab::as_str(self)
+    }
+
+    fn all() -> &'static [Self] {
+        &[
+            Self::Status,
+            Self::Logs,
+            Self::Operations,
+            Self::Host,
+            Self::Docker,
+            Self::Dure,
         ]
     }
 }
