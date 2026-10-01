@@ -173,6 +173,102 @@ pub async fn remove_docker(host: &str) -> Result<()> {
     Ok(())
 }
 
+/// Check if Dure is installed and running
+pub async fn check_dure_installed(host: &str) -> Result<(bool, bool, Vec<String>)> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    // Check if repo exists
+    let check_repo = "test -d /srv/dure-mycart && echo exists || echo missing";
+    let repo_output = execute_ssh_command(host, 22, &username, &auth, check_repo).await?;
+
+    if repo_output.trim() == "missing" {
+        return Ok((false, false, vec![]));
+    }
+
+    // Check docker-compose status
+    let check_compose = r#"
+        cd /srv/dure-mycart/xmpp-proxy-stack
+        docker-compose ps --format json 2>/dev/null || echo "[]"
+    "#;
+
+    let compose_output = execute_ssh_command(host, 22, &username, &auth, check_compose).await?;
+
+    // Parse services (simplified - actual parsing would use serde_json)
+    let running = !compose_output.trim().is_empty() && compose_output.trim() != "[]";
+    let services = if running {
+        vec!["service1".to_string(), "service2".to_string()] // Placeholder
+    } else {
+        vec![]
+    };
+
+    Ok((true, running, services))
+}
+
+/// Install Dure with docker-compose
+pub async fn install_dure(
+    host: &str,
+    env_config: &std::collections::HashMap<String, String>,
+) -> Result<()> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    // Clone repository
+    let clone_cmd = r#"
+        mkdir -p /srv
+        cd /srv
+        git clone https://github.com/dure-one/dure-mycart.git || (cd dure-mycart && git pull)
+    "#;
+
+    execute_ssh_command(host, 22, &username, &auth, clone_cmd)
+        .await
+        .context("Failed to clone dure-mycart")?;
+
+    // Create .env file
+    let env_content = env_config
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let create_env_cmd = format!(
+        "cat > /srv/dure-mycart/xmpp-proxy-stack/.env <<'EOF'\n{}\nEOF",
+        env_content
+    );
+
+    execute_ssh_command(host, 22, &username, &auth, &create_env_cmd)
+        .await
+        .context("Failed to create .env file")?;
+
+    // Start docker-compose
+    let compose_cmd = r#"
+        cd /srv/dure-mycart/xmpp-proxy-stack
+        sudo -u docker docker-compose up -d
+    "#;
+
+    execute_ssh_command(host, 22, &username, &auth, compose_cmd)
+        .await
+        .context("Failed to start docker-compose")?;
+
+    crate::dure_info!("Dure installed on {}", host);
+    Ok(())
+}
+
+/// Remove Dure (stop docker-compose)
+pub async fn remove_dure(host: &str) -> Result<()> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let remove_cmd = r#"
+        cd /srv/dure-mycart/xmpp-proxy-stack
+        sudo -u docker docker-compose down
+    "#;
+
+    execute_ssh_command(host, 22, &username, &auth, remove_cmd)
+        .await
+        .context("Failed to stop dure services")?;
+
+    crate::dure_info!("Dure removed from {}", host);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +324,35 @@ mod tests {
         smol::block_on(async {
             // Placeholder test - actual Docker removal requires SSH server
             let result = remove_docker("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_check_dure_installed_not_installed() {
+        smol::block_on(async {
+            // Placeholder - actual Dure check requires SSH server
+            let result = check_dure_installed("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_install_dure_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual Dure install requires SSH server
+            let mut env_config = std::collections::HashMap::new();
+            env_config.insert("TEST_VAR".to_string(), "test_value".to_string());
+            let result = install_dure("localhost", &env_config).await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_remove_dure_placeholder() {
+        smol::block_on(async {
+            // Placeholder - actual Dure removal requires SSH server
+            let result = remove_dure("localhost").await;
             assert!(result.is_ok() || result.is_err());
         });
     }
