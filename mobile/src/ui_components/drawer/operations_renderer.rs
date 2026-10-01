@@ -13,9 +13,10 @@ impl OperationsRenderer {
     }
 
     /// Set the maximum height of the scrollable area
-    pub fn max_height(mut self, height: f32) -> Self {
-        self.max_height = height;
-        self
+    pub fn max_height(self, height: f32) -> Self {
+        Self {
+            max_height: height,
+        }
     }
 
     /// Display the operation history in a scrollable container
@@ -59,7 +60,7 @@ impl OperationsRenderer {
         ui.label(format!("System: {}", op.external_system));
 
         if let Some(error) = &op.error_message {
-            ui.label(RichText::new(format!("Error: {}", error)).color(status_color));
+            ui.label(RichText::new(format!("Error: {}", error)).color(Color32::from_rgb(244, 67, 54)));
         }
 
         if let Some(details) = &op.details {
