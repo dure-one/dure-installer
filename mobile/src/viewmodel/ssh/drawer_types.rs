@@ -304,8 +304,8 @@ mod tests {
         let mut state = DrawerState::new();
         state.operations.push(OperationLog {
             id: 1,
-            operation_source: Some("ssh".to_string()),
-            relevant_id: Some("192.168.1.100".to_string()),
+            operation_source: "ssh".to_string(),
+            relevant_id: "192.168.1.100".to_string(),
             project_id: "192.168.1.100".to_string(),
             operation_type: "ssh_connect".to_string(),
             external_system: "ssh".to_string(),

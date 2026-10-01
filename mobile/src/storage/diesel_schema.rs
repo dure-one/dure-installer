@@ -95,8 +95,8 @@ diesel::table! {
 diesel::table! {
     operation_logs (id) {
         id -> Nullable<Integer>,
-        operation_source -> Nullable<Text>,
-        relevant_id -> Nullable<Text>,
+        operation_source -> Text,  // NOT NULL: always set to "platform" or "ssh"
+        relevant_id -> Text,       // NOT NULL: always set to project_id (platform) or ssh_host (ssh)
         project_id -> Text,
         operation_type -> Text,
         external_system -> Text,

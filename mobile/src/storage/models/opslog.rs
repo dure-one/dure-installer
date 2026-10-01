@@ -41,10 +41,10 @@ impl OperationStatus {
 pub struct OperationLog {
     /// Auto-assigned row id
     pub id: i64,
-    /// Source of operation: "platform" or "ssh"
-    pub operation_source: Option<String>,
-    /// Resource identifier (project_id for platform, ssh_host for ssh)
-    pub relevant_id: Option<String>,
+    /// Source of operation: "platform" or "ssh" (NOT NULL)
+    pub operation_source: String,
+    /// Resource identifier (project_id for platform, ssh_host for ssh) (NOT NULL)
+    pub relevant_id: String,
     /// Project/platform identifier
     pub project_id: String,
     /// Type of operation (e.g., "create_vm", "update_firewall", "add_dns_record")
@@ -86,6 +86,7 @@ pub struct NewOperationLog {
 }
 
 impl NewOperationLog {
+    /// Create a platform operation log entry (default)
     pub fn new(
         project_id: impl Into<String>,
         operation_type: impl Into<String>,
@@ -104,22 +105,12 @@ impl NewOperationLog {
         }
     }
 
-    /// Create a platform operation log entry
+    /// Create a platform operation log entry (specialization of new with gcp external_system)
     pub fn platform(
         platform_id: impl Into<String>,
         operation_type: impl Into<String>,
     ) -> Self {
-        let platform_id_str = platform_id.into();
-        Self {
-            operation_source: "platform".to_string(),
-            relevant_id: platform_id_str.clone(),
-            project_id: platform_id_str,
-            operation_type: operation_type.into(),
-            external_system: "gcp".to_string(),
-            status: OperationStatus::Running,
-            error_message: None,
-            details: None,
-        }
+        Self::new(platform_id, operation_type, "gcp")
     }
 
     /// Create an SSH operation log entry
@@ -311,10 +302,10 @@ pub fn list_by_project(
     struct QueryRow {
         #[diesel(sql_type = BigInt)]
         id: i64,
-        #[diesel(sql_type = Nullable<Text>)]
-        operation_source: Option<String>,
-        #[diesel(sql_type = Nullable<Text>)]
-        relevant_id: Option<String>,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
         #[diesel(sql_type = Text)]
         project_id: String,
         #[diesel(sql_type = Text)]
@@ -371,10 +362,10 @@ pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<Operation
     struct QueryRow {
         #[diesel(sql_type = BigInt)]
         id: i64,
-        #[diesel(sql_type = Nullable<Text>)]
-        operation_source: Option<String>,
-        #[diesel(sql_type = Nullable<Text>)]
-        relevant_id: Option<String>,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
         #[diesel(sql_type = Text)]
         project_id: String,
         #[diesel(sql_type = Text)]
@@ -457,10 +448,10 @@ pub fn get_ssh_operations(
     struct Row {
         #[diesel(sql_type = BigInt)]
         id: i64,
-        #[diesel(sql_type = Nullable<Text>)]
-        operation_source: Option<String>,
-        #[diesel(sql_type = Nullable<Text>)]
-        relevant_id: Option<String>,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
         #[diesel(sql_type = Text)]
         project_id: String,
         #[diesel(sql_type = Text)]
@@ -521,10 +512,10 @@ pub fn get_platform_operations(
     struct Row {
         #[diesel(sql_type = BigInt)]
         id: i64,
-        #[diesel(sql_type = Nullable<Text>)]
-        operation_source: Option<String>,
-        #[diesel(sql_type = Nullable<Text>)]
-        relevant_id: Option<String>,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
         #[diesel(sql_type = Text)]
         project_id: String,
         #[diesel(sql_type = Text)]
@@ -680,15 +671,15 @@ mod tests {
             // Query SSH operations
             let ssh_ops = get_ssh_operations(&mut conn, "192.168.1.100", 10).unwrap();
             assert_eq!(ssh_ops.len(), 1);
-            assert_eq!(ssh_ops[0].operation_source, Some("ssh".to_string()));
-            assert_eq!(ssh_ops[0].relevant_id, Some("192.168.1.100".to_string()));
+            assert_eq!(ssh_ops[0].operation_source, "ssh");
+            assert_eq!(ssh_ops[0].relevant_id, "192.168.1.100");
             assert_eq!(ssh_ops[0].external_system, "ssh");
 
             // Query platform operations
             let platform_ops = get_platform_operations(&mut conn, "test-project", 10).unwrap();
             assert_eq!(platform_ops.len(), 1);
-            assert_eq!(platform_ops[0].operation_source, Some("platform".to_string()));
-            assert_eq!(platform_ops[0].relevant_id, Some("test-project".to_string()));
+            assert_eq!(platform_ops[0].operation_source, "platform");
+            assert_eq!(platform_ops[0].relevant_id, "test-project");
             assert_eq!(platform_ops[0].external_system, "gcp");
 
             // Verify SSH ops don't include platform ops
