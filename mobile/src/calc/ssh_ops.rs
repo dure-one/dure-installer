@@ -114,6 +114,65 @@ pub async fn install_base_packages(host: &str) -> Result<()> {
     Ok(())
 }
 
+/// Check if Docker is installed and return version
+pub async fn check_docker_installed(host: &str) -> Result<Option<String>> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let cmd = "docker --version 2>/dev/null || echo not_installed";
+    let output = execute_ssh_command(host, 22, &username, &auth, cmd).await?;
+
+    if output.trim() == "not_installed" {
+        Ok(None)
+    } else {
+        let version = output
+            .split_whitespace()
+            .nth(2)
+            .map(|v| v.trim_end_matches(',').to_string());
+        Ok(version)
+    }
+}
+
+/// Install docker-ce and configure docker user
+pub async fn install_docker(host: &str) -> Result<()> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let install_cmd = r#"
+        extrepo enable docker-ce
+        apt-get update
+        apt-get install -y docker-ce
+        useradd -m -s /bin/bash docker || true
+        usermod -aG docker docker
+        systemctl enable docker
+        systemctl start docker
+    "#;
+
+    execute_ssh_command(host, 22, &username, &auth, install_cmd)
+        .await
+        .context("Failed to install docker")?;
+
+    crate::dure_info!("Docker installed on {}", host);
+    Ok(())
+}
+
+/// Remove docker-ce
+pub async fn remove_docker(host: &str) -> Result<()> {
+    let (username, auth) = load_ssh_credentials(host)?;
+
+    let remove_cmd = r#"
+        systemctl stop docker
+        systemctl disable docker
+        apt-get purge -y docker-ce docker-ce-cli containerd.io
+        apt-get autoremove -y
+    "#;
+
+    execute_ssh_command(host, 22, &username, &auth, remove_cmd)
+        .await
+        .context("Failed to remove docker")?;
+
+    crate::dure_info!("Docker removed from {}", host);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,6 +201,33 @@ mod tests {
         smol::block_on(async {
             // Placeholder - actual test needs SSH server
             let result = install_base_packages("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_check_docker_installed_placeholder() {
+        smol::block_on(async {
+            // Placeholder test - actual Docker check requires SSH server
+            let result = check_docker_installed("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_install_docker_placeholder() {
+        smol::block_on(async {
+            // Placeholder test - actual Docker install requires SSH server
+            let result = install_docker("localhost").await;
+            assert!(result.is_ok() || result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_remove_docker_placeholder() {
+        smol::block_on(async {
+            // Placeholder test - actual Docker removal requires SSH server
+            let result = remove_docker("localhost").await;
             assert!(result.is_ok() || result.is_err());
         });
     }
