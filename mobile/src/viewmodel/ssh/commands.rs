@@ -1,5 +1,14 @@
 //! SSH actor commands
 
+use std::collections::HashMap;
+
+/// Drawer commands for SSH operations
+#[derive(Debug, Clone)]
+pub enum DrawerCommand {
+    #[doc(hidden)]
+    _Placeholder,
+}
+
 #[derive(Debug, Clone)]
 pub enum SshCommand {
     // Host Management
@@ -161,4 +170,51 @@ pub enum SshCommand {
         name: String,
         timeout_secs: u8,
     },
+
+    // Operation commands
+    /// Refresh host status (SSH, Base, Docker, Dure)
+    OpRefresh {
+        host: String,
+    },
+    /// Check if SSH connection is available
+    OpSshCheck {
+        host: String,
+    },
+    /// Check if base packages are installed
+    OpCheckBase {
+        host: String,
+    },
+    /// Install base packages
+    OpInstallBase {
+        host: String,
+    },
+    /// Check if Docker is installed
+    OpCheckDocker {
+        host: String,
+    },
+    /// Install Docker daemon
+    OpInstallDockerDaemon {
+        host: String,
+    },
+    /// Remove Docker daemon
+    OpRemoveDocker {
+        host: String,
+    },
+    /// Check if Dure is installed
+    OpCheckDure {
+        host: String,
+    },
+    /// Install Dure with environment configuration
+    OpInstallDure {
+        host: String,
+        env_config: HashMap<String, String>,
+    },
+    /// Remove Dure
+    OpRemoveDure {
+        host: String,
+    },
+
+    // Drawer commands
+    /// Drawer-specific command passthrough
+    Drawer(DrawerCommand),
 }

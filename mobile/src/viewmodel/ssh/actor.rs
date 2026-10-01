@@ -479,6 +479,95 @@ impl SshActor {
             SshCommand::UninstallDureWss { host_name } => {
                 return self.handle_uninstall_dure_wss(host_name).await;
             }
+
+            // Operation commands (new)
+            SshCommand::OpRefresh { host } => {
+                self.send_event(SshEvent::RefreshCompleted {
+                    host: host.clone(),
+                    ssh_connected: false,
+                    base_installed: false,
+                    docker_installed: false,
+                    dure_installed: false,
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpSshCheck { host } => {
+                self.send_event(SshEvent::SshCheckCompleted {
+                    host: host.clone(),
+                    connected: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpCheckBase { host } => {
+                self.send_event(SshEvent::BaseCheckCompleted {
+                    host: host.clone(),
+                    installed: false,
+                    missing_packages: vec![],
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpInstallBase { host } => {
+                self.send_event(SshEvent::BaseInstallCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpCheckDocker { host } => {
+                self.send_event(SshEvent::DockerCheckCompleted {
+                    host: host.clone(),
+                    installed: false,
+                    version: None,
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpInstallDockerDaemon { host } => {
+                self.send_event(SshEvent::DockerInstallCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpRemoveDocker { host } => {
+                self.send_event(SshEvent::DockerRemoveCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpCheckDure { host } => {
+                self.send_event(SshEvent::DureCheckCompleted {
+                    host: host.clone(),
+                    installed: false,
+                    running: false,
+                    services: vec![],
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpInstallDure { host, env_config: _ } => {
+                self.send_event(SshEvent::DureInstallCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::OpRemoveDure { host } => {
+                self.send_event(SshEvent::DureRemoveCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some("Not implemented".to_string()),
+                }).await;
+                Ok(())
+            }
+            SshCommand::Drawer(_drawer_cmd) => {
+                Err(anyhow::anyhow!("Drawer command not yet implemented"))
+            }
+
             // Catch-all for cfg-gated commands on Android/WASM
             #[cfg(any(target_os = "android", target_arch = "wasm32"))]
             _ => {
@@ -2120,6 +2209,44 @@ impl SshActor {
             }
             SshEvent::Error { operation, .. } => {
                 format!("Error({})", operation)
+            }
+
+            // Operation events (new)
+            SshEvent::RefreshCompleted { host, .. } => {
+                format!("RefreshCompleted({})", host)
+            }
+            SshEvent::SshCheckCompleted { host, connected, .. } => {
+                format!("SshCheckCompleted({}, connected={})", host, connected)
+            }
+            SshEvent::BaseCheckCompleted { host, installed, .. } => {
+                format!("BaseCheckCompleted({}, installed={})", host, installed)
+            }
+            SshEvent::BaseInstallCompleted { host, success, .. } => {
+                format!("BaseInstallCompleted({}, success={})", host, success)
+            }
+            SshEvent::DockerCheckCompleted { host, installed, .. } => {
+                format!("DockerCheckCompleted({}, installed={})", host, installed)
+            }
+            SshEvent::DockerInstallCompleted { host, success, .. } => {
+                format!("DockerInstallCompleted({}, success={})", host, success)
+            }
+            SshEvent::DockerRemoveCompleted { host, success, .. } => {
+                format!("DockerRemoveCompleted({}, success={})", host, success)
+            }
+            SshEvent::DureCheckCompleted { host, installed, running, .. } => {
+                format!("DureCheckCompleted({}, installed={}, running={})", host, installed, running)
+            }
+            SshEvent::DureInstallCompleted { host, success, .. } => {
+                format!("DureInstallCompleted({}, success={})", host, success)
+            }
+            SshEvent::DureRemoveCompleted { host, success, .. } => {
+                format!("DureRemoveCompleted({}, success={})", host, success)
+            }
+            SshEvent::OperationFailed { host, operation, .. } => {
+                format!("OperationFailed({}, {})", host, operation)
+            }
+            SshEvent::Drawer(_) => {
+                format!("Drawer(...)")
             }
         }
     }
