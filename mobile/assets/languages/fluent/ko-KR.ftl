@@ -302,3 +302,18 @@ profile-name-hint = 프로필 이름 입력 (a-z, A-Z, 0-9, -, _)
 password-confirm = 비밀번호 확인:
 password-confirm-hint = 비밀번호 확인
 create = 생성
+
+# Delete Platform Dialog
+delete-platform-title = 플랫폼 삭제
+delete-platform-heading = 플랫폼 삭제 확인
+delete = 삭제
+
+# Add Platform Dialog
+add-platform-title = 플랫폼 추가
+add-platform-heading = 클라우드 플랫폼 추가
+add = 추가
+
+# Re-authenticate Platform Dialog
+reauth-platform-title = 플랫폼 재인증
+reauth-platform-heading = Google Cloud 재인증
+reauth = 재인증

@@ -95,8 +95,8 @@ impl PlatformCliRunner {
             PlatformCommand::ListProjects { platform_name } => {
                 self.vm.list_projects(platform_name.clone())?;
             }
-            PlatformCommand::ListVMs { platform_name } => {
-                self.vm.list_vms(platform_name.clone())?;
+            PlatformCommand::ListVMs { profile_config_path, platform_name } => {
+                self.vm.list_vms(profile_config_path.clone(), platform_name.clone())?;
             }
             _ => {
                 return Err(anyhow!("Command not yet supported: {:?}", cmd));

@@ -28,15 +28,19 @@ pub fn render_drawer(
 
     ui.separator();
 
-    // Content area
-    match drawer_state.active_tab {
-        DrawerTab::Status => render_status_tab(ui, row, drawer_state),
-        DrawerTab::Logs => render_logs_tab(ui, drawer_state),
-        DrawerTab::Operations => render_operations_tab(ui, drawer_state),
-        DrawerTab::Host => render_host_tab(ui, drawer_state),
-        DrawerTab::Docker => render_docker_tab(ui, drawer_state),
-        DrawerTab::Dure => render_dure_tab(ui, drawer_state),
-    }
+    // Content area with static height
+    egui::ScrollArea::vertical()
+        .max_height(500.0)
+        .show(ui, |ui| {
+            match drawer_state.active_tab {
+                DrawerTab::Status => render_status_tab(ui, row, drawer_state),
+                DrawerTab::Logs => render_logs_tab(ui, drawer_state),
+                DrawerTab::Operations => render_operations_tab(ui, drawer_state),
+                DrawerTab::Host => render_host_tab(ui, drawer_state),
+                DrawerTab::Docker => render_docker_tab(ui, drawer_state),
+                DrawerTab::Dure => render_dure_tab(ui, drawer_state),
+            }
+        });
 }
 
 /// Render Status tab

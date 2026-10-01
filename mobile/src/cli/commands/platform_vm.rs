@@ -56,7 +56,8 @@ pub async fn create_vm(
 pub async fn list_vms(platform_name: String) -> Result<()> {
     let mut vm = ViewModel::new_headless();
 
-    vm.list_vms(platform_name.clone())?;
+    let config_path = crate::get_app_config_dir()?.join("config.yml");
+    vm.list_vms(config_path, platform_name.clone())?;
 
     println!("Listing VMs for platform '{}'...", platform_name);
 

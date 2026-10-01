@@ -16,6 +16,13 @@ pub const GCP_BILLING_API_BASE: &str = "https://cloudbilling.googleapis.com/v1";
 pub const GCP_SERVICE_USAGE_API_BASE: &str = "https://serviceusage.googleapis.com/v1";
 
 // ============================================================================
+// API Configuration
+// ============================================================================
+
+/// Timeout for all GCP API requests (30 seconds)
+pub const GCP_API_TIMEOUT_SECS: u64 = 30;
+
+// ============================================================================
 // GCP REST Client
 // ============================================================================
 
@@ -35,6 +42,7 @@ impl GcpRestClient {
         match ureq::get(url)
             .set("Authorization", &format!("Bearer {}", self.access_token))
             .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(GCP_API_TIMEOUT_SECS))
             .call()
         {
             Ok(response) => Ok(response),
@@ -86,6 +94,7 @@ impl GcpRestClient {
         match ureq::post(url)
             .set("Authorization", &format!("Bearer {}", self.access_token))
             .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(GCP_API_TIMEOUT_SECS))
             .send_string(body)
         {
             Ok(response) => Ok(response),
@@ -104,6 +113,7 @@ impl GcpRestClient {
         match ureq::delete(url)
             .set("Authorization", &format!("Bearer {}", self.access_token))
             .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(GCP_API_TIMEOUT_SECS))
             .call()
         {
             Ok(response) => Ok(response),
@@ -122,6 +132,7 @@ impl GcpRestClient {
         match ureq::request("PATCH", url)
             .set("Authorization", &format!("Bearer {}", self.access_token))
             .set("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(GCP_API_TIMEOUT_SECS))
             .send_string(body)
         {
             Ok(response) => Ok(response),

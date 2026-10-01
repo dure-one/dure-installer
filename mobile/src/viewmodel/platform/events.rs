@@ -35,6 +35,15 @@ pub struct SshStatus {
     pub error: Option<String>,
 }
 
+/// Firewall rule information with IP inclusion check
+#[derive(Debug, Clone)]
+pub struct FirewallRuleInfo {
+    pub name: String,
+    pub source_ranges: Vec<String>,
+    pub ip_included: bool,
+    pub allows_ssh: bool,
+}
+
 #[derive(Debug, Clone)]
 pub enum PlatformEvent {
     // OAuth Events
@@ -51,6 +60,10 @@ pub enum PlatformEvent {
     PlatformAdded {
         platform_name: String,
         platform_type: String,
+    },
+    PlatformOAuthUpdated {
+        platform_name: String,
+        connected_email: String,
     },
     PlatformDeleted {
         platform_name: String,
@@ -99,6 +112,16 @@ pub enum PlatformEvent {
     FirewallUpdated {
         platform_name: String,
         whitelisted_ip: String,
+    },
+    FirewallRulesFetched {
+        platform_name: String,
+        rules: Vec<FirewallRuleInfo>,
+        current_ip: String,
+    },
+    FirewallRuleUpdated {
+        platform_name: String,
+        rule_name: String,
+        operation: String, // "add_ip", "remove_ip", "flush"
     },
 
     // Billing Events

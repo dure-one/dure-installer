@@ -341,9 +341,9 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn list_vms(&self, platform_name: String) -> anyhow::Result<()> {
+    pub fn list_vms(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::ListVMs { platform_name })
+            .send_blocking(platform::PlatformCommand::ListVMs { profile_config_path, platform_name })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -409,6 +409,61 @@ impl ViewModel {
             .send_blocking(platform::PlatformCommand::UpdateFirewall {
                 platform_name,
                 allow_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn fetch_firewall_rules(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::FetchFirewallRules { profile_config_path, platform_name })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_firewall_rule(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+        add_ip: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::UpdateFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
+                add_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn remove_ip_from_firewall(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+        remove_ips: Vec<String>,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::RemoveIpFromFirewall {
+                profile_config_path,
+                platform_name,
+                rule_name,
+                remove_ips,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn flush_firewall_rule(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::FlushFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
@@ -497,6 +552,27 @@ impl ViewModel {
                 oauth_token_expiry,
                 connected_email,
                 selected_project_id,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_platform_oauth(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        oauth_access_token: String,
+        oauth_refresh_token: String,
+        oauth_token_expiry: i64,
+        connected_email: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::UpdatePlatformOAuth {
+                profile_config_path,
+                platform_name,
+                oauth_access_token,
+                oauth_refresh_token,
+                oauth_token_expiry,
+                connected_email,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }

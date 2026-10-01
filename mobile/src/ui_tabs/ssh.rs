@@ -305,8 +305,8 @@ impl SshTab {
             .id(table_id)
             .allow_selection(false)
             .allow_drawer(true)
-            .auto_row_height(true)
-            .min_row_height(70.0)
+            .min_row_height(68.0)
+            .drawer_row_height(500.0)
             .column("Host", 230.0 * width_ratio, false)
             .column("Operations", 510.0 * width_ratio, false);
 

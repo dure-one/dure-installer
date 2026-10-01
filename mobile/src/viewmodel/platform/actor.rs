@@ -56,19 +56,24 @@ impl PlatformActor {
             PlatformCommand::RestartVM { .. } => "restart_vm",
             PlatformCommand::RegenerateVM { .. } => "regenerate_vm",
             PlatformCommand::UpdateFirewall { .. } => "update_firewall",
+            PlatformCommand::FetchFirewallRules { .. } => "fetch_firewall_rules",
+            PlatformCommand::UpdateFirewallRule { .. } => "update_firewall_rule",
+            PlatformCommand::RemoveIpFromFirewall { .. } => "remove_ip_from_firewall",
+            PlatformCommand::FlushFirewallRule { .. } => "flush_firewall_rule",
             PlatformCommand::FetchBilling { .. } => "fetch_billing",
             PlatformCommand::ListProjects { .. } => "list_projects",
             PlatformCommand::SelectProject { .. } => "select_project",
             PlatformCommand::StartOAuth { .. } => "start_oauth",
             PlatformCommand::CompleteOAuth { .. } => "complete_oauth",
             PlatformCommand::AddPlatform { .. } => "add_platform",
+            PlatformCommand::UpdatePlatformOAuth { .. } => "update_platform_oauth",
             PlatformCommand::DeletePlatform { .. } => "delete_platform",
             PlatformCommand::RefreshPlatform { .. } => "refresh_platform",
             PlatformCommand::RefreshAll => "refresh_all",
         }.to_string();
 
         let result = match cmd {
-            PlatformCommand::ListVMs { platform_name } => self.list_vms(platform_name).await,
+            PlatformCommand::ListVMs { profile_config_path, platform_name } => self.list_vms(profile_config_path, platform_name).await,
             PlatformCommand::ScanExistingVMs { profile_config_path, platform_name } => self.scan_existing_vms(profile_config_path, platform_name).await,
             PlatformCommand::CreateVM {
                 platform_name,
@@ -104,6 +109,26 @@ impl PlatformActor {
                 platform_name,
                 allow_ip,
             } => self.update_firewall(platform_name, allow_ip).await,
+            PlatformCommand::FetchFirewallRules { profile_config_path, platform_name } => {
+                self.fetch_firewall_rules(profile_config_path, platform_name).await
+            }
+            PlatformCommand::UpdateFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
+                add_ip,
+            } => self.update_firewall_rule(profile_config_path, platform_name, rule_name, add_ip).await,
+            PlatformCommand::RemoveIpFromFirewall {
+                profile_config_path,
+                platform_name,
+                rule_name,
+                remove_ips,
+            } => self.remove_ip_from_firewall(profile_config_path, platform_name, rule_name, remove_ips).await,
+            PlatformCommand::FlushFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
+            } => self.flush_firewall_rule(profile_config_path, platform_name, rule_name).await,
             PlatformCommand::FetchBilling {
                 profile_config_path,
                 platform_name,
@@ -144,6 +169,24 @@ impl PlatformActor {
                     oauth_token_expiry,
                     connected_email,
                     selected_project_id,
+                )
+                .await
+            }
+            PlatformCommand::UpdatePlatformOAuth {
+                profile_config_path,
+                platform_name,
+                oauth_access_token,
+                oauth_refresh_token,
+                oauth_token_expiry,
+                connected_email,
+            } => {
+                self.update_platform_oauth(
+                    profile_config_path,
+                    platform_name,
+                    oauth_access_token,
+                    oauth_refresh_token,
+                    oauth_token_expiry,
+                    connected_email,
                 )
                 .await
             }
@@ -193,6 +236,14 @@ impl PlatformActor {
     ) -> anyhow::Result<(crate::config::CloudPlatformConfig, PathBuf)> {
         let config_path = Self::get_config_path()?;
         let config = AppConfig::load_or_default(&config_path);
+
+        dure_info!("🔍 Looking for platform with project_id: {}", platform_name);
+        dure_info!("🔍 Found {} platforms in config", config.platforms.len());
+        for (idx, p) in config.platforms.iter().enumerate() {
+            dure_info!("🔍 Platform {}: type={}, project_id={:?}",
+                idx, p.platform_type, p.gcp_selected_project_id);
+        }
+
         let platform = config
             .platforms
             .into_iter()
@@ -201,12 +252,12 @@ impl PlatformActor {
         Ok((platform, config_path))
     }
 
-    async fn list_vms(&mut self, platform_name: String) -> anyhow::Result<()> {
+    async fn list_vms(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.send_progress("list_vms", 0.1, "Checking authentication...")
             .await;
 
-        // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        // Get valid access token (refreshes if expired) from profile config
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
 
         self.send_progress("list_vms", 0.2, "Loading platform config...")
             .await;
@@ -214,34 +265,12 @@ impl PlatformActor {
         // Load platform config
         let platform = runtime::unblock({
             let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
-
-        self.send_progress("list_vms", 0.3, "Fetching zones...")
-            .await;
-
-        let project_id = platform
-            .gcp_selected_project_id
-            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-
-        // Get zones to query (from existing VMs or list all zones)
-        let zones = runtime::unblock({
-            let project_id = project_id.clone();
-            let access_token = access_token.clone();
-            let vms = platform.vms.clone();
-            move || -> anyhow::Result<Vec<String>> {
-                let client = GcpRestClient::new(access_token.clone());
-                if !vms.is_empty() {
-                    // Use zones from existing VMs
-                    let zones: std::collections::HashSet<String> =
-                        vms.iter().map(|vm| vm.zone.clone()).collect();
-                    Ok(zones.into_iter().collect())
-                } else {
-                    // List all zones
-                    let zone_list = client.list_zones(&project_id)?;
-                    Ok(zone_list.items.into_iter().map(|z| z.name).collect())
-                }
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
             }
         })
         .await?;
@@ -249,19 +278,16 @@ impl PlatformActor {
         self.send_progress("list_vms", 0.5, "Fetching VMs from GCP...")
             .await;
 
-        // List instances from all zones
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        // List all instances using aggregated API (much faster)
         let all_instances = runtime::unblock({
             let project_id = project_id.clone();
             move || -> anyhow::Result<Vec<crate::api::gcp::compute::Instance>> {
                 let client = GcpRestClient::new(access_token);
-                let mut all_vms = Vec::new();
-                for zone in zones {
-                    match client.list_instances(&project_id, &zone) {
-                        Ok(list) => all_vms.extend(list.items),
-                        Err(e) => dure_warn!("Failed to list instances in zone {}: {}", zone, e),
-                    }
-                }
-                Ok(all_vms)
+                client.list_instances_aggregated(&project_id)
             }
         })
         .await?;
@@ -742,6 +768,323 @@ impl PlatformActor {
         result
     }
 
+    async fn fetch_firewall_rules(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
+        self.send_progress("fetch_firewall_rules", 0.3, "Fetching current IP...")
+            .await;
+
+        // Get current IP
+        let current_ip = runtime::unblock(|| crate::api::gcp::get_current_ip()).await?;
+
+        self.send_progress("fetch_firewall_rules", 0.5, "Fetching firewall rules...")
+            .await;
+
+        // Get valid access token from profile config
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        // Get project ID
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        // Fetch firewall rules
+        let rules = runtime::unblock({
+            let project_id = project_id.clone();
+            let current_ip = current_ip.clone();
+            move || -> anyhow::Result<Vec<crate::viewmodel::platform::FirewallRuleInfo>> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                let gcp_rules = client.list_firewall_rules(&project_id)?;
+
+                let rules = gcp_rules
+                    .into_iter()
+                    .map(|rule| {
+                        let allows_ssh = rule.allowed.iter().any(|a| {
+                            let proto = a.ip_protocol.to_lowercase();
+                            (proto == "tcp"
+                                && a.ports
+                                    .as_ref()
+                                    .map_or(false, |ports| ports.iter().any(|p| p == "22")))
+                                || proto == "all"
+                        });
+
+                        let source_ranges = rule.source_ranges.clone().unwrap_or_default();
+                        let ip_included =
+                            crate::api::gcp::ip_in_ranges(&current_ip, &source_ranges);
+
+                        crate::viewmodel::platform::FirewallRuleInfo {
+                            name: rule.name,
+                            source_ranges,
+                            ip_included,
+                            allows_ssh,
+                        }
+                    })
+                    .collect();
+
+                Ok(rules)
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRulesFetched {
+            platform_name,
+            rules,
+            current_ip,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn update_firewall_rule(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        rule_name: String,
+        add_ip: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("update_firewall_rule", 0.5, "Updating firewall rule...")
+            .await;
+
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        // Update the specific firewall rule
+        runtime::unblock({
+            let project_id = project_id.clone();
+            let rule_name = rule_name.clone();
+            let add_ip = add_ip.clone();
+            move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                let rules = client.list_firewall_rules(&project_id)?;
+
+                let rule = rules
+                    .iter()
+                    .find(|r| r.name == rule_name)
+                    .ok_or_else(|| anyhow::anyhow!("Firewall rule '{}' not found", rule_name))?;
+
+                let mut updated_ranges = rule.source_ranges.clone().unwrap_or_default();
+                let ip_cidr = format!("{}/32", add_ip);
+
+                if !updated_ranges.contains(&ip_cidr) {
+                    updated_ranges.push(ip_cidr);
+
+                    let body = serde_json::json!({
+                        "sourceRanges": updated_ranges,
+                    });
+
+                    let url = format!(
+                        "{}/projects/{}/global/firewalls/{}",
+                        crate::api::gcp::GCP_COMPUTE_API_BASE,
+                        project_id,
+                        rule_name
+                    );
+
+                    let response = client.patch(&url, &body.to_string())?;
+                    let status = response.status();
+
+                    if status != 200 && status != 202 {
+                        let response_text = response.into_string().unwrap_or_default();
+                        return Err(anyhow::anyhow!(
+                            "Failed to update firewall rule (status {}): {}",
+                            status,
+                            response_text
+                        ));
+                    }
+                }
+
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRuleUpdated {
+            platform_name,
+            rule_name,
+            operation: "add_ip".to_string(),
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn remove_ip_from_firewall(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        rule_name: String,
+        remove_ips: Vec<String>,
+    ) -> anyhow::Result<()> {
+        self.send_progress("remove_ip_from_firewall", 0.5, "Removing IPs...")
+            .await;
+
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        runtime::unblock({
+            let project_id = project_id.clone();
+            let rule_name = rule_name.clone();
+            move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                let rules = client.list_firewall_rules(&project_id)?;
+
+                let rule = rules
+                    .iter()
+                    .find(|r| r.name == rule_name)
+                    .ok_or_else(|| anyhow::anyhow!("Firewall rule '{}' not found", rule_name))?;
+
+                let mut updated_ranges = rule.source_ranges.clone().unwrap_or_default();
+                updated_ranges.retain(|ip| !remove_ips.contains(ip));
+
+                let body = serde_json::json!({
+                    "sourceRanges": updated_ranges,
+                });
+
+                let url = format!(
+                    "{}/projects/{}/global/firewalls/{}",
+                    crate::api::gcp::GCP_COMPUTE_API_BASE,
+                    project_id,
+                    rule_name
+                );
+
+                let response = client.patch(&url, &body.to_string())?;
+                let status = response.status();
+
+                if status != 200 && status != 202 {
+                    let response_text = response.into_string().unwrap_or_default();
+                    return Err(anyhow::anyhow!(
+                        "Failed to update firewall rule (status {}): {}",
+                        status,
+                        response_text
+                    ));
+                }
+
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRuleUpdated {
+            platform_name,
+            rule_name,
+            operation: "remove_ip".to_string(),
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn flush_firewall_rule(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        rule_name: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("flush_firewall_rule", 0.5, "Flushing firewall rule...")
+            .await;
+
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        runtime::unblock({
+            let project_id = project_id.clone();
+            let rule_name = rule_name.clone();
+            move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+
+                let body = serde_json::json!({
+                    "sourceRanges": Vec::<String>::new(),
+                });
+
+                let url = format!(
+                    "{}/projects/{}/global/firewalls/{}",
+                    crate::api::gcp::GCP_COMPUTE_API_BASE,
+                    project_id,
+                    rule_name
+                );
+
+                let response = client.patch(&url, &body.to_string())?;
+                let status = response.status();
+
+                if status != 200 && status != 202 {
+                    let response_text = response.into_string().unwrap_or_default();
+                    return Err(anyhow::anyhow!(
+                        "Failed to flush firewall rule (status {}): {}",
+                        status,
+                        response_text
+                    ));
+                }
+
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRuleUpdated {
+            platform_name,
+            rule_name,
+            operation: "flush".to_string(),
+        })
+        .await;
+
+        Ok(())
+    }
+
     async fn fetch_billing(
         &mut self,
         profile_config_path: PathBuf,
@@ -996,6 +1339,62 @@ impl PlatformActor {
         Ok(())
     }
 
+    async fn update_platform_oauth(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        oauth_access_token: String,
+        oauth_refresh_token: String,
+        oauth_token_expiry: i64,
+        connected_email: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("update_platform_oauth", 0.5, "Updating OAuth tokens...")
+            .await;
+
+        let connected_email_for_event = connected_email.clone();
+
+        runtime::unblock({
+            let platform_name = platform_name.clone();
+            let config_path = profile_config_path;
+            move || -> anyhow::Result<()> {
+                let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
+
+                // Find existing platform
+                let platform = app_config
+                    .platforms
+                    .iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+
+                // Update OAuth tokens
+                platform.gcp_oauth_access_token = Some(oauth_access_token);
+                platform.gcp_oauth_refresh_token = Some(oauth_refresh_token);
+                platform.gcp_oauth_token_expiry = Some(oauth_token_expiry);
+                platform.gcp_connected_email = Some(connected_email);
+
+                // Save config
+                app_config.save(&config_path)?;
+
+                // Record audit event
+                let _ = crate::calc::audit::push_gui("system", "desktop", "platform oauth update", &platform_name);
+
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_progress("update_platform_oauth", 1.0, "OAuth tokens updated")
+            .await;
+
+        self.send_event(PlatformEvent::PlatformOAuthUpdated {
+            platform_name,
+            connected_email: connected_email_for_event,
+        })
+        .await;
+
+        Ok(())
+    }
+
     async fn delete_platform(
         &mut self,
         profile_config_path: PathBuf,
@@ -1035,28 +1434,42 @@ impl PlatformActor {
         self.send_progress("delete_platform", 0.25, "Preparing deletion...")
             .await;
 
-        // Get platform data before deletion
-        let (project_id, vms) = runtime::unblock({
-            let platform_name = platform_name.clone();
-            let config_path = profile_config_path.clone();
-            move || -> anyhow::Result<(String, Vec<crate::config::VmInstance>)> {
-                let app_config = crate::config::AppConfig::load_or_default(&config_path);
+        // Get platform data only if we need to delete cloud resources
+        let (project_id, vms) = if delete_options.delete_vms || delete_options.delete_project {
+            runtime::unblock({
+                let platform_name = platform_name.clone();
+                let config_path = profile_config_path.clone();
+                move || -> anyhow::Result<(String, Vec<crate::config::VmInstance>)> {
+                    let app_config = crate::config::AppConfig::load_or_default(&config_path);
 
-                // Find platform
-                let platform = app_config
-                    .platforms
-                    .iter()
-                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
-                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+                    // Find platform
+                    // Handle "unknown" case: UI uses "unknown" when gcp_selected_project_id is None
+                    let platform = if platform_name == "unknown" {
+                        app_config
+                            .platforms
+                            .iter()
+                            .find(|p| p.gcp_selected_project_id.is_none())
+                            .ok_or_else(|| anyhow::anyhow!("Platform with no project_id not found"))?
+                    } else {
+                        app_config
+                            .platforms
+                            .iter()
+                            .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                            .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+                    };
 
-                let project_id = platform.gcp_selected_project_id.clone()
-                    .ok_or_else(|| anyhow::anyhow!("No project selected for platform"))?;
-                let vms = platform.vms.clone();
+                    let project_id = platform.gcp_selected_project_id.clone()
+                        .ok_or_else(|| anyhow::anyhow!("No project selected for platform"))?;
+                    let vms = platform.vms.clone();
 
-                Ok((project_id, vms))
-            }
-        })
-        .await?;
+                    Ok((project_id, vms))
+                }
+            })
+            .await?
+        } else {
+            // No cloud operations needed, skip platform data retrieval
+            (platform_name.clone(), Vec::new())
+        };
 
         // Delete VMs from GCP if requested
         if delete_options.delete_vms && !vms.is_empty() {
@@ -1112,11 +1525,22 @@ impl PlatformActor {
                 let mut app_config = crate::config::AppConfig::load_or_default(&config_path);
 
                 // Find and remove platform
-                let platform_idx = app_config
-                    .platforms
-                    .iter()
-                    .position(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
-                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?;
+                // Handle "unknown" case: UI uses "unknown" when gcp_selected_project_id is None
+                let platform_idx = if platform_name == "unknown" {
+                    // Search for first platform with no project_id
+                    app_config
+                        .platforms
+                        .iter()
+                        .position(|p| p.gcp_selected_project_id.is_none())
+                        .ok_or_else(|| anyhow::anyhow!("Platform with no project_id not found"))?
+                } else {
+                    // Normal case: search by project_id
+                    app_config
+                        .platforms
+                        .iter()
+                        .position(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                        .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))?
+                };
 
                 let platform = app_config.platforms.remove(platform_idx);
                 let vm_count = platform.vms.len();
@@ -1159,6 +1583,9 @@ impl PlatformActor {
             move || -> anyhow::Result<(String, PathBuf)> {
                 let config_path = Self::get_config_path()?;
                 let mut config = AppConfig::load_or_default(&config_path);
+
+                dure_info!("🔍 [get_valid_access_token] Looking for platform: {}", platform_name);
+                dure_info!("🔍 [get_valid_access_token] Config has {} platforms", config.platforms.len());
 
                 let platform = config
                     .platforms

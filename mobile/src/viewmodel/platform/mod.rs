@@ -15,4 +15,4 @@ pub use commands::{DeleteOptions, PlatformCommand};
 pub use drawer_actor::DrawerActor;
 pub use drawer_repository::DrawerRepository;
 pub use drawer_types::{DrawerCommand, DrawerEvent, DrawerState, DrawerTab};
-pub use events::{PlatformEvent, VmInfo, VmStatus, FirewallStatus, SshStatus};
+pub use events::{PlatformEvent, VmInfo, VmStatus, FirewallStatus, SshStatus, FirewallRuleInfo};

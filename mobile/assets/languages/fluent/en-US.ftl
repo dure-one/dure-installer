@@ -302,3 +302,18 @@ profile-name-hint = Enter profile name (a-z, A-Z, 0-9, -, _)
 password-confirm = Confirm Password:
 password-confirm-hint = Confirm password
 create = Create
+
+# Delete Platform Dialog
+delete-platform-title = Delete Platform
+delete-platform-heading = Confirm Platform Deletion
+delete = Delete
+
+# Add Platform Dialog
+add-platform-title = Add Platform
+add-platform-heading = Add Cloud Platform
+add = Add
+
+# Re-authenticate Platform Dialog
+reauth-platform-title = Re-authenticate Platform
+reauth-platform-heading = Re-authenticate to Google Cloud
+reauth = Re-authenticate

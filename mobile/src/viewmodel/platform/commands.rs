@@ -25,6 +25,14 @@ pub enum PlatformCommand {
         connected_email: Option<String>,
         selected_project_id: Option<String>,
     },
+    UpdatePlatformOAuth {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        oauth_access_token: String,
+        oauth_refresh_token: String,
+        oauth_token_expiry: i64,
+        connected_email: String,
+    },
     DeletePlatform {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
@@ -43,6 +51,7 @@ pub enum PlatformCommand {
 
     // VM Operations
     ListVMs {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
     ScanExistingVMs {
@@ -83,6 +92,27 @@ pub enum PlatformCommand {
     UpdateFirewall {
         platform_name: String,
         allow_ip: String,
+    },
+    FetchFirewallRules {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    },
+    UpdateFirewallRule {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+        add_ip: String,
+    },
+    RemoveIpFromFirewall {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+        remove_ips: Vec<String>,
+    },
+    FlushFirewallRule {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
     },
 
     // Billing Operations
