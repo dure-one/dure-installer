@@ -482,13 +482,8 @@ impl SshActor {
 
             // Operation commands (new)
             SshCommand::Refresh { host } => {
-                self.send_event(SshEvent::RefreshCompleted {
-                    host: host.clone(),
-                    ssh_connected: false,
-                    base_installed: false,
-                    docker_installed: false,
-                    dure_installed: false,
-                }).await;
+                let event = self.handle_refresh(host).await;
+                self.send_event(event).await;
                 Ok(())
             }
             SshCommand::SshCheck { host } => {
@@ -2251,6 +2246,95 @@ impl SshActor {
         }
     }
 
+    async fn start_operation_log(&self, host: &str, operation: &str) -> Result<i64, String> {
+        use crate::storage::models::opslog::NewOperationLog;
+        use crate::calc::db;
+
+        let log = NewOperationLog::ssh(host, operation);
+
+        runtime::unblock({
+            move || -> Result<i64, String> {
+                let mut conn = db::establish_connection();
+                crate::storage::models::opslog::create_log(&mut conn, log)
+                    .map_err(|e| format!("Failed to start operation log: {}", e))
+            }
+        })
+        .await
+    }
+
+    async fn complete_operation_log(
+        &self,
+        op_id: i64,
+        success: bool,
+        error: Option<String>,
+    ) -> Result<(), String> {
+        use crate::calc::db;
+        use crate::storage::models::opslog::OperationStatus;
+
+        runtime::unblock({
+            move || -> Result<(), String> {
+                let mut conn = db::establish_connection();
+                let status = if success {
+                    OperationStatus::Success
+                } else {
+                    OperationStatus::Failed
+                };
+
+                crate::storage::models::opslog::update_log_status(&mut conn, op_id, status, error)
+                    .map_err(|e| format!("Failed to update operation log: {}", e))
+            }
+        })
+        .await
+    }
+
+    async fn handle_refresh(&mut self, host: String) -> SshEvent {
+        use crate::calc::ssh_ops;
+
+        // Start operation logging
+        let op_id = match self.start_operation_log(&host, "refresh").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!("Failed to start operation log: {}", e);
+                // Continue anyway, just without logging
+                -1
+            }
+        };
+
+        // Run 4 checks
+        let ssh_result = ssh_ops::check_ssh_connection(&host, 22).await;
+        let base_result = if ssh_result.is_ok() {
+            ssh_ops::check_base_packages(&host).await.map(|missing| missing.is_empty())
+        } else {
+            Ok(false)
+        };
+        let docker_result = if ssh_result.is_ok() {
+            ssh_ops::check_docker_installed(&host).await.map(|v| v.is_some())
+        } else {
+            Ok(false)
+        };
+        let dure_result = if ssh_result.is_ok() {
+            ssh_ops::check_dure_installed(&host).await.map(|(installed, _, _)| installed)
+        } else {
+            Ok(false)
+        };
+
+        // Complete operation log
+        let success = ssh_result.is_ok();
+        if op_id >= 0 {
+            if let Err(e) = self.complete_operation_log(op_id, success, None::<String>).await {
+                dure_warn!("Failed to update operation log: {}", e);
+            }
+        }
+
+        SshEvent::RefreshCompleted {
+            host,
+            ssh_connected: ssh_result.unwrap_or(false),
+            base_installed: base_result.unwrap_or(false),
+            docker_installed: docker_result.unwrap_or(false),
+            dure_installed: dure_result.unwrap_or(false),
+        }
+    }
+
     async fn send_event(&self, event: SshEvent) {
         let event_desc = Self::get_event_description(&event);
         dure_debug!(" SSH Actor: Sending event: {}", event_desc);
@@ -2422,5 +2506,51 @@ ARG PORT=8080
         assert_eq!(args.len(), 2);
         assert!(args.iter().any(|(k, v)| k == "PORT" && v == "8080"));
         assert!(args.iter().any(|(k, v)| k == "HOST" && v == "localhost"));
+    }
+
+    #[test]
+    fn test_handle_refresh_creates_refresh_event() {
+        // Test that handle_refresh returns a RefreshCompleted event
+        smol::block_on(async {
+            let (tx, _rx) = smol::channel::unbounded();
+            let mut actor = SshActor::new(smol::channel::unbounded::<SshCommand>().1, tx);
+
+            // Call handle_refresh with a test host
+            let event = actor.handle_refresh("test-host".to_string()).await;
+
+            // Verify event type
+            match event {
+                SshEvent::RefreshCompleted { host, .. } => {
+                    assert_eq!(host, "test-host");
+                }
+                _ => panic!("Expected RefreshCompleted event"),
+            }
+        });
+    }
+
+    #[test]
+    fn test_handle_refresh_event_structure() {
+        // Test that RefreshCompleted event has all required fields
+        smol::block_on(async {
+            let (tx, _rx) = smol::channel::unbounded();
+            let mut actor = SshActor::new(smol::channel::unbounded::<SshCommand>().1, tx);
+
+            let event = actor.handle_refresh("localhost".to_string()).await;
+
+            match event {
+                SshEvent::RefreshCompleted {
+                    host,
+                    ssh_connected,
+                    base_installed,
+                    docker_installed,
+                    dure_installed,
+                } => {
+                    assert_eq!(host, "localhost");
+                    // Fields should be initialized (placeholder values)
+                    let _ = (ssh_connected, base_installed, docker_installed, dure_installed);
+                }
+                _ => panic!("Expected RefreshCompleted event"),
+            }
+        });
     }
 }
