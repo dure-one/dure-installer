@@ -135,14 +135,14 @@ impl DrawerActor {
         self.state.set_loading(true);
         self.state.set_project(&project_id);
 
-        // Send command to LogActor to retrieve logs
-        dure_debug!("[DRAWER_LOAD] Sending GetLogs command to LogActor");
+        // Send command to LogActor to retrieve logs (project-wide, all hosts)
+        dure_debug!("[DRAWER_LOAD] Sending GetProjectLogs command to LogActor");
         self.logs_tx
-            .send(LogCommand::GetLogs {
+            .send(LogCommand::GetProjectLogs {
                 project_id: project_id.clone(),
             })
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to send GetLogs command: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to send GetProjectLogs command: {}", e))?;
 
         dure_debug!(
             "[DRAWER_LOAD] ✓ GetLogs command sent for project '{}'",

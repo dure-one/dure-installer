@@ -40,6 +40,9 @@ pub struct ViewModel {
     // Optional egui context (for GUI mode)
     #[cfg(feature = "gui")]
     egui_ctx: Option<egui::Context>,
+
+    // Profile config path (for actor config loading)
+    profile_config_path: Option<std::path::PathBuf>,
 }
 
 enum RuntimeHandle {
@@ -87,7 +90,7 @@ pub struct WssConnectionInfo {
 impl ViewModel {
     /// Create ViewModel for GUI mode (Desktop/Android)
     #[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
-    pub fn new(ctx: egui::Context) -> Self {
+    pub fn new(ctx: egui::Context, profile_config_path: Option<std::path::PathBuf>) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
@@ -101,6 +104,7 @@ impl ViewModel {
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
+        let profile_config_path_for_actor = profile_config_path.clone();
 
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
@@ -110,7 +114,7 @@ impl ViewModel {
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
                 let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
-                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
+                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
@@ -138,12 +142,13 @@ impl ViewModel {
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
             egui_ctx: Some(ctx),
+            profile_config_path,
         }
     }
 
     /// Create ViewModel for CLI mode (headless)
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn new_headless() -> Self {
+    pub fn new_headless(profile_config_path: Option<std::path::PathBuf>) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
@@ -157,6 +162,7 @@ impl ViewModel {
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
+        let profile_config_path_for_actor = profile_config_path.clone();
 
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
@@ -164,7 +170,7 @@ impl ViewModel {
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
                 let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
-                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone());
+                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
@@ -191,16 +197,18 @@ impl ViewModel {
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
             #[cfg(feature = "gui")]
             egui_ctx: None,
+            profile_config_path,
         }
     }
 
     /// Create ViewModel for WASM (browser)
     #[cfg(target_arch = "wasm32")]
-    pub fn new_wasm() -> Self {
+    pub fn new_wasm(profile_config_path: Option<std::path::PathBuf>) -> Self {
         use wasm_bindgen_futures::spawn_local;
 
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
+        let (ssh_tx, _ssh_rx) = smol::channel::unbounded(); // Unused in WASM
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
@@ -237,7 +245,7 @@ impl ViewModel {
         Self {
             platform_tx,
             drawer_tx,
-            // ssh_tx gated out for WASM builds
+            ssh_tx,
             ns_tx,
             wss_tx,
             logs_tx,
@@ -246,6 +254,7 @@ impl ViewModel {
             runtime_handle: None,
             #[cfg(feature = "gui")]
             egui_ctx: None,
+            profile_config_path,
         }
     }
 
@@ -290,10 +299,10 @@ impl ViewModel {
     #[cfg(feature = "gui")]
     fn apply_event(&mut self, event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
         // Forward LogEvent::LogsRetrieved to DrawerActor
-        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { project_id, lines }) = event {
+        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { filter_id, lines }) = event {
             dure_debug!(
-                "[VM_FORWARD] Received LogsRetrieved - project_id='{}', {} lines",
-                project_id,
+                "[VM_FORWARD] Received LogsRetrieved - filter_id='{}', {} lines",
+                filter_id,
                 lines.len()
             );
 
@@ -302,7 +311,7 @@ impl ViewModel {
             }
 
             let cmd = platform::DrawerCommand::UpdateLogs {
-                project_id: project_id.clone(),
+                project_id: filter_id.clone(),
                 lines: lines.clone(),
             };
 
@@ -932,6 +941,126 @@ impl ViewModel {
     #[deprecated(note = "Use start_dure_wss/stop_dure_wss methods instead")]
     pub fn get_dure_wss_status(&self, _host: String) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    // SSH Operation Commands
+
+    /// Refresh SSH host status (SSH, Base, Docker, Dure)
+    pub fn refresh_ssh_host(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::Refresh { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check SSH connection
+    pub fn ssh_check(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::SshCheck { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if base packages are installed
+    pub fn check_base(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckBase { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install base packages
+    pub fn install_base(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallBase { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if Docker is installed
+    pub fn check_docker(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckDocker { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install Docker daemon
+    pub fn install_docker_daemon(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDockerDaemon { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Remove Docker daemon
+    pub fn remove_docker(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::RemoveDocker { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if Dure is installed
+    pub fn check_dure(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckDure { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install Dure with environment configuration
+    pub fn install_dure(
+        &self,
+        host: String,
+        env_config: std::collections::HashMap<String, String>,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDure { host, env_config, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Remove Dure
+    pub fn remove_dure(
+        &self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::RemoveDure { host, profile_kdbx })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Get logs for SSH host (uses host_id)
+    pub fn get_ssh_logs(&self, host: String) -> anyhow::Result<()> {
+        self.logs_tx
+            .send_blocking(logs::LogCommand::GetLogs { host_id: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // NS commands

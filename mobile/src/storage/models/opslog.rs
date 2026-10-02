@@ -37,10 +37,14 @@ impl OperationStatus {
 }
 
 /// An operation log record
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable)]
 pub struct OperationLog {
     /// Auto-assigned row id
     pub id: i64,
+    /// Source of operation: "platform" or "ssh" (NOT NULL)
+    pub operation_source: String,
+    /// Resource identifier (project_id for platform, ssh_host for ssh) (NOT NULL)
+    pub relevant_id: String,
     /// Project/platform identifier
     pub project_id: String,
     /// Type of operation (e.g., "create_vm", "update_firewall", "add_dns_record")
@@ -71,6 +75,8 @@ impl OperationLog {
 
 /// Builder for creating a new operation log
 pub struct NewOperationLog {
+    pub operation_source: String,
+    pub relevant_id: String,
     pub project_id: String,
     pub operation_type: String,
     pub external_system: String,
@@ -80,15 +86,45 @@ pub struct NewOperationLog {
 }
 
 impl NewOperationLog {
+    /// Create a platform operation log entry (default)
     pub fn new(
         project_id: impl Into<String>,
         operation_type: impl Into<String>,
         external_system: impl Into<String>,
     ) -> Self {
+        let project_id_str = project_id.into();
         Self {
-            project_id: project_id.into(),
+            operation_source: "platform".to_string(),
+            relevant_id: project_id_str.clone(),
+            project_id: project_id_str,
             operation_type: operation_type.into(),
             external_system: external_system.into(),
+            status: OperationStatus::Running,
+            error_message: None,
+            details: None,
+        }
+    }
+
+    /// Create a platform operation log entry (specialization of new with gcp external_system)
+    pub fn platform(
+        platform_id: impl Into<String>,
+        operation_type: impl Into<String>,
+    ) -> Self {
+        Self::new(platform_id, operation_type, "gcp")
+    }
+
+    /// Create an SSH operation log entry
+    pub fn ssh(
+        ssh_host: impl Into<String>,
+        operation_type: impl Into<String>,
+    ) -> Self {
+        let ssh_host_str = ssh_host.into();
+        Self {
+            operation_source: "ssh".to_string(),
+            relevant_id: ssh_host_str.clone(),
+            project_id: ssh_host_str,
+            operation_type: operation_type.into(),
+            external_system: "ssh".to_string(),
             status: OperationStatus::Running,
             error_message: None,
             details: None,
@@ -120,6 +156,8 @@ pub fn init_operation_logs_table(conn: &mut SqliteConnection) -> Result<()> {
     diesel::sql_query(
         "CREATE TABLE IF NOT EXISTS operation_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_source TEXT,
+            relevant_id TEXT,
             project_id TEXT NOT NULL,
             operation_type TEXT NOT NULL,
             external_system TEXT NOT NULL,
@@ -172,9 +210,11 @@ pub fn create_log(conn: &mut SqliteConnection, log: NewOperationLog) -> Result<i
 
     diesel::sql_query(
         "INSERT INTO operation_logs
-         (project_id, operation_type, external_system, status, started_at, completed_at, error_message, details)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+         (operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
     )
+    .bind::<diesel::sql_types::Text, _>(&log.operation_source)
+    .bind::<diesel::sql_types::Text, _>(&log.relevant_id)
     .bind::<diesel::sql_types::Text, _>(&log.project_id)
     .bind::<diesel::sql_types::Text, _>(&log.operation_type)
     .bind::<diesel::sql_types::Text, _>(&log.external_system)
@@ -258,42 +298,14 @@ pub fn list_by_project(
         details: Option<String>,
     }
 
-    let rows: Vec<Row> = diesel::sql_query(
-        "SELECT id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
-         FROM operation_logs
-         WHERE project_id = ?1
-         ORDER BY started_at ASC
-         LIMIT ?2",
-    )
-    .bind::<Text, _>(project_id)
-    .bind::<BigInt, _>(limit)
-    .load(conn)
-    .context("Failed to list operation logs by project")?;
-
-    Ok(rows
-        .into_iter()
-        .map(|r| OperationLog {
-            id: r.id,
-            project_id: r.project_id,
-            operation_type: r.operation_type,
-            external_system: r.external_system,
-            status: r.status,
-            started_at: r.started_at,
-            completed_at: r.completed_at,
-            error_message: r.error_message,
-            details: r.details,
-        })
-        .collect())
-}
-
-/// List all operation logs, newest first
-pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<OperationLog>> {
-    use diesel::sql_types::{BigInt, Nullable, Text};
-
     #[derive(QueryableByName)]
-    struct Row {
+    struct QueryRow {
         #[diesel(sql_type = BigInt)]
         id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
         #[diesel(sql_type = Text)]
         project_id: String,
         #[diesel(sql_type = Text)]
@@ -312,8 +324,68 @@ pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<Operation
         details: Option<String>,
     }
 
-    let rows: Vec<Row> = diesel::sql_query(
-        "SELECT id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+    let rows: Vec<QueryRow> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+         FROM operation_logs
+         WHERE project_id = ?1
+         ORDER BY started_at ASC
+         LIMIT ?2",
+    )
+    .bind::<Text, _>(project_id)
+    .bind::<BigInt, _>(limit)
+    .load(conn)
+    .context("Failed to list operation logs by project")?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| OperationLog {
+            id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
+            project_id: r.project_id,
+            operation_type: r.operation_type,
+            external_system: r.external_system,
+            status: r.status,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            error_message: r.error_message,
+            details: r.details,
+        })
+        .collect())
+}
+
+/// List all operation logs, newest first
+pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<OperationLog>> {
+    use diesel::sql_types::{BigInt, Nullable, Text};
+
+    #[derive(QueryableByName)]
+    struct QueryRow {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
+        #[diesel(sql_type = Text)]
+        project_id: String,
+        #[diesel(sql_type = Text)]
+        operation_type: String,
+        #[diesel(sql_type = Text)]
+        external_system: String,
+        #[diesel(sql_type = Text)]
+        status: String,
+        #[diesel(sql_type = BigInt)]
+        started_at: i64,
+        #[diesel(sql_type = Nullable<BigInt>)]
+        completed_at: Option<i64>,
+        #[diesel(sql_type = Nullable<Text>)]
+        error_message: Option<String>,
+        #[diesel(sql_type = Nullable<Text>)]
+        details: Option<String>,
+    }
+
+    let rows: Vec<QueryRow> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
          FROM operation_logs
          ORDER BY started_at DESC
          LIMIT ?1",
@@ -326,6 +398,8 @@ pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<Operation
         .into_iter()
         .map(|r| OperationLog {
             id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
             project_id: r.project_id,
             operation_type: r.operation_type,
             external_system: r.external_system,
@@ -360,6 +434,134 @@ pub fn delete_by_project(conn: &mut SqliteConnection, project_id: &str) -> Resul
     .context("Failed to delete operation logs for project")?;
 
     Ok(deleted)
+}
+
+/// Query SSH operations by host, newest first
+pub fn get_ssh_operations(
+    conn: &mut SqliteConnection,
+    ssh_host: &str,
+    limit: i64,
+) -> Result<Vec<OperationLog>> {
+    use diesel::sql_types::{BigInt, Nullable, Text};
+
+    #[derive(QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
+        #[diesel(sql_type = Text)]
+        project_id: String,
+        #[diesel(sql_type = Text)]
+        operation_type: String,
+        #[diesel(sql_type = Text)]
+        external_system: String,
+        #[diesel(sql_type = Text)]
+        status: String,
+        #[diesel(sql_type = BigInt)]
+        started_at: i64,
+        #[diesel(sql_type = Nullable<BigInt>)]
+        completed_at: Option<i64>,
+        #[diesel(sql_type = Nullable<Text>)]
+        error_message: Option<String>,
+        #[diesel(sql_type = Nullable<Text>)]
+        details: Option<String>,
+    }
+
+    let rows: Vec<Row> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+         FROM operation_logs
+         WHERE operation_source = 'ssh' AND relevant_id = ?1
+         ORDER BY started_at DESC
+         LIMIT ?2",
+    )
+    .bind::<Text, _>(ssh_host)
+    .bind::<BigInt, _>(limit)
+    .load(conn)
+    .context("Failed to load SSH operations")?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| OperationLog {
+            id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
+            project_id: r.project_id,
+            operation_type: r.operation_type,
+            external_system: r.external_system,
+            status: r.status,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            error_message: r.error_message,
+            details: r.details,
+        })
+        .collect())
+}
+
+/// Query platform operations by platform_id, newest first
+pub fn get_platform_operations(
+    conn: &mut SqliteConnection,
+    platform_id: &str,
+    limit: i64,
+) -> Result<Vec<OperationLog>> {
+    use diesel::sql_types::{BigInt, Nullable, Text};
+
+    #[derive(QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
+        #[diesel(sql_type = Text)]
+        project_id: String,
+        #[diesel(sql_type = Text)]
+        operation_type: String,
+        #[diesel(sql_type = Text)]
+        external_system: String,
+        #[diesel(sql_type = Text)]
+        status: String,
+        #[diesel(sql_type = BigInt)]
+        started_at: i64,
+        #[diesel(sql_type = Nullable<BigInt>)]
+        completed_at: Option<i64>,
+        #[diesel(sql_type = Nullable<Text>)]
+        error_message: Option<String>,
+        #[diesel(sql_type = Nullable<Text>)]
+        details: Option<String>,
+    }
+
+    let rows: Vec<Row> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+         FROM operation_logs
+         WHERE operation_source = 'platform' AND relevant_id = ?1
+         ORDER BY started_at DESC
+         LIMIT ?2",
+    )
+    .bind::<Text, _>(platform_id)
+    .bind::<BigInt, _>(limit)
+    .load(conn)
+    .context("Failed to load platform operations")?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| OperationLog {
+            id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
+            project_id: r.project_id,
+            operation_type: r.operation_type,
+            external_system: r.external_system,
+            status: r.status,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            error_message: r.error_message,
+            details: r.details,
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -439,5 +641,59 @@ mod tests {
         assert_eq!(OperationStatus::from_str("success"), OperationStatus::Success);
         assert_eq!(OperationStatus::from_str("failed"), OperationStatus::Failed);
         assert_eq!(OperationStatus::from_str("unknown"), OperationStatus::Failed);
+    }
+
+    #[test]
+    fn test_ssh_operations_filtered_correctly() {
+        // Setup unique test database
+        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_db = format!(
+            "test-ssh-operations-{}-{}.db",
+            std::process::id(),
+            test_id
+        );
+        db::set_db_path(test_db.clone());
+
+        {
+            let mut conn = db::establish_connection();
+            init_operation_logs_table(&mut conn).unwrap();
+
+            // Insert SSH operation
+            let ssh_log = NewOperationLog::ssh("192.168.1.100", "check_base");
+            let ssh_id = create_log(&mut conn, ssh_log).unwrap();
+            assert!(ssh_id > 0);
+
+            // Insert platform operation
+            let platform_log = NewOperationLog::platform("test-project", "create_vm");
+            let platform_id = create_log(&mut conn, platform_log).unwrap();
+            assert!(platform_id > 0);
+
+            // Query SSH operations
+            let ssh_ops = get_ssh_operations(&mut conn, "192.168.1.100", 10).unwrap();
+            assert_eq!(ssh_ops.len(), 1);
+            assert_eq!(ssh_ops[0].operation_source, "ssh");
+            assert_eq!(ssh_ops[0].relevant_id, "192.168.1.100");
+            assert_eq!(ssh_ops[0].external_system, "ssh");
+
+            // Query platform operations
+            let platform_ops = get_platform_operations(&mut conn, "test-project", 10).unwrap();
+            assert_eq!(platform_ops.len(), 1);
+            assert_eq!(platform_ops[0].operation_source, "platform");
+            assert_eq!(platform_ops[0].relevant_id, "test-project");
+            assert_eq!(platform_ops[0].external_system, "gcp");
+
+            // Verify SSH ops don't include platform ops
+            let ssh_ops_again = get_ssh_operations(&mut conn, "192.168.1.100", 10).unwrap();
+            assert_eq!(ssh_ops_again.len(), 1);
+            assert_eq!(ssh_ops_again[0].id, ssh_id);
+
+            // Verify platform ops don't include SSH ops
+            let platform_ops_again = get_platform_operations(&mut conn, "test-project", 10).unwrap();
+            assert_eq!(platform_ops_again.len(), 1);
+            assert_eq!(platform_ops_again[0].id, platform_id);
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&test_db);
     }
 }

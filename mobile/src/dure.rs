@@ -266,7 +266,8 @@ impl eframe::App for DureApp {
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
             info!("🔥 Initializing ViewModel");
-            self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone()));
+            let profile_config_path = self.current_profile.as_ref().map(|p| p.config_file.clone());
+            self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone(), profile_config_path));
         }
 
         // NOTE: Event polling moved to individual tabs to avoid consuming events centrally
@@ -472,7 +473,7 @@ impl DureApp {
         dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
         match self.active_tab {
             Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
-            Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut(), &self.current_profile_kdbx),
             Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             Tab::Site => self.tab_site.ui(&self.current_profile, ui),
         }

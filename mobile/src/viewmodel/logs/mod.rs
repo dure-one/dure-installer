@@ -6,8 +6,13 @@ pub use actor::log_actor_loop;
 
 use smol::channel::Sender;
 use std::sync::RwLock;
+use std::cell::RefCell;
 
 static LOG_SENDER: RwLock<Option<Sender<LogCommand>>> = RwLock::new(None);
+
+thread_local! {
+    static HOST_CONTEXT: RefCell<Option<String>> = RefCell::new(None);
+}
 
 pub fn init_log_sender(sender: Sender<LogCommand>) {
     if let Ok(mut guard) = LOG_SENDER.write() {
@@ -22,23 +27,55 @@ pub fn get_log_sender() -> Option<Sender<LogCommand>> {
     LOG_SENDER.read().ok().and_then(|guard| guard.clone())
 }
 
-pub fn append_log(project_id: impl Into<String>, level: LogLevel, message: impl Into<String>) {
-    let pid = project_id.into();
-    let msg = message.into();
+pub fn set_host_context(host_id: impl Into<String>) {
+    let id = host_id.into();
+    log::debug!("[HOST_CONTEXT] Setting host context to '{}'", id);
+    HOST_CONTEXT.with(|ctx| {
+        *ctx.borrow_mut() = Some(id);
+    });
+}
+
+pub fn clear_host_context() {
+    log::debug!("[HOST_CONTEXT] Clearing host context");
+    HOST_CONTEXT.with(|ctx| {
+        *ctx.borrow_mut() = None;
+    });
+}
+
+pub fn get_host_context() -> Option<String> {
+    let ctx = HOST_CONTEXT.with(|ctx| ctx.borrow().clone());
+    log::debug!("[HOST_CONTEXT] Getting host context: {:?}", ctx);
+    ctx
+}
+
+pub fn append_log(host_id_override: Option<String>, level: LogLevel, message: String) {
+    log::debug!("[APPEND_LOG] Called with override={:?}, message='{}'", host_id_override, message);
+
+    let host_id = match host_id_override {
+        Some(id) => {
+            log::debug!("[APPEND_LOG] Using override host_id: '{}'", id);
+            id
+        }
+        None => {
+            let ctx = get_host_context().unwrap_or_else(|| "unknown".to_string());
+            log::debug!("[APPEND_LOG] Using context host_id: '{}'", ctx);
+            ctx
+        }
+    };
 
     if let Some(sender) = get_log_sender() {
-        log::trace!("[APPEND_LOG] Sending AppendLog command - project_id='{}', level={:?}", pid, level);
+        log::debug!("[APPEND_LOG] Sending AppendLog command - host_id='{}', level={:?}, msg='{}'", host_id, level, message);
         let cmd = LogCommand::AppendLog {
-            project_id: pid,
+            host_id: host_id.clone(),
             level,
-            message: msg,
+            message: message.clone(),
         };
         match sender.try_send(cmd) {
-            Ok(_) => log::trace!("[APPEND_LOG] ✓ Command sent successfully"),
+            Ok(_) => log::debug!("[APPEND_LOG] ✓ Command sent successfully for host '{}'", host_id),
             Err(e) => log::error!("[APPEND_LOG] ✗ Failed to send command: {}", e),
         }
     } else {
-        log::trace!("[APPEND_LOG] Log sender not initialized yet (profile not loaded)");
+        log::debug!("[APPEND_LOG] Log sender not initialized yet (profile not loaded)");
     }
 }
 

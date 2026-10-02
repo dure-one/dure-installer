@@ -171,11 +171,10 @@ mod tests {
 }
 
 // Helper function for routing logs to actor
-pub fn log_to_actor(project_id: impl Into<String>, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
-    let pid = project_id.into();
-    let msg = message.into();
-    log::trace!("[LOG_ROUTE] Routing log to actor - project_id='{}', level={:?}, msg='{}'", pid, level, msg);
-    crate::viewmodel::logs::append_log(pid, level, msg);
+pub fn log_to_actor(host_id: Option<String>, level: crate::viewmodel::logs::LogLevel, message: String) {
+    let id_str = host_id.as_ref().map(|s| s.as_str()).unwrap_or("<context>");
+    log::trace!("[LOG_ROUTE] Routing log to actor - host_id='{}', level={:?}, msg='{}'", id_str, level, message);
+    crate::viewmodel::logs::append_log(host_id, level, message);
 }
 
 // Non-WASM platforms: use standard log crate
@@ -185,13 +184,13 @@ macro_rules! dure_info {
     (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::info!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
         {
             log::info!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
         }
     };
 }
@@ -202,13 +201,13 @@ macro_rules! dure_trace {
     (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::trace!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
         {
             log::trace!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
 }
@@ -219,13 +218,13 @@ macro_rules! dure_debug {
     (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::debug!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
         {
             log::debug!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
         }
     };
 }
@@ -236,13 +235,13 @@ macro_rules! dure_warn {
     (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::warn!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
         {
             log::warn!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
         }
     };
 }
@@ -253,13 +252,13 @@ macro_rules! dure_error {
     (project_id = $project_id:expr, $($arg:tt)*) => {
         {
             log::error!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
         {
             log::error!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*));
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
         }
     };
 }
@@ -273,7 +272,7 @@ macro_rules! dure_info {
             web_sys::console::log_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
@@ -281,7 +280,7 @@ macro_rules! dure_info {
             web_sys::console::log_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Info, format!($($arg)*));
         }
     };
 }
@@ -294,7 +293,7 @@ macro_rules! dure_trace {
             web_sys::console::debug_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
@@ -302,7 +301,7 @@ macro_rules! dure_trace {
             web_sys::console::debug_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Trace, format!($($arg)*));
         }
     };
 }
@@ -315,7 +314,7 @@ macro_rules! dure_debug {
             web_sys::console::debug_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
@@ -323,7 +322,7 @@ macro_rules! dure_debug {
             web_sys::console::debug_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Debug, format!($($arg)*));
         }
     };
 }
@@ -336,7 +335,7 @@ macro_rules! dure_warn {
             web_sys::console::warn_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
@@ -344,7 +343,7 @@ macro_rules! dure_warn {
             web_sys::console::warn_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Warn, format!($($arg)*));
         }
     };
 }
@@ -357,7 +356,7 @@ macro_rules! dure_error {
             web_sys::console::error_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor($project_id, $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
+            $crate::logging::log_to_actor(Some($project_id.to_string()), $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
         }
     };
     ($($arg:tt)*) => {
@@ -365,7 +364,7 @@ macro_rules! dure_error {
             web_sys::console::error_1(
                 &format!("[{}] {}", $crate::logging::truncate_module_name(&$crate::logging::module_name(module_path!())), format!($($arg)*)).into()
             );
-            $crate::logging::log_to_actor("__global__", $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
+            $crate::logging::log_to_actor(None, $crate::viewmodel::logs::LogLevel::Error, format!($($arg)*));
         }
     };
 }

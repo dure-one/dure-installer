@@ -1030,7 +1030,7 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
                         // Log with project_id context for filtering
                         crate::viewmodel::logs::append_log(
-                            &platform_name,
+                            Some(platform_name.clone()),
                             crate::viewmodel::logs::LogLevel::Info,
                             format!("✅ VM {} restarted successfully", vm_name)
                         );

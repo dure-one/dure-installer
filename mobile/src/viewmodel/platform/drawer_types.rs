@@ -182,6 +182,8 @@ mod tests {
         let mut state = DrawerState::new();
         state.operations.push(OperationLog {
             id: 1,
+            operation_source: "platform".to_string(),
+            relevant_id: "old-project".to_string(),
             project_id: "old-project".to_string(),
             operation_type: "test".to_string(),
             external_system: "gcp".to_string(),

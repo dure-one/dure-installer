@@ -1,6 +1,7 @@
 //! Drawer types for SSH host tab management and operation logging
 
 use crate::storage::models::opslog::OperationLog;
+use crate::ui_components::drawer::DrawerTabTrait;
 use serde::{Deserialize, Serialize};
 
 /// Active tab in the SSH drawer
@@ -40,6 +41,23 @@ impl DrawerTab {
             DrawerTab::Host,
             DrawerTab::Docker,
             DrawerTab::Dure,
+        ]
+    }
+}
+
+impl DrawerTabTrait for DrawerTab {
+    fn as_str(&self) -> &'static str {
+        DrawerTab::as_str(self)
+    }
+
+    fn all() -> &'static [Self] {
+        &[
+            Self::Status,
+            Self::Logs,
+            Self::Operations,
+            Self::Host,
+            Self::Docker,
+            Self::Dure,
         ]
     }
 }
@@ -185,6 +203,14 @@ pub struct DrawerState {
     pub containers: Vec<ContainerInfo>,
     /// Dure status (for Dure tab)
     pub dure_status: Option<DureStatus>,
+    /// Network log lines (for Host tab)
+    pub network_log: Vec<String>,
+    /// Raw docker ps -a output (for Docker tab)
+    pub docker_ps_raw: Option<String>,
+    /// Docker compose status output (for Dure tab)
+    pub dure_compose_status: Option<String>,
+    /// Docker compose logs (for Dure tab)
+    pub dure_compose_logs: Vec<String>,
 }
 
 impl DrawerState {
@@ -199,6 +225,10 @@ impl DrawerState {
             docker_status: None,
             containers: Vec::new(),
             dure_status: None,
+            network_log: Vec::new(),
+            docker_ps_raw: None,
+            dure_compose_status: None,
+            dure_compose_logs: Vec::new(),
         }
     }
 
@@ -211,6 +241,10 @@ impl DrawerState {
         self.docker_status = None;
         self.containers.clear();
         self.dure_status = None;
+        self.network_log.clear();
+        self.docker_ps_raw = None;
+        self.dure_compose_status = None;
+        self.dure_compose_logs.clear();
     }
 
     pub fn switch_tab(&mut self, tab: DrawerTab) {
@@ -304,6 +338,8 @@ mod tests {
         let mut state = DrawerState::new();
         state.operations.push(OperationLog {
             id: 1,
+            operation_source: "ssh".to_string(),
+            relevant_id: "192.168.1.100".to_string(),
             project_id: "192.168.1.100".to_string(),
             operation_type: "ssh_connect".to_string(),
             external_system: "ssh".to_string(),

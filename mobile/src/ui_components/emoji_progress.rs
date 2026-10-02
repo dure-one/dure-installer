@@ -214,6 +214,7 @@ mod tests {
             last_refresh_time: None,
             has_vm: false,
             vm_zone: None,
+            oauth_refresh_failed: false,
         };
 
         let bar = EmojiProgressBar::from_platform_row(&row);
@@ -254,6 +255,7 @@ mod tests {
             last_refresh_time: None,
             has_vm: false,
             vm_zone: None,
+            oauth_refresh_failed: false,
         };
 
         let bar = EmojiProgressBar::from_platform_row(&row);
