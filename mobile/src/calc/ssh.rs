@@ -91,7 +91,12 @@ mod desktop_impl {
         host_config: &SshHostConfig,
         profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> Result<SshConnectionResult> {
+        use std::time::Duration;
+
+        dure_debug!("test_connection: Starting for {}", host_config.host);
+
         let (username, hostname) = parse_ssh_host(&host_config.host)?;
+        dure_debug!("test_connection: Parsed username={}, hostname={}", username, hostname);
 
         let address = format!("{}:{}", hostname, host_config.port);
         let socket_addrs: Vec<_> = address
@@ -102,33 +107,60 @@ mod desktop_impl {
             .first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
 
-        let host_config = host_config.clone();
+        dure_debug!("test_connection: Resolved address: {}", socket_addr);
+
+        let host_config_clone = host_config.clone();
         let profile_keyring = profile_keyring.cloned();
 
-        async_compat::Compat::new(async move {
+        dure_debug!("test_connection: About to start race between connect and timeout");
+
+        // Wrap with 10-second timeout
+        let connect_future = async_compat::Compat::new(async move {
+            dure_debug!("connect_future: Starting russh connection");
             let config = Arc::new(russh::client::Config::default());
             let mut session = russh::client::connect(config, socket_addr, Client)
                 .await
                 .context("Failed to connect to SSH server")?;
 
-            match authenticate(&mut session, &username, &host_config, profile_keyring.as_ref()).await {
+            dure_debug!("connect_future: Connected, starting authentication");
+
+            match authenticate(&mut session, &username, &host_config_clone, profile_keyring.as_ref()).await {
                 Ok(_) => {
+                    dure_debug!("connect_future: Authentication successful");
                     session
                         .disconnect(russh::Disconnect::ByApplication, "", "")
                         .await
                         .ok();
                     Ok(SshConnectionResult {
                         success: true,
-                        message: format!("Successfully connected to {}", host_config.host),
+                        message: format!("Successfully connected to {}", host_config_clone.host),
                     })
                 }
-                Err(e) => Ok(SshConnectionResult {
-                    success: false,
-                    message: format!("{}", e),
-                }),
+                Err(e) => {
+                    dure_debug!("connect_future: Authentication failed: {}", e);
+                    Ok(SshConnectionResult {
+                        success: false,
+                        message: format!("{}", e),
+                    })
+                }
             }
-        })
-        .await
+        });
+
+        // Race between connect and timeout
+        let timeout_future = async {
+            dure_debug!("timeout_future: Waiting 10 seconds");
+            smol::Timer::after(Duration::from_secs(10)).await;
+            dure_debug!("timeout_future: Timeout reached!");
+            Ok(SshConnectionResult {
+                success: false,
+                message: "Connection timeout (10s)".to_string(),
+            })
+        };
+
+        dure_debug!("test_connection: Starting race");
+        let result = smol::future::race(connect_future, timeout_future).await;
+        dure_debug!("test_connection: Race completed");
+        result
     }
 
     /// Execute command over SSH
@@ -137,6 +169,8 @@ mod desktop_impl {
         command: &str,
         profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> Result<String> {
+        use std::time::Duration;
+
         let (username, hostname) = parse_ssh_host(&host_config.host)?;
 
         let address = format!("{}:{}", hostname, host_config.port);
@@ -145,15 +179,15 @@ mod desktop_impl {
             .first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
 
-        let host_config = host_config.clone();
+        let host_config_clone = host_config.clone();
         let command = command.to_string();
         let profile_keyring = profile_keyring.cloned();
 
-        async_compat::Compat::new(async move {
+        let exec_future = async_compat::Compat::new(async move {
             let config = Arc::new(russh::client::Config::default());
             let mut session = russh::client::connect(config, socket_addr, Client).await?;
 
-            authenticate(&mut session, &username, &host_config, profile_keyring.as_ref()).await?;
+            authenticate(&mut session, &username, &host_config_clone, profile_keyring.as_ref()).await?;
 
             let mut channel = session.channel_open_session().await?;
             channel.exec(true, command.as_str()).await?;
@@ -183,8 +217,15 @@ mod desktop_impl {
                 .await?;
 
             Ok(output)
-        })
-        .await
+        });
+
+        // 30-second timeout for command execution
+        let timeout_future = async {
+            smol::Timer::after(Duration::from_secs(30)).await;
+            anyhow::bail!("Command execution timeout (30s)")
+        };
+
+        smol::future::race(exec_future, timeout_future).await
     }
 
     /// Initialize SSH host (install swap, nftables, dure server)
@@ -329,7 +370,7 @@ table inet filter {
         if let Some(ref keyring_domain) = host_config.keyring_domain {
             attempted_methods.push("keyring".to_string());
 
-            match load_private_key_from_keyring(keyring_domain, username, profile_keyring) {
+            match load_private_key_from_keyring(keyring_domain, profile_keyring) {
                 Ok(private_key_pem) => match russh_keys::decode_secret_key(&private_key_pem, None) {
                     Ok(key_pair) => {
                         let auth_res = session
@@ -408,7 +449,6 @@ table inet filter {
     /// Load private key from keyring (either profile keyring or global keyring)
     fn load_private_key_from_keyring(
         domain: &str,
-        username: &str,
         profile_keyring: Option<&Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> Result<String> {
         use crate::calc::keyring;
@@ -425,19 +465,26 @@ table inet filter {
                 .context("Failed to list keys from keyring")?
         };
 
-        // Find key by domain
+        // Find key by domain only (matches platform tab behavior)
         let key_entry = keys
             .iter()
-            .find(|k| k.domain == domain && k.username == username)
+            .find(|k| k.domain == domain)
             .ok_or_else(|| {
                 anyhow::anyhow!(
-                    "Key not found in keyring for domain '{}' and username '{}'",
-                    domain,
-                    username
+                    "Key not found in keyring for domain '{}'",
+                    domain
                 )
             })?;
 
-        Ok(key_entry.password.clone())
+        // Use ssh_key field (binary), not password (matches platform tab)
+        let ssh_key_bytes = key_entry.ssh_key.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("SSH key not found in keyring entry"))?;
+
+        // Convert binary to UTF-8 string (should be OpenSSH format)
+        let key_str = String::from_utf8(ssh_key_bytes.clone())
+            .context("Failed to convert SSH key bytes to UTF-8 string")?;
+
+        Ok(key_str)
     }
 
     /// Detect OS distribution via SSH
@@ -860,18 +907,65 @@ pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> 
     anyhow::bail!("Port management not supported on this platform")
 }
 
+/// Check if base packages are installed
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn check_base_packages(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Vec<String>> {
+    let output = execute_command(host_config, "command -v curl wget git || true", profile_keyring).await?;
+    let missing = Vec::new(); // TODO: parse output properly
+    Ok(missing)
+}
+
+/// Check Docker version
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn check_docker_version(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Option<String>> {
+    let output = execute_command(host_config, "docker --version 2>/dev/null || true", profile_keyring).await?;
+    if output.contains("Docker version") {
+        Ok(Some(output.trim().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Check if Dure/mycart is installed
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn check_dure_mycart(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<(bool, bool, Vec<String>)> {
+    let output = execute_command(host_config, "systemctl is-active dure-mycart 2>/dev/null || echo inactive", profile_keyring).await?;
+    let installed = !output.contains("not found");
+    let running = output.trim() == "active";
+    let services = vec![];
+    Ok((installed, running, services))
+}
+
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-pub async fn check_base_packages(_host_config: &SshHostConfig) -> Result<Vec<String>> {
+pub async fn check_base_packages(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Vec<String>> {
     Ok(vec![])
 }
 
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-pub async fn check_docker_version(_host_config: &SshHostConfig) -> Result<Option<String>> {
+pub async fn check_docker_version(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<Option<String>> {
     Ok(None)
 }
 
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-pub async fn check_dure_mycart(_host_config: &SshHostConfig) -> Result<(bool, bool, Vec<String>)> {
+pub async fn check_dure_mycart(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<(bool, bool, Vec<String>)> {
     Ok((false, false, vec![]))
 }
 

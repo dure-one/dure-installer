@@ -175,43 +175,53 @@ pub enum SshCommand {
     /// Refresh host status (SSH, Base, Docker, Dure)
     Refresh {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Check if SSH connection is available
     SshCheck {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Check if base packages are installed
     CheckBase {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Install base packages
     InstallBase {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Check if Docker is installed
     CheckDocker {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Install Docker daemon
     InstallDockerDaemon {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Remove Docker daemon
     RemoveDocker {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Check if Dure is installed
     CheckDure {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Install Dure with environment configuration
     InstallDure {
         host: String,
         env_config: HashMap<String, String>,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Remove Dure
     RemoveDure {
         host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     // Drawer commands

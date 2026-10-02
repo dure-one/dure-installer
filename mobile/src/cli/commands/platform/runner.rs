@@ -14,7 +14,7 @@ impl PlatformCliRunner {
     /// Create a new runner with headless ViewModel
     pub fn new() -> Self {
         Self {
-            vm: ViewModel::new_headless(),
+            vm: ViewModel::new_headless(None),
         }
     }
 

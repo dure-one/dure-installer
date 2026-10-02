@@ -14,24 +14,34 @@ use smol::channel::{Receiver, Sender};
 pub struct SshActor {
     command_rx: Receiver<SshCommand>,
     event_tx: Sender<ViewModelEvent>,
+    profile_config_path: Option<std::path::PathBuf>,
 }
 
 impl SshActor {
-    pub fn new(command_rx: Receiver<SshCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
+    pub fn new(
+        command_rx: Receiver<SshCommand>,
+        event_tx: Sender<ViewModelEvent>,
+        profile_config_path: Option<std::path::PathBuf>,
+    ) -> Self {
         Self {
             command_rx,
             event_tx,
+            profile_config_path,
         }
     }
 
     fn get_config_and_path(&self) -> anyhow::Result<(crate::config::AppConfig, std::path::PathBuf)> {
-        let config_path = Self::get_config_path()?;
+        let config_path = self.profile_config_path
+            .clone()
+            .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
         Ok((config, config_path))
     }
 
     fn load_host_config(&self, host_name: &str) -> anyhow::Result<SshHostConfig> {
-        let config_path = Self::get_config_path()?;
+        let config_path = self.profile_config_path
+            .clone()
+            .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
         config
             .ssh_hosts
@@ -234,16 +244,16 @@ impl SshActor {
             SshCommand::GetLinuxStatus { name } => Some(name.clone()),
             SshCommand::CheckHostHealth { name, .. } => Some(name.clone()),
             SshCommand::InspectDockerImage { host_name, .. } => Some(host_name.clone()),
-            SshCommand::Refresh { host } => Some(host.clone()),
-            SshCommand::SshCheck { host } => Some(host.clone()),
-            SshCommand::CheckBase { host } => Some(host.clone()),
-            SshCommand::InstallBase { host } => Some(host.clone()),
-            SshCommand::CheckDocker { host } => Some(host.clone()),
-            SshCommand::InstallDockerDaemon { host } => Some(host.clone()),
-            SshCommand::RemoveDocker { host } => Some(host.clone()),
-            SshCommand::CheckDure { host } => Some(host.clone()),
+            SshCommand::Refresh { host, .. } => Some(host.clone()),
+            SshCommand::SshCheck { host, .. } => Some(host.clone()),
+            SshCommand::CheckBase { host, .. } => Some(host.clone()),
+            SshCommand::InstallBase { host, .. } => Some(host.clone()),
+            SshCommand::CheckDocker { host, .. } => Some(host.clone()),
+            SshCommand::InstallDockerDaemon { host, .. } => Some(host.clone()),
+            SshCommand::RemoveDocker { host, .. } => Some(host.clone()),
+            SshCommand::CheckDure { host, .. } => Some(host.clone()),
             SshCommand::InstallDure { host, .. } => Some(host.clone()),
-            SshCommand::RemoveDure { host } => Some(host.clone()),
+            SshCommand::RemoveDure { host, .. } => Some(host.clone()),
             #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallDockerImage { host_name, .. } => Some(host_name.clone()),
             #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
@@ -546,18 +556,18 @@ impl SshActor {
             }
 
             // Operation commands (new)
-            SshCommand::Refresh { host } => {
-                let event = self.handle_refresh(host).await;
+            SshCommand::Refresh { host, profile_kdbx } => {
+                let event = self.handle_refresh(host, profile_kdbx).await;
                 self.send_event(event).await;
                 Ok(())
             }
-            SshCommand::SshCheck { host } => {
-                self.handle_ssh_check(host).await
+            SshCommand::SshCheck { host, profile_kdbx } => {
+                self.handle_ssh_check(host, profile_kdbx).await
             }
-            SshCommand::CheckBase { host } => {
-                self.handle_check_base(host).await
+            SshCommand::CheckBase { host, profile_kdbx } => {
+                self.handle_check_base(host, profile_kdbx).await
             }
-            SshCommand::InstallBase { host } => {
+            SshCommand::InstallBase { host, profile_kdbx: _ } => {
                 self.send_event(SshEvent::BaseInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -565,10 +575,10 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::CheckDocker { host } => {
-                self.handle_check_docker(host).await
+            SshCommand::CheckDocker { host, profile_kdbx } => {
+                self.handle_check_docker(host, profile_kdbx).await
             }
-            SshCommand::InstallDockerDaemon { host } => {
+            SshCommand::InstallDockerDaemon { host, profile_kdbx: _ } => {
                 self.send_event(SshEvent::DockerInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -576,7 +586,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::RemoveDocker { host } => {
+            SshCommand::RemoveDocker { host, profile_kdbx: _ } => {
                 self.send_event(SshEvent::DockerRemoveCompleted {
                     host: host.clone(),
                     success: false,
@@ -584,10 +594,10 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::CheckDure { host } => {
-                self.handle_check_dure(host).await
+            SshCommand::CheckDure { host, profile_kdbx } => {
+                self.handle_check_dure(host, profile_kdbx).await
             }
-            SshCommand::InstallDure { host, env_config: _ } => {
+            SshCommand::InstallDure { host, env_config: _, profile_kdbx: _ } => {
                 self.send_event(SshEvent::DureInstallCompleted {
                     host: host.clone(),
                     success: false,
@@ -595,7 +605,7 @@ impl SshActor {
                 }).await;
                 Ok(())
             }
-            SshCommand::RemoveDure { host } => {
+            SshCommand::RemoveDure { host, profile_kdbx: _ } => {
                 self.send_event(SshEvent::DureRemoveCompleted {
                     host: host.clone(),
                     success: false,
@@ -2331,7 +2341,11 @@ impl SshActor {
         .await
     }
 
-    async fn handle_refresh(&mut self, host: String) -> SshEvent {
+    async fn handle_refresh(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> SshEvent {
         // Start operation logging
         let op_id = match self.start_operation_log(&host, "refresh").await {
             Ok(id) => id,
@@ -2357,21 +2371,21 @@ impl SshActor {
         };
 
         // Run 4 checks
-        let ssh_result = crate::calc::ssh::test_connection(&host_config, None).await;
+        let ssh_result = crate::calc::ssh::test_connection(&host_config, profile_kdbx.as_ref()).await;
         let ssh_connected = ssh_result.as_ref().map(|r| r.success).unwrap_or(false);
 
         let base_result = if ssh_connected {
-            crate::calc::ssh::check_base_packages(&host_config).await.map(|missing| missing.is_empty())
+            crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await.map(|missing| missing.is_empty())
         } else {
             Ok(false)
         };
         let docker_result = if ssh_connected {
-            crate::calc::ssh::check_docker_version(&host_config).await.map(|v| v.is_some())
+            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await.map(|v| v.is_some())
         } else {
             Ok(false)
         };
         let dure_result = if ssh_connected {
-            crate::calc::ssh::check_dure_mycart(&host_config).await.map(|(installed, _, _)| installed)
+            crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await.map(|(installed, _, _)| installed)
         } else {
             Ok(false)
         };
@@ -2392,21 +2406,33 @@ impl SshActor {
         }
     }
 
-    async fn handle_ssh_check(&mut self, host: String) -> anyhow::Result<()> {
+    async fn handle_ssh_check(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         dure_info!(project_id = host.clone(), "Checking SSH connection to {}", host);
+        dure_debug!("handle_ssh_check: Step 1 - Starting operation log");
 
         // Start operation logging
         let op_id = match self.start_operation_log(&host, "ssh_check").await {
-            Ok(id) => id,
+            Ok(id) => {
+                dure_debug!("handle_ssh_check: Step 2 - Operation log started with id={}", id);
+                id
+            }
             Err(e) => {
                 dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
                 -1
             }
         };
 
+        dure_debug!("handle_ssh_check: Step 3 - Loading host config for {}", host);
         // Check SSH connection
         let host_config = self.load_host_config(&host)?;
-        let result = crate::calc::ssh::test_connection(&host_config, None).await;
+        dure_debug!("handle_ssh_check: Step 4 - Host config loaded, calling test_connection");
+
+        let result = crate::calc::ssh::test_connection(&host_config, profile_kdbx.as_ref()).await;
+        dure_debug!("handle_ssh_check: Step 5 - test_connection returned");
 
         match result {
             Ok(conn_result) => {
@@ -2419,6 +2445,7 @@ impl SshActor {
                     let _ = self.complete_operation_log(op_id, connected, error.clone()).await;
                 }
 
+                dure_debug!("handle_ssh_check: Step 6 - Sending SshCheckCompleted event");
                 self.send_event(SshEvent::SshCheckCompleted {
                     host,
                     connected,
@@ -2452,11 +2479,24 @@ impl SshActor {
         }
     }
 
-    async fn handle_check_base(&mut self, host: String) -> anyhow::Result<()> {
+    async fn handle_check_base(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         dure_info!(project_id = host.clone(), "Checking base packages on {}", host);
 
+        // Start operation logging
+        let op_id = match self.start_operation_log(&host, "base_check").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
+                -1
+            }
+        };
+
         let host_config = self.load_host_config(&host)?;
-        let result = crate::calc::ssh::check_base_packages(&host_config).await;
+        let result = crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok(missing) => {
@@ -2468,6 +2508,11 @@ impl SshActor {
                 };
                 dure_info!(project_id = host.clone(), "Base packages check: {}", status);
 
+                // Complete operation log
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, installed, None::<String>).await;
+                }
+
                 self.send_event(SshEvent::BaseCheckCompleted {
                     host,
                     installed,
@@ -2477,6 +2522,11 @@ impl SshActor {
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Base check failed: {}", e);
+
+                // Complete operation log with failure
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
+                }
 
                 self.send_event(SshEvent::BaseCheckCompleted {
                     host,
@@ -2488,11 +2538,24 @@ impl SshActor {
         }
     }
 
-    async fn handle_check_docker(&mut self, host: String) -> anyhow::Result<()> {
+    async fn handle_check_docker(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         dure_info!(project_id = host.clone(), "Checking Docker on {}", host);
 
+        // Start operation logging
+        let op_id = match self.start_operation_log(&host, "docker_check").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
+                -1
+            }
+        };
+
         let host_config = self.load_host_config(&host)?;
-        let result = crate::calc::ssh::check_docker_version(&host_config).await;
+        let result = crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok(version) => {
@@ -2504,6 +2567,11 @@ impl SshActor {
                 };
                 dure_info!(project_id = host.clone(), "Docker check: {}", status);
 
+                // Complete operation log
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, installed, None::<String>).await;
+                }
+
                 self.send_event(SshEvent::DockerCheckCompleted {
                     host,
                     installed,
@@ -2513,6 +2581,11 @@ impl SshActor {
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Docker check failed: {}", e);
+
+                // Complete operation log with failure
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
+                }
 
                 self.send_event(SshEvent::DockerCheckCompleted {
                     host,
@@ -2524,11 +2597,15 @@ impl SshActor {
         }
     }
 
-    async fn handle_check_dure(&mut self, host: String) -> anyhow::Result<()> {
+    async fn handle_check_dure(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         dure_info!(project_id = host.clone(), "Checking Dure on {}", host);
 
         let host_config = self.load_host_config(&host)?;
-        let result = crate::calc::ssh::check_dure_mycart(&host_config).await;
+        let result = crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok((installed, running, services)) => {

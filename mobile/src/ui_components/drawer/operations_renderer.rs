@@ -1,5 +1,6 @@
 use crate::storage::models::opslog::{OperationLog, OperationStatus};
 use eframe::egui::{self, Color32, RichText, ScrollArea, Ui};
+use egui_extras::{Column, TableBuilder};
 
 /// Renders operation history from the operation log database
 pub struct OperationsRenderer {
@@ -19,53 +20,94 @@ impl OperationsRenderer {
         }
     }
 
-    /// Display the operation history in a scrollable container
+    /// Display the operation history in a data table
     pub fn show(&self, ui: &mut Ui, operations: &[OperationLog]) {
-        ui.heading("Operation History");
-        ui.separator();
+        if operations.is_empty() {
+            ui.heading("Operation History");
+            ui.separator();
+            ui.label("No operations yet");
+            return;
+        }
 
         ScrollArea::vertical()
             .max_height(self.max_height)
             .show(ui, |ui| {
-                if operations.is_empty() {
-                    ui.label("No operations yet");
-                    return;
-                }
-
-                for op in operations {
-                    self.render_operation(ui, op);
-                    ui.separator();
-                }
+                self.render_operations_table(ui, operations);
             });
     }
 
-    /// Render a single operation entry
-    fn render_operation(&self, ui: &mut Ui, op: &OperationLog) {
-        let status = op.status();
-        let (status_text, status_color) = match status {
-            OperationStatus::Running => ("RUNNING", Color32::from_rgb(33, 150, 243)),
-            OperationStatus::Success => ("SUCCESS", Color32::from_rgb(76, 175, 80)),
-            OperationStatus::Failed => ("FAILED", Color32::from_rgb(244, 67, 54)),
-        };
+    /// Render operations table with 6 columns
+    fn render_operations_table(&self, ui: &mut Ui, operations: &[OperationLog]) {
+        TableBuilder::new(ui)
+            .striped(true)
+            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+            .column(Column::auto().at_least(130.0)) // Date
+            .column(Column::auto().at_least(120.0)) // Operation
+            .column(Column::auto().at_least(80.0))  // System
+            .column(Column::auto().at_least(80.0))  // Status
+            .column(Column::auto().at_least(60.0))  // Duration
+            .column(Column::remainder())             // Error
+            .header(20.0, |mut header| {
+                header.col(|ui| { ui.heading("Date"); });
+                header.col(|ui| { ui.heading("Operation"); });
+                header.col(|ui| { ui.heading("System"); });
+                header.col(|ui| { ui.heading("Status"); });
+                header.col(|ui| { ui.heading("Duration"); });
+                header.col(|ui| { ui.heading("Error"); });
+            })
+            .body(|mut body| {
+                for op in operations {
+                    body.row(30.0, |mut row| {
+                        // Date
+                        row.col(|ui| {
+                            let dt = chrono::DateTime::from_timestamp(op.started_at, 0)
+                                .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
+                                .unwrap_or_else(|| "???????? ??:??".to_string());
+                            ui.label(dt);
+                        });
 
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(status_text).color(status_color));
-            ui.label(&op.operation_type);
+                        // Operation
+                        row.col(|ui| {
+                            ui.label(&op.operation_type);
+                        });
 
-            if let Some(duration) = op.duration_ms() {
-                ui.label(format!("({}ms)", duration));
-            }
-        });
+                        // System
+                        row.col(|ui| {
+                            ui.label(&op.external_system);
+                        });
 
-        ui.label(format!("System: {}", op.external_system));
+                        // Status with color
+                        row.col(|ui| {
+                            let (text, color) = match op.status.as_str() {
+                                "running" => ("⏳ Running", Color32::from_rgb(100, 150, 255)),
+                                "success" => ("✓ Success", Color32::from_rgb(50, 200, 50)),
+                                "failed" => ("✗ Failed", Color32::from_rgb(255, 80, 80)),
+                                _ => (&op.status[..], Color32::GRAY),
+                            };
+                            ui.colored_label(color, text);
+                        });
 
-        if let Some(error) = &op.error_message {
-            ui.label(RichText::new(format!("Error: {}", error)).color(Color32::from_rgb(244, 67, 54)));
-        }
+                        // Duration
+                        row.col(|ui| {
+                            if let Some(duration_ms) = op.duration_ms() {
+                                let duration_s = duration_ms as f64 / 1000.0;
+                                ui.label(format!("{:.2}s", duration_s));
+                            } else {
+                                ui.label("-");
+                            }
+                        });
 
-        if let Some(details) = &op.details {
-            ui.label(format!("Details: {}", details));
-        }
+                        // Error
+                        row.col(|ui| {
+                            if let Some(err) = &op.error_message {
+                                ui.label(err);
+                            } else {
+                                ui.label("");
+                            }
+                        });
+                    });
+                }
+            });
     }
 }
 

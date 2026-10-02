@@ -15,7 +15,7 @@ pub async fn create_vm(
     zone: String,
     machine_type: String,
 ) -> Result<()> {
-    let mut vm = ViewModel::new_headless();
+    let mut vm = ViewModel::new_headless(None);
 
     vm.create_vm(platform_name.clone(), vm_name.clone(), zone, machine_type)?;
 
@@ -54,7 +54,7 @@ pub async fn create_vm(
 
 /// List VMs using ViewModel
 pub async fn list_vms(platform_name: String) -> Result<()> {
-    let mut vm = ViewModel::new_headless();
+    let mut vm = ViewModel::new_headless(None);
 
     let config_path = crate::get_app_config_dir()?.join("config.yml");
     vm.list_vms(config_path, platform_name.clone())?;
@@ -98,7 +98,7 @@ pub async fn list_vms(platform_name: String) -> Result<()> {
 
 /// Delete a VM using ViewModel
 pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> Result<()> {
-    let mut vm = ViewModel::new_headless();
+    let mut vm = ViewModel::new_headless(None);
 
     // Use default config path for CLI
     let profile_config_path = crate::get_app_config_dir()?.join("config.yml");

@@ -696,21 +696,9 @@ impl SshTab {
             }
 
             ViewModelEvent::Logs(crate::viewmodel::logs::LogEvent::LogsRetrieved { filter_id, lines }) => {
-                dure_info!("===== LogsRetrieved EVENT: filter_id='{}', {} lines =====", filter_id, lines.len());
-
-                // Debug: Show all current row hosts
-                let all_hosts: Vec<_> = self.rows.iter().map(|r| r.host.as_str()).collect();
-                dure_info!("Current SSH rows: {:?}", all_hosts);
-
                 // Update drawer logs for matching SSH host
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == filter_id) {
-                    dure_info!("✓ Found matching row for '{}'", filter_id);
                     row.drawer_state.set_logs(lines.clone());
-                    dure_info!("✓ Set logs, drawer now has {} lines", row.drawer_state.logs.len());
-
-                    if !lines.is_empty() {
-                        dure_info!("First log line: '{}'", lines[0]);
-                    }
                 } else {
                     dure_error!("✗ No matching row found for filter_id '{}'", filter_id);
                 }
@@ -726,6 +714,7 @@ impl SshTab {
         profile: &Option<crate::calc::profile::ProfileContext>,
         ui: &mut egui::Ui,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         // Poll for ViewModel events
         if let Some(ref mut viewmodel) = vm {
@@ -764,7 +753,7 @@ impl SshTab {
         }
 
         // SSH host table (header is inside render_table)
-        self.render_table(ui, profile, vm.as_deref_mut());
+        self.render_table(ui, profile, vm.as_deref_mut(), current_profile_kdbx);
 
         // Add host dialog
         self.render_add_dialog(ui, profile);
@@ -779,6 +768,7 @@ impl SshTab {
         ui: &mut egui::Ui,
         profile: &Option<crate::calc::profile::ProfileContext>,
         vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         use egui_material3::{data_table, MaterialButton};
 
@@ -861,14 +851,14 @@ impl SshTab {
             match action {
                 SshAction::Refresh(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.refresh_ssh_host(host.clone());
-                        dure_info!("Refresh triggered for {}", host);
+                        let _ = vm.refresh_ssh_host(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Refresh triggered for {}", host);
                     }
                 }
                 SshAction::SshCheck(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.ssh_check(host.clone());
-                        dure_info!("SSH check triggered for {}", host);
+                        let _ = vm.ssh_check(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "SSH check triggered for {}", host);
                     }
                 }
                 SshAction::Edit(host) => {
@@ -879,47 +869,47 @@ impl SshTab {
                 }
                 SshAction::CheckBase(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.check_base(host.clone());
-                        dure_info!("Base check triggered for {}", host);
+                        let _ = vm.check_base(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Base check triggered for {}", host);
                     }
                 }
                 SshAction::InstallBase(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.install_base(host.clone());
-                        dure_info!("Base installation triggered for {}", host);
+                        let _ = vm.install_base(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Base installation triggered for {}", host);
                     }
                 }
                 SshAction::CheckDocker(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.check_docker(host.clone());
-                        dure_info!("Docker check triggered for {}", host);
+                        let _ = vm.check_docker(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Docker check triggered for {}", host);
                     }
                 }
                 SshAction::InstallDocker(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.install_docker_daemon(host.clone());
-                        dure_info!("Docker installation triggered for {}", host);
+                        let _ = vm.install_docker_daemon(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Docker installation triggered for {}", host);
                     }
                 }
                 SshAction::RemoveDocker(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.remove_docker(host.clone());
-                        dure_info!("Docker removal triggered for {}", host);
+                        let _ = vm.remove_docker(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Docker removal triggered for {}", host);
                     }
                 }
                 SshAction::CheckDure(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.check_dure(host.clone());
-                        dure_info!("Dure check triggered for {}", host);
+                        let _ = vm.check_dure(host.clone(), (*current_profile_kdbx).clone());
+                        dure_info!(project_id = host, "Dure check triggered for {}", host);
                     }
                 }
                 SshAction::InstallDure(host) => {
-                    dure_info!("Install Dure on {} (env dialog not implemented)", host);
+                    dure_info!(project_id = host, "Install Dure on {} (env dialog not implemented)", host);
                     // TODO: Show .env configuration dialog before calling vm.install_dure()
                 }
                 SshAction::RemoveDure(host) => {
                     if let Some(ref vm) = vm {
-                        let _ = vm.remove_dure(host.clone());
+                        let _ = vm.remove_dure(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!("Dure removal triggered for {}", host);
                     }
                 }
@@ -939,11 +929,9 @@ impl SshTab {
                 match new_tab {
                     DrawerTab::Logs => {
                         // Request logs from log system
-                        dure_info!("===== LOGS TAB SWITCH: Requesting logs for host {} =====", host);
                         if let Some(ref vm) = vm {
-                            match vm.get_ssh_logs(host.clone()) {
-                                Ok(_) => dure_info!("✓ Successfully sent GetLogs request for {}", host),
-                                Err(e) => dure_error!("✗ Failed to send GetLogs request: {}", e),
+                            if let Err(e) = vm.get_ssh_logs(host.clone()) {
+                                dure_error!("✗ Failed to send GetLogs request: {}", e);
                             }
                         } else {
                             dure_error!("✗ No ViewModel available");
