@@ -1196,7 +1196,7 @@ impl SshActor {
 
         // Install Docker (async operation)
         let result =
-            crate::calc::ssh::install_docker(&host_config, None).await;
+            crate::calc::ssh::install_docker(&host_config).await;
 
         match result {
             Ok(_) => {
