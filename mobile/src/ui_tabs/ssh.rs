@@ -6,6 +6,7 @@ use egui_material3::MaterialButton;
 
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
+use crate::ui_components::drawer::{LogsRenderer, OperationsRenderer};
 
 // Button spacing matching Platform tab
 const BUTTON_VERTICAL_SPACING: f32 = 4.0;
@@ -169,19 +170,19 @@ fn render_operations_column(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
-            if ui.button("Refresh").clicked() {
+            if ui.add(MaterialButton::outlined("Refresh").small()).clicked() {
                 *action_trigger = Some(SshAction::Refresh(row.host.clone()));
             }
 
-            if ui.button("SSH Check").clicked() {
+            if ui.add(MaterialButton::outlined("SSH Check").small()).clicked() {
                 *action_trigger = Some(SshAction::SshCheck(row.host.clone()));
             }
 
-            if ui.button("Edit").clicked() {
+            if ui.add(MaterialButton::outlined("Edit").small()).clicked() {
                 *action_trigger = Some(SshAction::Edit(row.host.clone()));
             }
 
-            if ui.button("Delete").clicked() {
+            if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
                 *action_trigger = Some(SshAction::Delete(row.host.clone()));
             }
         });
@@ -191,29 +192,29 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Base (always)
-            if ui.button("Check Base").clicked() {
+            if ui.add(MaterialButton::outlined("Check Base").small()).clicked() {
                 *action_trigger = Some(SshAction::CheckBase(row.host.clone()));
             }
 
             // Install Base (only when NOT installed)
             if !row.base_installed {
-                if ui.button("Install Base").clicked() {
+                if ui.add(MaterialButton::outlined("Install Base").small()).clicked() {
                     *action_trigger = Some(SshAction::InstallBase(row.host.clone()));
                 }
             }
 
             // Check Docker (always)
-            if ui.button("Check Docker").clicked() {
+            if ui.add(MaterialButton::outlined("Check Docker").small()).clicked() {
                 *action_trigger = Some(SshAction::CheckDocker(row.host.clone()));
             }
 
             // Install/Remove Docker (conditional)
             if !row.docker_installed {
-                if ui.button("Install Docker").clicked() {
+                if ui.add(MaterialButton::outlined("Install Docker").small()).clicked() {
                     *action_trigger = Some(SshAction::InstallDocker(row.host.clone()));
                 }
             } else {
-                if ui.button("Remove Docker").clicked() {
+                if ui.add(MaterialButton::outlined("Remove Docker").small()).clicked() {
                     *action_trigger = Some(SshAction::RemoveDocker(row.host.clone()));
                 }
             }
@@ -224,17 +225,17 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Dure (always)
-            if ui.button("Check Dure").clicked() {
+            if ui.add(MaterialButton::outlined("Check Dure").small()).clicked() {
                 *action_trigger = Some(SshAction::CheckDure(row.host.clone()));
             }
 
             // Install/Remove Dure (conditional)
             if !row.dure_installed {
-                if ui.button("Install Dure").clicked() {
+                if ui.add(MaterialButton::outlined("Install Dure").small()).clicked() {
                     *action_trigger = Some(SshAction::InstallDure(row.host.clone()));
                 }
             } else {
-                if ui.button("Remove Dure").clicked() {
+                if ui.add(MaterialButton::outlined("Remove Dure").small()).clicked() {
                     *action_trigger = Some(SshAction::RemoveDure(row.host.clone()));
                 }
             }
@@ -301,6 +302,31 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     add_use_private_key: bool,
+
+    // Edit host dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_edit_dialog: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_original_host: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_host: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_password: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_private_key_path: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_port: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_use_password: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    edit_use_private_key: bool,
 }
 
 impl Default for SshTab {
@@ -317,6 +343,14 @@ impl Default for SshTab {
             add_port: "22".to_string(),
             add_use_password: false,
             add_use_private_key: false,
+            show_edit_dialog: false,
+            edit_original_host: String::new(),
+            edit_host: String::new(),
+            edit_password: String::new(),
+            edit_private_key_path: String::new(),
+            edit_port: "22".to_string(),
+            edit_use_password: false,
+            edit_use_private_key: false,
         }
     }
 }
@@ -367,11 +401,11 @@ impl SshTab {
                             host: host_config.host.clone(),
                             port: host_config.port,
                             platform_id: host_config.platform_name.clone(), // Platform connection (if any)
-                            ssh_connected: false, // TODO: Determine from actual connection state
-                            base_installed: false, // TODO: Determine from actual check
+                            ssh_connected: false, // Updated via event handlers
+                            base_installed: false, // Updated via event handlers
                             docker_installed: !host_config.docker_containers.is_empty(),
                             dure_installed: host_config.dure_wss_config.is_some(),
-                            ssh_private_key: None, // TODO: Load from keyring
+                            ssh_private_key: host_config.private_key_path.clone(),
                             drawer_open: false,
                             drawer_state,
                             operation_state: OperationState::Idle,
@@ -463,7 +497,225 @@ impl SshTab {
                 }
             }
 
-            // TODO: Handle other events for drawer state updates
+            ViewModelEvent::Ssh(SshEvent::RefreshCompleted { host, ssh_connected, base_installed, docker_installed, dure_installed }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.ssh_connected = ssh_connected;
+                    row.base_installed = base_installed;
+                    row.docker_installed = docker_installed;
+                    row.dure_installed = dure_installed;
+                    row.operation_state = OperationState::Completed {
+                        operation: "Refresh".to_string(),
+                        completed_at: chrono::Utc::now().timestamp(),
+                    };
+                }
+                dure_info!("Refresh completed for host {}", host);
+            }
+
+            ViewModelEvent::Ssh(SshEvent::SshCheckCompleted { host, connected, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.ssh_connected = connected;
+                    row.last_ssh_check = Some(SshCheckResult {
+                        connected,
+                        error: error.clone(),
+                        checked_at: chrono::Utc::now().timestamp(),
+                    });
+                    row.operation_state = if error.is_none() {
+                        OperationState::Completed {
+                            operation: "SSH Check".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "SSH Check".to_string(),
+                            error: error.unwrap(),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::BaseCheckCompleted { host, installed, missing_packages }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.base_installed = installed;
+                    row.last_base_check = Some(BaseCheckResult {
+                        installed,
+                        missing_packages,
+                        checked_at: chrono::Utc::now().timestamp(),
+                    });
+                    row.operation_state = OperationState::Completed {
+                        operation: "Base Check".to_string(),
+                        completed_at: chrono::Utc::now().timestamp(),
+                    };
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::BaseInstallCompleted { host, success, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.base_installed = success;
+                    row.operation_state = if success {
+                        OperationState::Completed {
+                            operation: "Install Base".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "Install Base".to_string(),
+                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+                if success {
+                    dure_info!("Base packages installed successfully on {}", host);
+                } else {
+                    dure_error!("Base package installation failed on {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerCheckCompleted { host, installed, version }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.docker_installed = installed;
+                    row.last_docker_check = Some(DockerCheckResult {
+                        installed,
+                        version,
+                        checked_at: chrono::Utc::now().timestamp(),
+                    });
+                    row.operation_state = OperationState::Completed {
+                        operation: "Docker Check".to_string(),
+                        completed_at: chrono::Utc::now().timestamp(),
+                    };
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerInstallCompleted { host, success, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.docker_installed = success;
+                    row.operation_state = if success {
+                        OperationState::Completed {
+                            operation: "Install Docker".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "Install Docker".to_string(),
+                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+                if success {
+                    dure_info!("Docker installed successfully on {}", host);
+                } else {
+                    dure_error!("Docker installation failed on {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerRemoveCompleted { host, success, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.docker_installed = !success;
+                    row.operation_state = if success {
+                        OperationState::Completed {
+                            operation: "Remove Docker".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "Remove Docker".to_string(),
+                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+                if success {
+                    dure_info!("Docker removed successfully from {}", host);
+                } else {
+                    dure_error!("Docker removal failed on {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.dure_installed = installed;
+                    row.last_dure_check = Some(DureCheckResult {
+                        installed,
+                        running,
+                        services,
+                        checked_at: chrono::Utc::now().timestamp(),
+                    });
+                    row.operation_state = OperationState::Completed {
+                        operation: "Dure Check".to_string(),
+                        completed_at: chrono::Utc::now().timestamp(),
+                    };
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureInstallCompleted { host, success, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.dure_installed = success;
+                    row.operation_state = if success {
+                        OperationState::Completed {
+                            operation: "Install Dure".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "Install Dure".to_string(),
+                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+                if success {
+                    dure_info!("Dure installed successfully on {}", host);
+                } else {
+                    dure_error!("Dure installation failed on {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureRemoveCompleted { host, success, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.dure_installed = !success;
+                    row.operation_state = if success {
+                        OperationState::Completed {
+                            operation: "Remove Dure".to_string(),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        }
+                    } else {
+                        OperationState::Failed {
+                            operation: "Remove Dure".to_string(),
+                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            failed_at: chrono::Utc::now().timestamp(),
+                        }
+                    };
+                }
+                if success {
+                    dure_info!("Dure removed successfully from {}", host);
+                } else {
+                    dure_error!("Dure removal failed on {}", host);
+                }
+            }
+
+            ViewModelEvent::Logs(crate::viewmodel::logs::LogEvent::LogsRetrieved { filter_id, lines }) => {
+                dure_info!("===== LogsRetrieved EVENT: filter_id='{}', {} lines =====", filter_id, lines.len());
+
+                // Debug: Show all current row hosts
+                let all_hosts: Vec<_> = self.rows.iter().map(|r| r.host.as_str()).collect();
+                dure_info!("Current SSH rows: {:?}", all_hosts);
+
+                // Update drawer logs for matching SSH host
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == filter_id) {
+                    dure_info!("✓ Found matching row for '{}'", filter_id);
+                    row.drawer_state.set_logs(lines.clone());
+                    dure_info!("✓ Set logs, drawer now has {} lines", row.drawer_state.logs.len());
+
+                    if !lines.is_empty() {
+                        dure_info!("First log line: '{}'", lines[0]);
+                    }
+                } else {
+                    dure_error!("✗ No matching row found for filter_id '{}'", filter_id);
+                }
+            }
+
             _ => {}
         }
     }
@@ -512,10 +764,13 @@ impl SshTab {
         }
 
         // SSH host table (header is inside render_table)
-        self.render_table(ui, profile);
+        self.render_table(ui, profile, vm.as_deref_mut());
 
         // Add host dialog
         self.render_add_dialog(ui, profile);
+
+        // Edit host dialog
+        self.render_edit_dialog(ui, profile);
     }
 
     /// Render SSH hosts table with drawer
@@ -523,6 +778,7 @@ impl SshTab {
         &mut self,
         ui: &mut egui::Ui,
         profile: &Option<crate::calc::profile::ProfileContext>,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use egui_material3::{data_table, MaterialButton};
 
@@ -538,7 +794,7 @@ impl SshTab {
             .id(table_id)
             .allow_selection(false)
             .allow_drawer(true)
-            .min_row_height(68.0)
+            .min_row_height(100.0)
             .drawer_row_height(500.0)
             .column("Host", 230.0 * width_ratio, false)
             .column("Operations", 510.0 * width_ratio, false);
@@ -548,41 +804,21 @@ impl SshTab {
             let row_for_drawer = row.clone();
             let row_for_actions = row.clone();
 
+            let row_for_ops = row.clone();
+            let mut action_trigger: Option<SshAction> = None;
+
             table = table.row(move |r| {
                 r.cell_widget(move |ui| {
-                        ui.label(&row_for_cells.host);
+                        render_host_column(ui, &row_for_cells);
                     })
                     .cell_widget(move |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.add(MaterialButton::outlined("Refresh").small()).clicked() {
-                                ui.data_mut(|d| {
-                                    d.insert_temp(
-                                        egui::Id::new("ssh_action_refresh"),
-                                        row_for_actions.host.clone(),
-                                    )
-                                });
-                            }
-
-                            if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
-                                ui.data_mut(|d| {
-                                    d.insert_temp(
-                                        egui::Id::new("ssh_action_delete"),
-                                        row_for_actions.host.clone(),
-                                    )
-                                });
-                            }
-
-                            if row_for_actions.docker_installed {
-                                if ui.add(MaterialButton::outlined("Restart Docker").small()).clicked() {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("ssh_action_restart_docker"),
-                                            row_for_actions.host.clone(),
-                                        )
-                                    });
-                                }
-                            }
-                        });
+                        let mut local_action = None;
+                        render_operations_column(ui, &row_for_ops, &mut local_action);
+                        if let Some(action) = local_action {
+                            ui.data_mut(|d| {
+                                d.insert_temp(egui::Id::new("ssh_pending_action"), action);
+                            });
+                        }
                     })
                     .drawer(move |ui| {
                         use crate::ui_tabs::ssh_drawer;
@@ -619,20 +855,75 @@ impl SshTab {
         });
 
         // Handle pending actions
-        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_refresh"))) {
-            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_refresh")));
-            // Refresh action - toggle drawer or reload data
-            dure_info!("Refreshing SSH host: {}", host);
-        }
+        if let Some(action) = ui.data(|d| d.get_temp::<SshAction>(egui::Id::new("ssh_pending_action"))) {
+            ui.data_mut(|d| d.remove::<SshAction>(egui::Id::new("ssh_pending_action")));
 
-        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_delete"))) {
-            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_delete")));
-            self.delete_host(&host, profile);
-        }
-
-        if let Some(host) = ui.data(|d| d.get_temp::<String>(egui::Id::new("ssh_action_restart_docker"))) {
-            ui.data_mut(|d| d.remove::<String>(egui::Id::new("ssh_action_restart_docker")));
-            self.restart_docker(&host, profile);
+            match action {
+                SshAction::Refresh(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.refresh_ssh_host(host.clone());
+                        dure_info!("Refresh triggered for {}", host);
+                    }
+                }
+                SshAction::SshCheck(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.ssh_check(host.clone());
+                        dure_info!("SSH check triggered for {}", host);
+                    }
+                }
+                SshAction::Edit(host) => {
+                    self.start_edit_host(&host, profile);
+                }
+                SshAction::Delete(host) => {
+                    self.delete_host(&host, profile);
+                }
+                SshAction::CheckBase(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.check_base(host.clone());
+                        dure_info!("Base check triggered for {}", host);
+                    }
+                }
+                SshAction::InstallBase(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.install_base(host.clone());
+                        dure_info!("Base installation triggered for {}", host);
+                    }
+                }
+                SshAction::CheckDocker(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.check_docker(host.clone());
+                        dure_info!("Docker check triggered for {}", host);
+                    }
+                }
+                SshAction::InstallDocker(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.install_docker_daemon(host.clone());
+                        dure_info!("Docker installation triggered for {}", host);
+                    }
+                }
+                SshAction::RemoveDocker(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.remove_docker(host.clone());
+                        dure_info!("Docker removal triggered for {}", host);
+                    }
+                }
+                SshAction::CheckDure(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.check_dure(host.clone());
+                        dure_info!("Dure check triggered for {}", host);
+                    }
+                }
+                SshAction::InstallDure(host) => {
+                    dure_info!("Install Dure on {} (env dialog not implemented)", host);
+                    // TODO: Show .env configuration dialog before calling vm.install_dure()
+                }
+                SshAction::RemoveDure(host) => {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.remove_dure(host.clone());
+                        dure_info!("Dure removal triggered for {}", host);
+                    }
+                }
+            }
         }
 
         // Handle drawer tab switch
@@ -643,6 +934,31 @@ impl SshTab {
         }) {
             if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                 row.drawer_state.switch_tab(new_tab);
+
+                // Load data when switching to Logs or Operations tabs
+                match new_tab {
+                    DrawerTab::Logs => {
+                        // Request logs from log system
+                        dure_info!("===== LOGS TAB SWITCH: Requesting logs for host {} =====", host);
+                        if let Some(ref vm) = vm {
+                            match vm.get_ssh_logs(host.clone()) {
+                                Ok(_) => dure_info!("✓ Successfully sent GetLogs request for {}", host),
+                                Err(e) => dure_error!("✗ Failed to send GetLogs request: {}", e),
+                            }
+                        } else {
+                            dure_error!("✗ No ViewModel available");
+                        }
+                    }
+                    DrawerTab::Operations => {
+                        // Load operations from database
+                        self.load_operations_for_host(&host);
+                        if let Some(updated_row) = self.rows.iter_mut().find(|r| r.host == host) {
+                            updated_row.drawer_state.set_loading(false);
+                        }
+                    }
+                    _ => {}
+                }
+
                 ui.data_mut(|d| {
                     d.remove::<(String, DrawerTab)>(egui::Id::new("ssh_drawer_tab_switch").with(&host));
                 });
@@ -764,7 +1080,7 @@ impl SshTab {
                         return;
                     }
 
-                    // TODO: Log audit with audit::push_gui()
+                    dure_info!("SSH host '{}' added successfully", self.add_host);
 
                     // Reload rows
                     self.loaded = false;
@@ -788,6 +1104,166 @@ impl SshTab {
         self.add_use_private_key = false;
     }
 
+    /// Start editing an SSH host
+    fn start_edit_host(&mut self, host: &str, profile: &Option<crate::calc::profile::ProfileContext>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            match load_config(profile) {
+                Ok((app_config, _)) => {
+                    if let Some(host_config) = app_config.ssh_hosts.iter().find(|h| h.host == host) {
+                        self.edit_original_host = host.to_string();
+                        self.edit_host = host_config.host.clone();
+                        self.edit_port = host_config.port.to_string();
+                        self.edit_use_password = host_config.password.is_some();
+                        self.edit_password = host_config.password.clone().unwrap_or_default();
+                        self.edit_use_private_key = host_config.private_key_path.is_some();
+                        self.edit_private_key_path = host_config.private_key_path.clone().unwrap_or_default();
+                        self.show_edit_dialog = true;
+                        dure_info!("Started editing host {}", host);
+                    }
+                }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Render edit SSH host dialog
+    fn render_edit_dialog(
+        &mut self,
+        ui: &mut egui::Ui,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+    ) {
+        if !self.show_edit_dialog {
+            return;
+        }
+
+        let mut open = self.show_edit_dialog;
+
+        egui::Window::new("Edit SSH Host")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ui.ctx(), |ui| {
+                ui.label("Edit SSH host connection:");
+                ui.add_space(8.0);
+
+                ui.label("Host (IP or domain):");
+                ui.text_edit_singleline(&mut self.edit_host);
+                ui.add_space(8.0);
+
+                ui.label("Port:");
+                ui.text_edit_singleline(&mut self.edit_port);
+                ui.add_space(8.0);
+
+                ui.checkbox(&mut self.edit_use_password, "Use password authentication");
+                if self.edit_use_password {
+                    ui.label("Password:");
+                    ui.add(egui::TextEdit::singleline(&mut self.edit_password).password(true));
+                }
+                ui.add_space(8.0);
+
+                ui.checkbox(&mut self.edit_use_private_key, "Use private key authentication");
+                if self.edit_use_private_key {
+                    ui.label("Private key path:");
+                    ui.text_edit_singleline(&mut self.edit_private_key_path);
+                }
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.add(MaterialButton::filled("Save")).clicked() {
+                        self.save_edit_host(profile);
+                    }
+                    if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                        self.show_edit_dialog = false;
+                        self.reset_edit_dialog();
+                    }
+                });
+            });
+
+        if !open {
+            self.show_edit_dialog = false;
+        }
+    }
+
+    /// Save edited SSH host
+    fn save_edit_host(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let port = match self.edit_port.parse::<u16>() {
+                Ok(p) => p,
+                Err(e) => {
+                    self.load_error = Some(format!("Invalid port '{}': {}", self.edit_port, e));
+                    return;
+                }
+            };
+
+            match load_config(profile) {
+                Ok((mut app_config, config_path)) => {
+                    if let Some(host_config) = app_config.ssh_hosts.iter_mut().find(|h| h.host == self.edit_original_host) {
+                        host_config.host = self.edit_host.clone();
+                        host_config.port = port;
+                        host_config.password = if self.edit_use_password {
+                            Some(self.edit_password.clone())
+                        } else {
+                            None
+                        };
+                        host_config.private_key_path = if self.edit_use_private_key {
+                            Some(self.edit_private_key_path.clone())
+                        } else {
+                            None
+                        };
+
+                        if let Err(e) = app_config.save(&config_path) {
+                            self.load_error = Some(format!("Failed to save config: {}", e));
+                            return;
+                        }
+
+                        self.show_edit_dialog = false;
+                        self.reset_edit_dialog();
+                        self.loaded = false;
+                        dure_info!("Saved changes to SSH host {}", self.edit_host);
+                    }
+                }
+                Err(e) => {
+                    self.load_error = Some(format!("Failed to load config: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Reset edit dialog fields
+    fn reset_edit_dialog(&mut self) {
+        self.edit_original_host.clear();
+        self.edit_host.clear();
+        self.edit_password.clear();
+        self.edit_private_key_path.clear();
+        self.edit_port = "22".to_string();
+        self.edit_use_password = false;
+        self.edit_use_private_key = false;
+    }
+
+    /// Load operation logs for SSH host from database
+    fn load_operations_for_host(&mut self, host: &str) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use crate::calc::db;
+            use crate::storage::models::opslog::list_by_project;
+
+            // Use SSH host as project_id for filtering
+            if let Ok(mut conn) = std::panic::catch_unwind(|| db::establish_connection()) {
+                if let Ok(ops) = list_by_project(&mut conn, host, 50) {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.drawer_state.set_operations(ops);
+                    }
+                } else {
+                    dure_error!("Failed to load operations for host {}", host);
+                }
+            }
+        }
+    }
+
     /// Delete SSH host
     fn delete_host(&mut self, host: &str, profile: &Option<crate::calc::profile::ProfileContext>) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -801,7 +1277,7 @@ impl SshTab {
                         return;
                     }
 
-                    // TODO: Log audit with audit::push_gui()
+                    dure_info!("SSH host '{}' deleted successfully", host);
 
                     self.loaded = false;
                 }
@@ -810,17 +1286,6 @@ impl SshTab {
                 }
             }
         }
-    }
-
-    /// Restart Docker on SSH host
-    fn restart_docker(
-        &mut self,
-        host: &str,
-        _profile: &Option<crate::calc::profile::ProfileContext>,
-    ) {
-        dure_info!("Restarting Docker on {}", host);
-        // TODO: Send command to SSH actor to restart Docker
-        // TODO: Log audit with audit::push_gui()
     }
 }
 

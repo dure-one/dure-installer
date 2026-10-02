@@ -20,4 +20,3 @@ pub mod profile;
 pub mod session;
 pub mod site;
 pub mod ssh;
-pub mod ssh_ops;

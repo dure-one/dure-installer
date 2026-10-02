@@ -644,6 +644,82 @@ table inet filter {
     ) -> Result<()> {
         anyhow::bail!("Port close not yet implemented")
     }
+
+    /// Check which base packages are missing
+    pub async fn check_base_packages(host_config: &SshHostConfig) -> Result<Vec<String>> {
+        let required_packages = [
+            "extrepo",
+            "git",
+            "iptables",
+            "nftables",
+            "bpfcc-tools",
+            "moreutils",
+        ];
+
+        let mut missing = Vec::new();
+
+        for pkg in &required_packages {
+            let cmd = format!("dpkg -l | grep -q '^ii  {}' && echo installed || echo missing", pkg);
+            let output = execute_command(host_config, &cmd, None).await?;
+
+            if output.trim() == "missing" {
+                missing.push(pkg.to_string());
+            }
+        }
+
+        Ok(missing)
+    }
+
+    /// Check Docker installation and return version
+    pub async fn check_docker_version(host_config: &SshHostConfig) -> Result<Option<String>> {
+        let cmd = "docker --version 2>/dev/null || echo not_installed";
+        let output = execute_command(host_config, cmd, None).await?;
+
+        if output.trim() == "not_installed" {
+            Ok(None)
+        } else {
+            let version = output
+                .split_whitespace()
+                .nth(2)
+                .map(|v| v.trim_end_matches(',').to_string());
+            Ok(version)
+        }
+    }
+
+    /// Check if Dure mycart is installed and running
+    pub async fn check_dure_mycart(host_config: &SshHostConfig) -> Result<(bool, bool, Vec<String>)> {
+        // Check if repo exists
+        let check_repo = "test -d /srv/dure-mycart && echo exists || echo missing";
+        let repo_output = execute_command(host_config, check_repo, None).await?;
+
+        if repo_output.trim() == "missing" {
+            return Ok((false, false, vec![]));
+        }
+
+        // Check docker compose status
+        let check_compose = "cd /srv/dure-mycart/xmpp-proxy-stack && docker compose ps --format '{{.Service}}:{{.State}}' 2>/dev/null || echo error";
+        let compose_output = execute_command(host_config, check_compose, None).await?;
+
+        if compose_output.trim() == "error" {
+            return Ok((true, false, vec![]));
+        }
+
+        // Parse running services
+        let mut services = Vec::new();
+        let mut all_running = false;
+
+        for line in compose_output.lines() {
+            if let Some((service, state)) = line.split_once(':') {
+                if state.contains("running") || state.contains("up") {
+                    services.push(service.to_string());
+                }
+            }
+        }
+
+        all_running = !services.is_empty();
+
+        Ok((true, all_running, services))
+    }
 }
 
 // Re-export desktop implementation
@@ -782,6 +858,21 @@ pub fn port_open(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> R
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
 pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
     anyhow::bail!("Port management not supported on this platform")
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_base_packages(_host_config: &SshHostConfig) -> Result<Vec<String>> {
+    Ok(vec![])
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_docker_version(_host_config: &SshHostConfig) -> Result<Option<String>> {
+    Ok(None)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn check_dure_mycart(_host_config: &SshHostConfig) -> Result<(bool, bool, Vec<String>)> {
+    Ok((false, false, vec![]))
 }
 
 #[cfg(test)]

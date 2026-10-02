@@ -217,6 +217,71 @@ impl SshActor {
         }
     }
 
+    fn extract_host_id(cmd: &SshCommand) -> Option<String> {
+        match cmd {
+            SshCommand::AddHost { name, .. } => Some(name.clone()),
+            SshCommand::DeleteHost { name } => Some(name.clone()),
+            SshCommand::TestConnection { name } => Some(name.clone()),
+            SshCommand::InitHost { name } => Some(name.clone()),
+            SshCommand::DockerPull { host_name, .. } => Some(host_name.clone()),
+            SshCommand::DockerRun { host_name, .. } => Some(host_name.clone()),
+            SshCommand::DockerStop { host_name, .. } => Some(host_name.clone()),
+            SshCommand::DockerList { host_name } => Some(host_name.clone()),
+            SshCommand::PortOpen { host_name, .. } => Some(host_name.clone()),
+            SshCommand::PortClose { host_name, .. } => Some(host_name.clone()),
+            SshCommand::PortList { host_name } => Some(host_name.clone()),
+            SshCommand::DeployDureWss { host_name, .. } => Some(host_name.clone()),
+            SshCommand::GetLinuxStatus { name } => Some(name.clone()),
+            SshCommand::CheckHostHealth { name, .. } => Some(name.clone()),
+            SshCommand::InspectDockerImage { host_name, .. } => Some(host_name.clone()),
+            SshCommand::Refresh { host } => Some(host.clone()),
+            SshCommand::SshCheck { host } => Some(host.clone()),
+            SshCommand::CheckBase { host } => Some(host.clone()),
+            SshCommand::InstallBase { host } => Some(host.clone()),
+            SshCommand::CheckDocker { host } => Some(host.clone()),
+            SshCommand::InstallDockerDaemon { host } => Some(host.clone()),
+            SshCommand::RemoveDocker { host } => Some(host.clone()),
+            SshCommand::CheckDure { host } => Some(host.clone()),
+            SshCommand::InstallDure { host, .. } => Some(host.clone()),
+            SshCommand::RemoveDure { host } => Some(host.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::InstallDockerImage { host_name, .. } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::RemoveDockerContainer { host_name, .. } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::InstallDocker { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::GetDockerStatus { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::UninstallDocker { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::InstallAnsible { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::GetAnsibleStatus { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::UninstallAnsible { name } => Some(name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::ListDockerContainers { host_name } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::RemoveDockerContainers { host_name, .. } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::ValidateAnsibleRole { .. } => None,
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::InstallAnsibleRole { host_name, .. } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::RemoveAnsibleRole { host_name, .. } => Some(host_name.clone()),
+            #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+            SshCommand::ListAnsibleRoles { host_name } => Some(host_name.clone()),
+            SshCommand::InstallDureWssService { host_name, .. } => Some(host_name.clone()),
+            SshCommand::StartDureWss { host_name } => Some(host_name.clone()),
+            SshCommand::StopDureWss { host_name } => Some(host_name.clone()),
+            SshCommand::RestartDureWss { host_name } => Some(host_name.clone()),
+            SshCommand::UninstallDureWss { host_name } => Some(host_name.clone()),
+            SshCommand::ListHosts => None,
+            SshCommand::Drawer(_) => None,
+        }
+    }
+
     async fn handle_command(&mut self, cmd: SshCommand) -> anyhow::Result<()> {
         let operation = format!("{:?}", cmd);
         dure_debug!(" SSH Actor: Received command: {}", operation);
@@ -487,20 +552,10 @@ impl SshActor {
                 Ok(())
             }
             SshCommand::SshCheck { host } => {
-                self.send_event(SshEvent::SshCheckCompleted {
-                    host: host.clone(),
-                    connected: false,
-                    error: Some("Not implemented".to_string()),
-                }).await;
-                Ok(())
+                self.handle_ssh_check(host).await
             }
             SshCommand::CheckBase { host } => {
-                self.send_event(SshEvent::BaseCheckCompleted {
-                    host: host.clone(),
-                    installed: false,
-                    missing_packages: vec![],
-                }).await;
-                Ok(())
+                self.handle_check_base(host).await
             }
             SshCommand::InstallBase { host } => {
                 self.send_event(SshEvent::BaseInstallCompleted {
@@ -511,12 +566,7 @@ impl SshActor {
                 Ok(())
             }
             SshCommand::CheckDocker { host } => {
-                self.send_event(SshEvent::DockerCheckCompleted {
-                    host: host.clone(),
-                    installed: false,
-                    version: None,
-                }).await;
-                Ok(())
+                self.handle_check_docker(host).await
             }
             SshCommand::InstallDockerDaemon { host } => {
                 self.send_event(SshEvent::DockerInstallCompleted {
@@ -535,13 +585,7 @@ impl SshActor {
                 Ok(())
             }
             SshCommand::CheckDure { host } => {
-                self.send_event(SshEvent::DureCheckCompleted {
-                    host: host.clone(),
-                    installed: false,
-                    running: false,
-                    services: vec![],
-                }).await;
-                Ok(())
+                self.handle_check_dure(host).await
             }
             SshCommand::InstallDure { host, env_config: _ } => {
                 self.send_event(SshEvent::DureInstallCompleted {
@@ -2288,8 +2332,6 @@ impl SshActor {
     }
 
     async fn handle_refresh(&mut self, host: String) -> SshEvent {
-        use crate::calc::ssh_ops;
-
         // Start operation logging
         let op_id = match self.start_operation_log(&host, "refresh").await {
             Ok(id) => id,
@@ -2300,38 +2342,104 @@ impl SshActor {
             }
         };
 
+        // Load host config
+        let host_config = match self.load_host_config(&host) {
+            Ok(cfg) => cfg,
+            Err(_) => {
+                return SshEvent::RefreshCompleted {
+                    host,
+                    ssh_connected: false,
+                    base_installed: false,
+                    docker_installed: false,
+                    dure_installed: false,
+                };
+            }
+        };
+
         // Run 4 checks
-        let ssh_result = ssh_ops::check_ssh_connection(&host, 22).await;
-        let base_result = if ssh_result.is_ok() {
-            ssh_ops::check_base_packages(&host).await.map(|missing| missing.is_empty())
+        let ssh_result = crate::calc::ssh::test_connection(&host_config, None).await;
+        let ssh_connected = ssh_result.as_ref().map(|r| r.success).unwrap_or(false);
+
+        let base_result = if ssh_connected {
+            crate::calc::ssh::check_base_packages(&host_config).await.map(|missing| missing.is_empty())
         } else {
             Ok(false)
         };
-        let docker_result = if ssh_result.is_ok() {
-            ssh_ops::check_docker_installed(&host).await.map(|v| v.is_some())
+        let docker_result = if ssh_connected {
+            crate::calc::ssh::check_docker_version(&host_config).await.map(|v| v.is_some())
         } else {
             Ok(false)
         };
-        let dure_result = if ssh_result.is_ok() {
-            ssh_ops::check_dure_installed(&host).await.map(|(installed, _, _)| installed)
+        let dure_result = if ssh_connected {
+            crate::calc::ssh::check_dure_mycart(&host_config).await.map(|(installed, _, _)| installed)
         } else {
             Ok(false)
         };
 
         // Complete operation log
-        let success = ssh_result.is_ok();
         if op_id >= 0 {
-            if let Err(e) = self.complete_operation_log(op_id, success, None::<String>).await {
+            if let Err(e) = self.complete_operation_log(op_id, ssh_connected, None::<String>).await {
                 dure_warn!("Failed to update operation log: {}", e);
             }
         }
 
         SshEvent::RefreshCompleted {
             host,
-            ssh_connected: ssh_result.unwrap_or(false),
+            ssh_connected,
             base_installed: base_result.unwrap_or(false),
             docker_installed: docker_result.unwrap_or(false),
             dure_installed: dure_result.unwrap_or(false),
+        }
+    }
+
+    async fn handle_ssh_check(&mut self, host: String) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Checking SSH connection to {}", host);
+
+        // Start operation logging
+        let op_id = match self.start_operation_log(&host, "ssh_check").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
+                -1
+            }
+        };
+
+        // Check SSH connection
+        let host_config = self.load_host_config(&host)?;
+        let result = crate::calc::ssh::test_connection(&host_config, None).await;
+
+        match result {
+            Ok(conn_result) => {
+                let connected = conn_result.success;
+                let error = if !connected { Some(conn_result.message.clone()) } else { None };
+
+                dure_info!(project_id = host.clone(), "SSH connection check: {}", if connected { "✓ Connected" } else { "✗ Failed" });
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, connected, error.clone()).await;
+                }
+
+                self.send_event(SshEvent::SshCheckCompleted {
+                    host,
+                    connected,
+                    error,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "SSH connection check failed: {}", e);
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
+                }
+
+                self.send_event(SshEvent::SshCheckCompleted {
+                    host,
+                    connected: false,
+                    error: Some(e.to_string()),
+                }).await;
+                Ok(())
+            }
         }
     }
 
@@ -2341,6 +2449,117 @@ impl SshActor {
         match self.event_tx.send(ViewModelEvent::Ssh(event.clone())).await {
             Ok(_) => dure_info!(" SSH Actor: {}", event_desc),
             Err(e) => dure_warn!(" SSH Actor: Failed to send event ({}): {}", event_desc, e),
+        }
+    }
+
+    async fn handle_check_base(&mut self, host: String) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Checking base packages on {}", host);
+
+        let host_config = self.load_host_config(&host)?;
+        let result = crate::calc::ssh::check_base_packages(&host_config).await;
+
+        match result {
+            Ok(missing) => {
+                let installed = missing.is_empty();
+                let status = if installed {
+                    "✓ All installed".to_string()
+                } else {
+                    format!("✗ Missing: {:?}", missing)
+                };
+                dure_info!(project_id = host.clone(), "Base packages check: {}", status);
+
+                self.send_event(SshEvent::BaseCheckCompleted {
+                    host,
+                    installed,
+                    missing_packages: missing,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "Base check failed: {}", e);
+
+                self.send_event(SshEvent::BaseCheckCompleted {
+                    host,
+                    installed: false,
+                    missing_packages: vec![],
+                }).await;
+                Err(e)
+            }
+        }
+    }
+
+    async fn handle_check_docker(&mut self, host: String) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Checking Docker on {}", host);
+
+        let host_config = self.load_host_config(&host)?;
+        let result = crate::calc::ssh::check_docker_version(&host_config).await;
+
+        match result {
+            Ok(version) => {
+                let installed = version.is_some();
+                let status = if installed {
+                    format!("✓ Installed ({})", version.as_ref().unwrap())
+                } else {
+                    "✗ Not installed".to_string()
+                };
+                dure_info!(project_id = host.clone(), "Docker check: {}", status);
+
+                self.send_event(SshEvent::DockerCheckCompleted {
+                    host,
+                    installed,
+                    version,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "Docker check failed: {}", e);
+
+                self.send_event(SshEvent::DockerCheckCompleted {
+                    host,
+                    installed: false,
+                    version: None,
+                }).await;
+                Err(e)
+            }
+        }
+    }
+
+    async fn handle_check_dure(&mut self, host: String) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Checking Dure on {}", host);
+
+        let host_config = self.load_host_config(&host)?;
+        let result = crate::calc::ssh::check_dure_mycart(&host_config).await;
+
+        match result {
+            Ok((installed, running, services)) => {
+                let status = if installed && running {
+                    "✓ Installed and running"
+                } else if installed {
+                    "⚠ Installed but not running"
+                } else {
+                    "✗ Not installed"
+                };
+                dure_info!(project_id = host.clone(), "Dure check: {}", status);
+
+                self.send_event(SshEvent::DureCheckCompleted {
+                    host,
+                    installed,
+                    running,
+                    services,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "Dure check failed: {}", e);
+
+                self.send_event(SshEvent::DureCheckCompleted {
+                    host,
+                    installed: false,
+                    running: false,
+                    services: vec![],
+                }).await;
+                Err(e)
+            }
         }
     }
 

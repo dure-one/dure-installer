@@ -71,15 +71,18 @@ impl Default for LogBuffer {
 #[derive(Debug, Clone)]
 pub enum LogCommand {
     AppendLog {
-        project_id: String,
+        host_id: String,
         level: LogLevel,
         message: String,
     },
     GetLogs {
+        host_id: String,
+    },
+    GetProjectLogs {
         project_id: String,
     },
     ClearLogs {
-        project_id: String,
+        host_id: String,
     },
     ListProjects,
 }
@@ -87,7 +90,7 @@ pub enum LogCommand {
 #[derive(Debug, Clone)]
 pub enum LogEvent {
     LogsRetrieved {
-        project_id: String,
+        filter_id: String,
         lines: Vec<String>,
     },
     ProjectList {

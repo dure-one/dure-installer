@@ -290,10 +290,10 @@ impl ViewModel {
     #[cfg(feature = "gui")]
     fn apply_event(&mut self, event: &ViewModelEvent, _ctx: Option<&egui::Context>) {
         // Forward LogEvent::LogsRetrieved to DrawerActor
-        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { project_id, lines }) = event {
+        if let ViewModelEvent::Logs(logs::LogEvent::LogsRetrieved { filter_id, lines }) = event {
             dure_debug!(
-                "[VM_FORWARD] Received LogsRetrieved - project_id='{}', {} lines",
-                project_id,
+                "[VM_FORWARD] Received LogsRetrieved - filter_id='{}', {} lines",
+                filter_id,
                 lines.len()
             );
 
@@ -302,7 +302,7 @@ impl ViewModel {
             }
 
             let cmd = platform::DrawerCommand::UpdateLogs {
-                project_id: project_id.clone(),
+                project_id: filter_id.clone(),
                 lines: lines.clone(),
             };
 
@@ -932,6 +932,85 @@ impl ViewModel {
     #[deprecated(note = "Use start_dure_wss/stop_dure_wss methods instead")]
     pub fn get_dure_wss_status(&self, _host: String) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    // SSH Operation Commands
+
+    /// Refresh SSH host status (SSH, Base, Docker, Dure)
+    pub fn refresh_ssh_host(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::Refresh { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check SSH connection
+    pub fn ssh_check(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::SshCheck { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if base packages are installed
+    pub fn check_base(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckBase { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install base packages
+    pub fn install_base(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallBase { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if Docker is installed
+    pub fn check_docker(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckDocker { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install Docker daemon
+    pub fn install_docker_daemon(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDockerDaemon { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Remove Docker daemon
+    pub fn remove_docker(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::RemoveDocker { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Check if Dure is installed
+    pub fn check_dure(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::CheckDure { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Install Dure with environment configuration
+    pub fn install_dure(&self, host: String, env_config: std::collections::HashMap<String, String>) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::InstallDure { host, env_config })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Remove Dure
+    pub fn remove_dure(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::RemoveDure { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Get logs for SSH host (uses host_id)
+    pub fn get_ssh_logs(&self, host: String) -> anyhow::Result<()> {
+        self.logs_tx
+            .send_blocking(logs::LogCommand::GetLogs { host_id: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
     // NS commands
