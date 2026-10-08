@@ -51,6 +51,7 @@ pub enum SshCommand {
     },
 
     // Docker Lifecycle
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     InstallDockerImage {
         host_name: String,
         container_name: String,
@@ -59,15 +60,18 @@ pub enum SshCommand {
         ports: Vec<(u16, u16)>,
         env: Vec<(String, String)>,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     RemoveDockerContainer {
         host_name: String,
         container_name: String,
     },
     /// Remove multiple Docker containers (batch operation)
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     RemoveDockerContainers {
         host_name: String,
         container_names: Vec<String>,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     ListDockerContainers {
         host_name: String,
     },
@@ -79,9 +83,11 @@ pub enum SshCommand {
     },
 
     // Ansible Lifecycle
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     ValidateAnsibleRole {
         role: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     InstallAnsibleRole {
         host_name: String,
         instance_name: String,
@@ -89,10 +95,12 @@ pub enum SshCommand {
         variables: Vec<(String, String)>,
         ports: Vec<u16>,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     RemoveAnsibleRole {
         host_name: String,
         instance_name: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     ListAnsibleRoles {
         host_name: String,
     },
@@ -145,22 +153,28 @@ pub enum SshCommand {
         name: String,
     },
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     InstallDocker {
         name: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     GetDockerStatus {
         name: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     UninstallDocker {
         name: String,
     },
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     InstallAnsible {
         name: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     GetAnsibleStatus {
         name: String,
     },
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     UninstallAnsible {
         name: String,
     },
