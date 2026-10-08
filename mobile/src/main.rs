@@ -118,7 +118,7 @@ fn main() -> Result<()> {
     //             dure_info!("Verifying binary attestation for: {}", exe_path.display());
     //             match dure::attestation::verify_current_binary(
     //                 exe_path.to_str().unwrap_or(""),
-    //                 "nikescar",  // TODO: Replace with actual org name
+    //                 "dure-one",  // TODO: Replace with actual org name
     //                 "dure",
     //             ) {
     //                 Ok(result) => {

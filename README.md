@@ -239,7 +239,7 @@ Local Key Management and Exchange(Keepass)
 | `key save` | save keychain to keypass format | `dure save export xxx.kdb` |
 | `key load` | load keychain from keypass format | `dure load import xxx.kdb` |
 | `key status` | list all keys | `dure key status` |
-| `key add` | Add key to current keychain | `dure key add www.dure.app nikescar@gmail.com password` |
+| `key add` | Add key to current keychain | `dure key add www.dure.app admin@dure.co password` |
 | `key del` | Delete key from current keychain | `dure key del www.dure.app` |
 
 ```

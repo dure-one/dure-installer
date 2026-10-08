@@ -7,8 +7,8 @@ set -u
 # Configuration
 # Allow users to override with their own token via environment variable
 GITHUB_TOKEN="${GITHUB_TOKEN:-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}"
-REPO_OWNER="nikescar"
-REPO_NAME="dure"
+REPO_OWNER="dure-one"
+REPO_NAME="dure-installer"
 CHANNEL="${DURE_CHANNEL:-stable}"
 VARIANT="${DURE_VARIANT:-headless}"  # headless or gui
 QUIET="${DURE_QUIET:-no}"

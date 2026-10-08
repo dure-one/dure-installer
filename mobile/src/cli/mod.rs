@@ -219,7 +219,7 @@ pub enum KeyCommands {
     Add {
         /// Domain/URL for the key (e.g., www.dure.app)
         domain: String,
-        /// Username/email (e.g., nikescar@gmail.com)
+        /// Username/email (e.g., admin@dure.co)
         username: String,
         /// Password/credential
         password: String,

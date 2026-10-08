@@ -1,5 +1,5 @@
 # Makefile for building Dure Flatpak
-APP_ID = pe.nikescar.dure
+APP_ID = app.dure.installer
 MANIFEST = $(APP_ID).yaml
 BRANCH = master
 REPO_DIR = repo

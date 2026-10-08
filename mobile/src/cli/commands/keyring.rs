@@ -148,7 +148,7 @@ pub fn execute_key_status() -> Result<()> {
 /// # Arguments
 ///
 /// * `domain` - Domain/URL for the key (e.g., "www.dure.app")
-/// * `username` - Username/email (e.g., "nikescar@gmail.com")
+/// * `username` - Username/email (e.g., "admin@dure.co")
 /// * `password` - The password/credential
 pub fn execute_key_add(domain: String, username: String, password: String) -> Result<()> {
     dure_info!("Adding key to keyring...");

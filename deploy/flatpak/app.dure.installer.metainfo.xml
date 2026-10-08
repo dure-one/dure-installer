@@ -44,9 +44,9 @@
     <keyword>products</keyword>
     <keyword>orders</keyword>
   </keywords>
-  <url type="homepage">https://github.com/nikescar/dure</url>
-  <url type="bugtracker">https://github.com/nikescar/dure/issues</url>
-  <url type="vcs-browser">https://github.com/nikescar/dure</url>
+  <url type="homepage">https://github.com/dure-one/dure-installer</url>
+  <url type="bugtracker">https://github.com/dure-one/dure-installer/issues</url>
+  <url type="vcs-browser">https://github.com/dure-one/dure-installer</url>
   <launchable type="desktop-id">app.dure.installer.desktop</launchable>
   <provides>
     <binary>dure</binary>

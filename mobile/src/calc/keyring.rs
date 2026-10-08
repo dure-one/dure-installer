@@ -15,7 +15,7 @@
 //!
 //! Each key is stored as a KeePass entry with:
 //! - **Title**: domain/URL (e.g., "www.dure.app")
-//! - **UserName**: username/email (e.g., "nikescar@gmail.com")
+//! - **UserName**: username/email (e.g., "admin@dure.co")
 //! - **Password**: the actual password/credential (protected)
 //! - **created_at**: Unix timestamp (custom field)
 //!

@@ -410,4 +410,4 @@ git push origin main
 
 Issues or questions:
 - GitHub: https://github.com/dure-one/dure-installer/issues
-- Email: nikescar@gmail.com
+- Email: admin@dure.co
