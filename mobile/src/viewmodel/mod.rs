@@ -719,36 +719,42 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn install_docker(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::InstallDocker { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn get_docker_status(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::GetDockerStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn uninstall_docker(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::UninstallDocker { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn install_ansible(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::InstallAnsible { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn get_ansible_status(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::GetAnsibleStatus { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn uninstall_ansible(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::UninstallAnsible { name: host })
@@ -784,6 +790,7 @@ impl ViewModel {
     }
 
     /// Install Docker image on host (auto-installs Docker if needed)
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn install_docker_image(
         &self,
         host: String,
@@ -806,6 +813,7 @@ impl ViewModel {
     }
 
     /// Remove Docker container from host
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn remove_docker_container(&self, host: String, container_name: String) {
         let _ = self
             .ssh_tx
@@ -816,6 +824,7 @@ impl ViewModel {
     }
 
     /// Remove multiple Docker containers in batch
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn remove_docker_containers(
         &self,
         host: String,
@@ -830,6 +839,7 @@ impl ViewModel {
     }
 
     /// List Docker containers on host
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn list_docker_containers(&self, host: String) {
         let _ = self
             .ssh_tx
@@ -839,6 +849,7 @@ impl ViewModel {
     // Ansible Lifecycle Management
 
     /// Validate Ansible role and fetch metadata from Galaxy
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn validate_ansible_role(&self, role: String) {
         let _ = self
             .ssh_tx
@@ -846,6 +857,7 @@ impl ViewModel {
     }
 
     /// Install Ansible role on host (auto-installs Ansible if needed)
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn install_ansible_role(
         &self,
         host: String,
@@ -866,6 +878,7 @@ impl ViewModel {
     }
 
     /// Remove Ansible role from host
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn remove_ansible_role(&self, host: String, instance_name: String) {
         let _ = self
             .ssh_tx
@@ -876,6 +889,7 @@ impl ViewModel {
     }
 
     /// List Ansible roles installed on host
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     pub fn list_ansible_roles(&self, host: String) {
         let _ = self
             .ssh_tx
