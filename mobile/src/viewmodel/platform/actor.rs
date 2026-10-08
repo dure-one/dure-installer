@@ -212,7 +212,7 @@ impl PlatformActor {
     }
 
     /// Helper to get config file path (Desktop)
-    #[cfg(not(target_arch = "wasm32"))]#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
+    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     fn get_config_path() -> anyhow::Result<PathBuf> {
         Ok(crate::get_app_config_dir()?.join("config.yml"))
     }
