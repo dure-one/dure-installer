@@ -139,3 +139,4 @@ crates/go-webauthn/bin/
 *.core
 rust-analyzer.core
 mobile/migrations/.diesel_lock
+scripts/certificate*
