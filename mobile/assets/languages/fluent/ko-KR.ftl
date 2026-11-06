@@ -1,4 +1,5 @@
 app-title = Dure
+app-title-full = 두레인스톨러
 app-description = 소규모 상점 소유자를 위한 분산형 전자상거래 플랫폼.
 settings = 설정
 exit = 종료

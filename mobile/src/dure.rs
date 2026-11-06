@@ -426,6 +426,12 @@ impl DureApp {
                             // Clear and reload to reset UI
                             self.clear_and_reload_profile();
                         }
+
+                        // Add "Settings" button
+                        if ui.add(egui_material3::MaterialButton::outlined(tr!("settings")).small()).clicked() {
+                            dure_info!("Settings clicked");
+                            self.dlg_settings.open();
+                        }
                     }
                 });
 

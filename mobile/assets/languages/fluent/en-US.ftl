@@ -1,4 +1,5 @@
 app-title = Dure
+app-title-full = Dure Installer
 app-description = Distributed e-commerce platform for small shop owners.
 settings = Settings
 exit = Exit

@@ -323,10 +323,13 @@ fn main() -> Result<()> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 fn run_gui_mode() -> Result<()> {
+    // Initialize i18n system before creating window
+    dure::i18n::init_i18n("Auto")?;
+
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
-            .with_title("Dure")
+            .with_title(egui_i18n::tr!("app-title-full"))
             .with_icon(
                 eframe::icon_data::from_png_bytes(include_bytes!(
                     "../app/src/main/play_store_512.png"
@@ -337,7 +340,7 @@ fn run_gui_mode() -> Result<()> {
     };
 
     eframe::run_native(
-        "Dure",
+        egui_i18n::tr!("app-title-full").as_ref(),
         options,
         Box::new(|cc| {
             dure_info!("Creating Dure app instance");
