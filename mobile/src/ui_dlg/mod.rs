@@ -18,6 +18,9 @@ pub mod update_stt;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod platform_gcp;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod dns_wizard;
+
 pub use about_stt::*;
 pub use profile_create_stt::*;
 pub use profile_delete_stt::*;

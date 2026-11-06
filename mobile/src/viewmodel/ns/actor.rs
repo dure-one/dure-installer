@@ -116,7 +116,7 @@ impl NsActor {
 
                 match provider_type.as_str() {
                     "cloudflare" => {
-                        use crate::api::ns_cloudflare::CloudflareClient;
+                        use crate::api::cloudflare::CloudflareClient;
                         let client = CloudflareClient::new(api_token);
                         let zones = client.list_zones()?;
 

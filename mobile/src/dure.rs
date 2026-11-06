@@ -129,7 +129,8 @@ pub struct DureApp {
     pub scrolling_selected: usize,
     pub tab_platform: crate::ui_tabs::platform::PlatformTab,
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
-    pub tab_ns: crate::ui_tabs::ns::NsTab,
+    pub tab_ns: crate::ui_tabs::ns::NsTab, // Keep NS tab code, hidden from main tabs
+    pub tab_dns: crate::ui_tabs::dns::DnsTab, // New DNS tab with Cloudflare OAuth
     pub tab_site: crate::ui_tabs::site::SiteTab,
 }
 
@@ -254,6 +255,7 @@ impl Default for DureApp {
             tab_platform: crate::ui_tabs::platform::PlatformTab::default(),
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
             tab_ns: crate::ui_tabs::ns::NsTab::default(),
+            tab_dns: crate::ui_tabs::dns::DnsTab::default(),
             tab_site: crate::ui_tabs::site::SiteTab::default(),
         }
     }
@@ -439,7 +441,7 @@ impl DureApp {
         self.active_tab = match self.scrolling_selected {
             0 => Tab::Platform,
             1 => Tab::Ssh,
-            2 => Tab::Ns,
+            2 => Tab::Dns,
             3 => Tab::Site,
             _ => Tab::Platform,
         };
@@ -457,7 +459,7 @@ impl DureApp {
                         self.tab_ssh.reset_loaded();
                     }
                 }
-                Tab::Ns => {
+                Tab::Dns => {
                     if self.tab_ns.should_reload_config(&self.current_profile) {
                         self.tab_ns.reset_loaded();
                     }
@@ -474,7 +476,11 @@ impl DureApp {
         match self.active_tab {
             Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
             Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut(), &self.current_profile_kdbx),
-            Tab::Ns => self.tab_ns.ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+            Tab::Dns => {
+                if let Some(profile) = &self.current_profile {
+                    self.tab_dns.ui(ui, profile)
+                }
+            },
             Tab::Site => self.tab_site.ui(&self.current_profile, ui),
         }
     }

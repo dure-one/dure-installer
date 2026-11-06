@@ -8,7 +8,7 @@ pub mod desktop;
 
 // Platform-independent HTTP APIs
 pub mod gcp;
-pub mod ns_cloudflare;
+pub mod cloudflare;
 pub mod ns_duckdns;
 pub mod ns_gcp;
 pub mod ns_porkbun;

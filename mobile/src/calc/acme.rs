@@ -9,7 +9,7 @@ use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::api::ns_cloudflare::CloudflareClient;
+use crate::api::cloudflare::CloudflareClient;
 use crate::api::ns_duckdns::DuckDnsClient;
 use crate::api::ns_porkbun::PorkbunClient;
 

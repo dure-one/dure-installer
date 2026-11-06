@@ -1,7 +1,8 @@
 //! Tab modules for the main application UI
 
 // Infrastructure management tabs (active on all platforms)
-pub mod ns;
+pub mod ns; // Keep existing NS tab code, but hidden from main tabs
+pub mod dns; // New DNS tab with Cloudflare OAuth
 pub mod platform;
 pub mod platform_drawer;
 pub mod site;
@@ -24,8 +25,9 @@ pub mod ssh_drawer;
 pub enum Tab {
     Platform,
     Ssh,
-    Ns,
+    Dns, // New DNS tab with Cloudflare OAuth workflow
     Site,
+    // Ns tab kept in code but hidden from main tab list
 }
 
 impl Tab {
@@ -34,17 +36,17 @@ impl Tab {
         match self {
             Tab::Platform => "Platform",
             Tab::Ssh => "SSH",
-            Tab::Ns => "Nameserver",
+            Tab::Dns => "DNS",
             Tab::Site => "Site",
         }
     }
 
-    /// Get all tabs in order
+    /// Get all tabs in order (NS tab excluded - kept in code for reference)
     pub fn all() -> Vec<Tab> {
         vec![
             Tab::Platform,
             Tab::Ssh,
-            Tab::Ns,
+            Tab::Dns,
             Tab::Site,
         ]
     }

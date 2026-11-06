@@ -34,6 +34,14 @@ fn main() {
         println!("cargo:warning=GOOGLE_OAUTH_CLIENT_SECRET not set - OAuth will not work");
     }
 
+    // Cloudflare OAuth client ID (PKCE - no client_secret needed)
+    // Redirect URI is now dynamic (random port), so only client_id is needed
+    if let Ok(client_id) = std::env::var("CLOUDFLARE_OAUTH_CLIENT_ID") {
+        println!("cargo:rustc-env=CLOUDFLARE_OAUTH_CLIENT_ID={}", client_id);
+    } else {
+        println!("cargo:warning=CLOUDFLARE_OAUTH_CLIENT_ID not set - using wrangler's public client as fallback");
+    }
+
     // rust2go bridge is now in the go-webauthn crate
 
     // Build go-webauthn-cli executable

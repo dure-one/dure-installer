@@ -514,7 +514,7 @@ fn add_gcp_account_to_config(
 /// Execute add provider in blocking mode (for background thread)
 #[cfg(not(target_arch = "wasm32"))]
 fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, token: String) -> Result<Vec<String>, String> {
-    use crate::api::{ns_cloudflare, ns_porkbun};
+    use crate::api::{cloudflare, ns_porkbun};
     use crate::calc::ns::{NsConfig, RecordType};
 
     let mut log = Vec::new();
@@ -524,7 +524,7 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
     match provider.as_str() {
         "cloudflare" => {
             log.push("Calling Cloudflare API...".to_string());
-            let client = ns_cloudflare::CloudflareClient::new(token.clone());
+            let client = cloudflare::CloudflareClient::new(token.clone());
 
             let zones = client
                 .list_zones()
@@ -2003,7 +2003,7 @@ impl NsTab {
     fn execute_add_provider(&mut self, profile: &ProfileContext) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use crate::api::{ns_cloudflare, ns_porkbun};
+            use crate::api::{cloudflare, ns_porkbun};
 
             let provider = self.add_provider_type.clone();
 
@@ -2031,7 +2031,7 @@ impl NsTab {
             match provider.as_str() {
                 "cloudflare" => {
                     self.add_progress("Calling Cloudflare API...".to_string());
-                    let client = ns_cloudflare::CloudflareClient::new(token.clone());
+                    let client = cloudflare::CloudflareClient::new(token.clone());
                     match client.list_zones() {
                         Ok(zones) => {
                             self.add_progress(format!(
@@ -2705,7 +2705,7 @@ impl NsTab {
 
                             // For Cloudflare, create zone if it doesn't exist
                             if provider == "cloudflare" {
-                                use crate::api::ns_cloudflare::CloudflareClient;
+                                use crate::api::cloudflare::CloudflareClient;
 
                                 self.add_progress(format!(
                                     "Creating Cloudflare zone for {}...",
@@ -2849,7 +2849,7 @@ impl NsTab {
     fn refresh_from_api(&mut self, profile: &ProfileContext) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use crate::api::{ns_cloudflare, ns_porkbun};
+            use crate::api::{cloudflare, ns_porkbun};
             use crate::calc::dns;
 
             self.add_progress("Refreshing from API...".to_string());
@@ -2871,7 +2871,7 @@ impl NsTab {
 
                         match provider.as_str() {
                             "cloudflare" => {
-                                let client = ns_cloudflare::CloudflareClient::new(token);
+                                let client = cloudflare::CloudflareClient::new(token);
 
                                 // Fetch all zones
                                 match client.list_zones() {
@@ -3502,7 +3502,7 @@ impl NsTab {
 
                     match base_provider {
                         "cloudflare" => {
-                            use crate::api::ns_cloudflare::CloudflareClient;
+                            use crate::api::cloudflare::CloudflareClient;
                             let client = CloudflareClient::new(token.clone());
 
                             match client.list_zones() {
