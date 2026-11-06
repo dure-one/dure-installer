@@ -214,34 +214,10 @@ impl DnsTab {
 
         ui.vertical(|ui| {
             // Header with "Add DNS" button
-            ui.horizontal(|ui| {
-                ui.heading("DNS Management");
-                ui.add_space(10.0);
-
-                if ui
-                    .add(MaterialButton::filled("Add DNS"))
-                    .on_hover_text("Add new DNS with automated Cloudflare setup")
-                    .clicked()
-                {
-                    self.show_add_dns_wizard = true;
-                    let mut wizard = crate::ui_dlg::dns_wizard::DnsWizard::new(
-                        profile.name.clone(),
-                    );
-
-                    // Load platforms from config
-                    let platforms = Self::load_platforms_from_config(&profile.config_file);
-                    wizard.load_available_platforms(platforms);
-
-                    self.dns_wizard = Some(wizard);
-                }
-            });
-
-            ui.add_space(10.0);
-            ui.separator();
             ui.add_space(10.0);
 
             // Domain table
-            self.render_domain_table(ui);
+            self.render_domain_table(ui, profile);
 
             // Check for button click events stored in ui.data
             let check_ns = ui.data(|d| d.get_temp::<String>(egui::Id::new("dns_check_ns")));
@@ -277,7 +253,7 @@ impl DnsTab {
     }
 
     /// Render domain table
-    fn render_domain_table(&mut self, ui: &mut egui::Ui) {
+    fn render_domain_table(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
         // Calculate responsive column widths
         let available_width = ui.available_width() - 40.0;
         let base_width = 740.0;
@@ -287,6 +263,24 @@ impl DnsTab {
             ui.heading("DNS Domains");
             ui.add_space(4.0);
             ui.label("Manage DNS domains with Cloudflare integration.");
+            ui.add_space(8.0);
+
+            if ui
+                    .add(MaterialButton::filled("Add DNS"))
+                    .on_hover_text("Add new DNS with automated Cloudflare setup")
+                    .clicked()
+                {
+                    self.show_add_dns_wizard = true;
+                    let mut wizard = crate::ui_dlg::dns_wizard::DnsWizard::new(
+                        profile.name.clone(),
+                    );
+
+                    // Load platforms from config
+                    let platforms = Self::load_platforms_from_config(&profile.config_file);
+                    wizard.load_available_platforms(platforms);
+
+                    self.dns_wizard = Some(wizard);
+                }
             ui.add_space(8.0);
 
             if self.domain_rows.is_empty() {
