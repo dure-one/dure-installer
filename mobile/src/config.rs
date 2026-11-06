@@ -68,6 +68,10 @@ pub struct CloudPlatformConfig {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_status_refresh: Option<i64>,
+
+    // DNS wizard domain binding
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bound_domain: Option<String>,
 }
 
 /// Platform configuration (deprecated, use platforms list)

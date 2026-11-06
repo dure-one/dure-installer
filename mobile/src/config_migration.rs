@@ -86,6 +86,7 @@ fn migrate_platform_v1_to_v2(v1: CloudPlatformConfigV1) -> Option<CloudPlatformC
         cached_firewall_status: None,
         cached_vm_external_ip: None,
         last_status_refresh: None,
+        bound_domain: None,
     })
 }
 

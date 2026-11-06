@@ -1311,6 +1311,7 @@ impl PlatformActor {
                     cached_firewall_status: None,
                     cached_vm_external_ip: None,
                     last_status_refresh: None,
+                    bound_domain: None,
                 };
 
                 // Add to config

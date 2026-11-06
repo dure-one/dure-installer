@@ -72,12 +72,27 @@ pub struct OAuthResult {
     pub expires_at: u64,
 }
 
-/// User info from OAuth userinfo endpoint
+/// Account info from Cloudflare API
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudflareAccount {
+    pub id: String,
+    pub name: String,
+}
+
+/// API v4 response wrapper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ApiV4Response<T> {
+    pub success: bool,
+    pub result: T,
+    pub errors: Vec<serde_json::Value>,
+    pub messages: Vec<String>,
+}
+
+/// User info (account ID and name)
+#[derive(Debug, Clone)]
 pub struct UserInfo {
-    pub sub: String,           // User ID
-    pub email: String,         // User email
-    pub email_verified: bool,  // Email verification status
+    pub account_id: String,
+    pub account_name: String,
 }
 
 /// Cloudflare OAuth handler (PKCE - no client_secret needed)
@@ -283,24 +298,60 @@ pub fn verify_token(access_token: &str) -> Result<bool> {
     Ok(verify_response.success)
 }
 
-/// Fetch user info from Cloudflare OAuth userinfo endpoint
+/// Fetch account info from Cloudflare API v4 /accounts endpoint
 pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
-    let url = "https://dash.cloudflare.com/oauth2/userinfo";
+    let url = "https://api.cloudflare.com/client/v4/accounts";
 
-    dure_debug!("Fetching user info from OAuth endpoint...");
+    dure_debug!("Fetching account info from Cloudflare API v4...");
 
     let response = ureq::get(url)
         .set("Authorization", &format!("Bearer {}", access_token))
-        .call()
-        .context("Failed to fetch user info")?;
+        .set("Content-Type", "application/json")
+        .call();
 
-    let user_info: UserInfo = response
-        .into_json()
-        .context("Failed to parse user info response")?;
+    let response = match response {
+        Ok(resp) => resp,
+        Err(ureq::Error::Status(code, resp)) => {
+            let error_text = resp.into_string().unwrap_or_default();
+            dure_error!("API v4 accounts request failed with status {}: {}", code, error_text);
+            return Err(anyhow::anyhow!("Failed to fetch accounts (HTTP {}): {}", code, error_text));
+        }
+        Err(ureq::Error::Transport(err)) => {
+            return Err(anyhow::anyhow!("Network error during accounts fetch: {}", err));
+        }
+    };
 
-    dure_info!("✓ User info retrieved: {}", user_info.email);
+    let body = response.into_string()
+        .context("Failed to read response body")?;
 
-    Ok(user_info)
+    dure_debug!("Accounts API response: {}", body);
+
+    // Parse API v4 response
+    let api_response: ApiV4Response<Vec<CloudflareAccount>> = serde_json::from_str(&body)
+        .context(format!("Failed to parse accounts JSON: {}", body))?;
+
+    if !api_response.success {
+        let errors = serde_json::to_string(&api_response.errors).unwrap_or_default();
+        return Err(anyhow::anyhow!("API returned success=false: {}", errors));
+    }
+
+    if api_response.result.is_empty() {
+        return Err(anyhow::anyhow!("No accounts found for this user"));
+    }
+
+    let account = &api_response.result[0];
+
+    if api_response.result.len() > 1 {
+        dure_warn!("User has {} accounts - using first one: {} ({})",
+            api_response.result.len(), account.name, account.id);
+    }
+
+    dure_info!("✓ Account info retrieved: {} (ID: {})", account.name, account.id);
+
+    Ok(UserInfo {
+        account_id: account.id.clone(),
+        account_name: account.name.clone(),
+    })
 }
 
 // No longer need env var loading - using wrangler's public client

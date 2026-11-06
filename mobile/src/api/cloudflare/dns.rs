@@ -24,7 +24,7 @@ struct ZoneListResponse {
 }
 
 /// Zone information
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Zone {
     pub id: String,
     pub name: String,
@@ -98,6 +98,17 @@ struct DnsRecordRequest {
     ttl: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     proxied: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<SrvData>,
+}
+
+/// SRV record data structure
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SrvData {
+    pub priority: u16,
+    pub weight: u16,
+    pub port: u16,
+    pub target: String,
 }
 
 impl CloudflareClient {
@@ -250,6 +261,7 @@ impl CloudflareClient {
             content: content.to_string(),
             ttl,
             proxied,
+            data: None,
         };
 
         let response = ureq::post(&url)
@@ -289,6 +301,7 @@ impl CloudflareClient {
             content: content.to_string(),
             ttl,
             proxied,
+            data: None,
         };
 
         let response = ureq::patch(&url)
@@ -341,6 +354,80 @@ impl CloudflareClient {
         Ok(records
             .into_iter()
             .find(|r| r.name == name && r.record_type.to_uppercase() == record_type.to_uppercase()))
+    }
+
+    /// Create an SRV record with specific data
+    pub fn create_srv_record(
+        &self,
+        zone_id: &str,
+        name: &str,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: &str,
+    ) -> Result<()> {
+        let url = format!("{}/zones/{}/dns_records", API_BASE, zone_id);
+
+        let srv_data = SrvData {
+            priority,
+            weight,
+            port,
+            target: target.to_string(),
+        };
+
+        let request = DnsRecordRequest {
+            name: name.to_string(),
+            record_type: "SRV".to_string(),
+            content: target.to_string(),
+            ttl: Some(1), // Auto TTL
+            proxied: None,
+            data: Some(srv_data),
+        };
+
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .set("Content-Type", "application/json")
+            .send_json(&request)
+            .context("Failed to create SRV record")?;
+
+        let result: ApiResponse = response
+            .into_json()
+            .context("Failed to parse SRV create response")?;
+
+        if !result.success {
+            let errors: Vec<String> = result.errors.iter().map(|e| e.message.clone()).collect();
+            anyhow::bail!("Failed to create SRV record: {}", errors.join(", "));
+        }
+
+        Ok(())
+    }
+
+    /// Create default DNS records for XMPP server setup
+    /// Creates 7 records: 2 A records, 1 CNAME, 4 SRV records
+    pub fn create_default_xmpp_records(
+        &self,
+        zone_id: &str,
+        domain: &str,
+        server_ip: &str,
+    ) -> Result<()> {
+        // A record for root domain
+        self.create_record(zone_id, domain, "A", server_ip, Some(1), Some(false))?;
+
+        // A record for xmpp subdomain
+        let xmpp_domain = format!("xmpp.{}", domain);
+        self.create_record(zone_id, &xmpp_domain, "A", server_ip, Some(1), Some(false))?;
+
+        // CNAME for www
+        let www_domain = format!("www.{}", domain);
+        self.create_record(zone_id, &www_domain, "CNAME", domain, Some(1), Some(false))?;
+
+        // SRV records for XMPP
+        self.create_srv_record(zone_id, &format!("_xmpp-client._tcp.{}", domain), 5, 0, 5222, &xmpp_domain)?;
+        self.create_srv_record(zone_id, &format!("_xmpp-server._tcp.{}", domain), 5, 0, 5269, &xmpp_domain)?;
+        self.create_srv_record(zone_id, &format!("_xmpps-client._tcp.{}", domain), 5, 0, 5223, &xmpp_domain)?;
+        self.create_srv_record(zone_id, &format!("_xmpps-server._tcp.{}", domain), 5, 0, 5270, &xmpp_domain)?;
+
+        Ok(())
     }
 }
 

@@ -60,6 +60,9 @@ pub struct PlatformRow {
     pub has_vm: bool,            // Enable/disable VM operation buttons
     pub vm_zone: Option<String>, // For VM operations (delete, restart, regen)
     pub oauth_refresh_failed: bool, // OAuth token refresh failed
+
+    // DNS wizard domain binding
+    pub bound_domain: Option<String>,
 }
 
 /// Actions that can be triggered from platform table rows
@@ -1500,6 +1503,16 @@ impl PlatformTab {
                                     .size(16.0)
                                     .strong()
                                     .color(text_color));
+
+                                // Display domain badge if bound
+                                if let Some(domain) = &row_for_cells.bound_domain {
+                                    ui.add_space(4.0);
+                                    ui.add(
+                                        badge(domain)
+                                            .color(BadgeColor::Success)
+                                            .size(BadgeSize::Small)
+                                    );
+                                }
                             });
                         })
                         .cell_widget(move |ui| {
@@ -2353,6 +2366,9 @@ impl PlatformTab {
                             has_vm: !platform.vms.is_empty(),
                             vm_zone: platform.vms.first().map(|vm| vm.zone.clone()),
                             oauth_refresh_failed,
+
+                            // DNS wizard domain binding
+                            bound_domain: platform.bound_domain.clone(),
                         };
 
                         self.rows.push(row);
