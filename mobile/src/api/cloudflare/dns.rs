@@ -429,6 +429,57 @@ impl CloudflareClient {
 
         Ok(())
     }
+
+    /// Verify if default XMPP DNS records exist and match desired configuration
+    /// Returns true if all records exist and match, false otherwise
+    pub fn verify_default_xmpp_records(
+        &self,
+        zone_id: &str,
+        domain: &str,
+        server_ip: &str,
+    ) -> Result<bool> {
+        let records = self.get_records(zone_id)?;
+        let xmpp_domain = format!("xmpp.{}", domain);
+
+        // Check A record for root domain
+        let root_a = records.iter().find(|r| {
+            r.name == domain && r.record_type == "A" && r.content == server_ip
+        });
+
+        // Check A record for xmpp subdomain
+        let xmpp_a = records.iter().find(|r| {
+            r.name == xmpp_domain && r.record_type == "A" && r.content == server_ip
+        });
+
+        // Check CNAME for www
+        let www_domain = format!("www.{}", domain);
+        let www_cname = records.iter().find(|r| {
+            r.name == www_domain && r.record_type == "CNAME" && r.content == domain
+        });
+
+        // Check SRV records (just check existence, not full SRV data)
+        let srv_client = records.iter().find(|r| {
+            r.name == format!("_xmpp-client._tcp.{}", domain) && r.record_type == "SRV"
+        });
+        let srv_server = records.iter().find(|r| {
+            r.name == format!("_xmpp-server._tcp.{}", domain) && r.record_type == "SRV"
+        });
+        let srv_client_s = records.iter().find(|r| {
+            r.name == format!("_xmpps-client._tcp.{}", domain) && r.record_type == "SRV"
+        });
+        let srv_server_s = records.iter().find(|r| {
+            r.name == format!("_xmpps-server._tcp.{}", domain) && r.record_type == "SRV"
+        });
+
+        // All records must exist for verification to pass
+        Ok(root_a.is_some()
+            && xmpp_a.is_some()
+            && www_cname.is_some()
+            && srv_client.is_some()
+            && srv_server.is_some()
+            && srv_client_s.is_some()
+            && srv_server_s.is_some())
+    }
 }
 
 #[cfg(test)]

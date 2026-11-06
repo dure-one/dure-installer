@@ -284,7 +284,7 @@ tab-client = Client
 # Profile Selector
 profile = Profile:
 none = None
-create-new-profile = + Create New Profile
+create-profile = + Create New Profile
 delete-profile = Delete Profile
 close-profile = Close Profile
 

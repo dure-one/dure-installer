@@ -6,10 +6,11 @@
 //! 3. GCP VM integration for automatic NS record configuration
 //! 4. DNS verification and HTTPS connection testing
 
-use crate::{dure_debug, dure_info, dure_warn};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{badge, BadgeColor, BadgeSize, MaterialButton};
+use egui_material3::datatable::data_table;
 use poll_promise::Promise;
 
 use crate::calc::profile::ProfileContext;
@@ -59,23 +60,41 @@ pub struct DnsTab {
 
     /// NS check promise
     #[cfg_attr(feature = "serde", serde(skip))]
-    ns_check_promise: Option<Promise<Result<Vec<String>, String>>>,
+    ns_check_promise: Option<Promise<Result<(NsCheckResult, Vec<String>), (NsCheckResult, Vec<String>)>>>,
 
     /// DNS settings check promise
     #[cfg_attr(feature = "serde", serde(skip))]
-    dns_settings_promise: Option<Promise<Result<Vec<DnsRecordCheck>, String>>>,
+    dns_settings_promise: Option<Promise<Result<(SettingsCheckResult, Vec<String>), (SettingsCheckResult, Vec<String>)>>>,
 
     /// HTTPS check promise
     #[cfg_attr(feature = "serde", serde(skip))]
     https_check_promise: Option<Promise<Result<HttpsCheckResult, String>>>,
+
+    /// Flag to track if domain rows have been loaded from config
+    #[cfg_attr(feature = "serde", serde(skip))]
+    loaded: bool,
 }
 
 /// Domain row data for table
 #[derive(Clone, Debug)]
-struct DnsDomainRow {
-    provider: String,        // "cloudflare"
-    domain: String,          // "dure.co"
-    status: DomainStatus,    // Configured, Pending, Error
+pub struct DnsDomainRow {
+    pub provider: String,        // "cloudflare"
+    pub domain: String,          // "dure.co"
+    pub status: DomainStatus,    // Configured, Pending, Error
+
+    // Platform/VM binding
+    pub platform_id: Option<String>,
+    pub platform_name: Option<String>,
+    pub vm_name: Option<String>,
+    pub vm_external_ip: Option<String>,
+
+    // Check results
+    pub last_ns_check: Option<NsCheckResult>,
+    pub last_settings_check: Option<SettingsCheckResult>,
+    pub last_https_check: Option<HttpsCheckResult>,
+
+    // Drawer state
+    pub drawer_state: DnsDrawerState,
 }
 
 /// Domain status
@@ -98,12 +117,70 @@ struct DnsRecordCheck {
 
 /// HTTPS connection check result
 #[derive(Clone, Debug)]
-struct HttpsCheckResult {
-    success: bool,
-    status_code: Option<u16>,
-    ssl_valid: bool,
-    response_time_ms: u64,
-    error: Option<String>,
+pub struct HttpsCheckResult {
+    pub checked_at: i64,
+    pub resolves_to_vm: bool,
+    pub resolved_ip: Option<String>,
+    pub expected_ip: Option<String>,
+    pub error: Option<String>,
+}
+
+/// NS check result
+#[derive(Clone, Debug)]
+pub struct NsCheckResult {
+    pub checked_at: i64,
+    pub uses_cloudflare: bool,
+    pub nameservers: Vec<String>,
+    pub error: Option<String>,
+}
+
+/// DNS settings check result
+#[derive(Clone, Debug)]
+pub struct SettingsCheckResult {
+    pub checked_at: i64,
+    pub records_valid: bool,
+    pub missing_records: Vec<String>,
+    pub error: Option<String>,
+}
+
+/// Drawer state for DNS domain
+#[derive(Clone, Debug)]
+pub struct DnsDrawerState {
+    pub active_tab: DnsDrawerTab,
+}
+
+impl Default for DnsDrawerState {
+    fn default() -> Self {
+        Self {
+            active_tab: DnsDrawerTab::Status,
+        }
+    }
+}
+
+/// Drawer tabs for DNS domain
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DnsDrawerTab {
+    Status,
+    Logs,
+    Operations,
+}
+
+impl crate::ui_components::drawer::DrawerTabTrait for DnsDrawerTab {
+    fn as_str(&self) -> &'static str {
+        match self {
+            DnsDrawerTab::Status => "Status",
+            DnsDrawerTab::Logs => "Logs",
+            DnsDrawerTab::Operations => "Operations",
+        }
+    }
+
+    fn all() -> &'static [Self] {
+        &[
+            DnsDrawerTab::Status,
+            DnsDrawerTab::Logs,
+            DnsDrawerTab::Operations,
+        ]
+    }
 }
 
 impl Default for DnsTab {
@@ -122,6 +199,7 @@ impl Default for DnsTab {
             ns_check_promise: None,
             dns_settings_promise: None,
             https_check_promise: None,
+            loaded: false,
         }
     }
 }
@@ -129,6 +207,11 @@ impl Default for DnsTab {
 impl DnsTab {
     /// Render the DNS tab
     pub fn ui(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
+        // Load DNS domains from config on first render
+        if !self.loaded {
+            self.load_domain_rows(profile);
+        }
+
         ui.vertical(|ui| {
             // Header with "Add DNS" button
             ui.horizontal(|ui| {
@@ -141,9 +224,15 @@ impl DnsTab {
                     .clicked()
                 {
                     self.show_add_dns_wizard = true;
-                    self.dns_wizard = Some(crate::ui_dlg::dns_wizard::DnsWizard::new(
+                    let mut wizard = crate::ui_dlg::dns_wizard::DnsWizard::new(
                         profile.name.clone(),
-                    ));
+                    );
+
+                    // Load platforms from config
+                    let platforms = Self::load_platforms_from_config(&profile.config_file);
+                    wizard.load_available_platforms(platforms);
+
+                    self.dns_wizard = Some(wizard);
                 }
             });
 
@@ -169,6 +258,19 @@ impl DnsTab {
                 self.check_https_connection(&domain);
             }
 
+            // Handle drawer tab switches
+            for row in &mut self.domain_rows {
+                if let Some((domain, new_tab)) = ui.data(|d| {
+                    d.get_temp::<(String, DnsDrawerTab)>(
+                        egui::Id::new("dns_drawer_tab_switch").with(&row.domain)
+                    )
+                }) {
+                    if domain == row.domain {
+                        row.drawer_state.active_tab = new_tab;
+                    }
+                }
+            }
+
             // Dialogs
             self.render_dialogs(ui, profile);
         });
@@ -176,128 +278,128 @@ impl DnsTab {
 
     /// Render domain table
     fn render_domain_table(&mut self, ui: &mut egui::Ui) {
-        if self.domain_rows.is_empty() {
-            ui.vertical_centered(|ui| {
-                ui.add_space(50.0);
-                ui.label("No DNS domains configured");
-                ui.label("Click 'Add DNS' to get started with automated Cloudflare setup");
-            });
-            return;
-        }
+        // Calculate responsive column widths
+        let available_width = ui.available_width() - 40.0;
+        let base_width = 740.0;
+        let width_ratio = (available_width / base_width).min(1.5).max(0.8);
 
-        use egui_extras::{Column, TableBuilder};
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.heading("DNS Domains");
+            ui.add_space(4.0);
+            ui.label("Manage DNS domains with Cloudflare integration.");
+            ui.add_space(8.0);
 
-        TableBuilder::new(ui)
-            .striped(true)
-            .column(Column::exact(150.0)) // Provider
-            .column(Column::remainder())   // Domain
-            .column(Column::exact(400.0))  // Operations
-            .header(30.0, |mut header| {
-                header.col(|ui| {
-                    ui.heading("Provider");
-                });
-                header.col(|ui| {
-                    ui.heading("DNS");
-                });
-                header.col(|ui| {
-                    ui.heading("Operations");
-                });
-            })
-            .body(|mut body| {
-                let rows = self.domain_rows.clone(); // Clone to avoid borrow conflict
-                for row in &rows {
-                    body.row(40.0, |mut table_row| {
-                        // Provider column
-                        table_row.col(|ui| {
-                            ui.label(&row.provider);
+            if self.domain_rows.is_empty() {
+                ui.label("No DNS domains configured. Click 'Add DNS' to get started.");
+                return;
+            }
+
+            // Build data table
+            let table_id = egui::Id::new("dns_domains_table");
+
+            let mut table = data_table()
+                .id(table_id)
+                .allow_selection(false)
+                .allow_drawer(true)
+                .min_row_height(68.0)
+                .drawer_row_height(400.0)
+                .column("DNS", 230.0 * width_ratio, false)
+                .column("Operations", 510.0 * width_ratio, false);
+
+            for row in self.domain_rows.clone().iter() {
+                let row_for_cells = row.clone();
+                let row_for_ops = row.clone();
+                let row_for_drawer = row.clone();
+
+                table = table.row(move |r| {
+                    r.cell_widget(move |ui| {
+                        // DNS column: badge + domain name
+                        ui.vertical(|ui| {
+                            ui.add(
+                                badge(&row_for_cells.provider)
+                                    .color(BadgeColor::Primary)
+                                    .size(BadgeSize::Small)
+                            );
+                            let text_color = ui.style().visuals.text_color();
+                            ui.label(egui::RichText::new(&row_for_cells.domain)
+                                .size(16.0)
+                                .strong()
+                                .color(text_color));
                         });
+                    })
+                    .cell_widget(move |ui| {
+                        // Operations column: buttons
+                        let domain = row_for_ops.domain.clone();
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .add(MaterialButton::outlined("Check NS").small())
+                                .on_hover_text("Check nameserver records")
+                                .clicked()
+                            {
+                                ui.data_mut(|d| d.insert_temp(
+                                    egui::Id::new("dns_check_ns"),
+                                    domain.clone()
+                                ));
+                            }
 
-                        // Domain column
-                        table_row.col(|ui| {
-                            ui.label(&row.domain);
+                            if ui
+                                .add(MaterialButton::outlined("Check Settings").small())
+                                .on_hover_text("Verify DNS records")
+                                .clicked()
+                            {
+                                ui.data_mut(|d| d.insert_temp(
+                                    egui::Id::new("dns_check_settings"),
+                                    domain.clone()
+                                ));
+                            }
+
+                            if ui
+                                .add(MaterialButton::outlined("HTTPS Check").small())
+                                .on_hover_text("Test HTTPS connection")
+                                .clicked()
+                            {
+                                ui.data_mut(|d| d.insert_temp(
+                                    egui::Id::new("dns_check_https"),
+                                    domain.clone()
+                                ));
+                            }
                         });
+                    })
+                    .drawer(move |ui| {
+                        // Drawer with tabs
+                        let mut tab_switch = None;
+                        crate::ui_tabs::dns_drawer::render_drawer(
+                            ui,
+                            &row_for_drawer,
+                            &row_for_drawer.drawer_state,
+                            &mut tab_switch,
+                        );
 
-                        // Operations column (capture row domain for button callbacks)
-                        let domain = row.domain.clone();
-                        table_row.col(|ui| {
-                            ui.horizontal(|ui| {
-                                if ui
-                                    .add(MaterialButton::outlined("Check NS Server"))
-                                    .on_hover_text("Check nameserver records using dig")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("dns_check_ns"),
-                                        domain.clone()
-                                    ));
-                                }
-
-                                if ui
-                                    .add(MaterialButton::outlined("Check NS Settings"))
-                                    .on_hover_text("Verify all DNS records are configured correctly")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("dns_check_settings"),
-                                        domain.clone()
-                                    ));
-                                }
-
-                                if ui
-                                    .add(MaterialButton::outlined("Connection Check"))
-                                    .on_hover_text("Test HTTPS connection to domain")
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| d.insert_temp(
-                                        egui::Id::new("dns_check_https"),
-                                        domain.clone()
-                                    ));
-                                }
+                        if let Some(new_tab) = tab_switch {
+                            ui.data_mut(|d| {
+                                d.insert_temp(
+                                    egui::Id::new("dns_drawer_tab_switch").with(&row_for_drawer.domain),
+                                    (row_for_drawer.domain.clone(), new_tab),
+                                );
                             });
-                        });
-                    });
-                }
-            });
-    }
-
-    /// Render operation buttons for a domain
-    fn render_operations(&mut self, ui: &mut egui::Ui, row: &DnsDomainRow) {
-        ui.horizontal(|ui| {
-            if ui
-                .add(MaterialButton::outlined("Check NS Server"))
-                .on_hover_text("Check nameserver records using dig")
-                .clicked()
-            {
-                self.check_ns_server(&row.domain);
+                        }
+                    })
+                });
             }
 
-            if ui
-                .add(MaterialButton::outlined("Check NS Settings"))
-                .on_hover_text("Verify all DNS records are configured correctly")
-                .clicked()
-            {
-                self.check_dns_settings(&row.domain);
-            }
-
-            if ui
-                .add(MaterialButton::outlined("Connection Check"))
-                .on_hover_text("Test HTTPS connection to domain")
-                .clicked()
-            {
-                self.check_https_connection(&row.domain);
-            }
+            table.show(ui);
         });
     }
 
-    /// Check NS server records
+    /// Check NS server records using DNS over HTTPS
     fn check_ns_server(&mut self, domain: &str) {
         dure_info!("Checking NS server for domain: {}", domain);
 
+        // Store which domain is being checked
+        self.selected_domain = Some(domain.to_string());
+
         let domain = domain.to_string();
         let promise = Promise::spawn_thread("check_ns", move || {
-            let mut results = Vec::new();
-            results.push(format!("Querying NS records for {}...", domain));
-
             // Use DNS-over-HTTPS (Cloudflare 1.1.1.1)
             let url = format!("https://1.1.1.1/dns-query?name={}&type=NS", domain);
 
@@ -321,28 +423,64 @@ impl DnsTab {
                     match response.into_json::<DnsResponse>() {
                         Ok(dns_resp) => {
                             if let Some(answers) = dns_resp.answer {
-                                if answers.is_empty() {
-                                    results.push("✗ No NS records found".to_string());
-                                } else {
-                                    results.push(format!("✓ Found {} NS record(s):", answers.len()));
-                                    for answer in answers {
-                                        results.push(format!("  {}", answer.data));
-                                    }
+                                let nameservers: Vec<String> = answers.iter()
+                                    .map(|a| a.data.trim_end_matches('.').to_string())
+                                    .collect();
+
+                                // Check if using Cloudflare nameservers
+                                let uses_cloudflare = nameservers.iter().any(|ns| {
+                                    ns.ends_with(".ns.cloudflare.com")
+                                });
+
+                                let mut results = Vec::new();
+                                results.push(format!("Found {} NS record(s)", nameservers.len()));
+                                for ns in &nameservers {
+                                    results.push(format!("  {}", ns));
                                 }
+
+                                Ok((NsCheckResult {
+                                    checked_at: chrono::Utc::now().timestamp(),
+                                    uses_cloudflare,
+                                    nameservers,
+                                    error: None,
+                                }, results))
                             } else {
-                                results.push("✗ No NS records found".to_string());
+                                Err((
+                                    NsCheckResult {
+                                        checked_at: chrono::Utc::now().timestamp(),
+                                        uses_cloudflare: false,
+                                        nameservers: Vec::new(),
+                                        error: Some("No NS records found".to_string()),
+                                    },
+                                    vec!["✗ No NS records found".to_string()]
+                                ))
                             }
-                            Ok(results)
                         }
                         Err(e) => {
-                            results.push(format!("✗ Failed to parse DNS response: {}", e));
-                            Err(format!("Parse error: {}", e))
+                            let err_msg = format!("Failed to parse DNS response: {}", e);
+                            Err((
+                                NsCheckResult {
+                                    checked_at: chrono::Utc::now().timestamp(),
+                                    uses_cloudflare: false,
+                                    nameservers: Vec::new(),
+                                    error: Some(err_msg.clone()),
+                                },
+                                vec![format!("✗ {}", err_msg)]
+                            ))
                         }
                     }
                 }
                 Err(e) => {
-                    results.push(format!("✗ DNS query failed: {}", e));
-                    Err(format!("Query failed: {}", e))
+                    let err_msg = format!("DNS query failed: {}", e);
+                    Err((
+                        NsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            uses_cloudflare: false,
+                            nameservers: Vec::new(),
+                            error: Some(err_msg.clone()),
+                        },
+                        vec![format!("✗ {}", err_msg)]
+                    ))
                 }
             }
         });
@@ -351,12 +489,63 @@ impl DnsTab {
         self.show_ns_check_dialog = true;
     }
 
-    /// Check DNS settings (all 7 default records)
+    /// Check DNS settings via Cloudflare API
     fn check_dns_settings(&mut self, domain: &str) {
         dure_info!("Checking DNS settings for domain: {}", domain);
 
+        // Find domain row to get zone_id, vm_ip, and API credentials
+        let row = self.domain_rows.iter().find(|r| r.domain == domain);
+        if row.is_none() {
+            dure_warn!("Domain row not found for: {}", domain);
+            return;
+        }
+
+        // TODO: Get Cloudflare API token and zone_id from config
+        // For now, create placeholder promise
         let domain = domain.to_string();
+        let vm_ip = row.and_then(|r| r.vm_external_ip.clone());
+
+        self.selected_domain = Some(domain.clone());
+
         let promise = Promise::spawn_thread("check_dns_settings", move || {
+            // TODO: Implement Cloudflare API check
+            // For now, return error indicating not implemented
+            let check_result = SettingsCheckResult {
+                checked_at: chrono::Utc::now().timestamp(),
+                records_valid: false,
+                missing_records: vec![
+                    "A record for root domain".to_string(),
+                    "A/CNAME record for www subdomain".to_string(),
+                ],
+                error: Some("Cloudflare API check not yet implemented - needs zone_id and API token".to_string()),
+            };
+
+            let display = vec![
+                "⚠ Cloudflare API check not implemented".to_string(),
+                "  Missing: A record for root domain".to_string(),
+                "  Missing: A/CNAME for www subdomain".to_string(),
+            ];
+
+            Err((check_result, display))
+        });
+
+        self.dns_settings_promise = Some(promise);
+        self.show_dns_settings_dialog = true;
+    }
+
+    /// Check HTTPS connection and verify IP resolution
+    fn check_https_connection(&mut self, domain: &str) {
+        dure_info!("Checking HTTPS connection for domain: {}", domain);
+
+        // Find domain row to get expected VM IP
+        let row = self.domain_rows.iter().find(|r| r.domain == domain);
+        let expected_ip = row.and_then(|r| r.vm_external_ip.clone());
+
+        self.selected_domain = Some(domain.to_string());
+
+        let domain = domain.to_string();
+        let promise = Promise::spawn_thread("check_https", move || {
+            // Resolve domain IP using DoH
             #[derive(serde::Deserialize)]
             struct DnsResponse {
                 #[serde(rename = "Answer")]
@@ -368,130 +557,52 @@ impl DnsTab {
                 data: String,
             }
 
-            let query_dns = |name: &str, qtype: &str| -> Option<String> {
-                let url = format!("https://1.1.1.1/dns-query?name={}&type={}", name, qtype);
-                ureq::get(&url)
-                    .set("Accept", "application/dns-json")
-                    .timeout(std::time::Duration::from_secs(5))
-                    .call()
-                    .ok()?
-                    .into_json::<DnsResponse>()
-                    .ok()?
-                    .answer?
-                    .first()
-                    .map(|a| a.data.clone())
+            let resolved_ip = match ureq::get(&format!("https://1.1.1.1/dns-query?name={}&type=A", domain))
+                .set("Accept", "application/dns-json")
+                .timeout(std::time::Duration::from_secs(5))
+                .call()
+            {
+                Ok(resp) => {
+                    match resp.into_json::<DnsResponse>() {
+                        Ok(dns_resp) => {
+                            dns_resp.answer.and_then(|answers| answers.first().map(|a| a.data.clone()))
+                        }
+                        Err(e) => {
+                            return Ok(HttpsCheckResult {
+                                checked_at: chrono::Utc::now().timestamp(),
+                                resolves_to_vm: false,
+                                resolved_ip: None,
+                                expected_ip,
+                                error: Some(format!("DNS parse error: {}", e)),
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Ok(HttpsCheckResult {
+                        checked_at: chrono::Utc::now().timestamp(),
+                        resolves_to_vm: false,
+                        resolved_ip: None,
+                        expected_ip,
+                        error: Some(format!("DNS resolution failed: {}", e)),
+                    });
+                }
             };
 
-            let mut checks = Vec::new();
-
-            // 1. Check A record for domain
-            let expected_ip = query_dns(&domain, "A");
-            checks.push(DnsRecordCheck {
-                record_type: "A".to_string(),
-                name: domain.clone(),
-                expected: expected_ip.clone().unwrap_or_else(|| "IP address".to_string()),
-                actual: expected_ip.clone(),
-                valid: expected_ip.is_some(),
-            });
-
-            // 2. Check A record for xmpp.domain
-            let xmpp_domain = format!("xmpp.{}", domain);
-            let xmpp_ip = query_dns(&xmpp_domain, "A");
-            let valid = if let (Some(ref ip1), Some(ref ip2)) = (&expected_ip, &xmpp_ip) {
-                ip1 == ip2
+            // Compare resolved IP with expected VM IP
+            let resolves_to_vm = if let (Some(ref resolved), Some(ref expected)) = (&resolved_ip, &expected_ip) {
+                resolved == expected
             } else {
                 false
             };
-            checks.push(DnsRecordCheck {
-                record_type: "A".to_string(),
-                name: xmpp_domain,
-                expected: expected_ip.clone().unwrap_or_default(),
-                actual: xmpp_ip,
-                valid,
-            });
 
-            // 3. Check CNAME for www.domain
-            let www_domain = format!("www.{}", domain);
-            let cname = query_dns(&www_domain, "CNAME");
-            let valid = cname.as_ref().map_or(false, |c| c.contains(&domain));
-            checks.push(DnsRecordCheck {
-                record_type: "CNAME".to_string(),
-                name: www_domain,
-                expected: domain.clone(),
-                actual: cname,
-                valid,
-            });
-
-            // 4-7. Check SRV records for XMPP
-            let srv_records = [
-                ("_xmpp-client._tcp", 5222),
-                ("_xmpp-server._tcp", 5269),
-                ("_xmpps-client._tcp", 5223),
-                ("_xmpps-server._tcp", 5270),
-            ];
-
-            for (service, port) in srv_records {
-                let srv_name = format!("{}.{}", service, domain);
-                let srv_data = query_dns(&srv_name, "SRV");
-                let valid = srv_data.as_ref().map_or(false, |s| s.contains(&port.to_string()));
-                checks.push(DnsRecordCheck {
-                    record_type: "SRV".to_string(),
-                    name: srv_name,
-                    expected: format!("5 {} xmpp.{}", port, domain),
-                    actual: srv_data,
-                    valid,
-                });
-            }
-
-            Ok(checks)
-        });
-
-        self.dns_settings_promise = Some(promise);
-        self.show_dns_settings_dialog = true;
-    }
-
-    /// Check HTTPS connection
-    fn check_https_connection(&mut self, domain: &str) {
-        dure_info!("Checking HTTPS connection for domain: {}", domain);
-
-        let domain = domain.to_string();
-        let promise = Promise::spawn_thread("check_https", move || {
-            let url = format!("https://{}", domain);
-            let start = std::time::Instant::now();
-
-            match ureq::get(&url).timeout(std::time::Duration::from_secs(10)).call() {
-                Ok(response) => {
-                    let elapsed = start.elapsed().as_millis() as u64;
-                    Ok(HttpsCheckResult {
-                        success: true,
-                        status_code: Some(response.status()),
-                        ssl_valid: true, // ureq with rustls validates SSL automatically
-                        response_time_ms: elapsed,
-                        error: None,
-                    })
-                }
-                Err(ureq::Error::Status(code, _response)) => {
-                    let elapsed = start.elapsed().as_millis() as u64;
-                    Ok(HttpsCheckResult {
-                        success: false,
-                        status_code: Some(code),
-                        ssl_valid: true, // Connected but got error status
-                        response_time_ms: elapsed,
-                        error: Some(format!("HTTP error: {}", code)),
-                    })
-                }
-                Err(ureq::Error::Transport(e)) => {
-                    let elapsed = start.elapsed().as_millis() as u64;
-                    let is_ssl_error = e.to_string().contains("tls") || e.to_string().contains("ssl");
-                    Ok(HttpsCheckResult {
-                        success: false,
-                        status_code: None,
-                        ssl_valid: !is_ssl_error,
-                        response_time_ms: elapsed,
-                        error: Some(e.to_string()),
-                    })
-                }
-            }
+            Ok(HttpsCheckResult {
+                checked_at: chrono::Utc::now().timestamp(),
+                resolves_to_vm,
+                resolved_ip,
+                expected_ip,
+                error: None,
+            })
         });
 
         self.https_check_promise = Some(promise);
@@ -505,14 +616,57 @@ impl DnsTab {
             if let Some(wizard) = &mut self.dns_wizard {
                 let mut open = true;
                 egui::Window::new("Add DNS - Automated Setup")
+                    .id(egui::Id::new("add_dns_wizard_dialog"))
+                    .title_bar(false)
                     .open(&mut open)
-                    .resizable(true)
-                    .default_width(600.0)
+                    .resizable(false)
+                    .collapsible(false)
+                    .scroll([false, true])
+                    .min_width(400.0)
+                    .max_width(400.0)
+                    .min_height(400.0)
+                    .resize(|r| {
+                        r.default_size([400.0, 450.0])
+                    })
                     .show(ui.ctx(), |ui| {
                         wizard.ui(ui, profile);
                     });
 
-                if !open {
+                // Close wizard if requested or window closed
+                if !open || wizard.should_close {
+                    // Check if wizard completed a domain setup
+                    if let Some((provider, domain, zone_id, account_id)) = &wizard.completed_domain {
+                        // Extract platform/VM info from wizard
+                        let (platform_id, platform_name, vm_name, vm_external_ip) =
+                            wizard.get_selected_platform_info();
+
+                        // Add to domain rows if not already present
+                        if !self.domain_rows.iter().any(|r| &r.domain == domain) {
+                            self.domain_rows.push(DnsDomainRow {
+                                provider: provider.clone(),
+                                domain: domain.clone(),
+                                status: DomainStatus::Configured,
+                                platform_id,
+                                platform_name,
+                                vm_name,
+                                vm_external_ip,
+                                last_ns_check: None,
+                                last_settings_check: None,
+                                last_https_check: None,
+                                drawer_state: DnsDrawerState::default(),
+                            });
+
+                            // Save to config
+                            Self::save_domain_to_config(
+                                &profile.config_file,
+                                provider,
+                                domain,
+                                zone_id,
+                                account_id,
+                            );
+                        }
+                    }
+
                     self.show_add_dns_wizard = false;
                     self.dns_wizard = None;
                 }
@@ -525,8 +679,24 @@ impl DnsTab {
             if let Some(promise) = self.ns_check_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
-                        Ok(results) => self.ns_check_results = results.clone(),
-                        Err(err) => self.ns_check_results = vec![format!("✗ Error: {}", err)],
+                        Ok((check_result, display_results)) => {
+                            self.ns_check_results = display_results.clone();
+                            // Update domain row with check result
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_ns_check = Some(check_result.clone());
+                                }
+                            }
+                        }
+                        Err((check_result, display_results)) => {
+                            self.ns_check_results = display_results.clone();
+                            // Store error result too
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_ns_check = Some(check_result.clone());
+                                }
+                            }
+                        }
                     }
                 } else {
                     ui.ctx().request_repaint();
@@ -561,16 +731,41 @@ impl DnsTab {
             if let Some(promise) = self.dns_settings_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
-                        Ok(checks) => self.dns_settings_results = checks.clone(),
-                        Err(err) => {
-                            dure_warn!("DNS settings check error: {}", err);
-                            self.dns_settings_results = vec![DnsRecordCheck {
-                                record_type: "ERROR".to_string(),
-                                name: err.clone(),
-                                expected: String::new(),
-                                actual: None,
-                                valid: false,
-                            }];
+                        Ok((check_result, display_results)) => {
+                            // Store result in domain row
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_settings_check = Some(check_result.clone());
+                                }
+                            }
+                            // Convert display strings to DnsRecordCheck for legacy dialog
+                            self.dns_settings_results = display_results.iter().map(|msg| {
+                                DnsRecordCheck {
+                                    record_type: "INFO".to_string(),
+                                    name: msg.clone(),
+                                    expected: String::new(),
+                                    actual: None,
+                                    valid: !msg.contains('✗'),
+                                }
+                            }).collect();
+                        }
+                        Err((check_result, display_results)) => {
+                            // Store error result in domain row
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_settings_check = Some(check_result.clone());
+                                }
+                            }
+                            // Convert display strings to DnsRecordCheck for legacy dialog
+                            self.dns_settings_results = display_results.iter().map(|msg| {
+                                DnsRecordCheck {
+                                    record_type: "ERROR".to_string(),
+                                    name: msg.clone(),
+                                    expected: String::new(),
+                                    actual: None,
+                                    valid: false,
+                                }
+                            }).collect();
                         }
                     }
                 } else {
@@ -644,15 +839,30 @@ impl DnsTab {
             if let Some(promise) = self.https_check_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
-                        Ok(check_result) => self.https_check_result = Some(check_result.clone()),
+                        Ok(check_result) => {
+                            self.https_check_result = Some(check_result.clone());
+                            // Store result in domain row
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_https_check = Some(check_result.clone());
+                                }
+                            }
+                        }
                         Err(err) => {
-                            self.https_check_result = Some(HttpsCheckResult {
-                                success: false,
-                                status_code: None,
-                                ssl_valid: false,
-                                response_time_ms: 0,
+                            let error_result = HttpsCheckResult {
+                                checked_at: chrono::Utc::now().timestamp(),
+                                resolves_to_vm: false,
+                                resolved_ip: None,
+                                expected_ip: None,
                                 error: Some(err.clone()),
-                            });
+                            };
+                            self.https_check_result = Some(error_result.clone());
+                            // Store error result in domain row
+                            if let Some(domain) = &self.selected_domain {
+                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                    row.last_https_check = Some(error_result);
+                                }
+                            }
                         }
                     }
                 } else {
@@ -668,30 +878,34 @@ impl DnsTab {
                 .default_width(500.0)
                 .show(ui.ctx(), |ui| {
                     if let Some(result) = &self.https_check_result {
-                        ui.heading(if result.success { "✓ Connection Successful" } else { "✗ Connection Failed" });
+                        ui.heading(if result.resolves_to_vm { "✓ Resolves Correctly" } else { "✗ Resolution Mismatch" });
                         ui.add_space(10.0);
 
                         ui.horizontal(|ui| {
-                            ui.label("Status:");
-                            if let Some(code) = result.status_code {
-                                ui.label(format!("{}", code));
+                            ui.label("Resolved IP:");
+                            if let Some(ip) = &result.resolved_ip {
+                                ui.label(ip);
                             } else {
                                 ui.weak("N/A");
                             }
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("SSL Valid:");
-                            if result.ssl_valid {
-                                ui.colored_label(egui::Color32::GREEN, "Yes");
+                            ui.label("Expected IP:");
+                            if let Some(ip) = &result.expected_ip {
+                                ui.label(ip);
                             } else {
-                                ui.colored_label(egui::Color32::RED, "No");
+                                ui.weak("N/A");
                             }
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Response Time:");
-                            ui.label(format!("{} ms", result.response_time_ms));
+                            ui.label("Matches VM:");
+                            if result.resolves_to_vm {
+                                ui.colored_label(egui::Color32::GREEN, "Yes");
+                            } else {
+                                ui.colored_label(egui::Color32::RED, "No");
+                            }
                         });
 
                         if let Some(error) = &result.error {
@@ -700,7 +914,7 @@ impl DnsTab {
                         }
                     } else {
                         ui.spinner();
-                        ui.label("Testing HTTPS connection...");
+                        ui.label("Checking DNS resolution...");
                     }
                 });
 
@@ -708,5 +922,112 @@ impl DnsTab {
                 self.show_https_check_dialog = false;
             }
         }
+    }
+
+    /// Load platforms from config file
+    fn load_platforms_from_config(config_file: &std::path::Path) -> Vec<crate::ui_dlg::dns_wizard::PlatformVmInfo> {
+        let mut platforms = Vec::new();
+
+        if let Ok(config) = crate::config::AppConfig::load(&config_file.to_path_buf()) {
+            for (idx, platform_config) in config.platforms.iter().enumerate() {
+                if let Some(vm) = platform_config.vms.first() {
+                    let project_id = platform_config.gcp_selected_project_id.clone()
+                        .or_else(|| Some(vm.gcp_project_id.clone()))
+                        .unwrap_or_else(|| format!("project-{}", idx));
+
+                    let platform_name = format!("Platform {} ({})", idx, project_id);
+
+                    platforms.push(crate::ui_dlg::dns_wizard::PlatformVmInfo {
+                        project_id,
+                        platform_name,
+                        vm_name: vm.name.clone(),
+                        vm_external_ip: vm.external_ip.clone().unwrap_or_default(),
+                    });
+                }
+            }
+        }
+
+        platforms
+    }
+
+    /// Save DNS domain to config file
+    fn save_domain_to_config(
+        config_file: &std::path::Path,
+        provider: &str,
+        domain: &str,
+        zone_id: &Option<String>,
+        account_id: &Option<String>,
+    ) {
+        use crate::config::{AppConfig, DnsDomainConfig};
+
+        // Load config
+        let mut config = AppConfig::load(&config_file.to_path_buf())
+            .unwrap_or_default();
+
+        // Check if domain already exists
+        if config.dns_domains.iter().any(|d| &d.domain == domain) {
+            dure_warn!("Domain {} already in config, skipping", domain);
+            return;
+        }
+
+        // Add new domain
+        config.dns_domains.push(DnsDomainConfig {
+            provider: provider.to_string(),
+            domain: domain.to_string(),
+            zone_id: zone_id.clone(),
+            account_id: account_id.clone(),
+        });
+
+        // Save config
+        if let Err(e) = config.save(&config_file.to_path_buf()) {
+            dure_error!("Failed to save DNS domain to config: {}", e);
+        } else {
+            dure_info!("Saved DNS domain {} to config", domain);
+        }
+    }
+
+    /// Load DNS domains from config file
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_domain_rows(&mut self, profile: &ProfileContext) {
+        use crate::config::AppConfig;
+
+        // Clear existing rows
+        self.domain_rows.clear();
+
+        // Load config
+        let config = match AppConfig::load(&profile.config_file) {
+            Ok(config) => config,
+            Err(e) => {
+                dure_warn!("Failed to load config for DNS domains: {}", e);
+                self.loaded = true;
+                return;
+            }
+        };
+
+        // Convert DnsDomainConfig to DnsDomainRow
+        for dns_config in &config.dns_domains {
+            self.domain_rows.push(DnsDomainRow {
+                provider: dns_config.provider.clone(),
+                domain: dns_config.domain.clone(),
+                status: DomainStatus::Configured,
+                platform_id: None,
+                platform_name: None,
+                vm_name: None,
+                vm_external_ip: None,
+                last_ns_check: None,
+                last_settings_check: None,
+                last_https_check: None,
+                drawer_state: DnsDrawerState::default(),
+            });
+        }
+
+        dure_debug!("Loaded {} DNS domains from config", self.domain_rows.len());
+        self.loaded = true;
+    }
+
+    /// WASM stub for load_domain_rows
+    #[cfg(target_arch = "wasm32")]
+    fn load_domain_rows(&mut self, _profile: &ProfileContext) {
+        self.loaded = true;
     }
 }

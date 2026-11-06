@@ -193,8 +193,8 @@ impl Default for DureApp {
         let ehttp_cache = {
             let cache_dir = config.as_ref().map(|c| c.cache_dir.join("ehttp"));
             Some(Arc::new(crate::api::ehttp_cache::EhttpCache::new(
-                cache_dir,
-                7 * 24 * 3600, // 7 days TTL for image responses
+                        cache_dir,
+                        7 * 24 * 3600, // 7 days TTL for image responses
             )))
         };
 
@@ -305,7 +305,7 @@ impl eframe::App for DureApp {
         // Handle save and theme changes from settings dialog
         if self.dlg_settings.save_clicked {
             self.dlg_settings.save_clicked = false; // Reset flag after processing
-            // TODO: save settings to file
+                                                    // TODO: save settings to file
             dure_info!("Settings saved");
         }
         if let Some(theme_name) = self.dlg_settings.theme_to_apply.take() {
@@ -354,86 +354,93 @@ impl DureApp {
             });
         }
 
-        // Profile selector (top-left)
-        ui.horizontal(|ui| {
-            ui.label(tr!("profile"));
+        egui::ScrollArea::horizontal()
+            .id_source("top_profile_scroll_area")
+            .auto_shrink([false, true])  // Keep horizontal scroll, allow vertical shrink
+            .max_height(80.0)             // Limit height to prevent hiding tabs
+            .show(ui, |ui| {
+                // Profile selector (top-left)
+                ui.horizontal(|ui| {
+                    // ui.label(tr!("profile"));
 
-            // Get list of available profiles
-            let profiles = crate::calc::profile::ProfileManager::list_profiles()
-                .unwrap_or_else(|e| {
-                    dure_warn!("Failed to list profiles: {}", e);
-                    Vec::new()
+                    // Get list of available profiles
+                    let profiles = crate::calc::profile::ProfileManager::list_profiles()
+                        .unwrap_or_else(|e| {
+                            dure_warn!("Failed to list profiles: {}", e);
+                            Vec::new()
+                        });
+
+                    // Find current profile index in the profiles list
+                    let mut selected_profile_idx: Option<usize> = self.current_profile
+                        .as_ref()
+                        .and_then(|p| profiles.iter().position(|name| name == &p.name));
+
+                    let previous_selection = selected_profile_idx;
+
+                    // Build select with profile options
+                    let mut profile_select = egui_material3::select(&mut selected_profile_idx)
+                        .variant(egui_material3::SelectVariant::Outlined)
+                        .label(tr!("profile"))
+                        .placeholder(tr!("none"))
+                        .compact(true)
+                        .width(220.0)
+                        .menu_max_height(300.0);
+
+                    // Add profile options
+                    for (idx, profile_name) in profiles.iter().enumerate() {
+                        profile_select = profile_select.option(idx, profile_name.clone());
+                    }
+
+                    ui.add(profile_select);
+
+                    // Handle profile selection change
+                    if selected_profile_idx != previous_selection {
+                        if let Some(idx) = selected_profile_idx {
+                            if let Some(profile_name) = profiles.get(idx) {
+                                dure_info!("Profile selected: {}", profile_name);
+                                self.pending_profile_name = Some(profile_name.clone());
+                            }
+                        }
+                    }
+
+                    // Add "+ Create New Profile" button
+                    if ui.add(egui_material3::MaterialButton::outlined(tr!("create-profile")).small()).clicked() {
+                        dure_info!("Create new profile clicked");
+                        self.dlg_profile_create.open();
+                    }
+
+                    // Add "Delete Profile 'name'" button (only when a profile is selected)
+                    if let Some(ref profile) = self.current_profile {
+                        let delete_text = format!("{}", tr!("delete-profile"));
+                        if ui.add(egui_material3::MaterialButton::outlined(delete_text).small()).clicked() {
+                            dure_info!("Delete profile clicked: {}", profile.name);
+                            self.dlg_profile_delete.open(profile.name.clone());
+                        }
+
+                        // Add "Close Profile" button
+                        if ui.add(egui_material3::MaterialButton::outlined(tr!("close-profile")).small()).clicked() {
+                            dure_info!("Close profile clicked: {}", profile.name);
+                            // Clear current profile and keyring
+                            self.current_profile = None;
+                            self.current_profile_kdbx = None;
+                            // Clear and reload to reset UI
+                            self.clear_and_reload_profile();
+                        }
+                    }
                 });
 
-            // Find current profile index in the profiles list
-            let mut selected_profile_idx: Option<usize> = self.current_profile
-                .as_ref()
-                .and_then(|p| profiles.iter().position(|name| name == &p.name));
-
-            let previous_selection = selected_profile_idx;
-
-            // Build select with profile options
-            let mut profile_select = egui_material3::select(&mut selected_profile_idx)
-                .variant(egui_material3::SelectVariant::Outlined)
-                .label(tr!("profile"))
-                .placeholder(tr!("none"))
-                .compact(true)
-                .width(220.0)
-                .menu_max_height(300.0);
-
-            // Add profile options
-            for (idx, profile_name) in profiles.iter().enumerate() {
-                profile_select = profile_select.option(idx, profile_name.clone());
-            }
-
-            ui.add(profile_select);
-
-            // Handle profile selection change
-            if selected_profile_idx != previous_selection {
-                if let Some(idx) = selected_profile_idx {
-                    if let Some(profile_name) = profiles.get(idx) {
-                        dure_info!("Profile selected: {}", profile_name);
-                        self.pending_profile_name = Some(profile_name.clone());
-                    }
-                }
-            }
-
-            // Add "+ Create New Profile" button
-            if ui.add(egui_material3::MaterialButton::outlined(tr!("create-new-profile")).small()).clicked() {
-                dure_info!("Create new profile clicked");
-                self.dlg_profile_create.open();
-            }
-
-            // Add "Delete Profile 'name'" button (only when a profile is selected)
-            if let Some(ref profile) = self.current_profile {
-                let delete_text = format!("{} '{}'", tr!("delete-profile"), profile.name);
-                if ui.add(egui_material3::MaterialButton::outlined(delete_text).small()).clicked() {
-                    dure_info!("Delete profile clicked: {}", profile.name);
-                    self.dlg_profile_delete.open(profile.name.clone());
-                }
-
-                // Add "Close Profile" button
-                if ui.add(egui_material3::MaterialButton::outlined(tr!("close-profile")).small()).clicked() {
-                    dure_info!("Close profile clicked: {}", profile.name);
-                    // Clear current profile and keyring
-                    self.current_profile = None;
-                    self.current_profile_kdbx = None;
-                    // Clear and reload to reset UI
-                    self.clear_and_reload_profile();
-                }
-            }
-        });
+            });
 
         ui.add_space(10.0);
 
         // Tabs navigation
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
-                .id_salt("scrolling_primary")
-                .tab(tr!("tab-platform"))
-                .tab(tr!("tab-ssh"))
-                .tab(tr!("tab-domains"))
-                .tab(tr!("tab-site")),
+            .id_salt("scrolling_primary")
+            .tab(tr!("tab-platform"))
+            .tab(tr!("tab-ssh"))
+            .tab(tr!("tab-domains"))
+            .tab(tr!("tab-site")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -529,7 +536,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-    }
+        }
 
     #[cfg(target_os = "macos")]
     {
@@ -537,7 +544,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-    }
+        }
 
     #[cfg(target_os = "windows")]
     {
@@ -545,7 +552,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-    }
+        }
 
     Ok(())
 }

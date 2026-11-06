@@ -284,7 +284,7 @@ tab-client = 클라이언트
 # Profile Selector
 profile = 프로필:
 none = 없음
-create-new-profile = + 새 프로필 생성
+create-profile = + 새 프로필 생성
 delete-profile = 프로필 삭제
 close-profile = 프로필 닫기
 

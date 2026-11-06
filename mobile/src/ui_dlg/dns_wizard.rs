@@ -78,20 +78,34 @@ pub struct DnsWizard {
     #[cfg_attr(feature = "serde", serde(skip))]
     create_dns_promise: Option<Promise<Result<(), String>>>,
 
+    /// Promise for verifying DNS records
+    #[cfg_attr(feature = "serde", serde(skip))]
+    verify_dns_promise: Option<Promise<Result<bool, String>>>,
+
+    /// DNS verification result (true if records match desired state)
+    dns_verified: Option<bool>,
+
+    /// DNS operation log (separate from general progress_log)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dns_operation_log: Vec<String>,
+
     /// Selected domain for DNS setup
     selected_domain: Option<String>,
 
     /// Selected zone ID (from selected_domain)
     selected_zone_id: Option<String>,
 
+    /// Domain search query for browser link
+    search_query: String,
+
     /// Step 3: VM configuration
     selected_vm: Option<String>,
     vm_ip: Option<String>,
     ns_records_configured: bool,
 
-    /// Available GCP VMs (from platform tab)
+    /// Available platforms with VMs (from platform tab)
     #[cfg_attr(feature = "serde", serde(skip))]
-    available_vms: Vec<VmInfo>,
+    available_platforms: Vec<PlatformVmInfo>,
 
     /// Step 4: Configuration summary
     summary_items: Vec<String>,
@@ -99,14 +113,21 @@ pub struct DnsWizard {
     /// Progress log
     #[cfg_attr(feature = "serde", serde(skip))]
     progress_log: Vec<String>,
+
+    /// Should close wizard
+    pub should_close: bool,
+
+    /// Completed domain setup (provider, domain, zone_id, account_id) - used by DNS tab to add row
+    pub completed_domain: Option<(String, String, Option<String>, Option<String>)>,
 }
 
-/// VM information for selection
+/// Platform with VM information for selection
 #[derive(Clone, Debug)]
-struct VmInfo {
-    name: String,
-    ip: String,
-    zone: String,
+pub struct PlatformVmInfo {
+    pub project_id: String,
+    pub platform_name: String,
+    pub vm_name: String,
+    pub vm_external_ip: String,
 }
 
 impl DnsWizard {
@@ -130,14 +151,20 @@ impl DnsWizard {
             fetch_domains_promise: None,
             add_domain_promise: None,
             create_dns_promise: None,
+            verify_dns_promise: None,
+            dns_verified: None,
+            dns_operation_log: Vec::new(),
             selected_domain: None,
             selected_zone_id: None,
+            search_query: String::new(),
             selected_vm: None,
             vm_ip: None,
             ns_records_configured: false,
-            available_vms: Vec::new(),
+            available_platforms: Vec::new(),
             summary_items: Vec::new(),
             progress_log: Vec::new(),
+            should_close: false,
+            completed_domain: None,
         }
     }
 
@@ -230,6 +257,7 @@ impl DnsWizard {
     /// Render wizard UI
     pub fn ui(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
         ui.vertical(|ui| {
+            ui.add_space(10.0);
             // Progress indicator
             self.render_progress_indicator(ui);
 
@@ -248,15 +276,15 @@ impl DnsWizard {
             }
 
             // Navigation buttons
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(10.0);
-            self.render_navigation(ui);
+            //ui.add_space(10.0);
+            //ui.separator();
+            //ui.add_space(10.0);
+            //self.render_navigation(ui);
         });
     }
 
     /// Render progress indicator
-    fn render_progress_indicator(&self, ui: &mut egui::Ui) {
+    fn render_progress_indicator(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let steps = [
                 ("1. OAuth", DnsWizardState::CloudflareAuth),
@@ -271,15 +299,20 @@ impl DnsWizard {
                 let is_complete = self.step_index() > i;
 
                 if is_current {
-                    ui.strong(*label);
+                    // Current step: filled small button (not clickable)
+                    ui.add(MaterialButton::filled(*label).small());
                 } else if is_complete {
-                    ui.label(format!("✓ {}", label));
+                    // Completed step: outlined small button (clickable to jump back)
+                    if ui.add(MaterialButton::outlined(*label).small()).clicked() {
+                        self.state = step_state.clone();
+                    }
                 } else {
-                    ui.weak(*label);
+                    // Future step: disabled outlined small button
+                    ui.add(MaterialButton::outlined(*label).small().enabled(false));
                 }
 
                 if i < steps.len() - 1 {
-                    ui.label("→");
+                    ui.add_space(5.0);
                 }
             }
         });
@@ -388,7 +421,15 @@ impl DnsWizard {
         // Next button
         ui.add_space(20.0);
         ui.horizontal(|ui| {
-            ui.add_space(ui.available_width() - 100.0);
+            // Show "Open OAuth Screen" button if OAuth was attempted
+            if self.oauth_promise.is_some() || self.oauth_result.is_some() {
+                if ui.add(MaterialButton::outlined("Open OAuth Screen")).clicked() {
+                    self.start_oauth();
+                }
+                ui.add_space(10.0);
+            }
+
+            //ui.add_space(ui.available_width() - 100.0);
             let next_btn = ui.add_enabled(
                 self.can_proceed_from_step1(),
                 MaterialButton::filled("Next")
@@ -449,39 +490,47 @@ impl DnsWizard {
             }
         }
 
-        // Two-column layout for domain addition options
-        ui.columns(2, |cols| {
-            // Left column: I have domain
-            cols[0].group(|ui| {
-                ui.heading("I have domain");
-                ui.add_space(10.0);
+        // I have domain section
+        ui.heading("I have domain");
+        ui.add_space(10.0);
 
-                ui.horizontal(|ui| {
-                    ui.label("Domain:");
-                    ui.text_edit_singleline(&mut self.domain_name);
-                });
+        ui.horizontal(|ui| {
+            ui.label("Domain:");
+            ui.text_edit_singleline(&mut self.domain_name);
+        
 
-                ui.add_space(5.0);
-                let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
-                if ui.add_enabled(can_add, MaterialButton::outlined("Add")).clicked() {
-                    self.add_domain_to_account(&self.domain_name.clone());
+            ui.add_space(5.0);
+            let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
+            if ui.add_enabled(can_add, MaterialButton::filled("Add").small()).clicked() {
+                self.add_domain_to_account(&self.domain_name.clone());
+            }
+        });
+        ui.add_space(10.0);
+        ui.separator();
+        ui.add_space(10.0);
+
+        // I want to register domain section
+        ui.heading("I want to register domain");
+        ui.add_space(10.0);
+
+        ui.horizontal(|ui| {
+            ui.label("Domain:");
+            ui.text_edit_singleline(&mut self.search_query);
+
+            if ui.add(MaterialButton::filled("Search").small()).clicked() {
+                if !self.search_query.is_empty() {
+                    let url = format!(
+                        "https://dash.cloudflare.com/{}/domains/registrations/purchase?query={}",
+                        self.cloudflare_account_id,
+                        urlencoding::encode(&self.search_query)
+                    );
+                    if let Err(e) = webbrowser::open(&url) {
+                        self.progress_log.push(format!("✗ Failed to open browser: {}", e));
+                    } else {
+                        self.progress_log.push("✓ Opened Cloudflare dashboard".to_string());
+                    }
                 }
-            });
-
-            // Right column: I want to register domain
-            cols[1].group(|ui| {
-                ui.heading("I want to register domain");
-                ui.add_space(10.0);
-
-                let mut search_domain = String::new();
-                ui.horizontal(|ui| {
-                    ui.label("Domain:");
-                    ui.text_edit_singleline(&mut search_domain);
-                });
-
-                ui.add_space(5.0);
-                ui.label("⚠ Domain registration not yet implemented");
-            });
+            }
         });
 
         ui.add_space(20.0);
@@ -516,14 +565,33 @@ impl DnsWizard {
         ui.add_space(10.0);
         ui.label("* select domain to use and continue");
 
-        // Previous/Next buttons
+        // Progress log for domain operations
+        if !self.progress_log.is_empty() {
+            ui.add_space(10.0);
+            ui.group(|ui| {
+                ui.set_max_height(100.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for log in self.progress_log.iter().rev().take(5).rev() {
+                        ui.label(log);
+                    }
+                });
+            });
+        }
+
+        // Close/Previous/Next buttons
         ui.add_space(20.0);
         ui.horizontal(|ui| {
+            if ui.add(MaterialButton::outlined("Close")).clicked() {
+                self.should_close = true;
+            }
+
+            ui.add_space(10.0);
+
             if ui.add(MaterialButton::outlined("Previous")).clicked() {
                 self.state = DnsWizardState::CloudflareAuth;
             }
 
-            ui.add_space(ui.available_width() - 100.0);
+            ui.add_space(10.0);
 
             let next_btn = ui.add_enabled(
                 self.can_proceed_from_step2(),
@@ -540,35 +608,58 @@ impl DnsWizard {
         ui.heading("Step 3: VM Selection");
         ui.add_space(10.0);
 
-        ui.label("Select platform binded VM which doesn't have DNS yet:");
+        ui.label("Select VM to bind with DNS:");
         ui.add_space(10.0);
 
-        // VM list with checkboxes
-        for vm in self.available_vms.clone() {
-            let is_selected = self.selected_vm.as_ref() == Some(&vm.name);
+        // Platform list with Material-like styling
+        if self.available_platforms.is_empty() {
+            ui.label("No platforms available. Please add a platform in Platform tab first.");
+        } else {
+            egui::ScrollArea::vertical()
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    for platform in &self.available_platforms.clone() {
+                        let is_selected = self.selected_vm.as_ref() == Some(&platform.project_id);
 
-            ui.horizontal(|ui| {
-                if ui.radio(is_selected, "").clicked() {
-                    self.selected_vm = Some(vm.name.clone());
-                    self.vm_ip = Some(vm.ip.clone());
-                }
+                        ui.horizontal(|ui| {
+                            if ui.radio(is_selected, "").clicked() {
+                                self.selected_vm = Some(platform.project_id.clone());
+                                self.vm_ip = Some(platform.vm_external_ip.clone());
+                            }
 
-                // Format: project_id  vm_name  external_ip
-                ui.label(format!("{}  {}  {}", vm.zone, vm.name, vm.ip));
-            });
+                            ui.vertical(|ui| {
+                                ui.heading(&platform.platform_name);
+                                ui.label(format!(
+                                    "Project: {} | VM: {} | IP: {}",
+                                    platform.project_id,
+                                    platform.vm_name,
+                                    platform.vm_external_ip
+                                ));
+                            });
+                        });
+
+                        ui.add_space(5.0);
+                    }
+                });
         }
 
         ui.add_space(10.0);
-        ui.label("* select vm to bind and continue");
+        ui.label("* Select VM to bind and continue");
 
-        // Previous/Next buttons
+        // Close/Previous/Next buttons
         ui.add_space(20.0);
         ui.horizontal(|ui| {
+            if ui.add(MaterialButton::outlined("Close")).clicked() {
+                self.should_close = true;
+            }
+
+            ui.add_space(10.0);
+
             if ui.add(MaterialButton::outlined("Previous")).clicked() {
                 self.state = DnsWizardState::DomainRegistration;
             }
 
-            ui.add_space(ui.available_width() - 100.0);
+            ui.add_space(10.0);
 
             let next_btn = ui.add_enabled(
                 self.can_proceed_from_step3(),
@@ -585,40 +676,99 @@ impl DnsWizard {
         ui.heading("Step 4: DNS Setup");
         ui.add_space(10.0);
 
+        // Auto-verify DNS on first render of this step
+        if self.verify_dns_promise.is_none() && self.dns_verified.is_none() {
+            self.verify_dns_records();
+        }
+
+        // Handle verify DNS promise
+        if let Some(promise) = self.verify_dns_promise.take() {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(verified) => {
+                        self.dns_verified = Some(*verified);
+                        if *verified {
+                            self.dns_operation_log.push("✓ DNS records verified - all settings correct".to_string());
+                            self.ns_records_configured = true;
+                        } else {
+                            self.dns_operation_log.push("○ DNS records missing or incorrect - setup required".to_string());
+                        }
+                    }
+                    Err(err) => {
+                        self.dns_operation_log.push(format!("✗ Verification failed: {}", err));
+                    }
+                }
+            } else {
+                ui.spinner();
+                ui.label("Verifying DNS records...");
+                self.verify_dns_promise = Some(promise);
+                return; // Skip rest of UI while verifying
+            }
+        }
+
         // Handle create DNS records promise
         if let Some(promise) = self.create_dns_promise.take() {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok(()) => {
                         self.ns_records_configured = true;
-                        self.progress_log.push("✓ DNS records created successfully".to_string());
+                        self.dns_verified = Some(true);
+                        self.dns_operation_log.push("✓ DNS records created or updated successfully".to_string());
                     }
                     Err(err) => {
-                        self.progress_log.push(format!("✗ Failed to create DNS records: {}", err));
+                        // If error contains "already exists", mark as configured anyway
+                        if err.contains("already exists") || err.contains("duplicate") {
+                            self.ns_records_configured = true;
+                            self.dns_verified = Some(true);
+                            self.dns_operation_log.push("✓ DNS records already exist (no changes needed)".to_string());
+                        } else {
+                            self.dns_operation_log.push(format!("✗ Failed to setup DNS records: {}", err));
+                        }
                     }
                 }
             } else {
                 ui.spinner();
-                ui.label("Creating DNS records...");
+                ui.label("Setting up DNS records...");
                 self.create_dns_promise = Some(promise);
                 return; // Skip rest of UI while creating
             }
         }
 
-        // Show status and setup button
-        ui.horizontal(|ui| {
-            ui.label("Status of DNS settings:");
+        // DNS operation log
+        if !self.dns_operation_log.is_empty() {
+            ui.group(|ui| {
+                ui.label("DNS Operations:");
+                ui.add_space(5.0);
+                egui::ScrollArea::vertical()
+                    .max_height(100.0)
+                    .show(ui, |ui| {
+                        for log in self.dns_operation_log.iter().rev().take(10).rev() {
+                            ui.label(log);
+                        }
+                    });
+            });
             ui.add_space(10.0);
+        }
 
-            let can_setup = !self.ns_records_configured && self.create_dns_promise.is_none();
-            let setup_btn = ui.add_enabled(
-                can_setup,
-                MaterialButton::outlined("Setup DNS")
-            );
-            if setup_btn.clicked() {
-                self.create_dns_records();
-            }
-        });
+        // Show status and setup button
+        ui.label("Status of DNS settings:");
+        ui.add_space(5.0);
+
+        // Button enabled if: not verified OR verification failed OR create not in progress
+        let dns_needs_setup = self.dns_verified != Some(true);
+        let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
+
+        let setup_btn = ui.add_enabled(
+            can_setup,
+            MaterialButton::filled("Setup DNS").small()
+        );
+        if setup_btn.clicked() {
+            self.dns_operation_log.push("Starting DNS setup...".to_string());
+            self.create_dns_records();
+        }
+
+        ui.add_space(5.0);
+        ui.label("setup dns will overwrite to next values for your domain.");
 
         ui.add_space(10.0);
 
@@ -640,21 +790,37 @@ impl DnsWizard {
             }
         });
 
-        // Previous/Add buttons
+        // Close/Previous/Add buttons
         ui.add_space(20.0);
         ui.horizontal(|ui| {
+            if ui.add(MaterialButton::outlined("Close")).clicked() {
+                self.should_close = true;
+            }
+
+            ui.add_space(10.0);
+
             if ui.add(MaterialButton::outlined("Previous")).clicked() {
                 self.state = DnsWizardState::VmConfiguration;
             }
 
-            ui.add_space(ui.available_width() - 100.0);
+            ui.add_space(10.0);
 
             let add_btn = ui.add_enabled(
                 self.ns_records_configured,
                 MaterialButton::filled("Add")
             );
             if add_btn.clicked() {
-                self.state = DnsWizardState::Complete;
+                // Store completed domain info for DNS tab (provider, domain, zone_id, account_id)
+                if let Some(domain) = &self.selected_domain {
+                    self.completed_domain = Some((
+                        "cloudflare".to_string(),
+                        domain.clone(),
+                        self.selected_zone_id.clone(),
+                        Some(self.cloudflare_account_id.clone()),
+                    ));
+                }
+                // Close dialog instead of going to Complete screen
+                self.should_close = true;
             }
         });
     }
@@ -671,72 +837,6 @@ impl DnsWizard {
         ui.heading("Error");
         ui.add_space(10.0);
         ui.colored_label(egui::Color32::RED, error);
-    }
-
-    /// Render navigation buttons
-    fn render_navigation(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if self.can_go_back() {
-                if ui.add(MaterialButton::outlined("Back")).clicked() {
-                    self.go_back();
-                }
-            }
-
-            ui.add_space(10.0);
-
-            if self.can_go_next() {
-                if ui.add(MaterialButton::filled("Next")).clicked() {
-                    self.go_next();
-                }
-            }
-        });
-    }
-
-    /// Check if can go back
-    fn can_go_back(&self) -> bool {
-        matches!(
-            self.state,
-            DnsWizardState::DomainRegistration
-                | DnsWizardState::VmConfiguration
-                | DnsWizardState::Confirmation
-        )
-    }
-
-    /// Check if can go next
-    fn can_go_next(&self) -> bool {
-        match &self.state {
-            DnsWizardState::CloudflareAuth => {
-                self.oauth_result.is_some()
-                    && self.api_connection_ok
-                    && !self.cloudflare_account_id.is_empty()
-            }
-            DnsWizardState::DomainRegistration => self.domain_registered && self.ns_check_ok,
-            DnsWizardState::VmConfiguration => {
-                self.selected_vm.is_some() && self.ns_records_configured
-            }
-            _ => false,
-        }
-    }
-
-    /// Go to previous step
-    fn go_back(&mut self) {
-        self.state = match &self.state {
-            DnsWizardState::DomainRegistration => DnsWizardState::CloudflareAuth,
-            DnsWizardState::VmConfiguration => DnsWizardState::DomainRegistration,
-            DnsWizardState::Confirmation => DnsWizardState::VmConfiguration,
-            _ => return,
-        };
-    }
-
-    /// Go to next step
-    fn go_next(&mut self) {
-        self.state = match &self.state {
-            DnsWizardState::CloudflareAuth => DnsWizardState::DomainRegistration,
-            DnsWizardState::DomainRegistration => DnsWizardState::VmConfiguration,
-            DnsWizardState::VmConfiguration => DnsWizardState::Confirmation,
-            DnsWizardState::Confirmation => DnsWizardState::Complete,
-            _ => return,
-        };
     }
 
     /// Start OAuth flow
@@ -867,28 +967,12 @@ impl DnsWizard {
 
     /// Check nameservers
     fn check_nameservers(&mut self) {
-        // TODO: Implement NS verification using dqy
+        // ponytail: Stub NS check - returns true for now
+        // Real implementation: use hickory-dns or trust-dns-resolver to query NS records
+        // Upgrade when: NS misconfig becomes actual issue (domain pointing elsewhere)
         self.progress_log.push("Checking nameservers...".to_string());
-        // Simulate successful check for now
         self.ns_check_ok = true;
-        self.progress_log.push("✓ Nameservers verified".to_string());
-    }
-
-    /// Apply DNS configuration
-    fn apply_dns_configuration(&mut self) {
-        if let Some(ip) = &self.vm_ip {
-            self.progress_log
-                .push(format!("Configuring DNS records for {}...", self.domain_name));
-
-            // TODO: Actually create DNS records via Cloudflare API
-            let records = self.get_default_dns_records(ip);
-            for record in &records {
-                self.progress_log.push(format!("  Creating: {}", record));
-            }
-
-            self.ns_records_configured = true;
-            self.progress_log.push("✓ DNS records configured".to_string());
-        }
+        self.progress_log.push("✓ Nameservers verified (stub)".to_string());
     }
 
     /// Get default DNS records
@@ -904,24 +988,14 @@ impl DnsWizard {
         ]
     }
 
-    /// Load available VMs (placeholder - should be called from parent)
-    pub fn load_available_vms(&mut self, vms: Vec<(String, String, String)>) {
-        self.available_vms = vms
-            .into_iter()
-            .map(|(name, ip, zone)| VmInfo { name, ip, zone })
-            .collect();
+    /// Load available platforms with VMs
+    pub fn load_available_platforms(&mut self, platforms: Vec<PlatformVmInfo>) {
+        self.available_platforms = platforms;
     }
 
-    /// Filter VMs to only show those without domain binding
-    /// Call this after load_available_vms with platform configs
-    pub fn filter_vms_without_domain(&mut self, platforms: &[crate::config::CloudPlatformConfig]) {
-        let vms_with_domain: std::collections::HashSet<String> = platforms
-            .iter()
-            .filter(|p| p.bound_domain.is_some())
-            .flat_map(|p| p.vms.iter().map(|vm| vm.name.clone()))
-            .collect();
-
-        self.available_vms.retain(|vm| !vms_with_domain.contains(&vm.name));
+    /// Check if platforms need to be loaded
+    pub fn needs_platform_data(&self) -> bool {
+        self.available_platforms.is_empty()
     }
 
     /// Fetch domains from Cloudflare account
@@ -1006,4 +1080,64 @@ impl DnsWizard {
 
         self.create_dns_promise = Some(promise);
     }
+
+    /// Verify existing DNS records match desired configuration
+    pub fn verify_dns_records(&mut self) {
+        let token = match &self.oauth_result {
+            Some(result) => result.access_token.clone(),
+            None => {
+                dure_error!("No OAuth token available");
+                return;
+            }
+        };
+
+        let zone_id = match &self.selected_zone_id {
+            Some(id) => id.clone(),
+            None => {
+                dure_error!("No zone ID available");
+                return;
+            }
+        };
+
+        let domain = match &self.selected_domain {
+            Some(d) => d.clone(),
+            None => {
+                dure_error!("No domain selected");
+                return;
+            }
+        };
+
+        let ip = match &self.vm_ip {
+            Some(i) => i.clone(),
+            None => {
+                dure_error!("No VM IP available");
+                return;
+            }
+        };
+
+        let promise = poll_promise::Promise::spawn_thread("verify_dns", move || {
+            let client = crate::api::cloudflare::CloudflareClient::new(token);
+            client.verify_default_xmpp_records(&zone_id, &domain, &ip)
+                .map_err(|e| format!("Failed to verify DNS records: {}", e))
+        });
+
+        self.verify_dns_promise = Some(promise);
+    }
+
+    /// Get selected platform/VM info for DNS tab binding
+    pub fn get_selected_platform_info(&self) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+        // Find the selected platform from available_platforms based on selected_vm
+        if let Some(ref vm_name) = self.selected_vm {
+            if let Some(platform) = self.available_platforms.iter().find(|p| &p.vm_name == vm_name) {
+                return (
+                    Some(platform.project_id.clone()),
+                    Some(platform.platform_name.clone()),
+                    Some(platform.vm_name.clone()),
+                    self.vm_ip.clone(),
+                );
+            }
+        }
+        (None, None, None, None)
+    }
+
 }

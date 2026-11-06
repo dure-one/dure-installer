@@ -3,6 +3,7 @@
 // Infrastructure management tabs (active on all platforms)
 pub mod ns; // Keep existing NS tab code, but hidden from main tabs
 pub mod dns; // New DNS tab with Cloudflare OAuth
+pub mod dns_drawer; // DNS drawer with tabs
 pub mod platform;
 pub mod platform_drawer;
 pub mod site;

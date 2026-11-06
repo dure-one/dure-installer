@@ -12,4 +12,7 @@ pub mod registrar;
 // Re-export commonly used types
 pub use dns::{CloudflareClient, DnsRecord, Zone};
 pub use oauth::{CloudflareOAuthHandler, OAuthResult, UserInfo, get_user_info};
-pub use registrar::CloudflareRegistrarClient;
+pub use registrar::{
+    CloudflareRegistrarClient, CreateRegistrationRequest, Domain, DomainPricing,
+    DomainSearchResult, Registration, RegistrationContext, RegistrationStatus,
+};

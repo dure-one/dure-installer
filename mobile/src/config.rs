@@ -163,6 +163,21 @@ pub struct DomainConfig {
     pub porkbun: PorkbunConfig,
 }
 
+/// DNS domain entry for DNS management table
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsDomainConfig {
+    /// DNS provider (e.g., "cloudflare")
+    pub provider: String,
+    /// Domain name (e.g., "example.com")
+    pub domain: String,
+    /// Zone ID from provider (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone_id: Option<String>,
+    /// Account ID from provider (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+}
+
 /// SSH host configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SshHostConfig {
@@ -297,6 +312,8 @@ pub struct AppConfig {
     pub platforms: Vec<CloudPlatformConfig>,
     #[serde(default)]
     pub domain: DomainConfig,
+    #[serde(default)]
+    pub dns_domains: Vec<DnsDomainConfig>,
     #[serde(default)]
     pub server: ServerConfig,
     #[serde(default)]

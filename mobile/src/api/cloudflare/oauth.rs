@@ -43,13 +43,9 @@ fn get_oauth_client_id() -> &'static str {
 /// Cloudflare OAuth scopes - MUST match exactly what's configured in OAuth app
 /// Note: No offline_access = no refresh token (re-auth needed when token expires)
 const CLOUDFLARE_SCOPES: &[&str] = &[
-    // DNS Settings
+    // Account DNS Settings
     "account-dns-settings.read",
     "account-dns-settings.write",
-
-    // DNS Firewall
-    "dns-firewall.read",
-    "dns-firewall.write",
 
     // DNS Management
     "dns.read",
@@ -59,9 +55,21 @@ const CLOUDFLARE_SCOPES: &[&str] = &[
     "dns-view.read",
     "dns-view.write",
 
-    // Registrar
+    // Registrar Domains
     "registrar-domains.admin",
     "registrar-domains.read",
+
+    // Zone DNS Settings
+    "zone-dns-settings.read",
+    "zone-dns-settings.write",
+
+    // Zone Management
+    "zone.read",
+    "zone.write",
+
+    // Zone Settings
+    "zone-settings.read",
+    "zone-settings.write",
 ];
 
 /// OAuth result
