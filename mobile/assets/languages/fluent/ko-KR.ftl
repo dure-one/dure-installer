@@ -14,6 +14,7 @@ all-users = 모든 사용자
 refresh = 새로고침
 logs = 애플리케이션 로그:
 theme-mode = 테마 모드:
+lightdark-mode = 밝기 모드:
 contrast-level = 대비 수준:
 log-level = 로그 레벨:
 ok = 확인

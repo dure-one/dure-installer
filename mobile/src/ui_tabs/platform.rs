@@ -15,6 +15,10 @@ use crate::ui_dlg::platform_gcp::GcpWizard;
 
 use crate::ui_components::{ActionMenu, SvgEmoji, EmojiProgressBar};
 
+// Button spacing matching Platform tab
+const BUTTON_VERTICAL_SPACING: f32 = 4.0;
+const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
+
 /// Firewall rule information for firewall dialog
 #[derive(Clone, Debug)]
 struct FirewallRuleInfo {
@@ -1536,8 +1540,8 @@ impl PlatformTab {
                             ui.set_min_height(needed_height);
 
                             ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.x = 2.0;
-                                ui.spacing_mut().item_spacing.y = 2.0;
+                                ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
+                                ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
                                 ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
                                 // Check if any operation in progress

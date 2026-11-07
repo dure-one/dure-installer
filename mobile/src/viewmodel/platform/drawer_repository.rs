@@ -131,13 +131,9 @@ mod tests {
     fn test_repository_log_operation() {
         smol::block_on(async {
             // Setup unique test database
-            let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let test_db = format!(
-                "test-drawer-repo-{}-{}.db",
-                std::process::id(),
-                test_id
-            );
-            db::set_db_path(test_db);
+            let _temp_dir = tempfile::tempdir().unwrap();
+            let test_db = _temp_dir.path().join("test.db");
+            db::set_db_path(test_db.to_string_lossy().to_string());
 
             let repo = DrawerRepository::new();
             repo.init().await.unwrap();
@@ -178,13 +174,9 @@ mod tests {
     fn test_repository_mark_failed() {
         smol::block_on(async {
             // Setup unique test database
-            let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let test_db = format!(
-                "test-drawer-repo-fail-{}-{}.db",
-                std::process::id(),
-                test_id
-            );
-            db::set_db_path(test_db);
+            let _temp_dir = tempfile::tempdir().unwrap();
+            let test_db = _temp_dir.path().join("test.db");
+            db::set_db_path(test_db.to_string_lossy().to_string());
 
             let repo = DrawerRepository::new();
             repo.init().await.unwrap();
@@ -210,13 +202,9 @@ mod tests {
     fn test_repository_multiple_projects() {
         smol::block_on(async {
             // Setup unique test database
-            let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let test_db = format!(
-                "test-drawer-repo-multi-{}-{}.db",
-                std::process::id(),
-                test_id
-            );
-            db::set_db_path(test_db);
+            let _temp_dir = tempfile::tempdir().unwrap();
+            let test_db = _temp_dir.path().join("test.db");
+            db::set_db_path(test_db.to_string_lossy().to_string());
 
             let repo = DrawerRepository::new();
             repo.init().await.unwrap();

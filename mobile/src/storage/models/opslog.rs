@@ -574,14 +574,10 @@ mod tests {
 
     #[test]
     fn test_operation_log_crud() {
-        // Setup unique test database
-        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let test_db = format!(
-            "test-operation-log-{}-{}.db",
-            std::process::id(),
-            test_id
-        );
-        db::set_db_path(test_db.clone());
+        // Setup unique test database with tempfile
+        let _temp_dir = tempfile::tempdir().unwrap();
+        let test_db = _temp_dir.path().join("test.db");
+        db::set_db_path(test_db.to_string_lossy().to_string());
 
         // Initialize table
         let mut conn = db::establish_connection();
@@ -645,14 +641,10 @@ mod tests {
 
     #[test]
     fn test_ssh_operations_filtered_correctly() {
-        // Setup unique test database
-        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let test_db = format!(
-            "test-ssh-operations-{}-{}.db",
-            std::process::id(),
-            test_id
-        );
-        db::set_db_path(test_db.clone());
+        // Setup unique test database with tempfile
+        let _temp_dir = tempfile::tempdir().unwrap();
+        let test_db = _temp_dir.path().join("test.db");
+        db::set_db_path(test_db.to_string_lossy().to_string());
 
         {
             let mut conn = db::establish_connection();
@@ -693,7 +685,6 @@ mod tests {
             assert_eq!(platform_ops_again[0].id, platform_id);
         }
 
-        // Cleanup
-        let _ = std::fs::remove_file(&test_db);
+        // Cleanup handled automatically by tempfile
     }
 }

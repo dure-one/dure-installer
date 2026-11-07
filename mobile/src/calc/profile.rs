@@ -21,29 +21,44 @@ use thiserror::Error;
 pub struct ProfileContext {
     pub name: String,
     pub config_dir: PathBuf,       // ~/.config/dure_installer/{name}/
-    pub config_file: PathBuf,      // .../config.yml
-    pub db_path: PathBuf,          // .../dure.db
-    pub kdbx_path: PathBuf,        // .../key.kdbx
-    pub kpkey_path: PathBuf,       // .../id_ed25519
-    pub kppubkey_path: PathBuf,    // .../id_ed25519.pub
+    pub data_dir: PathBuf,         // ~/.local/share/dure_installer/{name}/ (XDG data dir)
+    pub config_file: PathBuf,      // {config_dir}/config.yml
+    pub settings_file: PathBuf,    // {config_dir}/settings.yml
+    pub db_path: PathBuf,          // {data_dir}/dure.db (moved from config to data dir)
+    pub kdbx_path: PathBuf,        // {config_dir}/key.kdbx
+    pub kpkey_path: PathBuf,       // {config_dir}/id_ed25519
+    pub kppubkey_path: PathBuf,    // {config_dir}/id_ed25519.pub
 }
 
 impl ProfileContext {
     /// Create ProfileContext from profile name
     ///
     /// Constructs all file paths for the profile based on the base directory.
+    /// Per XDG Base Directory specification:
+    /// - Config files (config.yml, SSH keys, KeePass DB) → ~/.config/dure_installer/{name}/
+    /// - Database files → ~/.local/share/dure_installer/{name}/
+    ///
     /// Does NOT create files or verify they exist - use ProfileManager for that.
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         let config_dir = crate::get_profiles_base_dir()?.join(&name);
 
+        // Database goes to data directory (XDG_DATA_HOME)
+        #[cfg(not(target_arch = "wasm32"))]
+        let data_dir = crate::get_app_data_dir()?.join(&name);
+
+        #[cfg(target_arch = "wasm32")]
+        let data_dir = config_dir.clone(); // WASM uses same directory
+
         Ok(Self {
             name,
             config_file: config_dir.join("config.yml"),
-            db_path: config_dir.join("dure.db"),
+            settings_file: config_dir.join("settings.yml"),
+            db_path: data_dir.join("dure.db"),
             kdbx_path: config_dir.join("key.kdbx"),
             kpkey_path: config_dir.join("id_ed25519"),
             kppubkey_path: config_dir.join("id_ed25519.pub"),
+            data_dir,
             config_dir,
         })
     }
@@ -196,8 +211,10 @@ impl ProfileManager {
             return Err(ProfileError::AlreadyExists(name.to_string()).into());
         }
 
-        // Create profile directory
-        fs::create_dir_all(&ctx.config_dir).context("failed to create profile directory")?;
+        // Create profile directories (config and data)
+        fs::create_dir_all(&ctx.config_dir).context("failed to create profile config directory")?;
+        #[cfg(not(target_arch = "wasm32"))]
+        fs::create_dir_all(&ctx.data_dir).context("failed to create profile data directory")?;
 
         // Generate SSH keypair
         let (private_key, public_key) = Self::generate_keypair()?;
@@ -606,5 +623,40 @@ mod tests {
         // Cleanup
         fs::remove_dir_all(&test_dir).unwrap();
         std::env::remove_var("DURE_TEST_PROFILES_DIR");
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_profile_context_data_dir_separation() {
+        // Test that database goes to data_dir, config stays in config_dir
+        use tempfile::TempDir;
+
+        // Create temporary directories to simulate XDG layout
+        let temp_config = TempDir::new().unwrap();
+        let temp_data = TempDir::new().unwrap();
+
+        // Override environment to use temp directories
+        std::env::set_var("HOME", temp_config.path().parent().unwrap());
+
+        let ctx = ProfileContext::new("test-profile").unwrap();
+
+        // Verify config files are in config directory
+        assert!(ctx.config_file.starts_with(&ctx.config_dir));
+        assert!(ctx.kdbx_path.starts_with(&ctx.config_dir));
+        assert!(ctx.kpkey_path.starts_with(&ctx.config_dir));
+        assert!(ctx.kppubkey_path.starts_with(&ctx.config_dir));
+
+        // Verify database is in data directory (NOT config directory)
+        assert!(ctx.db_path.starts_with(&ctx.data_dir));
+        assert!(!ctx.db_path.starts_with(&ctx.config_dir));
+
+        // Verify paths contain correct XDG directories
+        assert!(ctx.config_dir.to_string_lossy().contains(".config/dure_installer"));
+        assert!(ctx.data_dir.to_string_lossy().contains(".local/share/dure_installer")
+            || ctx.data_dir.to_string_lossy().contains(r".local\share\dure_installer"));
+
+        dure_info!("✓ Config dir: {}", ctx.config_dir.display());
+        dure_info!("✓ Data dir: {}", ctx.data_dir.display());
+        dure_info!("✓ DB path: {}", ctx.db_path.display());
     }
 }

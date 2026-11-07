@@ -26,8 +26,8 @@ pub fn render_drawer(
         .show(ui, |ui| {
             match drawer_state.active_tab {
                 DnsDrawerTab::Status => render_status_tab(ui, row),
-                DnsDrawerTab::Logs => render_logs_tab(ui),
-                DnsDrawerTab::Operations => render_operations_tab(ui),
+                DnsDrawerTab::Logs => render_logs_tab(ui, drawer_state),
+                DnsDrawerTab::Operations => render_operations_tab(ui, drawer_state),
             }
         });
 }
@@ -39,8 +39,13 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     // Domain
     StatusLine::new("Domain", &row.domain).show(ui);
 
-    // Provider
-    StatusLine::new("Provider", &row.provider).show(ui);
+    // Provider (with account_id if available)
+    let provider_display = if let Some(account_id) = &row.account_id {
+        format!("{}({})", row.provider, account_id)
+    } else {
+        row.provider.clone()
+    };
+    StatusLine::new("Provider", &provider_display).show(ui);
 
     ui.add_space(8.0);
     ui.label(egui::RichText::new("Platform Binding").strong());
@@ -143,15 +148,19 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
 }
 
 /// Render Logs tab
-fn render_logs_tab(ui: &mut egui::Ui) {
-    ui.add_space(8.0);
-    ui.label("Operation logs will appear here");
-    // TODO: Use LogsRenderer once we have operation logs
+fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
+    let renderer = LogsRenderer::new("DNS Operation Logs")
+        .max_height(400.0)
+        .refresh_interval(2);
+
+    let refresh_id = ui.id().with("dns_logs_refresh");
+    renderer.show(ui, &drawer_state.logs, refresh_id);
 }
 
 /// Render Operations tab
-fn render_operations_tab(ui: &mut egui::Ui) {
-    ui.add_space(8.0);
-    ui.label("Operation history will appear here");
-    // TODO: Use OperationsRenderer once we track operations
+fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
+    let renderer = OperationsRenderer::new()
+        .max_height(400.0);
+
+    renderer.show(ui, &drawer_state.operations);
 }

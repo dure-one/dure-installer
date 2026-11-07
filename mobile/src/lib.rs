@@ -177,6 +177,29 @@ pub fn get_app_cache_dir() -> Result<PathBuf> {
     }
 }
 
+/// Get the application data directory (~/.local/share/dure_installer)
+///
+/// Per XDG Base Directory specification, persistent application data
+/// (like databases) should be stored in ~/.local/share, not ~/.config
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_app_data_dir() -> Result<PathBuf> {
+    #[cfg(not(target_os = "android"))]
+    {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Failed to get home directory")?;
+        let data_dir = PathBuf::from(home).join(".local").join("share").join("dure_installer");
+        Ok(data_dir)
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        let base_path = std::env::var("ANDROID_INTERNAL_DATA_PATH")
+            .context("ANDROID_INTERNAL_DATA_PATH environment variable not set")?;
+        Ok(PathBuf::from(base_path).join("data"))
+    }
+}
+
 /// Application directory paths configuration
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -305,6 +328,29 @@ pub enum LogLevel {
     Trace,
 }
 
+impl LogLevel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LogLevel::Error => "Error",
+            LogLevel::Warn => "Warn",
+            LogLevel::Info => "Info",
+            LogLevel::Debug => "Debug",
+            LogLevel::Trace => "Trace",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "Error" => LogLevel::Error,
+            "Warn" => LogLevel::Warn,
+            "Info" => LogLevel::Info,
+            "Debug" => LogLevel::Debug,
+            "Trace" => LogLevel::Trace,
+            _ => LogLevel::Info,
+        }
+    }
+}
+
 /// Application settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -325,6 +371,30 @@ pub struct Settings {
     pub theme_name: String,
     #[serde(default)]
     pub autoupdate: bool,
+}
+
+impl Settings {
+    /// Load settings from file
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let settings: Settings = serde_yaml::from_str(&content)?;
+        Ok(settings)
+    }
+
+    /// Load settings from file or return default
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_or_default(path: &std::path::Path) -> Self {
+        Self::load(path).unwrap_or_default()
+    }
+
+    /// Save settings to file
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        let yaml = serde_yaml::to_string(self)?;
+        std::fs::write(path, yaml)?;
+        Ok(())
+    }
 }
 
 impl Default for Settings {
@@ -361,4 +431,184 @@ fn default_display_size() -> String {
 
 fn default_theme_name() -> String {
     "default".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_level_as_str() {
+        assert_eq!(LogLevel::Error.as_str(), "Error");
+        assert_eq!(LogLevel::Warn.as_str(), "Warn");
+        assert_eq!(LogLevel::Info.as_str(), "Info");
+        assert_eq!(LogLevel::Debug.as_str(), "Debug");
+        assert_eq!(LogLevel::Trace.as_str(), "Trace");
+    }
+
+    #[test]
+    fn test_log_level_from_str() {
+        assert_eq!(LogLevel::from_str("Error"), LogLevel::Error);
+        assert_eq!(LogLevel::from_str("Warn"), LogLevel::Warn);
+        assert_eq!(LogLevel::from_str("Info"), LogLevel::Info);
+        assert_eq!(LogLevel::from_str("Debug"), LogLevel::Debug);
+        assert_eq!(LogLevel::from_str("Trace"), LogLevel::Trace);
+    }
+
+    #[test]
+    fn test_log_level_from_str_invalid() {
+        assert_eq!(LogLevel::from_str("Invalid"), LogLevel::Info);
+        assert_eq!(LogLevel::from_str(""), LogLevel::Info);
+        assert_eq!(LogLevel::from_str("random"), LogLevel::Info);
+    }
+
+    #[test]
+    fn test_log_level_default() {
+        assert_eq!(LogLevel::default(), LogLevel::Info);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_settings_save_and_load() {
+        use std::io::Write;
+
+        // Create a temporary file
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_settings.yml");
+
+        // Create test settings
+        let settings = Settings {
+            show_logs: true,
+            log_level: "Debug".to_string(),
+            theme_mode: "Dark".to_string(),
+            display_size: "Mobile".to_string(),
+            language: "ko-KR".to_string(),
+            font_path: "/test/font.ttf".to_string(),
+            override_text_style: "Heading".to_string(),
+            theme_name: "custom".to_string(),
+            autoupdate: true,
+        };
+
+        // Save settings
+        settings.save(&test_file).expect("Failed to save settings");
+
+        // Load settings
+        let loaded = Settings::load(&test_file).expect("Failed to load settings");
+
+        // Verify all fields match
+        assert_eq!(loaded.show_logs, true);
+        assert_eq!(loaded.log_level, "Debug");
+        assert_eq!(loaded.theme_mode, "Dark");
+        assert_eq!(loaded.display_size, "Mobile");
+        assert_eq!(loaded.language, "ko-KR");
+        assert_eq!(loaded.font_path, "/test/font.ttf");
+        assert_eq!(loaded.override_text_style, "Heading");
+        assert_eq!(loaded.theme_name, "custom");
+        assert_eq!(loaded.autoupdate, true);
+
+        // Cleanup
+        let _ = std::fs::remove_file(&test_file);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_settings_load_or_default_missing_file() {
+        let temp_dir = std::env::temp_dir();
+        let nonexistent_file = temp_dir.join("nonexistent_settings.yml");
+
+        // Should return default settings when file doesn't exist
+        let settings = Settings::load_or_default(&nonexistent_file);
+
+        assert_eq!(settings.show_logs, false);
+        assert_eq!(settings.log_level, "Error");
+        assert_eq!(settings.theme_mode, "Auto");
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_settings_load_or_default_with_existing_file() {
+        use std::io::Write;
+
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_settings_existing.yml");
+
+        // Create a test settings file
+        let yaml_content = r#"
+show_logs: true
+log_level: "Info"
+theme_mode: "Light"
+display_size: "Desktop (1024x768)"
+language: "en-US"
+font_path: ""
+override_text_style: ""
+theme_name: "default"
+autoupdate: false
+"#;
+        std::fs::write(&test_file, yaml_content).expect("Failed to write test file");
+
+        // Load settings
+        let settings = Settings::load_or_default(&test_file);
+
+        assert_eq!(settings.show_logs, true);
+        assert_eq!(settings.log_level, "Info");
+        assert_eq!(settings.theme_mode, "Light");
+
+        // Cleanup
+        let _ = std::fs::remove_file(&test_file);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_get_app_data_dir() {
+        #[cfg(not(target_os = "android"))]
+        {
+            let data_dir = get_app_data_dir().expect("Failed to get data directory");
+            assert!(data_dir.to_string_lossy().contains(".local/share/dure_installer")
+                || data_dir.to_string_lossy().contains(r".local\share\dure_installer"));
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            // Android test requires ANDROID_INTERNAL_DATA_PATH to be set
+            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            let data_dir = get_app_data_dir().expect("Failed to get data directory");
+            assert!(data_dir.to_string_lossy().contains("/data"));
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_get_app_cache_dir() {
+        #[cfg(not(target_os = "android"))]
+        {
+            let cache_dir = get_app_cache_dir().expect("Failed to get cache directory");
+            assert!(cache_dir.to_string_lossy().contains(".cache/dure-installer")
+                || cache_dir.to_string_lossy().contains(r".cache\dure-installer"));
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            let cache_dir = get_app_cache_dir().expect("Failed to get cache directory");
+            assert!(cache_dir.to_string_lossy().contains("/cache"));
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_get_app_config_dir() {
+        #[cfg(not(target_os = "android"))]
+        {
+            let config_dir = get_app_config_dir().expect("Failed to get config directory");
+            assert!(config_dir.to_string_lossy().contains(".config/dure_installer")
+                || config_dir.to_string_lossy().contains(r".config\dure_installer"));
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            let config_dir = get_app_config_dir().expect("Failed to get config directory");
+            assert!(config_dir.to_string_lossy().contains("/files"));
+        }
+    }
 }

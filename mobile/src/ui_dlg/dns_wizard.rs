@@ -421,6 +421,12 @@ impl DnsWizard {
         // Next button
         ui.add_space(20.0);
         ui.horizontal(|ui| {
+            if ui.add(MaterialButton::outlined("Close")).clicked() {
+                self.should_close = true;
+            }
+
+            ui.add_space(10.0);
+            
             // Show "Open OAuth Screen" button if OAuth was attempted
             if self.oauth_promise.is_some() || self.oauth_result.is_some() {
                 if ui.add(MaterialButton::outlined("Open OAuth Screen")).clicked() {
@@ -1126,9 +1132,9 @@ impl DnsWizard {
 
     /// Get selected platform/VM info for DNS tab binding
     pub fn get_selected_platform_info(&self) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
-        // Find the selected platform from available_platforms based on selected_vm
-        if let Some(ref vm_name) = self.selected_vm {
-            if let Some(platform) = self.available_platforms.iter().find(|p| &p.vm_name == vm_name) {
+        // Find the selected platform from available_platforms based on selected_vm (which stores project_id)
+        if let Some(ref project_id) = self.selected_vm {
+            if let Some(platform) = self.available_platforms.iter().find(|p| &p.project_id == project_id) {
                 return (
                     Some(platform.project_id.clone()),
                     Some(platform.platform_name.clone()),
@@ -1140,4 +1146,74 @@ impl DnsWizard {
         (None, None, None, None)
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_selected_platform_info_with_valid_selection() {
+        let mut wizard = DnsWizard::new();
+
+        // Add test platforms
+        wizard.available_platforms = vec![
+            PlatformVmInfo {
+                project_id: "project-123".to_string(),
+                platform_name: "Test Platform".to_string(),
+                vm_name: "test-vm".to_string(),
+                vm_external_ip: "1.2.3.4".to_string(),
+            },
+            PlatformVmInfo {
+                project_id: "project-456".to_string(),
+                platform_name: "Other Platform".to_string(),
+                vm_name: "other-vm".to_string(),
+                vm_external_ip: "5.6.7.8".to_string(),
+            },
+        ];
+
+        // Select first platform (selected_vm stores project_id)
+        wizard.selected_vm = Some("project-123".to_string());
+
+        let (platform_id, platform_name, vm_name, vm_ip) = wizard.get_selected_platform_info();
+
+        assert_eq!(platform_id, Some("project-123".to_string()));
+        assert_eq!(platform_name, Some("Test Platform".to_string()));
+        assert_eq!(vm_name, Some("test-vm".to_string()));
+        assert_eq!(vm_ip, None); // vm_ip is separate in wizard
+    }
+
+    #[test]
+    fn test_get_selected_platform_info_no_selection() {
+        let wizard = DnsWizard::new();
+
+        let (platform_id, platform_name, vm_name, vm_ip) = wizard.get_selected_platform_info();
+
+        assert_eq!(platform_id, None);
+        assert_eq!(platform_name, None);
+        assert_eq!(vm_name, None);
+        assert_eq!(vm_ip, None);
+    }
+
+    #[test]
+    fn test_get_selected_platform_info_invalid_selection() {
+        let mut wizard = DnsWizard::new();
+
+        wizard.available_platforms = vec![PlatformVmInfo {
+            project_id: "project-123".to_string(),
+            platform_name: "Test Platform".to_string(),
+            vm_name: "test-vm".to_string(),
+            vm_external_ip: "1.2.3.4".to_string(),
+        }];
+
+        // Select a non-existent platform
+        wizard.selected_vm = Some("project-999".to_string());
+
+        let (platform_id, platform_name, vm_name, vm_ip) = wizard.get_selected_platform_info();
+
+        assert_eq!(platform_id, None);
+        assert_eq!(platform_name, None);
+        assert_eq!(vm_name, None);
+        assert_eq!(vm_ip, None);
+    }
 }

@@ -1,6 +1,8 @@
 pub mod about;
 pub mod about_stt;
 pub mod clipboard_popup;
+pub mod db_debugger;
+pub mod db_debugger_stt;
 pub mod profile_create;
 pub mod profile_create_stt;
 pub mod profile_delete;
@@ -22,6 +24,7 @@ pub mod platform_gcp;
 pub mod dns_wizard;
 
 pub use about_stt::*;
+pub use db_debugger_stt::*;
 pub use profile_create_stt::*;
 pub use profile_delete_stt::*;
 pub use profile_login_stt::*;

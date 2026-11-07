@@ -176,6 +176,9 @@ pub struct DnsDomainConfig {
     /// Account ID from provider (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
+    /// Platform ID binding (GCP project ID, optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<String>,
 }
 
 /// SSH host configuration

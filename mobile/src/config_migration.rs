@@ -197,3 +197,106 @@ mod tests {
         assert_eq!(v2_config.platforms.len(), 0); // Should skip invalid platform
     }
 }
+
+/// Migrate profile database from config directory to data directory
+///
+/// Per XDG Base Directory specification, databases belong in data dir (~/.local/share),
+/// not config dir (~/.config). This function migrates existing databases for a profile.
+///
+/// Migration strategy:
+/// 1. Check if old database exists in config_dir
+/// 2. Check if new database already exists in data_dir (skip if so)
+/// 3. Create data_dir if needed
+/// 4. Copy database files (*.db, *.db-wal, *.db-shm) to new location
+/// 5. Verify new database is readable
+/// 6. Delete old files only after successful verification
+#[cfg(not(target_arch = "wasm32"))]
+pub fn migrate_profile_database(profile_ctx: &crate::calc::profile::ProfileContext) -> anyhow::Result<()> {
+    use std::fs;
+    use anyhow::Context;
+
+    // Old location: config_dir/dure.db
+    let old_db_path = profile_ctx.config_dir.join("dure.db");
+    let old_wal_path = profile_ctx.config_dir.join("dure.db-wal");
+    let old_shm_path = profile_ctx.config_dir.join("dure.db-shm");
+
+    // New location: data_dir/dure.db (already set in profile_ctx)
+    let new_db_path = &profile_ctx.db_path;
+
+    // Check if migration needed
+    if !old_db_path.exists() {
+        dure_debug!("No migration needed - old database not found at {}", old_db_path.display());
+        return Ok(());
+    }
+
+    if new_db_path.exists() {
+        dure_info!("Migration already complete - database exists at {}", new_db_path.display());
+        return Ok(());
+    }
+
+    dure_info!("Migrating database from {} to {}", old_db_path.display(), new_db_path.display());
+
+    // Create data directory if needed
+    if let Some(parent) = new_db_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create data directory: {}", parent.display()))?;
+    }
+
+    // Copy main database file
+    fs::copy(&old_db_path, new_db_path)
+        .with_context(|| format!("Failed to copy database from {} to {}", old_db_path.display(), new_db_path.display()))?;
+    dure_info!("✓ Copied main database file");
+
+    // Copy WAL file if exists
+    if old_wal_path.exists() {
+        let new_wal_path = new_db_path.with_extension("db-wal");
+        fs::copy(&old_wal_path, &new_wal_path)
+            .with_context(|| format!("Failed to copy WAL file"))?;
+        dure_info!("✓ Copied WAL file");
+    }
+
+    // Copy SHM file if exists
+    if old_shm_path.exists() {
+        let new_shm_path = new_db_path.with_extension("db-shm");
+        fs::copy(&old_shm_path, &new_shm_path)
+            .with_context(|| format!("Failed to copy SHM file"))?;
+        dure_info!("✓ Copied SHM file");
+    }
+
+    // Verify new database is readable by attempting connection
+    use diesel::prelude::*;
+    let verify_result = SqliteConnection::establish(new_db_path.to_str().unwrap());
+    match verify_result {
+        Ok(_conn) => {
+            dure_info!("✓ Verified new database is readable");
+        }
+        Err(e) => {
+            // Rollback - delete the copied files
+            dure_error!("Failed to verify migrated database: {}", e);
+            let _ = fs::remove_file(new_db_path);
+            let _ = fs::remove_file(new_db_path.with_extension("db-wal"));
+            let _ = fs::remove_file(new_db_path.with_extension("db-shm"));
+            anyhow::bail!("Database migration failed verification: {}", e);
+        }
+    }
+
+    // Delete old files only after successful verification
+    fs::remove_file(&old_db_path)
+        .with_context(|| format!("Failed to remove old database file"))?;
+    dure_info!("✓ Removed old database file");
+
+    if old_wal_path.exists() {
+        fs::remove_file(&old_wal_path)
+            .with_context(|| format!("Failed to remove old WAL file"))?;
+        dure_info!("✓ Removed old WAL file");
+    }
+
+    if old_shm_path.exists() {
+        fs::remove_file(&old_shm_path)
+            .with_context(|| format!("Failed to remove old SHM file"))?;
+        dure_info!("✓ Removed old SHM file");
+    }
+
+    dure_info!("✓ Database migration completed successfully");
+    Ok(())
+}

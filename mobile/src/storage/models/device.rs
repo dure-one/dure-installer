@@ -191,16 +191,17 @@ mod tests {
 
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-    fn setup_test_db() -> diesel::SqliteConnection {
-        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let test_db = format!("test-dure-device-{}-{}.db", std::process::id(), test_id);
-        db::set_db_path(test_db);
-        db::establish_connection()
+    fn setup_test_db() -> (tempfile::TempDir, diesel::SqliteConnection) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        db::set_db_path(db_path.to_string_lossy().to_string());
+        let conn = db::establish_connection();
+        (temp_dir, conn)
     }
 
     #[test]
     fn test_store_and_get_device() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -226,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_get_device_by_session() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

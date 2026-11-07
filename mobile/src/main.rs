@@ -68,22 +68,9 @@ fn main() -> Result<()> {
         log_file_opt
     };
 
-    // Initialize logger with tab-separated format
-    let mut builder = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
-
-    builder.format(|buf, record| {
-        use std::io::Write;
-        writeln!(
-            buf,
-            "{} [{}] {}",
-            chrono::Local::now().format("%Y%m%dT%H%M%S"),
-            record.level(),
-            record.args()
-        )
-    });
-
+    // Initialize logger - conditional based on --log flag
     if let Some(log_path) = &log_file {
-        // File-based logging
+        // File-based logging with env_logger (no UI logs)
         let log_path = if log_path.is_empty() {
             "dure.log"
         } else {
@@ -101,12 +88,59 @@ fn main() -> Result<()> {
                 }),
         );
 
-        builder.target(env_logger::Target::Pipe(target));
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+            .format(|buf, record| {
+                use std::io::Write;
+                writeln!(
+                    buf,
+                    "{} [{}] {}",
+                    chrono::Local::now().format("%Y%m%dT%H%M%S"),
+                    record.level(),
+                    record.args()
+                )
+            })
+            .target(env_logger::Target::Pipe(target))
+            .init();
+
+        dure_info!(
+            "Dure v{} starting with file logging",
+            env!("CARGO_PKG_VERSION")
+        );
+    } else {
+        // Combined logger for UI + stdout (in-app log viewer)
+        // Try to load log level from settings, default to INFO
+        let log_level = if let Ok(config_dir) = dure::get_profiles_base_dir() {
+            // Look for default profile settings
+            let default_profile = config_dir.join("default").join("settings.yml");
+            if default_profile.exists() {
+                if let Ok(content) = std::fs::read_to_string(&default_profile) {
+                    if let Ok(settings) = serde_yaml::from_str::<dure::Settings>(&content) {
+                        settings.log_level.to_uppercase()
+                    } else {
+                        "INFO".to_string()
+                    }
+                } else {
+                    "INFO".to_string()
+                }
+            } else {
+                "INFO".to_string()
+            }
+        } else {
+            "INFO".to_string()
+        };
+
+        let level_filter = match log_level.as_str() {
+            "TRACE" => log::LevelFilter::Trace,
+            "DEBUG" => log::LevelFilter::Debug,
+            "INFO" => log::LevelFilter::Info,
+            "WARN" => log::LevelFilter::Warn,
+            "ERROR" => log::LevelFilter::Error,
+            _ => log::LevelFilter::Info,
+        };
+
+        dure::log_capture::init_combined_logger(level_filter);
+        dure_info!("Dure v{} starting", env!("CARGO_PKG_VERSION"));
     }
-
-    builder.init();
-
-    dure_info!("Dure v{} starting...", env!("CARGO_PKG_VERSION"));
 
     // NOTE: Config and database are NOT loaded here - they are loaded after profile selection
     // See mobile/src/dure.rs profile login/create handlers for config/DB initialization

@@ -69,6 +69,8 @@ pub struct DureApp {
     pub dlg_profile_login: crate::ui_dlg::DlgProfileLogin,
     pub dlg_profile_create: crate::ui_dlg::DlgProfileCreate,
     pub dlg_profile_delete: crate::ui_dlg::DlgProfileDelete,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub dlg_db_debugger: crate::ui_dlg::DlgDbDebugger,
 
     // Profile state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -198,6 +200,10 @@ impl Default for DureApp {
             )))
         };
 
+        // Log app initialization
+        dure_info!("DureApp initializing...");
+        dure_debug!("Screen size: {}x{}", screen_width, screen_height);
+
         Self {
             title: "DureApp Window".to_owned(),
             title_bar: false,
@@ -217,6 +223,7 @@ impl Default for DureApp {
             dlg_profile_login: crate::ui_dlg::DlgProfileLogin::new(),
             dlg_profile_create: crate::ui_dlg::DlgProfileCreate::new(),
             dlg_profile_delete: crate::ui_dlg::DlgProfileDelete::new(),
+            dlg_db_debugger: crate::ui_dlg::DlgDbDebugger::new(),
             // Profile state
             current_profile: None,
             pending_profile_name: None,
@@ -288,6 +295,30 @@ impl eframe::App for DureApp {
             self.dlg_about.open();
         }
 
+        // Hidden debugger keyboard handler (Ctrl+Shift+D x3 within 1 second)
+        if self.current_profile.is_some() {
+            ctx.input(|i| {
+                let current_time = i.time;
+
+                // Reset sequence if timeout (1 second)
+                if current_time - self.dlg_db_debugger.last_key_time > 1.0 {
+                    self.dlg_db_debugger.reset_sequence();
+                }
+
+                // Check for Ctrl+Shift+D
+                if i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::D) {
+                    self.dlg_db_debugger.key_sequence_count += 1;
+                    self.dlg_db_debugger.last_key_time = current_time;
+
+                    // Open on third press
+                    if self.dlg_db_debugger.key_sequence_count >= 3 {
+                        self.dlg_db_debugger.open();
+                        self.dlg_db_debugger.reset_sequence();
+                    }
+                }
+            });
+        }
+
         // Apply top padding on Android to avoid content under status bar
         egui::CentralPanel::default().show(ctx, |ui| {
             #[cfg(target_os = "android")]
@@ -303,14 +334,39 @@ impl eframe::App for DureApp {
         // Show settings dialog
         self.dlg_settings.show(ctx, &mut self.settings);
         // Handle save and theme changes from settings dialog
+        dure_debug!("🔍 After settings dialog: show_logs={}", self.settings.show_logs);
         if self.dlg_settings.save_clicked {
             self.dlg_settings.save_clicked = false; // Reset flag after processing
-                                                    // TODO: save settings to file
-            dure_info!("Settings saved");
+
+            // Save settings to profile's settings file
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(profile) = &self.current_profile {
+                match self.settings.save(&profile.settings_file) {
+                    Ok(_) => {
+                        dure_info!("Settings saved to {:?}", profile.settings_file);
+                        dure_info!("Log settings: show={}, level={}", self.settings.show_logs, self.settings.log_level);
+
+                        // Update log settings in global state
+                        crate::log_capture::update_log_settings(
+                            self.settings.show_logs,
+                            crate::LogLevel::from_str(&self.settings.log_level),
+                        );
+
+                        // Force UI update to show/hide log pane
+                        ctx.request_repaint();
+                    }
+                    Err(e) => {
+                        dure_error!("Failed to save settings: {}", e);
+                    }
+                }
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            dure_info!("Settings saved (in-memory only on WASM)");
         }
         if let Some(theme_name) = self.dlg_settings.theme_to_apply.take() {
-            // TODO: apply theme
             dure_info!("Applying theme: {}", theme_name);
+            Self::apply_material_theme(&theme_name, ctx);
         }
 
         // Show about dialog
@@ -327,6 +383,22 @@ impl eframe::App for DureApp {
         }
         if self.dlg_about.do_perform_update {
             self.perform_update();
+        }
+
+        // Show database debugger (hidden, activated by Ctrl+Shift+D x3)
+        if self.dlg_db_debugger.open && self.current_profile.is_some() {
+            // Establish connection for debugger (only when open)
+            match crate::calc::db::establish_connection_result() {
+                Ok(mut conn) => {
+                    self.dlg_db_debugger.show(ctx, Some(&mut conn));
+                }
+                Err(e) => {
+                    self.dlg_db_debugger.error_message = Some(format!("DB connection failed: {}", e));
+                    self.dlg_db_debugger.show(ctx, None);
+                }
+            }
+        } else {
+            self.dlg_db_debugger.show(ctx, None);
         }
 
         // Show install dialog (desktop only)
@@ -484,17 +556,98 @@ impl DureApp {
 
         ui.add_space(10.0);
 
-        // Render active tab content
+        // Calculate available height for tab content, reserving space for log pane if enabled
+        // IMPORTANT: Tab ScrollAreas consume all available vertical space. Without this limit,
+        // the log pane below would have no space to render and remain invisible.
+        #[cfg(not(target_arch = "wasm32"))]
+        let tab_max_height = if self.settings.show_logs {
+            ui.available_height() - 250.0 // Reserve 250px for log pane (separator + heading + scroll area)
+        } else {
+            ui.available_height()
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let tab_max_height = ui.available_height();
+
+        // Render active tab content in container with limited height
         dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
-        match self.active_tab {
-            Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
-            Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut(), &self.current_profile_kdbx),
-            Tab::Dns => {
-                if let Some(profile) = &self.current_profile {
-                    self.tab_dns.ui(ui, profile)
-                }
-            },
-            Tab::Site => self.tab_site.ui(&self.current_profile, ui),
+        ui.allocate_ui(egui::vec2(ui.available_width(), tab_max_height), |ui| {
+            match self.active_tab {
+                Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
+                Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut(), &self.current_profile_kdbx),
+                Tab::Dns => {
+                    if let Some(profile) = &self.current_profile {
+                        self.tab_dns.ui(ui, profile)
+                    }
+                },
+                Tab::Site => self.tab_site.ui(&self.current_profile, ui),
+            }
+        });
+
+        // Show log pane if enabled
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            dure_debug!("🔍 Log pane check: show_logs={}", self.settings.show_logs);
+            if self.settings.show_logs {
+                dure_trace!("Rendering log pane (show_logs=true)");
+
+            ui.add_space(16.0);
+            ui.separator();
+            ui.add_space(8.0);
+
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("📋 Logs").strong().size(16.0));
+                ui.label(format!("(Log Level: {})", self.settings.log_level));
+            });
+
+            egui::ScrollArea::vertical()
+                .id_source("log_scroll_area")
+                .max_height(200.0)
+                .min_scrolled_height(150.0)
+                .stick_to_bottom(true)
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    let logs = crate::log_capture::get_logs();
+                    if logs.is_empty() {
+                        ui.label(egui::RichText::new("No logs yet...").italics());
+                    } else {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut logs.as_str())
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(10)
+                                .interactive(false)
+                        );
+                    }
+                });
+            }
+        }
+    }
+
+    /// Apply material theme by name
+    fn apply_material_theme(theme_name: &str, ctx: &egui::Context) {
+        use egui_material3::theme::load_theme_from_json_str;
+
+        // Theme JSON constants (from main.rs)
+        const THEME_GREEN: &str = include_str!("../resources/material-theme-green.json");
+        const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblue.json");
+        const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
+        const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
+        const THEME_DEFAULT: &str = include_str!("../resources/material-theme.json");
+
+        let theme_json = match theme_name {
+            "green" => THEME_GREEN,
+            "lightblue" => THEME_LIGHTBLUE,
+            "lightpink" => THEME_LIGHTPINK,
+            "yellow" => THEME_YELLOW,
+            _ => THEME_DEFAULT,
+        };
+
+        if let Err(e) = load_theme_from_json_str(theme_json) {
+            dure_error!("Failed to load theme '{}': {}", theme_name, e);
+        } else {
+            dure_info!("Successfully loaded theme: {}", theme_name);
+            ctx.request_repaint();
         }
     }
 
@@ -995,6 +1148,12 @@ impl DureApp {
                             // Load profile context
                             match crate::calc::profile::ProfileContext::new(&profile_name) {
                                 Ok(ctx) => {
+                                    // Migrate database from config to data directory if needed
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    if let Err(e) = crate::config_migration::migrate_profile_database(&ctx) {
+                                        dure_warn!("Database migration failed (continuing anyway): {}", e);
+                                    }
+
                                     // Update database path to profile's database
                                     let db_path = ctx.db_path.to_string_lossy().to_string();
                                     crate::calc::db::set_db_path(db_path);
@@ -1078,6 +1237,9 @@ impl DureApp {
                 match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password) {
                     Ok(ctx) => {
                         dure_info!("Profile created successfully: {}", profile_name);
+
+                        // New profiles don't need migration (no old database to migrate)
+                        // Database will be created in the correct data directory location
 
                         // Update database path to profile's database
                         let db_path = ctx.db_path.to_string_lossy().to_string();
@@ -1196,6 +1358,24 @@ impl DureApp {
 
         // Reset config to reload from new profile's config file
         self.config = None;
+
+        // Load settings from profile's settings file
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(profile) = &self.current_profile {
+            self.settings = Settings::load_or_default(&profile.settings_file);
+            dure_info!("Settings loaded from {:?}", profile.settings_file);
+            dure_info!("Settings: show_logs={}, log_level={}", self.settings.show_logs, self.settings.log_level);
+
+            // Apply loaded settings to global state
+            crate::log_capture::update_log_settings(
+                self.settings.show_logs,
+                crate::LogLevel::from_str(&self.settings.log_level),
+            );
+
+            // Test logging at various levels
+            dure_debug!("Profile loaded successfully: {}", profile.name);
+            dure_trace!("Config dir: {:?}", profile.config_dir);
+        }
 
         // Reset active tab to Platform (first tab)
         self.active_tab = crate::ui_tabs::Tab::Platform;

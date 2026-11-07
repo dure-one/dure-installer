@@ -23,8 +23,8 @@ impl OperationsRenderer {
     /// Display the operation history in a data table
     pub fn show(&self, ui: &mut Ui, operations: &[OperationLog]) {
         if operations.is_empty() {
-            ui.heading("Operation History");
-            ui.separator();
+            // ui.heading("Operation History");
+            // ui.separator();
             ui.label("No operations yet");
             return;
         }

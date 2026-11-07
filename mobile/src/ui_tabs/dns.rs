@@ -15,6 +15,10 @@ use poll_promise::Promise;
 
 use crate::calc::profile::ProfileContext;
 
+// Button spacing matching Platform tab
+const BUTTON_VERTICAL_SPACING: f32 = 4.0;
+const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
+
 /// DNS tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DnsTab {
@@ -88,6 +92,9 @@ pub struct DnsDomainRow {
     pub vm_name: Option<String>,
     pub vm_external_ip: Option<String>,
 
+    // Provider metadata
+    pub account_id: Option<String>,
+
     // Check results
     pub last_ns_check: Option<NsCheckResult>,
     pub last_settings_check: Option<SettingsCheckResult>,
@@ -147,19 +154,50 @@ pub struct SettingsCheckResult {
 #[derive(Clone, Debug)]
 pub struct DnsDrawerState {
     pub active_tab: DnsDrawerTab,
+    pub logs: Vec<String>,
+    pub operations: Vec<crate::storage::models::opslog::OperationLog>,
+    pub loading: bool,
 }
 
 impl Default for DnsDrawerState {
     fn default() -> Self {
         Self {
             active_tab: DnsDrawerTab::Status,
+            logs: Vec::new(),
+            operations: Vec::new(),
+            loading: false,
         }
     }
 }
 
+impl DnsDrawerState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn switch_tab(&mut self, tab: DnsDrawerTab) {
+        self.active_tab = tab;
+    }
+
+    pub fn set_logs(&mut self, logs: Vec<String>) {
+        self.logs = logs;
+        self.loading = false;
+    }
+
+    pub fn set_operations(&mut self, ops: Vec<crate::storage::models::opslog::OperationLog>) {
+        self.operations = ops;
+        self.loading = false;
+    }
+
+    pub fn set_loading(&mut self, loading: bool) {
+        self.loading = loading;
+    }
+}
+
 /// Drawer tabs for DNS domain
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum DnsDrawerTab {
+    #[default]
     Status,
     Logs,
     Operations,
@@ -219,10 +257,11 @@ impl DnsTab {
             // Domain table
             self.render_domain_table(ui, profile);
 
-            // Check for button click events stored in ui.data
-            let check_ns = ui.data(|d| d.get_temp::<String>(egui::Id::new("dns_check_ns")));
-            let check_settings = ui.data(|d| d.get_temp::<String>(egui::Id::new("dns_check_settings")));
-            let check_https = ui.data(|d| d.get_temp::<String>(egui::Id::new("dns_check_https")));
+            // Check for button click events stored in ui.data (consume with remove_temp)
+            let check_ns = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_ns")));
+            let check_settings = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_settings")));
+            let check_https = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_https")));
+            let delete_domain = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_delete_domain")));
 
             if let Some(domain) = check_ns {
                 self.check_ns_server(&domain);
@@ -233,11 +272,14 @@ impl DnsTab {
             if let Some(domain) = check_https {
                 self.check_https_connection(&domain);
             }
+            if let Some(domain) = delete_domain {
+                self.delete_domain(&domain, profile);
+            }
 
             // Handle drawer tab switches
             for row in &mut self.domain_rows {
-                if let Some((domain, new_tab)) = ui.data(|d| {
-                    d.get_temp::<(String, DnsDrawerTab)>(
+                if let Some((domain, new_tab)) = ui.data_mut(|d| {
+                    d.remove_temp::<(String, DnsDrawerTab)>(
                         egui::Id::new("dns_drawer_tab_switch").with(&row.domain)
                     )
                 }) {
@@ -323,6 +365,8 @@ impl DnsTab {
                     })
                     .cell_widget(move |ui| {
                         // Operations column: buttons
+                        ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+                        
                         let domain = row_for_ops.domain.clone();
                         ui.horizontal_wrapped(|ui| {
                             if ui
@@ -354,6 +398,17 @@ impl DnsTab {
                             {
                                 ui.data_mut(|d| d.insert_temp(
                                     egui::Id::new("dns_check_https"),
+                                    domain.clone()
+                                ));
+                            }
+
+                            if ui
+                                .add(MaterialButton::outlined("Delete").small())
+                                .on_hover_text("Remove this DNS domain")
+                                .clicked()
+                            {
+                                ui.data_mut(|d| d.insert_temp(
+                                    egui::Id::new("dns_delete_domain"),
                                     domain.clone()
                                 ));
                             }
@@ -640,10 +695,11 @@ impl DnsTab {
                                 provider: provider.clone(),
                                 domain: domain.clone(),
                                 status: DomainStatus::Configured,
-                                platform_id,
+                                platform_id: platform_id.clone(),
                                 platform_name,
                                 vm_name,
                                 vm_external_ip,
+                                account_id: account_id.clone(),
                                 last_ns_check: None,
                                 last_settings_check: None,
                                 last_https_check: None,
@@ -657,6 +713,7 @@ impl DnsTab {
                                 domain,
                                 zone_id,
                                 account_id,
+                                &platform_id,
                             );
                         }
                     }
@@ -700,9 +757,18 @@ impl DnsTab {
 
             let mut open = true;
             egui::Window::new("NS Server Check")
+                .id(egui::Id::new("add_ns_server_check_dialog"))
+                .title_bar(false)
                 .open(&mut open)
-                .resizable(true)
-                .default_width(500.0)
+                .resizable(false)
+                .collapsible(false)
+                .scroll([false, true])
+                .min_width(400.0)
+                .max_width(400.0)
+                .min_height(400.0)
+                .resize(|r| {
+                    r.default_size([400.0, 450.0])
+                })
                 .show(ui.ctx(), |ui| {
                     if self.ns_check_results.is_empty() {
                         ui.spinner();
@@ -770,9 +836,18 @@ impl DnsTab {
 
             let mut open = true;
             egui::Window::new("DNS Settings Check")
+                .id(egui::Id::new("add_dns_settings_check_dialog"))
+                .title_bar(false)
                 .open(&mut open)
-                .resizable(true)
-                .default_width(700.0)
+                .resizable(false)
+                .collapsible(false)
+                .scroll([false, true])
+                .min_width(400.0)
+                .max_width(400.0)
+                .min_height(400.0)
+                .resize(|r| {
+                    r.default_size([400.0, 450.0])
+                })
                 .show(ui.ctx(), |ui| {
                     if self.dns_settings_results.is_empty() {
                         ui.spinner();
@@ -819,6 +894,22 @@ impl DnsTab {
                                     });
                                 }
                             });
+
+                        ui.add_space(8.0);
+
+                        // Show "Set Correct Records" button if there are invalid records
+                        if !self.dns_settings_results.is_empty() {
+                            let all_valid = self.dns_settings_results.iter().all(|r| r.valid);
+                            if !all_valid {
+                                ui.horizontal(|ui| {
+                                    if ui.add(MaterialButton::filled("Set Correct Records")).clicked() {
+                                        // TODO: Implement Cloudflare API call to update DNS records
+                                        dure_warn!("Set DNS records not implemented yet - needs Cloudflare API integration");
+                                    }
+                                    ui.label("(Not implemented - requires Cloudflare API token)");
+                                });
+                            }
+                        }
                     }
                 });
 
@@ -867,9 +958,18 @@ impl DnsTab {
 
             let mut open = true;
             egui::Window::new("HTTPS Connection Check")
+                .id(egui::Id::new("add_https_connection_check_dialog"))
+                .title_bar(false)
                 .open(&mut open)
-                .resizable(true)
-                .default_width(500.0)
+                .resizable(false)
+                .collapsible(false)
+                .scroll([false, true])
+                .min_width(400.0)
+                .max_width(400.0)
+                .min_height(400.0)
+                .resize(|r| {
+                    r.default_size([400.0, 450.0])
+                })
                 .show(ui.ctx(), |ui| {
                     if let Some(result) = &self.https_check_result {
                         ui.heading(if result.resolves_to_vm { "✓ Resolves Correctly" } else { "✗ Resolution Mismatch" });
@@ -951,6 +1051,7 @@ impl DnsTab {
         domain: &str,
         zone_id: &Option<String>,
         account_id: &Option<String>,
+        platform_id: &Option<String>,
     ) {
         use crate::config::{AppConfig, DnsDomainConfig};
 
@@ -970,6 +1071,7 @@ impl DnsTab {
             domain: domain.to_string(),
             zone_id: zone_id.clone(),
             account_id: account_id.clone(),
+            platform_id: platform_id.clone(),
         });
 
         // Save config
@@ -977,6 +1079,33 @@ impl DnsTab {
             dure_error!("Failed to save DNS domain to config: {}", e);
         } else {
             dure_info!("Saved DNS domain {} to config", domain);
+        }
+    }
+
+    /// Delete DNS domain from config and memory
+    fn delete_domain(&mut self, domain: &str, profile: &ProfileContext) {
+        use crate::config::AppConfig;
+
+        dure_info!("Deleting DNS domain: {}", domain);
+
+        // Remove from memory
+        self.domain_rows.retain(|row| row.domain != domain);
+
+        // Remove from config file
+        let mut config = AppConfig::load(&profile.config_file)
+            .unwrap_or_default();
+
+        let original_count = config.dns_domains.len();
+        config.dns_domains.retain(|d| &d.domain != domain);
+
+        if config.dns_domains.len() < original_count {
+            if let Err(e) = config.save(&profile.config_file) {
+                dure_error!("Failed to save config after deleting domain: {}", e);
+            } else {
+                dure_info!("Successfully deleted DNS domain {} from config", domain);
+            }
+        } else {
+            dure_warn!("Domain {} not found in config", domain);
         }
     }
 
@@ -1000,14 +1129,31 @@ impl DnsTab {
 
         // Convert DnsDomainConfig to DnsDomainRow
         for dns_config in &config.dns_domains {
+            // Lookup platform info from config if platform_id is set
+            let (platform_id, platform_name, vm_name, vm_external_ip) = if let Some(pid) = &dns_config.platform_id {
+                let platforms = Self::load_platforms_from_config(&profile.config_file);
+                platforms.iter()
+                    .find(|p| &p.project_id == pid)
+                    .map(|p| (
+                        Some(p.project_id.clone()),
+                        Some(p.platform_name.clone()),
+                        Some(p.vm_name.clone()),
+                        Some(p.vm_external_ip.clone()),
+                    ))
+                    .unwrap_or_else(|| (Some(pid.clone()), None, None, None))
+            } else {
+                (None, None, None, None)
+            };
+
             self.domain_rows.push(DnsDomainRow {
                 provider: dns_config.provider.clone(),
                 domain: dns_config.domain.clone(),
                 status: DomainStatus::Configured,
-                platform_id: None,
-                platform_name: None,
-                vm_name: None,
-                vm_external_ip: None,
+                platform_id,
+                platform_name,
+                vm_name,
+                vm_external_ip,
+                account_id: dns_config.account_id.clone(),
                 last_ns_check: None,
                 last_settings_check: None,
                 last_https_check: None,
@@ -1023,5 +1169,92 @@ impl DnsTab {
     #[cfg(target_arch = "wasm32")]
     fn load_domain_rows(&mut self, _profile: &ProfileContext) {
         self.loaded = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dns_drawer_state_default() {
+        let state = DnsDrawerState::default();
+        assert_eq!(state.active_tab, DnsDrawerTab::Status);
+        assert!(state.logs.is_empty());
+        assert!(state.operations.is_empty());
+        assert!(!state.loading);
+    }
+
+    #[test]
+    fn test_dns_drawer_state_new() {
+        let state = DnsDrawerState::new();
+        assert_eq!(state.active_tab, DnsDrawerTab::Status);
+        assert!(state.logs.is_empty());
+        assert!(state.operations.is_empty());
+        assert!(!state.loading);
+    }
+
+    #[test]
+    fn test_dns_drawer_state_switch_tab() {
+        let mut state = DnsDrawerState::new();
+        assert_eq!(state.active_tab, DnsDrawerTab::Status);
+
+        state.switch_tab(DnsDrawerTab::Logs);
+        assert_eq!(state.active_tab, DnsDrawerTab::Logs);
+
+        state.switch_tab(DnsDrawerTab::Operations);
+        assert_eq!(state.active_tab, DnsDrawerTab::Operations);
+    }
+
+    #[test]
+    fn test_dns_drawer_state_set_logs() {
+        let mut state = DnsDrawerState::new();
+        state.loading = true;
+
+        let logs = vec!["log1".to_string(), "log2".to_string()];
+        state.set_logs(logs.clone());
+
+        assert_eq!(state.logs, logs);
+        assert!(!state.loading, "set_logs should clear loading flag");
+    }
+
+    #[test]
+    fn test_dns_drawer_state_set_operations() {
+        let mut state = DnsDrawerState::new();
+        state.loading = true;
+
+        let ops = vec![];
+        state.set_operations(ops);
+
+        assert!(state.operations.is_empty());
+        assert!(!state.loading, "set_operations should clear loading flag");
+    }
+
+    #[test]
+    fn test_dns_drawer_state_set_loading() {
+        let mut state = DnsDrawerState::new();
+        assert!(!state.loading);
+
+        state.set_loading(true);
+        assert!(state.loading);
+
+        state.set_loading(false);
+        assert!(!state.loading);
+    }
+
+    #[test]
+    fn test_dns_drawer_tab_as_str() {
+        assert_eq!(DnsDrawerTab::Status.as_str(), "Status");
+        assert_eq!(DnsDrawerTab::Logs.as_str(), "Logs");
+        assert_eq!(DnsDrawerTab::Operations.as_str(), "Operations");
+    }
+
+    #[test]
+    fn test_dns_drawer_tab_all() {
+        let tabs = DnsDrawerTab::all();
+        assert_eq!(tabs.len(), 3);
+        assert_eq!(tabs[0], DnsDrawerTab::Status);
+        assert_eq!(tabs[1], DnsDrawerTab::Logs);
+        assert_eq!(tabs[2], DnsDrawerTab::Operations);
     }
 }

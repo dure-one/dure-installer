@@ -324,22 +324,23 @@ mod tests {
 
     static TEST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-    fn setup_test_db() -> diesel::SqliteConnection {
-        let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let test_db = format!("test-dure-session-{}-{}.db", std::process::id(), test_id);
-        db::set_db_path(test_db);
-        db::establish_connection()
+    fn setup_test_db() -> (tempfile::TempDir, diesel::SqliteConnection) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        db::set_db_path(db_path.to_string_lossy().to_string());
+        let conn = db::establish_connection();
+        (temp_dir, conn)
     }
 
     #[test]
     fn test_init_tables() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
         init_session_tables(&mut conn).unwrap();
     }
 
     #[test]
     fn test_store_and_get_session() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
         init_session_tables(&mut conn).unwrap();
 
         let session = Session::new(
@@ -361,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_update_session_activity() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
         init_session_tables(&mut conn).unwrap();
 
         let session = Session::new(
@@ -381,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_list_sessions_by_type() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
         init_session_tables(&mut conn).unwrap();
 
         let http_session = Session::new(
@@ -410,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_cleanup_old_sessions() {
-        let mut conn = setup_test_db();
+        let (_temp_dir, mut conn) = setup_test_db();
         init_session_tables(&mut conn).unwrap();
 
         let mut old_session = Session::new(

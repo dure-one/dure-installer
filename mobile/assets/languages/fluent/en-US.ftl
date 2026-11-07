@@ -14,6 +14,7 @@ all-users = All Users
 refresh = Refresh
 logs = Application Logs:
 theme-mode = Theme Mode:
+lightdark-mode = Light/Dark Mode:
 contrast-level = Contrast Level:
 log-level = Log Level:
 ok = OK

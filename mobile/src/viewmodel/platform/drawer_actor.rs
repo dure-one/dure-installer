@@ -232,9 +232,9 @@ mod tests {
     #[test]
     fn test_drawer_actor_switch_tab() {
         smol::block_on(async {
-            let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let test_db = format!("test-drawer-actor-tab-{}-{}.db", std::process::id(), test_id);
-            db::set_db_path(test_db);
+            let _temp_dir = tempfile::tempdir().unwrap();
+            let test_db = _temp_dir.path().join("test.db");
+            db::set_db_path(test_db.to_string_lossy().to_string());
 
             let (cmd_tx, cmd_rx) = unbounded();
             let (evt_tx, evt_rx) = unbounded();
@@ -270,9 +270,9 @@ mod tests {
     #[test]
     fn test_drawer_actor_load_operations() {
         smol::block_on(async {
-            let test_id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
-            let test_db = format!("test-drawer-actor-ops-{}-{}.db", std::process::id(), test_id);
-            db::set_db_path(test_db);
+            let _temp_dir = tempfile::tempdir().unwrap();
+            let test_db = _temp_dir.path().join("test.db");
+            db::set_db_path(test_db.to_string_lossy().to_string());
 
             let (cmd_tx, cmd_rx) = unbounded();
             let (evt_tx, evt_rx) = unbounded();
