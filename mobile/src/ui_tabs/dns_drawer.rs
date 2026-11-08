@@ -57,7 +57,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     StatusLine::new("Provider", &provider_display).show(ui);
 
     ui.add_space(8.0);
-    ui.label(egui::RichText::new("Platform Binding").strong());
+    ui.label(egui::RichText::new("Platform Binding").strong().color(egui::Color32::BLACK));
     ui.separator();
 
     // Platform info
@@ -82,28 +82,27 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     }
 
     ui.add_space(8.0);
-    ui.label(egui::RichText::new("Check Status").strong());
+    ui.label(egui::RichText::new("Check Status").strong().color(egui::Color32::BLACK));
     ui.separator();
 
     // NS Check Status
     if let Some(check) = &row.last_ns_check {
         if check.uses_cloudflare {
-            StatusLine::new("NS Check", "✓ Using Cloudflare")
+            let ns_list = check.nameservers.join(", ");
+            StatusLine::new("NS Check", &format!("✓ Using Cloudflare - {}", ns_list))
                 .show(ui);
-            for ns in &check.nameservers {
-                ui.label(format!("  {}", ns));
-            }
         } else {
-            let mut line = StatusLine::new("NS Check", "✗ Not using Cloudflare");
+            let mut msg = "✗ Not using Cloudflare".to_string();
+            if let Some(err) = &check.error {
+                msg.push_str(&format!(" - Error: {}", err));
+            }
+            let mut line = StatusLine::new("NS Check", &msg);
             if check.error.is_some() {
                 line = line.error();
             } else {
                 line = line.warning();
             }
             line.show(ui);
-        }
-        if let Some(err) = &check.error {
-            ui.label(format!("  Error: {}", err));
         }
     } else {
         StatusLine::new("NS Check", "Not checked").show(ui);
@@ -115,15 +114,16 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
             StatusLine::new("Settings Check", "✓ All records configured")
                 .show(ui);
         } else {
-            StatusLine::new("Settings Check", &format!("✗ {} missing records", check.missing_records.len()))
+            let mut msg = format!("✗ {} missing records", check.missing_records.len());
+            if !check.missing_records.is_empty() {
+                msg.push_str(&format!(" - {}", check.missing_records.join(", ")));
+            }
+            if let Some(err) = &check.error {
+                msg.push_str(&format!(" - Error: {}", err));
+            }
+            StatusLine::new("Settings Check", &msg)
                 .warning()
                 .show(ui);
-            for record in &check.missing_records {
-                ui.label(format!("  {}", record));
-            }
-        }
-        if let Some(err) = &check.error {
-            ui.label(format!("  Error: {}", err));
         }
     } else {
         StatusLine::new("Settings Check", "Not checked").show(ui);
@@ -132,24 +132,27 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     // HTTPS Check Status
     if let Some(check) = &row.last_https_check {
         if check.resolves_to_vm {
-            let msg = if let Some(ip) = &check.resolved_ip {
+            let mut msg = if let Some(ip) = &check.resolved_ip {
                 format!("✓ Resolves to {} (VM IP)", ip)
             } else {
                 "✓ Resolves correctly".to_string()
             };
+            if let Some(err) = &check.error {
+                msg.push_str(&format!(" - Error: {}", err));
+            }
             StatusLine::new("HTTPS Check", &msg).show(ui);
         } else {
-            let msg = if let (Some(resolved), Some(expected)) = (&check.resolved_ip, &check.expected_ip) {
+            let mut msg = if let (Some(resolved), Some(expected)) = (&check.resolved_ip, &check.expected_ip) {
                 format!("✗ Resolves to {} (expected {})", resolved, expected)
             } else {
                 "✗ Does not resolve to VM".to_string()
             };
+            if let Some(err) = &check.error {
+                msg.push_str(&format!(" - Error: {}", err));
+            }
             StatusLine::new("HTTPS Check", &msg)
                 .warning()
                 .show(ui);
-        }
-        if let Some(err) = &check.error {
-            ui.label(format!("  Error: {}", err));
         }
     } else {
         StatusLine::new("HTTPS Check", "Not checked").show(ui);
