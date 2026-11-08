@@ -2,7 +2,7 @@
 
 use crate::{dure_debug, dure_error, dure_info};
 use eframe::egui;
-use egui_material3::MaterialButton;
+use egui_material3::{MaterialButton, dialog};
 
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
@@ -988,51 +988,79 @@ impl SshTab {
             return;
         }
 
-        let mut open = self.show_add_dialog;
+        use std::cell::Cell;
 
-        egui::Window::new("Add SSH Host")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ui.ctx(), |ui| {
+        // Clone data for dialog
+        let mut add_host = self.add_host.clone();
+        let mut add_port = self.add_port.clone();
+        let mut add_use_password = self.add_use_password;
+        let mut add_password = self.add_password.clone();
+        let mut add_use_private_key = self.add_use_private_key;
+        let mut add_private_key_path = self.add_private_key_path.clone();
+
+        let add_requested = Cell::new(false);
+        let reset_requested = Cell::new(false);
+
+        dialog("add_ssh_host_dialog", "Add SSH Host", &mut self.show_add_dialog)
+            .min_width(400.0)
+            .max_height(500.0)
+            .scrollable(true)
+            .content(|ui, open| {
                 ui.label("Configure a new SSH host connection:");
                 ui.add_space(8.0);
 
                 ui.label("Host (IP or domain):");
-                ui.text_edit_singleline(&mut self.add_host);
+                ui.text_edit_singleline(&mut add_host);
                 ui.add_space(8.0);
 
                 ui.label("Port:");
-                ui.text_edit_singleline(&mut self.add_port);
+                ui.text_edit_singleline(&mut add_port);
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut self.add_use_password, "Use password authentication");
-                if self.add_use_password {
+                ui.checkbox(&mut add_use_password, "Use password authentication");
+                if add_use_password {
                     ui.label("Password:");
-                    ui.add(egui::TextEdit::singleline(&mut self.add_password).password(true));
+                    ui.add(egui::TextEdit::singleline(&mut add_password).password(true));
                 }
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut self.add_use_private_key, "Use private key authentication");
-                if self.add_use_private_key {
+                ui.checkbox(&mut add_use_private_key, "Use private key authentication");
+                if add_use_private_key {
                     ui.label("Private key path:");
-                    ui.text_edit_singleline(&mut self.add_private_key_path);
+                    ui.text_edit_singleline(&mut add_private_key_path);
                 }
+                ui.add_space(12.0);
+                ui.separator();
                 ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.add_host_action(profile);
+                        add_requested.set(true);
+                        *open = false;
                     }
                     if ui.add(MaterialButton::outlined("Cancel")).clicked() {
-                        self.show_add_dialog = false;
-                        self.reset_add_dialog();
+                        reset_requested.set(true);
+                        *open = false;
                     }
                 });
-            });
+            })
+            .show(ui.ctx());
 
-        if !open {
-            self.show_add_dialog = false;
+        // Update state from dialog
+        self.add_host = add_host;
+        self.add_port = add_port;
+        self.add_use_password = add_use_password;
+        self.add_password = add_password;
+        self.add_use_private_key = add_use_private_key;
+        self.add_private_key_path = add_private_key_path;
+
+        if add_requested.get() {
+            self.add_host_action(profile);
+            self.reset_add_dialog();
+        }
+
+        if reset_requested.get() {
+            self.reset_add_dialog();
         }
     }
 
@@ -1151,51 +1179,79 @@ impl SshTab {
             return;
         }
 
-        let mut open = self.show_edit_dialog;
+        use std::cell::Cell;
 
-        egui::Window::new("Edit SSH Host")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ui.ctx(), |ui| {
+        // Clone data for dialog
+        let mut edit_host = self.edit_host.clone();
+        let mut edit_port = self.edit_port.clone();
+        let mut edit_use_password = self.edit_use_password;
+        let mut edit_password = self.edit_password.clone();
+        let mut edit_use_private_key = self.edit_use_private_key;
+        let mut edit_private_key_path = self.edit_private_key_path.clone();
+
+        let save_requested = Cell::new(false);
+        let reset_requested = Cell::new(false);
+
+        dialog("edit_ssh_host_dialog", "Edit SSH Host", &mut self.show_edit_dialog)
+            .min_width(400.0)
+            .max_height(500.0)
+            .scrollable(true)
+            .content(|ui, open| {
                 ui.label("Edit SSH host connection:");
                 ui.add_space(8.0);
 
                 ui.label("Host (IP or domain):");
-                ui.text_edit_singleline(&mut self.edit_host);
+                ui.text_edit_singleline(&mut edit_host);
                 ui.add_space(8.0);
 
                 ui.label("Port:");
-                ui.text_edit_singleline(&mut self.edit_port);
+                ui.text_edit_singleline(&mut edit_port);
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut self.edit_use_password, "Use password authentication");
-                if self.edit_use_password {
+                ui.checkbox(&mut edit_use_password, "Use password authentication");
+                if edit_use_password {
                     ui.label("Password:");
-                    ui.add(egui::TextEdit::singleline(&mut self.edit_password).password(true));
+                    ui.add(egui::TextEdit::singleline(&mut edit_password).password(true));
                 }
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut self.edit_use_private_key, "Use private key authentication");
-                if self.edit_use_private_key {
+                ui.checkbox(&mut edit_use_private_key, "Use private key authentication");
+                if edit_use_private_key {
                     ui.label("Private key path:");
-                    ui.text_edit_singleline(&mut self.edit_private_key_path);
+                    ui.text_edit_singleline(&mut edit_private_key_path);
                 }
+                ui.add_space(12.0);
+                ui.separator();
                 ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(MaterialButton::filled("Save")).clicked() {
-                        self.save_edit_host(profile);
+                        save_requested.set(true);
+                        *open = false;
                     }
                     if ui.add(MaterialButton::outlined("Cancel")).clicked() {
-                        self.show_edit_dialog = false;
-                        self.reset_edit_dialog();
+                        reset_requested.set(true);
+                        *open = false;
                     }
                 });
-            });
+            })
+            .show(ui.ctx());
 
-        if !open {
-            self.show_edit_dialog = false;
+        // Update state from dialog
+        self.edit_host = edit_host;
+        self.edit_port = edit_port;
+        self.edit_use_password = edit_use_password;
+        self.edit_password = edit_password;
+        self.edit_use_private_key = edit_use_private_key;
+        self.edit_private_key_path = edit_private_key_path;
+
+        if save_requested.get() {
+            self.save_edit_host(profile);
+            self.reset_edit_dialog();
+        }
+
+        if reset_requested.get() {
+            self.reset_edit_dialog();
         }
     }
 

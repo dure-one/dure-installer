@@ -9,7 +9,7 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{badge, BadgeColor, BadgeSize, MaterialButton};
+use egui_material3::{badge, BadgeColor, BadgeSize, MaterialButton, dialog};
 use egui_material3::datatable::data_table;
 use poll_promise::Promise;
 
@@ -774,34 +774,34 @@ impl DnsTab {
                 }
             }
 
-            let mut open = true;
-            egui::Window::new("NS Server Check")
-                .id(egui::Id::new("add_ns_server_check_dialog"))
-                .title_bar(false)
-                .open(&mut open)
-                .resizable(false)
-                .collapsible(false)
-                .scroll([false, true])
+            let ns_check_results = self.ns_check_results.clone();
+
+            dialog("ns_server_check_dialog", "NS Server Check", &mut self.show_ns_check_dialog)
                 .min_width(400.0)
                 .max_width(400.0)
-                .min_height(400.0)
-                .resize(|r| {
-                    r.default_size([400.0, 450.0])
-                })
-                .show(ui.ctx(), |ui| {
-                    if self.ns_check_results.is_empty() {
+                .max_height(450.0)
+                .scrollable(true)
+                .content(|ui, open| {
+                    if ns_check_results.is_empty() {
                         ui.spinner();
                         ui.label("Querying NS records...");
                     } else {
-                        for result in &self.ns_check_results {
+                        for result in &ns_check_results {
                             ui.label(result);
                         }
                     }
-                });
 
-            if !open {
-                self.show_ns_check_dialog = false;
-            }
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                            *open = false;
+                        }
+                    });
+                })
+                .show(ui.ctx());
         }
 
         // DNS settings check dialog
@@ -853,22 +853,14 @@ impl DnsTab {
                 }
             }
 
-            let mut open = true;
-            egui::Window::new("DNS Settings Check")
-                .id(egui::Id::new("add_dns_settings_check_dialog"))
-                .title_bar(false)
-                .open(&mut open)
-                .resizable(false)
-                .collapsible(false)
-                .scroll([false, true])
-                .min_width(400.0)
-                .max_width(400.0)
-                .min_height(400.0)
-                .resize(|r| {
-                    r.default_size([400.0, 450.0])
-                })
-                .show(ui.ctx(), |ui| {
-                    if self.dns_settings_results.is_empty() {
+            let dns_settings_results = self.dns_settings_results.clone();
+
+            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut self.show_dns_settings_dialog)
+                .min_width(600.0)
+                .max_height(500.0)
+                .scrollable(true)
+                .content(|ui, open| {
+                    if dns_settings_results.is_empty() {
                         ui.spinner();
                         ui.label("Checking all DNS records...");
                     } else {
@@ -891,7 +883,7 @@ impl DnsTab {
                                 header.col(|ui| { ui.strong("Status"); });
                             })
                             .body(|mut body| {
-                                for check in &self.dns_settings_results {
+                                for check in &dns_settings_results {
                                     body.row(18.0, |mut row| {
                                         row.col(|ui| { ui.label(&check.record_type); });
                                         row.col(|ui| { ui.label(&check.name); });
@@ -917,8 +909,8 @@ impl DnsTab {
                         ui.add_space(8.0);
 
                         // Show "Set Correct Records" button if there are invalid records
-                        if !self.dns_settings_results.is_empty() {
-                            let all_valid = self.dns_settings_results.iter().all(|r| r.valid);
+                        if !dns_settings_results.is_empty() {
+                            let all_valid = dns_settings_results.iter().all(|r| r.valid);
                             if !all_valid {
                                 ui.horizontal(|ui| {
                                     if ui.add(MaterialButton::filled("Set Correct Records")).clicked() {
@@ -930,11 +922,18 @@ impl DnsTab {
                             }
                         }
                     }
-                });
 
-            if !open {
-                self.show_dns_settings_dialog = false;
-            }
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                            *open = false;
+                        }
+                    });
+                })
+                .show(ui.ctx());
         }
 
         // HTTPS check dialog
@@ -975,22 +974,15 @@ impl DnsTab {
                 }
             }
 
-            let mut open = true;
-            egui::Window::new("HTTPS Connection Check")
-                .id(egui::Id::new("add_https_connection_check_dialog"))
-                .title_bar(false)
-                .open(&mut open)
-                .resizable(false)
-                .collapsible(false)
-                .scroll([false, true])
+            let https_check_result = self.https_check_result.clone();
+
+            dialog("https_connection_check_dialog", "HTTPS Connection Check", &mut self.show_https_check_dialog)
                 .min_width(400.0)
                 .max_width(400.0)
-                .min_height(400.0)
-                .resize(|r| {
-                    r.default_size([400.0, 450.0])
-                })
-                .show(ui.ctx(), |ui| {
-                    if let Some(result) = &self.https_check_result {
+                .max_height(450.0)
+                .scrollable(true)
+                .content(|ui, open| {
+                    if let Some(result) = &https_check_result {
                         ui.heading(if result.resolves_to_vm { "✓ Resolves Correctly" } else { "✗ Resolution Mismatch" });
                         ui.add_space(10.0);
 
@@ -1029,11 +1021,18 @@ impl DnsTab {
                         ui.spinner();
                         ui.label("Checking DNS resolution...");
                     }
-                });
 
-            if !open {
-                self.show_https_check_dialog = false;
-            }
+                    ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                            *open = false;
+                        }
+                    });
+                })
+                .show(ui.ctx());
         }
     }
 

@@ -3,7 +3,7 @@
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize, notification, NotificationAlign};
+use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize, notification, NotificationAlign, dialog};
 use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -4190,33 +4190,42 @@ impl PlatformTab {
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        egui::Window::new("Estimated Billing")
-            .collapsible(false)
-            .resizable(true)
-            .default_width(600.0)
-            .show(ctx, |ui| {
+        use std::cell::Cell;
+
+        let billing_project_id = self.billing_project_id.clone();
+        let billing_loading = self.billing_loading;
+        let billing_error = self.billing_error.clone();
+        let billing_data = self.billing_data.clone();
+
+        let refresh_requested = Cell::new(false);
+
+        dialog("billing_dialog", "Estimated Billing", &mut self.show_billing_dialog)
+            .max_width(600.0)
+            .max_height(600.0)
+            .scrollable(true)
+            .content(|ui, open| {
                 ui.heading("Monthly Total Cost (Last 3 Months)");
                 ui.add_space(8.0);
 
                 // Project ID display with GCP console link
                 ui.horizontal(|ui| {
                     ui.label("Project ID:");
-                    ui.label(&self.billing_project_id);
+                    ui.label(&billing_project_id);
                     ui.add_space(8.0);
                     ui.hyperlink_to(
                         "GCP Console",
                         format!("https://console.cloud.google.com/billing?project={}",
-                               self.billing_project_id)
+                               billing_project_id)
                     );
                 });
                 ui.add_space(8.0);
                 ui.separator();
                 ui.add_space(8.0);
 
-                if self.billing_loading {
+                if billing_loading {
                     ui.spinner();
                     ui.label("Loading billing data...");
-                } else if let Some(error) = &self.billing_error {
+                } else if let Some(error) = &billing_error {
                     // Check if this is a "table not found" error (billing export not configured)
                     let is_table_not_found =
                         error.contains("was not found") || error.contains("Not found");
@@ -4240,7 +4249,7 @@ impl PlatformTab {
                     ui.label("2. Select 'Detailed cost data' tab");
                     ui.label("3. Select or create a BigQuery dataset");
                     ui.label("4. Wait a few hours for data to populate");
-                } else if let Some(records) = &self.billing_data {
+                } else if let Some(records) = &billing_data {
                     if records.is_empty() {
                         ui.label("No billing data found for the current month.");
                         ui.add_space(8.0);
@@ -4256,109 +4265,105 @@ impl PlatformTab {
                         ));
                         ui.add_space(8.0);
 
-                        egui::ScrollArea::vertical()
-                            .max_height(400.0)
-                            .show(ui, |ui| {
-                                for record in records {
-                                    ui.group(|ui| {
-                                        ui.horizontal(|ui| {
-                                            ui.label(format!(
-                                                "📅 {} ({})",
-                                                record.month, record.currency
-                                            ));
+                        for record in records {
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!(
+                                        "📅 {} ({})",
+                                        record.month, record.currency
+                                    ));
 
-                                            // Helper to format currency with thousand separators
-                                            let format_currency =
-                                                |amount: f64, currency: &str| -> String {
-                                                    // Determine if currency uses decimals
-                                                    let uses_decimals = match currency {
-                                                        "KRW" | "JPY" | "VND" | "IDR" => false,
-                                                        _ => true,
-                                                    };
-
-                                                    // Get currency symbol
-                                                    let symbol = match currency {
-                                                        "USD" => "$",
-                                                        "EUR" => "€",
-                                                        "GBP" => "£",
-                                                        "JPY" => "¥",
-                                                        "KRW" => "₩",
-                                                        "CNY" => "¥",
-                                                        "INR" => "₹",
-                                                        "AUD" => "A$",
-                                                        "CAD" => "C$",
-                                                        "SGD" => "S$",
-                                                        "HKD" => "HK$",
-                                                        "TWD" => "NT$",
-                                                        "THB" => "฿",
-                                                        "VND" => "₫",
-                                                        "IDR" => "Rp",
-                                                        "BRL" => "R$",
-                                                        _ => currency, // Fallback to currency code
-                                                    };
-
-                                                    if uses_decimals {
-                                                        format!("{}{:.2}", symbol, amount)
-                                                    } else {
-                                                        let int_amount = amount as i64;
-                                                        let abs_amount = int_amount.abs();
-                                                        let formatted = abs_amount
-                                                            .to_string()
-                                                            .as_bytes()
-                                                            .rchunks(3)
-                                                            .rev()
-                                                            .map(std::str::from_utf8)
-                                                            .collect::<Result<Vec<&str>, _>>()
-                                                            .unwrap()
-                                                            .join(",");
-                                                        if int_amount < 0 {
-                                                            format!("-{}{}", symbol, formatted)
-                                                        } else {
-                                                            format!("{}{}", symbol, formatted)
-                                                        }
-                                                    }
-                                                };
-
-                                            let (color, text) = if record.total_net_cost < 0.0 {
-                                                (
-                                                    egui::Color32::from_rgb(72, 187, 120),
-                                                    format!(
-                                                        "{} (credit)",
-                                                        format_currency(
-                                                            record.total_net_cost,
-                                                            &record.currency
-                                                        )
-                                                    ),
-                                                )
-                                            } else if record.total_net_cost == 0.0 {
-                                                (
-                                                    egui::Color32::GRAY,
-                                                    format!(
-                                                        "{} (no charges)",
-                                                        format_currency(0.0, &record.currency)
-                                                    ),
-                                                )
-                                            } else {
-                                                (
-                                                    egui::Color32::from_rgb(255, 200, 87),
-                                                    format_currency(
-                                                        record.total_net_cost,
-                                                        &record.currency,
-                                                    ),
-                                                )
+                                    // Helper to format currency with thousand separators
+                                    let format_currency =
+                                        |amount: f64, currency: &str| -> String {
+                                            // Determine if currency uses decimals
+                                            let uses_decimals = match currency {
+                                                "KRW" | "JPY" | "VND" | "IDR" => false,
+                                                _ => true,
                                             };
 
-                                            ui.with_layout(
-                                                egui::Layout::right_to_left(egui::Align::Center),
-                                                |ui| {
-                                                    ui.colored_label(color, &text);
-                                                },
-                                            );
-                                        });
-                                    });
-                                    ui.add_space(4.0);
-                                }
+                                            // Get currency symbol
+                                            let symbol = match currency {
+                                                "USD" => "$",
+                                                "EUR" => "€",
+                                                "GBP" => "£",
+                                                "JPY" => "¥",
+                                                "KRW" => "₩",
+                                                "CNY" => "¥",
+                                                "INR" => "₹",
+                                                "AUD" => "A$",
+                                                "CAD" => "C$",
+                                                "SGD" => "S$",
+                                                "HKD" => "HK$",
+                                                "TWD" => "NT$",
+                                                "THB" => "฿",
+                                                "VND" => "₫",
+                                                "IDR" => "Rp",
+                                                "BRL" => "R$",
+                                                _ => currency, // Fallback to currency code
+                                            };
+
+                                            if uses_decimals {
+                                                format!("{}{:.2}", symbol, amount)
+                                            } else {
+                                                let int_amount = amount as i64;
+                                                let abs_amount = int_amount.abs();
+                                                let formatted = abs_amount
+                                                    .to_string()
+                                                    .as_bytes()
+                                                    .rchunks(3)
+                                                    .rev()
+                                                    .map(std::str::from_utf8)
+                                                    .collect::<Result<Vec<&str>, _>>()
+                                                    .unwrap()
+                                                    .join(",");
+                                                if int_amount < 0 {
+                                                    format!("-{}{}", symbol, formatted)
+                                                } else {
+                                                    format!("{}{}", symbol, formatted)
+                                                }
+                                            }
+                                        };
+
+                                    let (color, text) = if record.total_net_cost < 0.0 {
+                                        (
+                                            egui::Color32::from_rgb(72, 187, 120),
+                                            format!(
+                                                "{} (credit)",
+                                                format_currency(
+                                                    record.total_net_cost,
+                                                    &record.currency
+                                                )
+                                            ),
+                                        )
+                                    } else if record.total_net_cost == 0.0 {
+                                        (
+                                            egui::Color32::GRAY,
+                                            format!(
+                                                "{} (no charges)",
+                                                format_currency(0.0, &record.currency)
+                                            ),
+                                        )
+                                    } else {
+                                        (
+                                            egui::Color32::from_rgb(255, 200, 87),
+                                            format_currency(
+                                                record.total_net_cost,
+                                                &record.currency,
+                                            ),
+                                        )
+                                    };
+
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.colored_label(color, &text);
+                                        },
+                                    );
+                                });
                             });
+                            ui.add_space(4.0);
+                        }
                     }
                 }
 
@@ -4366,17 +4371,22 @@ impl PlatformTab {
                 ui.separator();
                 ui.add_space(8.0);
 
-                // Right-bottom aligned buttons
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-                    if ui.add(MaterialButton::outlined("Close")).clicked() {
-                        self.show_billing_dialog = false;
+                // Action buttons
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(MaterialButton::filled("Close")).clicked() {
+                        *open = false;
                     }
 
                     if ui.add(MaterialButton::outlined("Refresh")).clicked() {
-                        self.fetch_billing_data(profile, vm, None);
+                        refresh_requested.set(true);
                     }
                 });
-            });
+            })
+            .show(ctx);
+
+        if refresh_requested.get() {
+            self.fetch_billing_data(profile, vm, None);
+        }
     }
 
     fn fetch_vm_list_for_binding(
@@ -4405,75 +4415,88 @@ impl PlatformTab {
         ctx: &egui::Context,
         _vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        egui::Window::new("Bind VM")
-            .id(egui::Id::new("bind_vm_dialog"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
+        use std::cell::Cell;
+
+        let bind_vm_loading = self.bind_vm_loading;
+        let bind_vm_list = self.bind_vm_list.clone();
+        let mut bind_vm_selected = self.bind_vm_selected;
+        let bind_vm_platform = self.bind_vm_platform.clone();
+
+        let bind_requested = Cell::new(false);
+
+        dialog("bind_vm_dialog", "Bind VM", &mut self.show_bind_vm_dialog)
             .min_width(500.0)
-            .min_height(350.0)
-            .show(ctx, |ui| {
+            .max_height(450.0)
+            .scrollable(true)
+            .content(|ui, open| {
                 ui.heading("Bind VM to Platform");
                 ui.add_space(12.0);
 
-                if self.bind_vm_loading {
+                if bind_vm_loading {
                     ui.spinner();
                     ui.label("Loading VMs from GCP...");
-                } else if self.bind_vm_list.is_empty() {
+                } else if bind_vm_list.is_empty() {
                     ui.colored_label(egui::Color32::from_rgb(255, 152, 0), "No VMs found");
                 } else {
-                    ui.label(format!("Select VM to bind ({})", self.bind_vm_list.len()));
+                    ui.label(format!("Select VM to bind ({})", bind_vm_list.len()));
                     ui.add_space(8.0);
 
-                    egui::ScrollArea::vertical()
-                        .max_height(250.0)
-                        .show(ui, |ui| {
-                            for (idx, (vm_name, zone, external_ip)) in
-                                self.bind_vm_list.iter().enumerate()
-                            {
-                                let is_selected = self.bind_vm_selected == Some(idx);
-                                let label = if !external_ip.is_empty() {
-                                    format!("{} ({}) - IP: {}", vm_name, zone, external_ip)
-                                } else {
-                                    format!("{} ({})", vm_name, zone)
-                                };
-                                if ui.selectable_label(is_selected, label).clicked() {
-                                    self.bind_vm_selected = Some(idx);
-                                }
-                            }
-                        });
+                    for (idx, (vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
+                        let is_selected = bind_vm_selected == Some(idx);
+                        let label = if !external_ip.is_empty() {
+                            format!("{} ({}) - IP: {}", vm_name, zone, external_ip)
+                        } else {
+                            format!("{} ({})", vm_name, zone)
+                        };
+                        if ui.selectable_label(is_selected, label).clicked() {
+                            bind_vm_selected = Some(idx);
+                        }
+                    }
                 }
 
                 ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let bind_enabled = !self.bind_vm_loading && self.bind_vm_selected.is_some();
-                        if ui
-                            .add_enabled(bind_enabled, MaterialButton::filled("Bind"))
-                            .clicked()
-                        {
-                            // Use scan_existing_vms which properly imports all VMs with full metadata
-                            #[cfg(not(target_arch = "wasm32"))]
-                            if let Some(vm_ref) = _vm {
-                                let profile_config_path = _current_profile.config_file.clone();
-                                if let Err(e) = vm_ref.scan_existing_vms(
-                                    profile_config_path,
-                                    self.bind_vm_platform.clone(),
-                                ) {
-                                    dure_error!("Failed to bind VMs: {}", e);
-                                }
-                            }
-                            self.show_bind_vm_dialog = false;
-                            self.bind_vm_selected = None;
-                        }
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            self.show_bind_vm_dialog = false;
-                            self.bind_vm_selected = None;
-                        }
-                    });
+                // Action buttons
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let bind_enabled = !bind_vm_loading && bind_vm_selected.is_some();
+                    if ui
+                        .add_enabled(bind_enabled, MaterialButton::filled("Bind"))
+                        .clicked()
+                    {
+                        bind_requested.set(true);
+                        *open = false;
+                    }
+                    if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
+                        *open = false;
+                    }
                 });
-            });
+            })
+            .show(ctx);
+
+        // Update selection state
+        self.bind_vm_selected = bind_vm_selected;
+
+        // Handle bind action
+        if bind_requested.get() {
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(vm_ref) = _vm {
+                let profile_config_path = _current_profile.config_file.clone();
+                if let Err(e) = vm_ref.scan_existing_vms(
+                    profile_config_path,
+                    bind_vm_platform,
+                ) {
+                    dure_error!("Failed to bind VMs: {}", e);
+                }
+            }
+            self.bind_vm_selected = None;
+        }
+
+        // Clear selection when dialog closes
+        if !self.show_bind_vm_dialog {
+            self.bind_vm_selected = None;
+        }
     }
 
     fn fetch_firewall_data(
@@ -4501,18 +4524,24 @@ impl PlatformTab {
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        egui::Window::new("Manage Firewall Rules")
-            .id(egui::Id::new("firewall_dialog"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .min_width(700.0)
-            .min_height(450.0)
-            .show(ctx, |ui| {
-                ui.heading("Manage Firewall Rules");
-                ui.add_space(8.0);
+        use std::cell::Cell;
 
-                if let Some(ip) = &self.current_ip {
+        let current_ip = self.current_ip.clone();
+        let firewall_rule_list = self.firewall_rule_list.clone();
+        let mut firewall_selected = self.firewall_selected;
+        let firewall_platform = self.firewall_platform.clone();
+
+        let add_ip_requested = Cell::new(false);
+        let remove_ip_requested = Cell::new(false);
+        let flush_requested = Cell::new(false);
+        let selected_rule_name = Cell::new(String::new());
+
+        dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
+            .min_width(700.0)
+            .max_height(600.0)
+            .scrollable(true)
+            .content(|ui, open| {
+                if let Some(ip) = &current_ip {
                     ui.label(format!("Current IP: {}", ip));
                 } else {
                     ui.label("Fetching current IP...");
@@ -4524,74 +4553,56 @@ impl PlatformTab {
                     columns[0].heading("Firewall Rules");
                     columns[0].add_space(8.0);
 
-                    egui::ScrollArea::vertical()
-                        .id_salt("firewall_rules_list")
-                        .max_height(300.0)
-                        .show(&mut columns[0], |ui| {
-                            for (idx, rule) in self.firewall_rule_list.iter().enumerate() {
-                                let is_selected = self.firewall_selected == Some(idx);
-                                let label = if rule.ip_included {
-                                    format!("{} ✓", rule.name)
-                                } else {
-                                    rule.name.clone()
-                                };
-                                if ui.selectable_label(is_selected, label).clicked() {
-                                    self.firewall_selected = Some(idx);
-                                }
-                            }
-                        });
+                    for (idx, rule) in firewall_rule_list.iter().enumerate() {
+                        let is_selected = firewall_selected == Some(idx);
+                        let label = if rule.ip_included {
+                            format!("{} ✓", rule.name)
+                        } else {
+                            rule.name.clone()
+                        };
+                        if columns[0].selectable_label(is_selected, label).clicked() {
+                            firewall_selected = Some(idx);
+                        }
+                    }
 
                     // Right column: Selected rule details
                     columns[1].heading("Selected Rule Details");
                     columns[1].add_space(8.0);
 
-                    if let Some(idx) = self.firewall_selected {
-                        if let Some(rule) = self.firewall_rule_list.get(idx) {
+                    if let Some(idx) = firewall_selected {
+                        if let Some(rule) = firewall_rule_list.get(idx) {
                             columns[1].label(format!("Name: {}", rule.name));
                             columns[1].add_space(4.0);
                             columns[1].label("Source IPs:");
 
-                            egui::ScrollArea::vertical()
-                                .id_salt("firewall_source_ips")
-                                .max_height(200.0)
-                                .show(&mut columns[1], |ui| {
-                                    for ip_range in &rule.source_ranges {
-                                        let is_current_ip = if let Some(current_ip) = &self.current_ip {
-                                            ip_range == &format!("{}/32", current_ip) || ip_range == current_ip
-                                        } else {
-                                            false
-                                        };
-                                        let text = if is_current_ip {
-                                            format!("• {} ✓", ip_range)
-                                        } else {
-                                            format!("• {}", ip_range)
-                                        };
-                                        ui.label(text);
-                                    }
-                                });
+                            for ip_range in &rule.source_ranges {
+                                let is_current_ip = if let Some(current_ip) = &current_ip {
+                                    ip_range == &format!("{}/32", current_ip) || ip_range == current_ip
+                                } else {
+                                    false
+                                };
+                                let text = if is_current_ip {
+                                    format!("• {} ✓", ip_range)
+                                } else {
+                                    format!("• {}", ip_range)
+                                };
+                                columns[1].label(text);
+                            }
 
                             columns[1].add_space(12.0);
 
                             // Action buttons
                             if columns[1].add(MaterialButton::outlined("Add My IP").small()).clicked() {
-                                if let (Some(vm), Some(ip)) = (vm.as_ref(), &self.current_ip) {
-                                    if let Err(e) = vm.update_firewall_rule(
-                                        current_profile.config_file.clone(),
-                                        self.firewall_platform.clone(),
-                                        rule.name.clone(),
-                                        ip.clone(),
-                                    ) {
-                                        dure_error!("Failed to add IP to firewall rule: {}", e);
-                                    }
-                                }
+                                add_ip_requested.set(true);
+                                selected_rule_name.set(rule.name.clone());
                             }
                             if columns[1].add(MaterialButton::outlined("Remove IP...").small()).clicked() {
-                                self.show_remove_ip_dialog = true;
-                                self.remove_ip_list = rule.source_ranges.clone();
-                                self.remove_ip_selected = vec![false; rule.source_ranges.len()];
+                                remove_ip_requested.set(true);
+                                selected_rule_name.set(rule.name.clone());
                             }
                             if columns[1].add(MaterialButton::outlined("Flush All IPs").small()).clicked() {
-                                self.show_flush_confirm = true;
+                                flush_requested.set(true);
+                                selected_rule_name.set(rule.name.clone());
                             }
                         }
                     } else {
@@ -4600,81 +4611,132 @@ impl PlatformTab {
                 });
 
                 ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::outlined("Close")).clicked() {
-                            self.show_firewall_dialog = false;
-                            self.firewall_selected = None;
-                        }
-                    });
+                // Close button
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(MaterialButton::filled("Close")).clicked() {
+                        *open = false;
+                    }
                 });
-            });
+            })
+            .show(ctx);
+
+        // Update selection state
+        self.firewall_selected = firewall_selected;
+
+        // Handle add IP action
+        if add_ip_requested.get() {
+            if let (Some(vm_ref), Some(ip)) = (vm.as_ref(), &self.current_ip) {
+                if let Err(e) = vm_ref.update_firewall_rule(
+                    current_profile.config_file.clone(),
+                    firewall_platform.clone(),
+                    selected_rule_name.take(),
+                    ip.clone(),
+                ) {
+                    dure_error!("Failed to add IP to firewall rule: {}", e);
+                }
+            }
+        }
+
+        // Handle remove IP dialog trigger
+        if remove_ip_requested.get() {
+            if let Some(idx) = self.firewall_selected {
+                if let Some(rule) = self.firewall_rule_list.get(idx) {
+                    self.show_remove_ip_dialog = true;
+                    self.remove_ip_list = rule.source_ranges.clone();
+                    self.remove_ip_selected = vec![false; rule.source_ranges.len()];
+                }
+            }
+        }
+
+        // Handle flush dialog trigger
+        if flush_requested.get() {
+            self.show_flush_confirm = true;
+        }
+
+        // Clear selection when dialog closes
+        if !self.show_firewall_dialog {
+            self.firewall_selected = None;
+        }
 
         // Remove IP submenu dialog
         if self.show_remove_ip_dialog {
-            egui::Window::new("Remove IP from Rule")
-                .id(egui::Id::new("remove_ip_dialog"))
-                .title_bar(false)
-                .resizable(false)
-                .collapsible(false)
+            let remove_ip_list = self.remove_ip_list.clone();
+            let mut remove_ip_selected = self.remove_ip_selected.clone();
+            let remove_confirmed = Cell::new(false);
+
+            dialog("remove_ip_dialog", "Remove IP from Rule", &mut self.show_remove_ip_dialog)
                 .min_width(350.0)
-                .show(ctx, |ui| {
+                .max_height(400.0)
+                .scrollable(true)
+                .content(|ui, open| {
                     ui.heading("Select IPs to remove:");
                     ui.add_space(8.0);
 
-                    for (idx, ip) in self.remove_ip_list.iter().enumerate() {
-                        if idx < self.remove_ip_selected.len() {
-                            ui.checkbox(&mut self.remove_ip_selected[idx], ip);
+                    for (idx, ip) in remove_ip_list.iter().enumerate() {
+                        if idx < remove_ip_selected.len() {
+                            ui.checkbox(&mut remove_ip_selected[idx], ip);
                         }
                     }
 
                     ui.add_space(12.0);
+                    ui.separator();
+                    ui.add_space(8.0);
 
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add(MaterialButton::filled("Remove")).clicked() {
-                                let selected_ips: Vec<String> = self.remove_ip_list.iter()
-                                    .enumerate()
-                                    .filter(|(idx, _)| self.remove_ip_selected.get(*idx).copied().unwrap_or(false))
-                                    .map(|(_, ip)| ip.clone())
-                                    .collect();
-
-                                if !selected_ips.is_empty() {
-                                    if let (Some(vm), Some(idx)) = (vm.as_ref(), self.firewall_selected) {
-                                        if let Some(rule) = self.firewall_rule_list.get(idx) {
-                                            if let Err(e) = vm.remove_ip_from_firewall(
-                                                current_profile.config_file.clone(),
-                                                self.firewall_platform.clone(),
-                                                rule.name.clone(),
-                                                selected_ips,
-                                            ) {
-                                                dure_error!("Failed to remove IPs from firewall rule: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                                self.show_remove_ip_dialog = false;
-                            }
-                            if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                                self.show_remove_ip_dialog = false;
-                            }
-                        });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Remove")).clicked() {
+                            remove_confirmed.set(true);
+                            *open = false;
+                        }
+                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
+                            *open = false;
+                        }
                     });
-                });
+                })
+                .show(ctx);
+
+            // Update selection state
+            self.remove_ip_selected = remove_ip_selected;
+
+            // Handle remove action
+            if remove_confirmed.get() {
+                let selected_ips: Vec<String> = self.remove_ip_list.iter()
+                    .enumerate()
+                    .filter(|(idx, _)| self.remove_ip_selected.get(*idx).copied().unwrap_or(false))
+                    .map(|(_, ip)| ip.clone())
+                    .collect();
+
+                if !selected_ips.is_empty() {
+                    if let (Some(vm_ref), Some(idx)) = (vm.as_ref(), self.firewall_selected) {
+                        if let Some(rule) = self.firewall_rule_list.get(idx) {
+                            if let Err(e) = vm_ref.remove_ip_from_firewall(
+                                current_profile.config_file.clone(),
+                                self.firewall_platform.clone(),
+                                rule.name.clone(),
+                                selected_ips,
+                            ) {
+                                dure_error!("Failed to remove IPs from firewall rule: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Flush confirmation dialog
         if self.show_flush_confirm {
-            egui::Window::new("Confirm Flush")
-                .id(egui::Id::new("flush_confirm_dialog"))
-                .title_bar(false)
-                .resizable(false)
-                .collapsible(false)
+            let firewall_selected = self.firewall_selected;
+            let firewall_rule_list = self.firewall_rule_list.clone();
+            let firewall_platform = self.firewall_platform.clone();
+            let flush_confirmed = Cell::new(false);
+
+            dialog("flush_confirm_dialog", "Confirm Flush", &mut self.show_flush_confirm)
                 .min_width(400.0)
-                .show(ctx, |ui| {
-                    if let Some(idx) = self.firewall_selected {
-                        if let Some(rule) = self.firewall_rule_list.get(idx) {
+                .content(|ui, open| {
+                    if let Some(idx) = firewall_selected {
+                        if let Some(rule) = firewall_rule_list.get(idx) {
                             ui.heading("Flush All IPs");
                             ui.add_space(8.0);
                             ui.colored_label(
@@ -4683,29 +4745,39 @@ impl PlatformTab {
                             );
                             ui.label("This cannot be undone.");
                             ui.add_space(12.0);
+                            ui.separator();
+                            ui.add_space(8.0);
 
-                            ui.horizontal(|ui| {
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.add(MaterialButton::filled("Flush")).clicked() {
-                                        if let Some(vm) = vm.as_ref() {
-                                            if let Err(e) = vm.flush_firewall_rule(
-                                                current_profile.config_file.clone(),
-                                                self.firewall_platform.clone(),
-                                                rule.name.clone(),
-                                            ) {
-                                                dure_error!("Failed to flush firewall rule: {}", e);
-                                            }
-                                        }
-                                        self.show_flush_confirm = false;
-                                    }
-                                    if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                                        self.show_flush_confirm = false;
-                                    }
-                                });
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.add(MaterialButton::filled("Flush")).clicked() {
+                                    flush_confirmed.set(true);
+                                    *open = false;
+                                }
+                                if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
+                                    *open = false;
+                                }
                             });
                         }
                     }
-                });
+                })
+                .show(ctx);
+
+            // Handle flush action
+            if flush_confirmed.get() {
+                if let Some(idx) = self.firewall_selected {
+                    if let Some(rule) = self.firewall_rule_list.get(idx) {
+                        if let Some(vm_ref) = vm.as_ref() {
+                            if let Err(e) = vm_ref.flush_firewall_rule(
+                                current_profile.config_file.clone(),
+                                firewall_platform,
+                                rule.name.clone(),
+                            ) {
+                                dure_error!("Failed to flush firewall rule: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
