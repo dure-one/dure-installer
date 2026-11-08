@@ -203,6 +203,25 @@ pub enum DnsDrawerTab {
     Operations,
 }
 
+impl DnsDrawerTab {
+    pub fn to_index(&self) -> usize {
+        match self {
+            DnsDrawerTab::Status => 0,
+            DnsDrawerTab::Logs => 1,
+            DnsDrawerTab::Operations => 2,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => DnsDrawerTab::Status,
+            1 => DnsDrawerTab::Logs,
+            2 => DnsDrawerTab::Operations,
+            _ => DnsDrawerTab::default(),
+        }
+    }
+}
+
 impl crate::ui_components::drawer::DrawerTabTrait for DnsDrawerTab {
     fn as_str(&self) -> &'static str {
         match self {

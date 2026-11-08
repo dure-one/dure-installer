@@ -43,6 +43,29 @@ impl DrawerTab {
             DrawerTab::Dure,
         ]
     }
+
+    pub fn to_index(&self) -> usize {
+        match self {
+            DrawerTab::Status => 0,
+            DrawerTab::Logs => 1,
+            DrawerTab::Operations => 2,
+            DrawerTab::Host => 3,
+            DrawerTab::Docker => 4,
+            DrawerTab::Dure => 5,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => DrawerTab::Status,
+            1 => DrawerTab::Logs,
+            2 => DrawerTab::Operations,
+            3 => DrawerTab::Host,
+            4 => DrawerTab::Docker,
+            5 => DrawerTab::Dure,
+            _ => DrawerTab::default(),
+        }
+    }
 }
 
 impl DrawerTabTrait for DrawerTab {
@@ -317,6 +340,27 @@ mod tests {
         assert_eq!(tabs[3], DrawerTab::Host);
         assert_eq!(tabs[4], DrawerTab::Docker);
         assert_eq!(tabs[5], DrawerTab::Dure);
+    }
+
+    #[test]
+    fn test_drawer_tab_to_index() {
+        assert_eq!(DrawerTab::Status.to_index(), 0);
+        assert_eq!(DrawerTab::Logs.to_index(), 1);
+        assert_eq!(DrawerTab::Operations.to_index(), 2);
+        assert_eq!(DrawerTab::Host.to_index(), 3);
+        assert_eq!(DrawerTab::Docker.to_index(), 4);
+        assert_eq!(DrawerTab::Dure.to_index(), 5);
+    }
+
+    #[test]
+    fn test_drawer_tab_from_index() {
+        assert_eq!(DrawerTab::from_index(0), DrawerTab::Status);
+        assert_eq!(DrawerTab::from_index(1), DrawerTab::Logs);
+        assert_eq!(DrawerTab::from_index(2), DrawerTab::Operations);
+        assert_eq!(DrawerTab::from_index(3), DrawerTab::Host);
+        assert_eq!(DrawerTab::from_index(4), DrawerTab::Docker);
+        assert_eq!(DrawerTab::from_index(5), DrawerTab::Dure);
+        assert_eq!(DrawerTab::from_index(99), DrawerTab::Status); // Out of range
     }
 
     #[test]

@@ -170,19 +170,27 @@ fn render_operations_column(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
-            if ui.add(MaterialButton::outlined("Refresh").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Refresh").small())
+                .on_hover_text("Refresh SSH host status")
+                .clicked() {
                 *action_trigger = Some(SshAction::Refresh(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("SSH Check").small()).clicked() {
+            if ui.add(MaterialButton::outlined("SSH Check").small())
+                .on_hover_text("Test SSH connection")
+                .clicked() {
                 *action_trigger = Some(SshAction::SshCheck(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Edit").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Edit").small())
+                .on_hover_text("Edit SSH host configuration")
+                .clicked() {
                 *action_trigger = Some(SshAction::Edit(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Delete").small())
+                .on_hover_text("Delete SSH host")
+                .clicked() {
                 *action_trigger = Some(SshAction::Delete(row.host.clone()));
             }
         });
@@ -192,29 +200,39 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Base (always)
-            if ui.add(MaterialButton::outlined("Check Base").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Check Base").small())
+                .on_hover_text("Check base system packages")
+                .clicked() {
                 *action_trigger = Some(SshAction::CheckBase(row.host.clone()));
             }
 
             // Install Base (only when NOT installed)
             if !row.base_installed {
-                if ui.add(MaterialButton::outlined("Install Base").small()).clicked() {
+                if ui.add(MaterialButton::outlined("Install Base").small())
+                    .on_hover_text("Install required base packages")
+                    .clicked() {
                     *action_trigger = Some(SshAction::InstallBase(row.host.clone()));
                 }
             }
 
             // Check Docker (always)
-            if ui.add(MaterialButton::outlined("Check Docker").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Check Docker").small())
+                .on_hover_text("Check Docker installation")
+                .clicked() {
                 *action_trigger = Some(SshAction::CheckDocker(row.host.clone()));
             }
 
             // Install/Remove Docker (conditional)
             if !row.docker_installed {
-                if ui.add(MaterialButton::outlined("Install Docker").small()).clicked() {
+                if ui.add(MaterialButton::outlined("Install Docker").small())
+                    .on_hover_text("Install Docker on remote host")
+                    .clicked() {
                     *action_trigger = Some(SshAction::InstallDocker(row.host.clone()));
                 }
             } else {
-                if ui.add(MaterialButton::outlined("Remove Docker").small()).clicked() {
+                if ui.add(MaterialButton::outlined("Remove Docker").small())
+                    .on_hover_text("Uninstall Docker from remote host")
+                    .clicked() {
                     *action_trigger = Some(SshAction::RemoveDocker(row.host.clone()));
                 }
             }
@@ -225,17 +243,23 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Dure (always)
-            if ui.add(MaterialButton::outlined("Check Dure").small()).clicked() {
+            if ui.add(MaterialButton::outlined("Check Dure").small())
+                .on_hover_text("Check Dure service status")
+                .clicked() {
                 *action_trigger = Some(SshAction::CheckDure(row.host.clone()));
             }
 
             // Install/Remove Dure (conditional)
             if !row.dure_installed {
-                if ui.add(MaterialButton::outlined("Install Dure").small()).clicked() {
+                if ui.add(MaterialButton::outlined("Install Dure").small())
+                    .on_hover_text("Install Dure service")
+                    .clicked() {
                     *action_trigger = Some(SshAction::InstallDure(row.host.clone()));
                 }
             } else {
-                if ui.add(MaterialButton::outlined("Remove Dure").small()).clicked() {
+                if ui.add(MaterialButton::outlined("Remove Dure").small())
+                    .on_hover_text("Uninstall Dure service")
+                    .clicked() {
                     *action_trigger = Some(SshAction::RemoveDure(row.host.clone()));
                 }
             }

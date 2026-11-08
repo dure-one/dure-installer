@@ -1,9 +1,10 @@
 //! SSH drawer UI with Status/Logs/Operations/Host/Docker/Dure tabs
 
 use eframe::egui;
+use egui_material3::tabs_primary;
 
 use crate::storage::models::opslog::OperationLog;
-use crate::ui_components::drawer::{StatusLine, TabBar, LogsRenderer, OperationsRenderer};
+use crate::ui_components::drawer::{StatusLine, LogsRenderer, OperationsRenderer};
 use crate::ui_tabs::ssh::{SshRow, OperationState};
 use crate::viewmodel::ssh::{DrawerTab, DrawerState};
 
@@ -14,10 +15,21 @@ pub fn render_drawer(
     drawer_state: &DrawerState,
     on_tab_switch: &mut Option<DrawerTab>,
 ) {
-    // Tab bar (using shared component)
-    let tab_bar = TabBar::<DrawerTab>::new();
-    if let Some(new_tab) = tab_bar.show(ui, drawer_state.active_tab) {
-        *on_tab_switch = Some(new_tab);
+    // Tab bar (Material3 compact tabs)
+    let mut temp_selected = drawer_state.active_tab.to_index();
+    ui.add(
+        tabs_primary(&mut temp_selected)
+            .id_salt("ssh_drawer_tabs")
+            .height(32.0)
+            .tab("Status")
+            .tab("Logs")
+            .tab("Operations")
+            .tab("Host")
+            .tab("Docker")
+            .tab("Dure")
+    );
+    if temp_selected != drawer_state.active_tab.to_index() {
+        *on_tab_switch = Some(DrawerTab::from_index(temp_selected));
     }
 
     ui.separator();

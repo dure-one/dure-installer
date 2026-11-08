@@ -1,6 +1,7 @@
 //! Platform drawer UI with Status/Logs/Operations tabs
 
 use eframe::egui;
+use egui_material3::tabs_primary;
 
 use crate::storage::models::opslog::OperationLog;
 use crate::ui_tabs::platform::PlatformRow;
@@ -14,18 +15,19 @@ pub fn render_drawer(
     on_tab_switch: &mut Option<DrawerTab>,
     current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) {
-    // Tab bar at top
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
-
-        for tab in DrawerTab::all() {
-            let is_selected = drawer_state.active_tab == tab;
-
-            if ui.selectable_label(is_selected, tab.as_str()).clicked() && !is_selected {
-                *on_tab_switch = Some(tab);
-            }
-        }
-    });
+    // Tab bar at top (Material3 compact tabs)
+    let mut temp_selected = drawer_state.active_tab.to_index();
+    ui.add(
+        tabs_primary(&mut temp_selected)
+            .id_salt("platform_drawer_tabs")
+            .height(32.0)
+            .tab("Status")
+            .tab("Logs")
+            .tab("Operations")
+    );
+    if temp_selected != drawer_state.active_tab.to_index() {
+        *on_tab_switch = Some(DrawerTab::from_index(temp_selected));
+    }
 
     ui.separator();
 
@@ -48,89 +50,91 @@ fn render_status_tab(
     _drawer_state: &DrawerState,
     current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) {
-    use crate::ui_components::ActionMenu;
-    use egui_twemoji::EmojiLabel as TwemojiLabel;
+    use crate::ui_components::{ActionMenu, drawer::StatusLine};
 
     ui.add_space(8.0);
 
     // Connection info
     if let Some(email) = &row.email {
         let count_display = format_project_count_display(row.total_project_count);
-        TwemojiLabel::new(format!("📧 {} ({})", email, count_display)).show(ui);
+        StatusLine::new("Email", &format!("{} ({})", email, count_display)).show(ui);
     } else {
-        TwemojiLabel::new("📧 Not connected").show(ui);
+        StatusLine::new("Email", "Not connected").show(ui);
     }
 
     ui.add_space(4.0);
 
     // Project info
     if let Some(project_id) = &row.selected_project_id {
-        TwemojiLabel::new(format!("📁 Project: {}", project_id)).show(ui);
+        StatusLine::new("Project", project_id).show(ui);
         ui.add_space(4.0);
 
         // Refresh staleness
         if let Some(last_refresh) = row.last_refresh_time {
             let elapsed = chrono::Utc::now().timestamp() - last_refresh;
-            let time_text = if elapsed < 60 {
-                "🕐 Refreshed: just now".to_string()
+            let (time_text, is_warning) = if elapsed < 60 {
+                ("just now".to_string(), false)
             } else if elapsed < 3600 {
-                format!("🕐 Refreshed: {} min ago", elapsed / 60)
+                (format!("{} min ago", elapsed / 60), false)
             } else if elapsed < 86400 {
-                format!("⚠️ Refreshed: {} hours ago", elapsed / 3600)
+                (format!("{} hours ago", elapsed / 3600), true)
             } else {
-                format!("⚠️ Refreshed: {} days ago", elapsed / 86400)
+                (format!("{} days ago", elapsed / 86400), true)
             };
 
-            let color = if elapsed < 3600 {
-                ui.style().visuals.text_color()
-            } else {
-                egui::Color32::from_rgb(255, 193, 7) // Warning color
-            };
-
-            TwemojiLabel::new(egui::RichText::new(time_text).color(color)).show(ui);
+            let mut status_line = StatusLine::new("Refreshed", &time_text);
+            if is_warning {
+                status_line = status_line.warning();
+            }
+            status_line.show(ui);
             ui.add_space(4.0);
         }
 
         // VM details
         if let Some(vm_name) = &row.vm_name {
-            TwemojiLabel::new(format!("💻 VM: {}", vm_name)).show(ui);
+            StatusLine::new("VM", vm_name).show(ui);
             ui.add_space(4.0);
 
             // IP address
             if let Some(ip) = &row.vm_external_ip {
-                TwemojiLabel::new(format!("🌐 IP: {}", ip)).show(ui);
+                StatusLine::new("IP", ip).show(ui);
             } else {
-                TwemojiLabel::new(
-                    egui::RichText::new("⚠️ IP: No external IP")
-                        .color(egui::Color32::from_rgb(255, 193, 7))
-                ).show(ui);
+                StatusLine::new("IP", "No external IP")
+                    .warning()
+                    .show(ui);
             }
             ui.add_space(4.0);
 
             // Firewall status (check operation state)
-            let firewall_text = match &row.operation_state {
+            let (firewall_text, firewall_type) = match &row.operation_state {
                 crate::ui_tabs::platform::OperationState::InProgress { operation, .. }
                     if operation.to_lowercase().contains("firewall") =>
                 {
-                    ("🔄 Updating...".to_string(), egui::Color32::from_rgb(255, 152, 0))
+                    ("Updating...".to_string(), 1) // warning
                 }
                 crate::ui_tabs::platform::OperationState::Failed { operation, error, .. }
                     if operation.to_lowercase().contains("firewall") =>
                 {
-                    (format!("🔥 {}", error), egui::Color32::from_rgb(244, 67, 54))
+                    (error.clone(), 2) // error
                 }
-                _ => (format!("🔥 {}", row.firewall_status), ui.style().visuals.text_color()),
+                _ => (row.firewall_status.clone(), 0), // normal
             };
-            TwemojiLabel::new(egui::RichText::new(firewall_text.0).color(firewall_text.1)).show(ui);
+            let mut firewall_line = StatusLine::new("Firewall", &firewall_text);
+            if firewall_type == 1 {
+                firewall_line = firewall_line.warning();
+            } else if firewall_type == 2 {
+                firewall_line = firewall_line.error();
+            }
+            firewall_line.show(ui);
             ui.add_space(4.0);
 
             // SSH status
-            TwemojiLabel::new(format!("🔑 SSH: {}", row.ssh_status)).show(ui);
+            StatusLine::new("SSH", &row.ssh_status).show(ui);
         } else {
-            TwemojiLabel::new("💻 VM: — No VM created").show(ui);
+            StatusLine::new("VM", "No VM created").show(ui);
         }
     } else {
-        TwemojiLabel::new("📁 Project: — No project selected").show(ui);
+        StatusLine::new("Project", "No project selected").show(ui);
     }
 
     ui.add_space(8.0);
@@ -190,10 +194,9 @@ fn render_status_tab(
                 }
             } else {
                 ui.add_space(8.0);
-                TwemojiLabel::new(
-                    egui::RichText::new("⚠️ SSH key not found in keyring")
-                        .color(egui::Color32::from_rgb(255, 152, 0))
-                ).show(ui);
+                StatusLine::new("SSH Key", "Not found in keyring")
+                    .warning()
+                    .show(ui);
             }
         }
     }

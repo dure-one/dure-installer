@@ -26,6 +26,23 @@ impl DrawerTab {
     pub fn all() -> [DrawerTab; 3] {
         [DrawerTab::Status, DrawerTab::Logs, DrawerTab::Operations]
     }
+
+    pub fn to_index(&self) -> usize {
+        match self {
+            DrawerTab::Status => 0,
+            DrawerTab::Logs => 1,
+            DrawerTab::Operations => 2,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => DrawerTab::Status,
+            1 => DrawerTab::Logs,
+            2 => DrawerTab::Operations,
+            _ => DrawerTab::default(),
+        }
+    }
 }
 
 impl Default for DrawerTab {
@@ -165,6 +182,21 @@ mod tests {
         assert_eq!(tabs[0], DrawerTab::Status);
         assert_eq!(tabs[1], DrawerTab::Logs);
         assert_eq!(tabs[2], DrawerTab::Operations);
+    }
+
+    #[test]
+    fn test_drawer_tab_to_index() {
+        assert_eq!(DrawerTab::Status.to_index(), 0);
+        assert_eq!(DrawerTab::Logs.to_index(), 1);
+        assert_eq!(DrawerTab::Operations.to_index(), 2);
+    }
+
+    #[test]
+    fn test_drawer_tab_from_index() {
+        assert_eq!(DrawerTab::from_index(0), DrawerTab::Status);
+        assert_eq!(DrawerTab::from_index(1), DrawerTab::Logs);
+        assert_eq!(DrawerTab::from_index(2), DrawerTab::Operations);
+        assert_eq!(DrawerTab::from_index(99), DrawerTab::Status); // Out of range returns default
     }
 
     #[test]
