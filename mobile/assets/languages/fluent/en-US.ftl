@@ -684,17 +684,6 @@ ssh-op-completed = {$operation} completed ({$seconds}s ago)
 ssh-op-failed = {$operation} failed
 ssh-op-in-progress = {$operation} ({$seconds}s)
 
-ssh-button-refresh = Refresh
-
-ssh-error-no-profile = No active profile - please select or create a profile first
-ssh-error-wasm = SSH management not available on WASM
-ssh-error-load-config = Failed to load config: {$error}
-ssh-error-unknown = Unknown error
-
-## DNS Tab & Wizard
-dns-drawer-tab-status = Status
-dns-drawer-tab-logs = Logs
-dns-drawer-tab-operations = Operations
 
 dns-check-ns-title = NS Check
 dns-check-ns-found = Found {$count} NS record(s)
@@ -733,47 +722,11 @@ dns-wizard-progress-oauth-error = Error: OAuth failed: {$error}
 dns-wizard-progress-loading = Loading: Waiting for OAuth authorization...
 platform-button-add-vm = Add VM
 platform-button-add-vm-tooltip = Add VM
-platform-button-bind-vm = Bind VM
-platform-button-bind-vm-tooltip = Bind VM to Platform
-
-## Drawer Tabs
-platform-drawer-tab-status = Status
-platform-drawer-tab-logs = Logs
-platform-drawer-tab-operations = Operations
-
-## Drawer Status Tab
-platform-drawer-status-email = Email
-platform-drawer-status-project = Project
-platform-drawer-status-vm = VM
-platform-drawer-status-ip = IP
-platform-drawer-status-firewall = Firewall
-platform-drawer-status-ssh = SSH
-platform-drawer-status-refreshed = Refreshed
-platform-drawer-status-not-connected = Not connected
-platform-drawer-status-no-external-ip = No external IP
-platform-drawer-status-updating = Updating...
-platform-drawer-status-no-vm = No VM created
-platform-drawer-status-no-project = No project selected
-platform-drawer-status-ssh-key = SSH Key
-platform-drawer-status-key-not-found = Not found in keyring
-platform-drawer-status-project-singular = project
-platform-drawer-status-project-plural = projects
-platform-drawer-status-project-unknown = ? projects
-
-## Drawer SSH Menu
-platform-drawer-ssh-menu-title = 💻SSH
-platform-drawer-ssh-copy-command = Copy SSH Command
-platform-drawer-ssh-copy-key = Copy Private Key
 platform-drawer-ssh-copy-ip = Copy IP Address
 
 ## Drawer Logs Tab
 platform-drawer-logs-heading = Project Logs
 platform-drawer-logs-level = Level:
-platform-drawer-logs-level-all = All
-platform-drawer-logs-level-debug = DEBUG
-platform-drawer-logs-level-info = INFO
-platform-drawer-logs-level-warn = WARN
-platform-drawer-logs-level-error = ERROR
 platform-drawer-logs-loading = Loading logs...
 platform-drawer-logs-no-project = No project selected
 platform-drawer-logs-empty = No logs available

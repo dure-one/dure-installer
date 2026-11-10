@@ -684,17 +684,6 @@ ssh-op-completed = {$operation} 완료 ({$seconds}초 전)
 ssh-op-failed = {$operation} 실패
 ssh-op-in-progress = {$operation} ({$seconds}초)
 
-ssh-button-refresh = 새로고침
-
-ssh-error-no-profile = 활성 프로필 없음 - 먼저 프로필을 선택하거나 생성하세요
-ssh-error-wasm = WASM에서는 SSH 관리를 사용할 수 없습니다
-ssh-error-load-config = 설정 로드 실패: {$error}
-ssh-error-unknown = 알 수 없는 오류
-
-## DNS Tab & Wizard
-dns-drawer-tab-status = 상태
-dns-drawer-tab-logs = 로그
-dns-drawer-tab-operations = 작업
 
 dns-check-ns-title = NS 확인
 dns-check-ns-found = {$count}개의 NS 레코드 발견
@@ -727,53 +716,12 @@ dns-wizard-button-next = 다음
 dns-wizard-button-previous = 이전
 dns-wizard-button-oauth = OAuth 화면 열기
 dns-wizard-waiting = 작업 대기 중...
-
-dns-wizard-progress-oauth-success = 성공: OAuth 성공
-dns-wizard-progress-oauth-error = 오류: OAuth 실패: {$error}
-dns-wizard-progress-loading = 로드 중: OAuth 인증 대기 중...
-platform-button-add-vm = VM 추가
 platform-button-add-vm-tooltip = VM 추가
-platform-button-bind-vm = VM 바인딩
-platform-button-bind-vm-tooltip = 플랫폼에 VM 바인딩
-
-## Drawer Tabs
-platform-drawer-tab-status = 상태
-platform-drawer-tab-logs = 로그
-platform-drawer-tab-operations = 작업
-
-## Drawer Status Tab
-platform-drawer-status-email = 이메일
-platform-drawer-status-project = 프로젝트
-platform-drawer-status-vm = VM
-platform-drawer-status-ip = IP
-platform-drawer-status-firewall = 방화벽
-platform-drawer-status-ssh = SSH
-platform-drawer-status-refreshed = 새로고침됨
-platform-drawer-status-not-connected = 연결되지 않음
-platform-drawer-status-no-external-ip = 외부 IP 없음
-platform-drawer-status-updating = 업데이트 중...
-platform-drawer-status-no-vm = VM이 생성되지 않음
-platform-drawer-status-no-project = 프로젝트가 선택되지 않음
-platform-drawer-status-ssh-key = SSH 키
-platform-drawer-status-key-not-found = 키링에서 찾을 수 없음
-platform-drawer-status-project-singular = 프로젝트
-platform-drawer-status-project-plural = 프로젝트
-platform-drawer-status-project-unknown = ? 프로젝트
-
-## Drawer SSH Menu
-platform-drawer-ssh-menu-title = 💻SSH
-platform-drawer-ssh-copy-command = SSH 명령 복사
-platform-drawer-ssh-copy-key = 개인 키 복사
 platform-drawer-ssh-copy-ip = IP 주소 복사
 
 ## Drawer Logs Tab
 platform-drawer-logs-heading = 프로젝트 로그
 platform-drawer-logs-level = 레벨:
-platform-drawer-logs-level-all = 전체
-platform-drawer-logs-level-debug = DEBUG
-platform-drawer-logs-level-info = INFO
-platform-drawer-logs-level-warn = WARN
-platform-drawer-logs-level-error = ERROR
 platform-drawer-logs-loading = 로그 로드 중...
 platform-drawer-logs-no-project = 프로젝트가 선택되지 않음
 platform-drawer-logs-empty = 사용 가능한 로그 없음
