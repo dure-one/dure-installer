@@ -391,7 +391,7 @@ impl Default for PlatformTab {
 fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<std::path::PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
-        None => Err("No active profile - please select or create a profile first".to_string()),
+        None => Err(tr!("platform-error-no-profile")),
     }
 }
 
@@ -409,7 +409,7 @@ fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result
     }
 
     let contents = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read config: {}", e))?;
+        .map_err(|e| tr!("platform-error-read-config", {error: e.to_string()}))?;
 
     // Try loading as V2 first (current format)
     match serde_yaml::from_str::<AppConfig>(&contents) {
@@ -431,7 +431,7 @@ fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result
 
                     // Save migrated config immediately
                     v2_config.save(&config_path)
-                        .map_err(|e| format!("Failed to save migrated config: {}", e))?;
+                        .map_err(|e| tr!("platform-error-save-config", {error: e.to_string()}))?;
 
                     dure_info!(" Migrated {} platform(s) to V2 format", v2_config.platforms.len());
 
@@ -439,8 +439,7 @@ fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result
                 }
                 Err(v1_err) => {
                     // Both V1 and V2 failed - config is corrupted
-                    Err(format!("Failed to parse config as V1 or V2: V2 error: {:?}, V1 error: {:?}",
-                        _v2_err, v1_err))
+                    Err(tr!("platform-error-parse-config", {v2_error: format!("{:?}", _v2_err), v1_error: format!("{:?}", v1_err)}))
                 }
             }
         }
@@ -1090,7 +1089,7 @@ impl PlatformTab {
                                 platform.vms.retain(|vm| vm.name != vm_name);
 
                                 if let Err(e) = app_config.save(&config_path) {
-                                    self.load_error = Some(format!("Failed to save config: {}", e));
+                                    self.load_error = Some(tr!("platform-error-save-config", {error: e.to_string()}));
                                 } else {
                                     dure_info!("✅ Config updated, refreshing table");
                                     self.loaded = false;
@@ -1406,17 +1405,17 @@ impl PlatformTab {
         }
 
         if self.rows.is_empty() && self.load_error.is_none() {
-            ui.heading("Cloud Platforms");
+            ui.heading(tr!("platform-main-heading"));
             ui.add_space(4.0);
-            ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+            ui.label(tr!("platform-main-desc"));
             ui.add_space(8.0);
 
-            if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+            if ui.add(MaterialButton::filled(tr!("platform-button-add"))).clicked() {
                 self.show_add_dialog = true;
                 self.add_platform_type = "gcp".to_string();
             }
             ui.add_space(8.0);
-            ui.label("No platforms configured. Click 'Add Platform' to get started.");
+            ui.label(tr!("platform-main-empty"));
         } else if !self.rows.is_empty() {
             // Calculate responsive column widths
             // Reserve space for borders, padding, and scrollbar
@@ -1451,8 +1450,8 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .min_row_height(68.0)
                 .drawer_row_height(500.0)
-                .column("Project", 230.0 * width_ratio, false)
-                .column("Operations", 510.0 * width_ratio, false);
+                .column(&tr!("platform-table-col-project"), 230.0 * width_ratio, false)
+                .column(&tr!("platform-table-col-operations"), 510.0 * width_ratio, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
@@ -1523,8 +1522,8 @@ impl PlatformTab {
                                 ui.horizontal(|ui| {
                                     // Refresh (always enabled)
                                     if ui
-                                        .add(MaterialButton::outlined("Refresh").small())
-                                        .on_hover_text("Refresh platform data")
+                                        .add(MaterialButton::outlined(tr!("platform-button-refresh")).small())
+                                        .on_hover_text(tr!("platform-button-refresh-tooltip"))
                                         .clicked()
                                     {
                                         ui.data_mut(|d| {
@@ -1538,8 +1537,8 @@ impl PlatformTab {
                                     // Re-authenticate (shown when OAuth refresh fails)
                                     if row_for_actions.oauth_refresh_failed {
                                         if ui
-                                            .add(MaterialButton::filled("Re-auth").small())
-                                            .on_hover_text("Re-authenticate to Google Cloud")
+                                            .add(MaterialButton::filled(tr!("platform-button-reauth")).small())
+                                            .on_hover_text(tr!("platform-button-reauth-tooltip"))
                                             .clicked()
                                         {
                                             ui.data_mut(|d| {
@@ -1560,9 +1559,9 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
-                                                MaterialButton::outlined("Billing").small(),
+                                                MaterialButton::outlined(tr!("platform-button-billing")).small(),
                                             )
-                                            .on_hover_text("Estimated Billing")
+                                            .on_hover_text(tr!("platform-button-billing-tooltip"))
                                             .clicked()
                                         {
                                             ui.data_mut(|d| {
@@ -1581,8 +1580,8 @@ impl PlatformTab {
 
                                         // Delete
                                         if ui
-                                            .add(MaterialButton::outlined("Delete").small())
-                                            .on_hover_text("Delete Platform")
+                                            .add(MaterialButton::outlined(tr!("platform-button-delete")).small())
+                                            .on_hover_text(tr!("platform-button-delete-tooltip"))
                                             .clicked()
                                         {
                                             ui.data_mut(|d| {
@@ -1609,9 +1608,9 @@ impl PlatformTab {
                                             .add_enabled(
                                                 !row_for_actions.has_vm
                                                     && row_for_actions.project_selected,
-                                                MaterialButton::outlined("Add VM").small(),
+                                                MaterialButton::outlined(tr!("platform-button-add-vm")).small(),
                                             )
-                                            .on_hover_text("Add VM")
+                                            .on_hover_text(tr!("platform-button-add-vm-tooltip"))
                                             .clicked()
                                         {
                                             ui.data_mut(|d| {
@@ -1626,9 +1625,9 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.project_selected,
-                                                MaterialButton::outlined("Bind VM").small(),
+                                                MaterialButton::outlined(tr!("platform-button-bind-vm")).small(),
                                             )
-                                            .on_hover_text("Bind existing VM from GCP to this platform")
+                                            .on_hover_text(tr!("platform-button-bind-vm-tooltip"))
                                             .clicked()
                                         {
                                             ui.data_mut(|d| {
@@ -1644,7 +1643,7 @@ impl PlatformTab {
                                             .add_enabled(
                                                 row_for_actions.project_selected
                                                     && row_for_actions.gcp_connected,
-                                                MaterialButton::outlined("Firewall").small(),
+                                                MaterialButton::outlined(tr!("platform-button-firewall")).small(),
                                             )
                                             .on_hover_text("Manage Firewall Rules")
                                             .clicked()
@@ -1663,7 +1662,7 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.has_vm,
-                                                MaterialButton::outlined("Restart").small(),
+                                                MaterialButton::outlined(tr!("platform-button-restart")).small(),
                                             )
                                             .on_hover_text("Restart VM")
                                             .clicked()
@@ -1680,7 +1679,7 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.has_vm,
-                                                MaterialButton::outlined("Del VM").small(),
+                                                MaterialButton::outlined(tr!("platform-button-del-vm")).small(),
                                             )
                                             .on_hover_text("Delete VM")
                                             .clicked()
@@ -1751,12 +1750,12 @@ impl PlatformTab {
             }
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.heading("Cloud Platforms");
+                ui.heading(tr!("platform-main-heading"));
                 ui.add_space(4.0);
-                ui.label("Manage cloud service platforms GCP for deployment and hosting.");
+                ui.label(tr!("platform-main-desc"));
                 ui.add_space(8.0);
 
-                if ui.add(MaterialButton::filled("Add Platform")).clicked() {
+                if ui.add(MaterialButton::filled(tr!("platform-button-add"))).clicked() {
                     self.show_add_dialog = true;
                     self.add_platform_type = "gcp".to_string();
                 }
@@ -2609,11 +2608,11 @@ impl PlatformTab {
                     ui.label(format!("Project: {}", self.add_platform_existing_project_id));
                     ui.add_space(8.0);
                 } else {
-                    ui.label("Configure a new cloud platform:");
+                    ui.label(tr!("platform-add-configure"));
                     ui.add_space(8.0);
 
                     ui.horizontal(|ui| {
-                        ui.label("Type:");
+                        ui.label(tr!("platform-add-type"));
                         egui::ComboBox::from_id_salt("platform_type_combo")
                             .selected_text(&self.add_platform_type)
                             .show_ui(ui, |ui| {
@@ -2685,7 +2684,7 @@ impl PlatformTab {
                             }
 
                             // Show project selection or creation
-                            ui.label("Project:");
+                            ui.label(tr!("platform-add-project"));
                             ui.add_space(4.0);
 
                             // Radio buttons for select vs create
@@ -2697,7 +2696,7 @@ impl PlatformTab {
 
                             if self.add_platform_create_new {
                                 // Create new project UI
-                                ui.label("New Project ID:");
+                                ui.label(tr!("platform-add-project-id"));
                                 ui.add_space(4.0);
                                 ui.text_edit_singleline(&mut self.add_platform_new_project_id);
                                 ui.add_space(4.0);
@@ -2736,11 +2735,11 @@ impl PlatformTab {
                         }
                     } else if self.add_platform_oauth_promise.is_some() {
                         ui.spinner();
-                        ui.label("Waiting for authorization...");
-                        ui.label("Please complete the OAuth flow in your browser.");
+                        ui.label(tr!("platform-add-oauth-waiting"));
+                        ui.label(tr!("platform-add-oauth-complete"));
                     } else {
                         if ui
-                            .add(MaterialButton::outlined("Connect to Google Cloud"))
+                            .add(MaterialButton::outlined(tr!("platform-add-oauth-connect")))
                             .clicked()
                         {
                             self.start_add_platform_oauth();
@@ -2749,7 +2748,7 @@ impl PlatformTab {
                         // Show OAuth URL if available
                         if let Some(ref oauth_url) = self.add_platform_oauth_url {
                             ui.add_space(8.0);
-                            ui.label("OAuth URL (copy to browser if needed):");
+                            ui.label(tr!("platform-add-oauth-url"));
                             ui.add_space(4.0);
                             egui::ScrollArea::vertical()
                                 .max_height(60.0)
@@ -2912,10 +2911,10 @@ impl PlatformTab {
     fn render_init_progress(&mut self, ui: &mut egui::Ui) {
         ui.add_space(12.0);
         ui.separator();
-        ui.heading("Initialization Progress");
+        ui.heading(tr!("platform-progress-heading"));
 
         if let Some(name) = &self.init_platform_name {
-            ui.label(format!("Platform: {}", name));
+            ui.label(tr!("platform-progress-platform", {name: name.clone()}));
         }
 
         ui.add_space(8.0);
@@ -3243,19 +3242,19 @@ impl PlatformTab {
             .show(ctx, |ui| {
                 if self.delete_vm_confirming {
                     // Confirmation step
-                    ui.heading("Confirm Deletion");
+                    ui.heading(tr!("platform-delete-vm-confirm"));
                     ui.add_space(8.0);
 
                     if let Some(idx) = self.delete_vm_selected {
                         if let Some((name, zone, _)) = self.delete_vm_list.get(idx).cloned() {
-                            ui.label(format!("Are you sure you want to delete VM '{}'?", name));
+                            ui.label(tr!("platform-delete-vm-question", {name: name.clone()}));
                             ui.add_space(4.0);
                             ui.colored_label(
                                 egui::Color32::from_rgb(245, 101, 101),
                                 "This action cannot be undone!",
                             );
                             ui.add_space(4.0);
-                            ui.label(format!("Zone: {}", zone));
+                            ui.label(tr!("platform-delete-vm-zone", {zone: zone.clone()}));
 
                             ui.add_space(8.0);
 
@@ -3284,7 +3283,7 @@ impl PlatformTab {
                                 ui.label("(Default: Keep IP reserved for future use)");
 
                                 ui.add_space(8.0);
-                                if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+                                if ui.add(MaterialButton::text(tr!("platform-delete-vm-manage-ips")).small()).clicked() {
                                     let url = format!(
                                         "https://console.cloud.google.com/networking/addresses/list?project={}",
                                         self.delete_vm_platform
@@ -3299,12 +3298,12 @@ impl PlatformTab {
                             let zone_clone = zone.clone();
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                                if ui.add(MaterialButton::outlined("Yes, Delete")).clicked() {
+                                if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-yes"))).clicked() {
                                     self.execute_delete_vm(profile, name_clone, zone_clone, vm);
                                     self.show_delete_vm_dialog = false;
                                 }
 
-                                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                                if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-cancel"))).clicked() {
                                     self.delete_vm_confirming = false;
                                     should_clear_progress = true;
                                 }
@@ -3313,18 +3312,18 @@ impl PlatformTab {
                     }
                 } else {
                     // VM selection step
-                    ui.heading("Select VM to Delete");
+                    ui.heading(tr!("platform-delete-vm-select"));
                     ui.add_space(8.0);
 
                     if self.delete_vm_list.is_empty() {
-                        ui.label("No VMs found in this project.");
+                        ui.label(tr!("platform-delete-vm-none"));
                         ui.add_space(8.0);
                         ui.colored_label(
                             egui::Color32::GRAY,
                             "Note: Only VMs in common zones are shown.",
                         );
                     } else {
-                        ui.label(format!("Found {} VM(s):", self.delete_vm_list.len()));
+                        ui.label(tr!("platform-delete-vm-found", {count: self.delete_vm_list.len()}));
                         ui.add_space(8.0);
 
                         egui::ScrollArea::vertical()
@@ -3352,12 +3351,12 @@ impl PlatformTab {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         let can_delete = self.delete_vm_selected.is_some();
                         ui.add_enabled_ui(can_delete, |ui| {
-                            if ui.add(MaterialButton::outlined("Next")).clicked() {
+                            if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-next"))).clicked() {
                                 self.delete_vm_confirming = true;
                             }
                         });
 
-                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                        if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-cancel"))).clicked() {
                             self.show_delete_vm_dialog = false;
                             should_clear_progress = true;
                         }
@@ -3815,7 +3814,7 @@ impl PlatformTab {
                         "Note: VMs will be removed from config but NOT deleted from GCP.",
                     );
                 } else {
-                    ui.colored_label(egui::Color32::GRAY, "This platform has no VMs configured.");
+                    ui.colored_label(egui::Color32::GRAY, tr!("platform-drawer-no-vms"));
                 }
 
                 ui.add_space(8.0);
@@ -3875,11 +3874,11 @@ impl PlatformTab {
             .collapsible(false)
             .default_width(500.0)
             .show(ctx, |ui| {
-                ui.heading("Select Project");
+                ui.heading(tr!("platform-select-project-heading"));
                 ui.add_space(8.0);
 
                 if self.select_project_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), "No projects found");
+                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), tr!("platform-select-project-none"));
                 } else {
                     ui.label(format!(
                         "Found {} projects:",
@@ -3915,7 +3914,7 @@ impl PlatformTab {
                     }
 
                     let select_enabled = self.select_project_selected.is_some();
-                    let select_button = MaterialButton::filled("Select");
+                    let select_button = MaterialButton::filled(tr!("platform-select-project-button"));
                     let select_button = if select_enabled {
                         select_button
                     } else {
@@ -4170,12 +4169,12 @@ impl PlatformTab {
             .max_height(600.0)
             .scrollable(true)
             .content(|ui, open| {
-                ui.heading("Monthly Total Cost (Last 3 Months)");
+                ui.heading(tr!("platform-billing-heading"));
                 ui.add_space(8.0);
 
                 // Project ID display with GCP console link
                 ui.horizontal(|ui| {
-                    ui.label("Project ID:");
+                    ui.label(tr!("platform-billing-project-id"));
                     ui.label(&billing_project_id);
                     ui.add_space(8.0);
                     ui.hyperlink_to(
@@ -4190,7 +4189,7 @@ impl PlatformTab {
 
                 if billing_loading {
                     ui.spinner();
-                    ui.label("Loading billing data...");
+                    ui.label(tr!("platform-billing-loading"));
                 } else if let Some(error) = &billing_error {
                     // Check if this is a "table not found" error (billing export not configured)
                     let is_table_not_found =
@@ -4202,22 +4201,22 @@ impl PlatformTab {
                             "⚠️ Billing Export Not Configured",
                         );
                         ui.add_space(4.0);
-                        ui.label("BigQuery billing export table does not exist yet.");
+                        ui.label(tr!("platform-billing-no-table"));
                     } else {
-                        ui.colored_label(egui::Color32::from_rgb(255, 82, 82), "Error:");
+                        ui.colored_label(egui::Color32::from_rgb(255, 82, 82), tr!("platform-billing-error"));
                         ui.add_space(4.0);
                         ui.label(error);
                     }
                     ui.add_space(16.0);
 
-                    ui.label("To enable BigQuery billing export:");
+                    ui.label(tr!("platform-billing-help"));
                     ui.label("1. Go to GCP Console → Billing → Billing export");
                     ui.label("2. Select 'Detailed cost data' tab");
                     ui.label("3. Select or create a BigQuery dataset");
                     ui.label("4. Wait a few hours for data to populate");
                 } else if let Some(records) = &billing_data {
                     if records.is_empty() {
-                        ui.label("No billing data found for the current month.");
+                        ui.label(tr!("platform-billing-no-data"));
                         ui.add_space(8.0);
                         ui.label("This could mean:");
                         ui.label("• Billing export is not configured");
@@ -4390,21 +4389,21 @@ impl PlatformTab {
 
         let bind_requested = Cell::new(false);
 
-        dialog("bind_vm_dialog", "Bind VM", &mut self.show_bind_vm_dialog)
+        dialog("bind_vm_dialog", &tr!("platform-dialog-bind-title"), &mut self.show_bind_vm_dialog)
             .min_width(500.0)
             .max_height(450.0)
             .scrollable(true)
             .content(|ui, open| {
-                ui.heading("Bind VM to Platform");
+                ui.heading(tr!("platform-dialog-bind-heading"));
                 ui.add_space(12.0);
 
                 if bind_vm_loading {
                     ui.spinner();
-                    ui.label("Loading VMs from GCP...");
+                    ui.label(tr!("platform-dialog-bind-loading"));
                 } else if bind_vm_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), "No VMs found");
+                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), tr!("platform-dialog-bind-no-vms"));
                 } else {
-                    ui.label(format!("Select VM to bind ({})", bind_vm_list.len()));
+                    ui.label(tr!("platform-dialog-bind-select", {count: bind_vm_list.len()}));
                     ui.add_space(8.0);
 
                     for (idx, (vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
@@ -4428,13 +4427,13 @@ impl PlatformTab {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let bind_enabled = !bind_vm_loading && bind_vm_selected.is_some();
                     if ui
-                        .add_enabled(bind_enabled, MaterialButton::filled("Bind"))
+                        .add_enabled(bind_enabled, MaterialButton::filled(tr!("button-bind")))
                         .clicked()
                     {
                         bind_requested.set(true);
                         *open = false;
                     }
-                    if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
+                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                         *open = false;
                     }
                 });

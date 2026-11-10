@@ -222,12 +222,17 @@ impl DnsDrawerTab {
     }
 }
 
+// Tab string constants (not user-facing, only for internal identification)
+const TAB_STATUS: &str = "status";
+const TAB_LOGS: &str = "logs";
+const TAB_OPERATIONS: &str = "operations";
+
 impl crate::ui_components::drawer::DrawerTabTrait for DnsDrawerTab {
     fn as_str(&self) -> &'static str {
         match self {
-            DnsDrawerTab::Status => "Status",
-            DnsDrawerTab::Logs => "Logs",
-            DnsDrawerTab::Operations => "Operations",
+            DnsDrawerTab::Status => TAB_STATUS,
+            DnsDrawerTab::Logs => TAB_LOGS,
+            DnsDrawerTab::Operations => TAB_OPERATIONS,
         }
     }
 
@@ -271,7 +276,7 @@ impl DnsTab {
 
         ui.vertical(|ui| {
             // Header with "Add DNS" button
-            ui.add_space(10.0);
+            //ui.add_space(10.0);
 
             // Domain table
             self.render_domain_table(ui, profile);
@@ -321,14 +326,14 @@ impl DnsTab {
         let width_ratio = (available_width / base_width).min(1.5).max(0.8);
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.heading("DNS Domains");
+            ui.heading(tr!("dns-main-heading"));
             ui.add_space(4.0);
-            ui.label("Manage DNS domains with Cloudflare integration.");
+            ui.label(tr!("dns-main-desc"));
             ui.add_space(8.0);
 
             if ui
-                    .add(MaterialButton::filled("Add DNS"))
-                    .on_hover_text("Add new DNS with automated Cloudflare setup")
+                    .add(MaterialButton::filled(tr!("dns-button-add")))
+                    .on_hover_text(tr!("dns-button-add-tooltip"))
                     .clicked()
                 {
                     self.show_add_dns_wizard = true;
@@ -345,7 +350,7 @@ impl DnsTab {
             ui.add_space(8.0);
 
             if self.domain_rows.is_empty() {
-                ui.label("No DNS domains configured. Click 'Add DNS' to get started.");
+                ui.label(tr!("dns-main-empty"));
                 return;
             }
 
@@ -358,8 +363,8 @@ impl DnsTab {
                 .allow_drawer(true)
                 .min_row_height(68.0)
                 .drawer_row_height(400.0)
-                .column("DNS", 230.0 * width_ratio, false)
-                .column("Operations", 510.0 * width_ratio, false);
+                .column(tr!("dns-table-col-dns"), 230.0 * width_ratio, false)
+                .column(tr!("dns-table-col-operations"), 510.0 * width_ratio, false);
 
             for row in self.domain_rows.clone().iter() {
                 let row_for_cells = row.clone();
@@ -389,8 +394,8 @@ impl DnsTab {
                         let domain = row_for_ops.domain.clone();
                         ui.horizontal_wrapped(|ui| {
                             if ui
-                                .add(MaterialButton::outlined("Check NS").small())
-                                .on_hover_text("Check nameserver records")
+                                .add(MaterialButton::outlined(tr!("dns-button-check-ns")).small())
+                                .on_hover_text(tr!("dns-button-check-ns-tooltip"))
                                 .clicked()
                             {
                                 ui.data_mut(|d| d.insert_temp(
@@ -400,8 +405,8 @@ impl DnsTab {
                             }
 
                             if ui
-                                .add(MaterialButton::outlined("Check Settings").small())
-                                .on_hover_text("Verify DNS records")
+                                .add(MaterialButton::outlined(tr!("dns-button-check-settings")).small())
+                                .on_hover_text(tr!("dns-button-check-settings-tooltip"))
                                 .clicked()
                             {
                                 ui.data_mut(|d| d.insert_temp(
@@ -411,8 +416,8 @@ impl DnsTab {
                             }
 
                             if ui
-                                .add(MaterialButton::outlined("HTTPS Check").small())
-                                .on_hover_text("Test HTTPS connection")
+                                .add(MaterialButton::outlined(tr!("dns-button-https-check")).small())
+                                .on_hover_text(tr!("dns-button-https-check-tooltip"))
                                 .clicked()
                             {
                                 ui.data_mut(|d| d.insert_temp(
@@ -422,8 +427,8 @@ impl DnsTab {
                             }
 
                             if ui
-                                .add(MaterialButton::outlined("Delete").small())
-                                .on_hover_text("Remove this DNS domain")
+                                .add(MaterialButton::outlined(tr!("dns-button-delete")).small())
+                                .on_hover_text(tr!("dns-button-delete-tooltip"))
                                 .clicked()
                             {
                                 ui.data_mut(|d| d.insert_temp(
@@ -501,7 +506,7 @@ impl DnsTab {
                                 });
 
                                 let mut results = Vec::new();
-                                results.push(format!("Found {} NS record(s)", nameservers.len()));
+                                results.push(tr!("dns-check-ns-found", {count: nameservers.len()}));
                                 for ns in &nameservers {
                                     results.push(format!("  {}", ns));
                                 }
@@ -518,9 +523,9 @@ impl DnsTab {
                                         checked_at: chrono::Utc::now().timestamp(),
                                         uses_cloudflare: false,
                                         nameservers: Vec::new(),
-                                        error: Some("No NS records found".to_string()),
+                                        error: Some(tr!("dns-check-ns-none")),
                                     },
-                                    vec!["✗ No NS records found".to_string()]
+                                    vec![format!("✗ {}", tr!("dns-check-ns-none"))]
                                 ))
                             }
                         }
@@ -582,8 +587,8 @@ impl DnsTab {
                 checked_at: chrono::Utc::now().timestamp(),
                 records_valid: false,
                 missing_records: vec![
-                    "A record for root domain".to_string(),
-                    "A/CNAME record for www subdomain".to_string(),
+                    tr!("dns-check-settings-root"),
+                    tr!("dns-check-settings-www"),
                 ],
                 error: Some("Cloudflare API check not yet implemented - needs zone_id and API token".to_string()),
             };
@@ -694,7 +699,7 @@ impl DnsTab {
                     .max_width(400.0)
                     .min_height(460.0)
                     .resize(|r| {
-                        r.default_size([400.0, 518.0])
+                        r.default_size([400.0, 510.0])
                     })
                     .show(ui.ctx(), |ui| {
                         wizard.ui(ui, profile);
@@ -776,7 +781,7 @@ impl DnsTab {
 
             let ns_check_results = self.ns_check_results.clone();
 
-            dialog("ns_server_check_dialog", "NS Server Check", &mut self.show_ns_check_dialog)
+            dialog("ns_server_check_dialog", tr!("dns-dialog-ns-title"), &mut self.show_ns_check_dialog)
                 .min_width(400.0)
                 .max_width(400.0)
                 .max_height(450.0)
@@ -784,7 +789,7 @@ impl DnsTab {
                 .content(|ui, open| {
                     if ns_check_results.is_empty() {
                         ui.spinner();
-                        ui.label("Querying NS records...");
+                        ui.label(tr!("dns-dialog-ns-querying"));
                     } else {
                         for result in &ns_check_results {
                             ui.label(result);
@@ -796,7 +801,7 @@ impl DnsTab {
                     ui.add_space(8.0);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                        if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
                             *open = false;
                         }
                     });
@@ -855,16 +860,16 @@ impl DnsTab {
 
             let dns_settings_results = self.dns_settings_results.clone();
 
-            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut self.show_dns_settings_dialog)
+            dialog("dns_settings_check_dialog", tr!("dns-dialog-settings-title"), &mut self.show_dns_settings_dialog)
                 .min_width(600.0)
                 .max_height(500.0)
                 .scrollable(true)
                 .content(|ui, open| {
                     if dns_settings_results.is_empty() {
                         ui.spinner();
-                        ui.label("Checking all DNS records...");
+                        ui.label(tr!("dns-dialog-settings-checking"));
                     } else {
-                        ui.heading("DNS Record Verification");
+                        ui.heading(tr!("dns-dialog-settings-verification"));
                         ui.add_space(10.0);
 
                         use egui_extras::{TableBuilder, Column};
@@ -876,11 +881,11 @@ impl DnsTab {
                             .column(Column::remainder())  // Actual
                             .column(Column::exact(60.0))  // Status
                             .header(20.0, |mut header| {
-                                header.col(|ui| { ui.strong("Type"); });
-                                header.col(|ui| { ui.strong("Name"); });
-                                header.col(|ui| { ui.strong("Expected"); });
-                                header.col(|ui| { ui.strong("Actual"); });
-                                header.col(|ui| { ui.strong("Status"); });
+                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-type")); });
+                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-name")); });
+                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-expected")); });
+                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-actual")); });
+                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-status")); });
                             })
                             .body(|mut body| {
                                 for check in &dns_settings_results {
@@ -892,7 +897,7 @@ impl DnsTab {
                                             if let Some(actual) = &check.actual {
                                                 ui.label(actual);
                                             } else {
-                                                ui.weak("(not found)");
+                                                ui.weak(tr!("dns-dialog-settings-not-found"));
                                             }
                                         });
                                         row.col(|ui| {
@@ -913,11 +918,11 @@ impl DnsTab {
                             let all_valid = dns_settings_results.iter().all(|r| r.valid);
                             if !all_valid {
                                 ui.horizontal(|ui| {
-                                    if ui.add(MaterialButton::filled("Set Correct Records")).clicked() {
+                                    if ui.add(MaterialButton::filled(tr!("dns-button-set-records"))).clicked() {
                                         // TODO: Implement Cloudflare API call to update DNS records
                                         dure_warn!("Set DNS records not implemented yet - needs Cloudflare API integration");
                                     }
-                                    ui.label("(Not implemented - requires Cloudflare API token)");
+                                    ui.label(tr!("dns-button-set-records-note"));
                                 });
                             }
                         }
@@ -976,50 +981,50 @@ impl DnsTab {
 
             let https_check_result = self.https_check_result.clone();
 
-            dialog("https_connection_check_dialog", "HTTPS Connection Check", &mut self.show_https_check_dialog)
+            dialog("https_connection_check_dialog", tr!("dns-dialog-https-title"), &mut self.show_https_check_dialog)
                 .min_width(400.0)
                 .max_width(400.0)
                 .max_height(450.0)
                 .scrollable(true)
                 .content(|ui, open| {
                     if let Some(result) = &https_check_result {
-                        ui.heading(if result.resolves_to_vm { "✓ Resolves Correctly" } else { "✗ Resolution Mismatch" });
+                        ui.heading(if result.resolves_to_vm { tr!("dns-dialog-https-ok") } else { tr!("dns-dialog-https-mismatch") });
                         ui.add_space(10.0);
 
                         ui.horizontal(|ui| {
-                            ui.label("Resolved IP:");
+                            ui.label(tr!("dns-dialog-https-resolved-ip"));
                             if let Some(ip) = &result.resolved_ip {
                                 ui.label(ip);
                             } else {
-                                ui.weak("N/A");
+                                ui.weak(tr!("dns-dialog-https-na"));
                             }
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Expected IP:");
+                            ui.label(tr!("dns-dialog-https-expected-ip"));
                             if let Some(ip) = &result.expected_ip {
                                 ui.label(ip);
                             } else {
-                                ui.weak("N/A");
+                                ui.weak(tr!("dns-dialog-https-na"));
                             }
                         });
 
                         ui.horizontal(|ui| {
-                            ui.label("Matches VM:");
+                            ui.label(tr!("dns-dialog-https-matches-vm"));
                             if result.resolves_to_vm {
-                                ui.colored_label(egui::Color32::GREEN, "Yes");
+                                ui.colored_label(egui::Color32::GREEN, tr!("dns-dialog-https-yes"));
                             } else {
-                                ui.colored_label(egui::Color32::RED, "No");
+                                ui.colored_label(egui::Color32::RED, tr!("dns-dialog-https-no"));
                             }
                         });
 
-                        if let Some(error) = &result.error {
+                        if let Some(err_msg) = &result.error {
                             ui.add_space(10.0);
-                            ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+                            ui.colored_label(egui::Color32::RED, format!("{} {}", tr!("dns-dialog-https-error-prefix"), err_msg));
                         }
                     } else {
                         ui.spinner();
-                        ui.label("Checking DNS resolution...");
+                        ui.label(tr!("dns-dialog-https-checking"));
                     }
 
                     ui.add_space(12.0);
@@ -1027,7 +1032,7 @@ impl DnsTab {
                     ui.add_space(8.0);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                        if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
                             *open = false;
                         }
                     });
@@ -1262,9 +1267,9 @@ mod tests {
 
     #[test]
     fn test_dns_drawer_tab_as_str() {
-        assert_eq!(DnsDrawerTab::Status.as_str(), "Status");
-        assert_eq!(DnsDrawerTab::Logs.as_str(), "Logs");
-        assert_eq!(DnsDrawerTab::Operations.as_str(), "Operations");
+        assert_eq!(DnsDrawerTab::Status.as_str(), "status");
+        assert_eq!(DnsDrawerTab::Logs.as_str(), "logs");
+        assert_eq!(DnsDrawerTab::Operations.as_str(), "operations");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! SSH drawer UI with Status/Logs/Operations/Host/Docker/Dure tabs
 
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::tabs_primary;
 
 use crate::storage::models::opslog::OperationLog;
@@ -21,12 +22,12 @@ pub fn render_drawer(
         tabs_primary(&mut temp_selected)
             .id_salt("ssh_drawer_tabs")
             .height(32.0)
-            .tab("Status")
-            .tab("Logs")
-            .tab("Operations")
-            .tab("Host")
-            .tab("Docker")
-            .tab("Dure")
+            .tab(&tr!("ssh-drawer-tab-status"))
+            .tab(&tr!("ssh-drawer-tab-logs"))
+            .tab(&tr!("ssh-drawer-tab-operations"))
+            .tab(&tr!("ssh-drawer-tab-host"))
+            .tab(&tr!("ssh-drawer-tab-docker"))
+            .tab(&tr!("ssh-drawer-tab-dure"))
     );
     if temp_selected != drawer_state.active_tab.to_index() {
         *on_tab_switch = Some(DrawerTab::from_index(temp_selected));
@@ -56,28 +57,28 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     ui.add_space(8.0);
 
     // IP Address (no emoji)
-    StatusLine::new("IP", &row.host).show(ui);
+    StatusLine::new(&tr!("ssh-drawer-status-ip"), &row.host).show(ui);
 
     // SSH Connection Status (inline error display)
     if let Some(check_result) = &row.last_ssh_check {
         if check_result.connected {
-            StatusLine::new("SSH", "Connected").show(ui);
+            StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-connected")).show(ui);
         } else if let Some(error) = &check_result.error {
-            StatusLine::new("SSH", &format!("Failed ({})", error))
+            StatusLine::new(&tr!("ssh-drawer-status-ssh"), &format!("Failed ({})", error))
                 .error()
                 .show(ui);
         } else {
-            StatusLine::new("SSH", "Disconnected")
+            StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-disconnected"))
                 .warning()
                 .show(ui);
         }
     } else {
-        StatusLine::new("SSH", "Not checked").show(ui);
+        StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-not-checked")).show(ui);
     }
 
     // Base Packages Status
-    let base_status = if row.base_installed { "Installed" } else { "Not Installed" };
-    let mut base_line = StatusLine::new("Base", base_status);
+    let base_status = if row.base_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
+    let mut base_line = StatusLine::new(&tr!("ssh-drawer-status-base"), base_status);
     if !row.base_installed {
         base_line = base_line.warning();
     }
@@ -96,23 +97,23 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
             if let Some(version) = &check_result.version {
                 format!("Installed ({})", version)
             } else {
-                "Installed".to_string()
+                tr!("ssh-drawer-status-installed").to_string()
             }
         } else {
-            "Installed".to_string()
+            tr!("ssh-drawer-status-installed").to_string()
         }
     } else {
-        "Not Installed".to_string()
+        tr!("ssh-drawer-status-not-installed").to_string()
     };
-    let mut docker_line = StatusLine::new("Docker", &docker_status);
+    let mut docker_line = StatusLine::new(&tr!("ssh-drawer-status-docker"), &docker_status);
     if !row.docker_installed {
         docker_line = docker_line.warning();
     }
     docker_line.show(ui);
 
     // Dure Status
-    let dure_status = if row.dure_installed { "Installed" } else { "Not Installed" };
-    let mut dure_line = StatusLine::new("Dure", dure_status);
+    let dure_status = if row.dure_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
+    let mut dure_line = StatusLine::new(&tr!("ssh-drawer-status-dure"), dure_status);
     if !row.dure_installed {
         dure_line = dure_line.warning();
     }
@@ -171,7 +172,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
 
 /// Render Logs tab (stdout logs filtered by SSH host)
 fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    let renderer = LogsRenderer::new("SSH Host Logs")
+    let renderer = LogsRenderer::new(&tr!("ssh-logs-title"))
         .refresh_interval(1);  // 1 second auto-refresh
 
     let refresh_id = egui::Id::new("ssh_drawer_action_refresh_logs");
@@ -187,10 +188,10 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 /// Render Host tab (system information)
 fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     ui.horizontal(|ui| {
-        ui.heading("Host Information");
+        ui.heading(tr!("ssh-host-info-title"));
         ui.add_space(8.0);
 
-        if ui.button("Refresh").clicked() {
+        if ui.button(tr!("ssh-button-refresh")).clicked() {
             ui.data_mut(|d| {
                 d.insert_temp(
                     egui::Id::new("ssh_drawer_action_refresh_host"),
@@ -203,16 +204,16 @@ fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     ui.separator();
 
     if let Some(host_info) = &drawer_state.host_info {
-        ui.label(format!("OS: {}", host_info.os));
-        ui.label(format!("Uptime: {}", host_info.uptime));
-        ui.label(format!("External IP: {}", host_info.external_ip));
-        ui.label(format!("Load: {}", host_info.load_average));
-        ui.label(format!("Memory: {}", host_info.memory_usage));
-        ui.label(format!("Disk: {}", host_info.disk_usage));
+        ui.label(tr!("ssh-host-info-os", {os: &host_info.os}));
+        ui.label(tr!("ssh-host-info-uptime", {uptime: &host_info.uptime}));
+        ui.label(tr!("ssh-host-info-ip", {ip: &host_info.external_ip}));
+        ui.label(tr!("ssh-host-info-load", {load: &host_info.load_average}));
+        ui.label(tr!("ssh-host-info-memory", {memory: &host_info.memory_usage}));
+        ui.label(tr!("ssh-host-info-disk", {disk: &host_info.disk_usage}));
 
         ui.add_space(8.0);
         ui.separator();
-        ui.heading("Network Log (last 100 lines)");
+        ui.heading(tr!("ssh-logs-network-title"));
         ui.separator();
 
         egui::ScrollArea::vertical()
@@ -235,7 +236,7 @@ fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         ui.heading("Docker Containers");
         ui.add_space(8.0);
 
-        if ui.button("Refresh").clicked() {
+        if ui.button(tr!("ssh-button-refresh")).clicked() {
             ui.data_mut(|d| {
                 d.insert_temp(
                     egui::Id::new("ssh_drawer_action_refresh_docker"),
@@ -280,7 +281,7 @@ fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         ui.heading("Dure (mycart) Status");
         ui.add_space(8.0);
 
-        if ui.button("Refresh").clicked() {
+        if ui.button(tr!("ssh-button-refresh")).clicked() {
             ui.data_mut(|d| {
                 d.insert_temp(
                     egui::Id::new("ssh_drawer_action_refresh_dure"),

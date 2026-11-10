@@ -2,6 +2,7 @@
 
 use crate::{dure_debug, dure_error, dure_info};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::{MaterialButton, dialog};
 
 use crate::config::{AppConfig, SshHostConfig};
@@ -170,26 +171,26 @@ fn render_operations_column(
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
-            if ui.add(MaterialButton::outlined("Refresh").small())
-                .on_hover_text("Refresh SSH host status")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-refresh")).small())
+                .on_hover_text(tr!("ssh-button-refresh-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::Refresh(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("SSH Check").small())
-                .on_hover_text("Test SSH connection")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-ssh-check")).small())
+                .on_hover_text(tr!("ssh-button-ssh-check-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::SshCheck(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Edit").small())
-                .on_hover_text("Edit SSH host configuration")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-edit")).small())
+                .on_hover_text(tr!("ssh-button-edit-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::Edit(row.host.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Delete").small())
-                .on_hover_text("Delete SSH host")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-delete")).small())
+                .on_hover_text(tr!("ssh-button-delete-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::Delete(row.host.clone()));
             }
@@ -200,38 +201,38 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Base (always)
-            if ui.add(MaterialButton::outlined("Check Base").small())
-                .on_hover_text("Check base system packages")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-check-base")).small())
+                .on_hover_text(tr!("ssh-button-check-base-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::CheckBase(row.host.clone()));
             }
 
             // Install Base (only when NOT installed)
             if !row.base_installed {
-                if ui.add(MaterialButton::outlined("Install Base").small())
-                    .on_hover_text("Install required base packages")
+                if ui.add(MaterialButton::outlined(tr!("ssh-button-install-base")).small())
+                    .on_hover_text(tr!("ssh-button-install-base-tooltip"))
                     .clicked() {
                     *action_trigger = Some(SshAction::InstallBase(row.host.clone()));
                 }
             }
 
             // Check Docker (always)
-            if ui.add(MaterialButton::outlined("Check Docker").small())
-                .on_hover_text("Check Docker installation")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-check-docker")).small())
+                .on_hover_text(tr!("ssh-button-check-docker-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::CheckDocker(row.host.clone()));
             }
 
             // Install/Remove Docker (conditional)
             if !row.docker_installed {
-                if ui.add(MaterialButton::outlined("Install Docker").small())
-                    .on_hover_text("Install Docker on remote host")
+                if ui.add(MaterialButton::outlined(tr!("ssh-button-install-docker")).small())
+                    .on_hover_text(tr!("ssh-button-install-docker-tooltip"))
                     .clicked() {
                     *action_trigger = Some(SshAction::InstallDocker(row.host.clone()));
                 }
             } else {
-                if ui.add(MaterialButton::outlined("Remove Docker").small())
-                    .on_hover_text("Uninstall Docker from remote host")
+                if ui.add(MaterialButton::outlined(tr!("ssh-button-remove-docker")).small())
+                    .on_hover_text(tr!("ssh-button-remove-docker-tooltip"))
                     .clicked() {
                     *action_trigger = Some(SshAction::RemoveDocker(row.host.clone()));
                 }
@@ -243,22 +244,22 @@ fn render_operations_column(
             ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
 
             // Check Dure (always)
-            if ui.add(MaterialButton::outlined("Check Dure").small())
-                .on_hover_text("Check Dure service status")
+            if ui.add(MaterialButton::outlined(tr!("ssh-button-check-dure")).small())
+                .on_hover_text(tr!("ssh-button-check-dure-tooltip"))
                 .clicked() {
                 *action_trigger = Some(SshAction::CheckDure(row.host.clone()));
             }
 
             // Install/Remove Dure (conditional)
             if !row.dure_installed {
-                if ui.add(MaterialButton::outlined("Install Dure").small())
-                    .on_hover_text("Install Dure service")
+                if ui.add(MaterialButton::outlined(tr!("ssh-button-install-dure")).small())
+                    .on_hover_text(tr!("ssh-button-install-dure-tooltip"))
                     .clicked() {
                     *action_trigger = Some(SshAction::InstallDure(row.host.clone()));
                 }
             } else {
-                if ui.add(MaterialButton::outlined("Remove Dure").small())
-                    .on_hover_text("Uninstall Dure service")
+                if ui.add(MaterialButton::outlined(tr!("ssh-button-remove-dure")).small())
+                    .on_hover_text(tr!("ssh-button-remove-dure-tooltip"))
                     .clicked() {
                     *action_trigger = Some(SshAction::RemoveDure(row.host.clone()));
                 }
@@ -386,7 +387,7 @@ fn get_config_path(
 ) -> Result<std::path::PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
-        None => Err("No active profile - please select or create a profile first".to_string()),
+        None => Err(tr!("ssh-error-no-profile")),
     }
 }
 
@@ -449,7 +450,7 @@ impl SshTab {
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.load_error = Some("SSH management not available on WASM".to_string());
+            self.load_error = Some(tr!("ssh-error-wasm"));
             self.loaded = true;
         }
     }
@@ -528,7 +529,7 @@ impl SshTab {
                     row.docker_installed = docker_installed;
                     row.dure_installed = dure_installed;
                     row.operation_state = OperationState::Completed {
-                        operation: "Refresh".to_string(),
+                        operation: tr!("ssh-operation-refresh"),
                         completed_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -545,12 +546,12 @@ impl SshTab {
                     });
                     row.operation_state = if error.is_none() {
                         OperationState::Completed {
-                            operation: "SSH Check".to_string(),
+                            operation: tr!("ssh-operation-ssh-check"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "SSH Check".to_string(),
+                            operation: tr!("ssh-operation-ssh-check"),
                             error: error.unwrap(),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
@@ -567,7 +568,7 @@ impl SshTab {
                         checked_at: chrono::Utc::now().timestamp(),
                     });
                     row.operation_state = OperationState::Completed {
-                        operation: "Base Check".to_string(),
+                        operation: tr!("ssh-operation-base-check"),
                         completed_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -578,13 +579,13 @@ impl SshTab {
                     row.base_installed = success;
                     row.operation_state = if success {
                         OperationState::Completed {
-                            operation: "Install Base".to_string(),
+                            operation: tr!("ssh-operation-install-base"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "Install Base".to_string(),
-                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            operation: tr!("ssh-operation-install-base"),
+                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
@@ -605,7 +606,7 @@ impl SshTab {
                         checked_at: chrono::Utc::now().timestamp(),
                     });
                     row.operation_state = OperationState::Completed {
-                        operation: "Docker Check".to_string(),
+                        operation: tr!("ssh-operation-docker-check"),
                         completed_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -616,13 +617,13 @@ impl SshTab {
                     row.docker_installed = success;
                     row.operation_state = if success {
                         OperationState::Completed {
-                            operation: "Install Docker".to_string(),
+                            operation: tr!("ssh-operation-install-docker"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "Install Docker".to_string(),
-                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            operation: tr!("ssh-operation-install-docker"),
+                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
@@ -639,13 +640,13 @@ impl SshTab {
                     row.docker_installed = !success;
                     row.operation_state = if success {
                         OperationState::Completed {
-                            operation: "Remove Docker".to_string(),
+                            operation: tr!("ssh-operation-remove-docker"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "Remove Docker".to_string(),
-                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            operation: tr!("ssh-operation-remove-docker"),
+                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
@@ -667,7 +668,7 @@ impl SshTab {
                         checked_at: chrono::Utc::now().timestamp(),
                     });
                     row.operation_state = OperationState::Completed {
-                        operation: "Dure Check".to_string(),
+                        operation: tr!("ssh-operation-dure-check"),
                         completed_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -678,13 +679,13 @@ impl SshTab {
                     row.dure_installed = success;
                     row.operation_state = if success {
                         OperationState::Completed {
-                            operation: "Install Dure".to_string(),
+                            operation: tr!("ssh-operation-install-dure"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "Install Dure".to_string(),
-                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            operation: tr!("ssh-operation-install-dure"),
+                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
@@ -701,13 +702,13 @@ impl SshTab {
                     row.dure_installed = !success;
                     row.operation_state = if success {
                         OperationState::Completed {
-                            operation: "Remove Dure".to_string(),
+                            operation: tr!("ssh-operation-remove-dure"),
                             completed_at: chrono::Utc::now().timestamp(),
                         }
                     } else {
                         OperationState::Failed {
-                            operation: "Remove Dure".to_string(),
-                            error: error.unwrap_or_else(|| "Unknown error".to_string()),
+                            operation: tr!("ssh-operation-remove-dure"),
+                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
@@ -852,13 +853,13 @@ impl SshTab {
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.heading("SSH Hosts");
+            ui.heading(tr!("ssh-main-heading"));
             ui.add_space(4.0);
-            ui.label("Manage SSH host connections and services.");
+            ui.label(tr!("ssh-main-desc"));
             ui.add_space(8.0);
 
             if ui
-                .add(MaterialButton::filled("Add SSH Host"))
+                .add(MaterialButton::filled(tr!("ssh-button-add")))
                 .clicked()
             {
                 self.show_add_dialog = true;
@@ -1001,32 +1002,32 @@ impl SshTab {
         let add_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
 
-        dialog("add_ssh_host_dialog", "Add SSH Host", &mut self.show_add_dialog)
+        dialog("add_ssh_host_dialog", &tr!("ssh-dialog-add-title"), &mut self.show_add_dialog)
             .min_width(400.0)
             .max_height(500.0)
             .scrollable(true)
             .content(|ui, open| {
-                ui.label("Configure a new SSH host connection:");
+                ui.label(tr!("ssh-dialog-add-heading"));
                 ui.add_space(8.0);
 
-                ui.label("Host (IP or domain):");
+                ui.label(tr!("ssh-dialog-add-host-label"));
                 ui.text_edit_singleline(&mut add_host);
                 ui.add_space(8.0);
 
-                ui.label("Port:");
+                ui.label(tr!("ssh-dialog-add-port-label"));
                 ui.text_edit_singleline(&mut add_port);
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut add_use_password, "Use password authentication");
+                ui.checkbox(&mut add_use_password, &tr!("ssh-dialog-add-use-password"));
                 if add_use_password {
-                    ui.label("Password:");
+                    ui.label(tr!("ssh-dialog-add-password-label"));
                     ui.add(egui::TextEdit::singleline(&mut add_password).password(true));
                 }
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut add_use_private_key, "Use private key authentication");
+                ui.checkbox(&mut add_use_private_key, &tr!("ssh-dialog-add-use-key"));
                 if add_use_private_key {
-                    ui.label("Private key path:");
+                    ui.label(tr!("ssh-dialog-add-key-path-label"));
                     ui.text_edit_singleline(&mut add_private_key_path);
                 }
                 ui.add_space(12.0);
@@ -1034,11 +1035,11 @@ impl SshTab {
                 ui.add_space(8.0);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Add")).clicked() {
+                    if ui.add(MaterialButton::filled(tr!("button-add"))).clicked() {
                         add_requested.set(true);
                         *open = false;
                     }
-                    if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                         reset_requested.set(true);
                         *open = false;
                     }
@@ -1072,7 +1073,7 @@ impl SshTab {
             let port = match self.add_port.parse::<u16>() {
                 Ok(p) => p,
                 Err(e) => {
-                    self.load_error = Some(format!("Invalid port '{}': {}", self.add_port, e));
+                    self.load_error = Some(tr!("ssh-error-invalid-port", {port: self.add_port.clone(), error: e.to_string()}));
                     return;
                 }
             };
@@ -1085,7 +1086,7 @@ impl SshTab {
                         .iter()
                         .any(|h| h.host == self.add_host)
                     {
-                        self.load_error = Some(format!("Host {} already exists", self.add_host));
+                        self.load_error = Some(tr!("ssh-error-host-exists", {host: self.add_host.clone()}));
                         return;
                     }
 
@@ -1116,7 +1117,7 @@ impl SshTab {
 
                     // Save config
                     if let Err(e) = app_config.save(&config_path) {
-                        self.load_error = Some(format!("Failed to save config: {}", e));
+                        self.load_error = Some(tr!("ssh-error-save-config", {error: e.to_string()}));
                         return;
                     }
 
@@ -1128,7 +1129,7 @@ impl SshTab {
                     self.reset_add_dialog();
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -1163,7 +1164,7 @@ impl SshTab {
                     }
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -1192,32 +1193,32 @@ impl SshTab {
         let save_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
 
-        dialog("edit_ssh_host_dialog", "Edit SSH Host", &mut self.show_edit_dialog)
+        dialog("edit_ssh_host_dialog", &tr!("ssh-dialog-edit-title"), &mut self.show_edit_dialog)
             .min_width(400.0)
             .max_height(500.0)
             .scrollable(true)
             .content(|ui, open| {
-                ui.label("Edit SSH host connection:");
+                ui.label(tr!("ssh-dialog-edit-heading"));
                 ui.add_space(8.0);
 
-                ui.label("Host (IP or domain):");
+                ui.label(tr!("ssh-dialog-add-host-label"));
                 ui.text_edit_singleline(&mut edit_host);
                 ui.add_space(8.0);
 
-                ui.label("Port:");
+                ui.label(tr!("ssh-dialog-add-port-label"));
                 ui.text_edit_singleline(&mut edit_port);
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut edit_use_password, "Use password authentication");
+                ui.checkbox(&mut edit_use_password, &tr!("ssh-dialog-add-use-password"));
                 if edit_use_password {
-                    ui.label("Password:");
+                    ui.label(tr!("ssh-dialog-add-password-label"));
                     ui.add(egui::TextEdit::singleline(&mut edit_password).password(true));
                 }
                 ui.add_space(8.0);
 
-                ui.checkbox(&mut edit_use_private_key, "Use private key authentication");
+                ui.checkbox(&mut edit_use_private_key, &tr!("ssh-dialog-add-use-key"));
                 if edit_use_private_key {
-                    ui.label("Private key path:");
+                    ui.label(tr!("ssh-dialog-add-key-path-label"));
                     ui.text_edit_singleline(&mut edit_private_key_path);
                 }
                 ui.add_space(12.0);
@@ -1225,11 +1226,11 @@ impl SshTab {
                 ui.add_space(8.0);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Save")).clicked() {
+                    if ui.add(MaterialButton::filled(tr!("button-save"))).clicked() {
                         save_requested.set(true);
                         *open = false;
                     }
-                    if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                         reset_requested.set(true);
                         *open = false;
                     }
@@ -1262,7 +1263,7 @@ impl SshTab {
             let port = match self.edit_port.parse::<u16>() {
                 Ok(p) => p,
                 Err(e) => {
-                    self.load_error = Some(format!("Invalid port '{}': {}", self.edit_port, e));
+                    self.load_error = Some(tr!("ssh-error-invalid-port", {port: self.edit_port.clone(), error: e.to_string()}));
                     return;
                 }
             };
@@ -1284,7 +1285,7 @@ impl SshTab {
                         };
 
                         if let Err(e) = app_config.save(&config_path) {
-                            self.load_error = Some(format!("Failed to save config: {}", e));
+                            self.load_error = Some(tr!("ssh-error-save-config", {error: e.to_string()}));
                             return;
                         }
 
@@ -1295,7 +1296,7 @@ impl SshTab {
                     }
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -1341,7 +1342,7 @@ impl SshTab {
                     app_config.ssh_hosts.retain(|h| h.host != host);
 
                     if let Err(e) = app_config.save(&config_path) {
-                        self.load_error = Some(format!("Failed to save config: {}", e));
+                        self.load_error = Some(tr!("ssh-error-save-config", {error: e.to_string()}));
                         return;
                     }
 
@@ -1350,7 +1351,7 @@ impl SshTab {
                     self.loaded = false;
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }

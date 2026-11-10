@@ -319,3 +319,490 @@ add = Add
 reauth-platform-title = Re-authenticate Platform
 reauth-platform-heading = Re-authenticate to Google Cloud
 reauth = Re-authenticate
+
+# DNS Tab
+dns-main-heading = DNS Domains
+dns-main-desc = Manage DNS domains with Cloudflare integration.
+dns-button-add = Add DNS
+dns-button-add-tooltip = Add new DNS with automated Cloudflare setup
+dns-main-empty = No DNS domains configured. Click 'Add DNS' to get started.
+
+# DNS Table
+dns-table-col-dns = DNS
+dns-table-col-operations = Operations
+
+# DNS Operation Buttons
+dns-button-check-ns = Check NS
+dns-button-check-ns-tooltip = Check nameserver records
+dns-button-check-settings = Check Settings
+dns-button-check-settings-tooltip = Verify DNS records
+dns-button-https-check = HTTPS Check
+dns-button-https-check-tooltip = Test HTTPS connection
+dns-button-delete = Delete
+dns-button-delete-tooltip = Remove this DNS domain
+
+# DNS NS Check Dialog
+dns-dialog-ns-title = NS Server Check
+dns-dialog-ns-querying = Querying NS records...
+dns-dialog-ns-found = Found { $count } NS record(s)
+dns-dialog-ns-not-found = ✗ No NS records found
+dns-error-parse-response = Failed to parse DNS response: { $error }
+dns-error-query-failed = DNS query failed: { $error }
+
+# DNS Settings Dialog
+dns-dialog-settings-title = DNS Settings Check
+dns-dialog-settings-checking = Checking all DNS records...
+dns-dialog-settings-verification = DNS Record Verification
+dns-dialog-settings-col-type = Type
+dns-dialog-settings-col-name = Name
+dns-dialog-settings-col-expected = Expected
+dns-dialog-settings-col-actual = Actual
+dns-dialog-settings-col-status = Status
+dns-dialog-settings-not-found = (not found)
+dns-button-set-records = Set Correct Records
+dns-button-set-records-note = (Not implemented - requires Cloudflare API token)
+dns-status-not-implemented = ⚠ Cloudflare API check not implemented
+dns-status-missing-a-record = Missing: A record for root domain
+dns-status-missing-cname = Missing: A/CNAME for www subdomain
+
+# DNS HTTPS Check Dialog
+dns-dialog-https-title = HTTPS Connection Check
+dns-dialog-https-checking = Checking DNS resolution...
+dns-dialog-https-ok = ✓ Resolves Correctly
+dns-dialog-https-mismatch = ✗ Resolution Mismatch
+dns-dialog-https-resolved-ip = Resolved IP:
+dns-dialog-https-expected-ip = Expected IP:
+dns-dialog-https-matches-vm = Matches VM:
+dns-dialog-https-yes = Yes
+dns-dialog-https-no = No
+dns-dialog-https-na = N/A
+dns-dialog-https-error-prefix = Error:
+
+# DNS Drawer Tabs
+dns-drawer-tab-status = Status
+dns-drawer-tab-logs = Logs
+dns-drawer-tab-operations = Operations
+
+# DNS Wizard Dialog - Step Headers
+dns-wizard-step-oauth = 1. OAuth
+dns-wizard-step-domain = 2. Domain
+dns-wizard-step-vm = 3. VM Config
+dns-wizard-step-confirm = 4. Confirm
+
+# DNS Wizard - OAuth Step
+dns-wizard-oauth-title = Connect Cloudflare Account
+dns-wizard-oauth-desc = Connect your Cloudflare account to manage DNS:
+dns-wizard-oauth-button = Open OAuth Screen
+dns-wizard-oauth-account-id = Account ID:
+dns-wizard-oauth-connected = Account connected
+dns-wizard-oauth-connected-email = Connected: { $email }
+dns-wizard-oauth-verified = API connection verified
+dns-wizard-oauth-token-verified = API token verified
+dns-wizard-oauth-fetching = Fetching account info...
+dns-wizard-oauth-auto-account = Auto-populated Account ID: { $id } ({ $name })
+dns-wizard-oauth-account-info = Account: { $email } (ID: { $id })
+dns-wizard-oauth-error = Error: OAuth failed: { $error }
+dns-wizard-oauth-error-token = Error: Invalid API token
+dns-wizard-oauth-error-browser = Error: Failed to open browser: { $error }
+dns-wizard-oauth-loading = Loading: Waiting for OAuth authorization...
+dns-wizard-oauth-no-token = No OAuth token available
+
+# DNS Wizard - Domain Step
+dns-wizard-domain-register = I want to register domain
+dns-wizard-domain-have = I have domain
+dns-wizard-domain-label = Domain:
+dns-wizard-domain-checking = Checking availability: { $domain }
+dns-wizard-domain-loading = Loading domains...
+dns-wizard-domain-loaded = Loaded { $count } domains
+dns-wizard-domain-adding = Adding domain...
+dns-wizard-domain-added = Added domain: { $domain }
+dns-wizard-domain-connecting = Connecting existing domain: { $domain }
+dns-wizard-domain-checking-ns = Checking nameservers...
+dns-wizard-domain-ns-verified = Nameservers verified (stub)
+dns-wizard-domain-error-fetch = Error: Failed to fetch domains: { $error }
+dns-wizard-domain-error-add = Error: Failed to add domain: { $error }
+dns-wizard-domain-no-selection = No domain selected
+
+# DNS Wizard - VM Config Step
+dns-wizard-vm-no-platforms = No platforms available. Please add a platform in Platform tab first.
+dns-wizard-vm-default-settings = Default settings:
+dns-wizard-vm-no-ip = No VM IP available
+dns-wizard-vm-no-zone = No zone ID available
+dns-wizard-vm-dns-missing = DNS records missing or incorrect - setup required
+dns-wizard-vm-dns-exists = DNS records already exist (no changes needed)
+dns-wizard-vm-dns-created = DNS records created or updated successfully
+dns-wizard-vm-dns-verified = DNS records verified - all settings correct
+dns-wizard-vm-error-setup = Error: Failed to setup DNS records: { $error }
+dns-wizard-vm-error-verify = Error: Verification failed: { $error }
+dns-wizard-vm-check-failed = Check failed: { $error }
+
+# SSH Tab
+ssh-main-heading = SSH Hosts
+ssh-main-desc = Manage SSH host connections and services.
+ssh-button-add = Add SSH Host
+
+# SSH Table
+ssh-table-col-host = Host
+ssh-table-col-operations = Operations
+
+# SSH Operation Buttons - Row 1
+ssh-button-refresh = Refresh
+ssh-button-refresh-tooltip = Refresh SSH host status
+ssh-button-ssh-check = SSH Check
+ssh-button-ssh-check-tooltip = Test SSH connection
+ssh-button-edit = Edit
+ssh-button-edit-tooltip = Edit SSH host configuration
+ssh-button-delete = Delete
+ssh-button-delete-tooltip = Delete SSH host
+
+# SSH Operation Buttons - Row 2 (Base & Docker)
+ssh-button-check-base = Check Base
+ssh-button-check-base-tooltip = Check base system packages
+ssh-button-install-base = Install Base
+ssh-button-install-base-tooltip = Install required base packages
+ssh-button-check-docker = Check Docker
+ssh-button-check-docker-tooltip = Check Docker installation
+ssh-button-install-docker = Install Docker
+ssh-button-install-docker-tooltip = Install Docker on remote host
+ssh-button-remove-docker = Remove Docker
+ssh-button-remove-docker-tooltip = Uninstall Docker from remote host
+
+# SSH Operation Buttons - Row 3 (Dure)
+ssh-button-check-dure = Check Dure
+ssh-button-check-dure-tooltip = Check Dure service status
+ssh-button-install-dure = Install Dure
+ssh-button-install-dure-tooltip = Install Dure service
+ssh-button-remove-dure = Remove Dure
+ssh-button-remove-dure-tooltip = Uninstall Dure service
+
+# SSH Add Host Dialog
+ssh-dialog-add-title = Add SSH Host
+ssh-dialog-add-heading = Configure a new SSH host connection:
+ssh-dialog-add-host-label = Host (IP or domain):
+ssh-dialog-add-port-label = Port:
+ssh-dialog-add-use-password = Use password authentication
+ssh-dialog-add-password-label = Password:
+ssh-dialog-add-use-key = Use private key authentication
+ssh-dialog-add-key-path-label = Private key path:
+
+# SSH Edit Host Dialog
+ssh-dialog-edit-title = Edit SSH Host
+ssh-dialog-edit-heading = Edit SSH host connection:
+
+# SSH Drawer Tabs
+ssh-drawer-tab-status = Status
+ssh-drawer-tab-logs = Logs
+ssh-drawer-tab-operations = Operations
+ssh-drawer-tab-host = Host
+ssh-drawer-tab-docker = Docker
+ssh-drawer-tab-dure = Dure
+
+# SSH Drawer Status Tab
+ssh-drawer-status-ip = IP
+ssh-drawer-status-ssh = SSH
+ssh-drawer-status-base = Base
+ssh-drawer-status-docker = Docker
+ssh-drawer-status-dure = Dure
+ssh-drawer-status-connected = Connected
+ssh-drawer-status-disconnected = Disconnected
+ssh-drawer-status-not-checked = Not checked
+ssh-drawer-status-installed = Installed
+ssh-drawer-status-not-installed = Not Installed
+ssh-drawer-status-failed = Failed ({ $error })
+
+# SSH Drawer Logs Tab
+ssh-drawer-logs-heading = SSH Host Logs
+ssh-drawer-logs-col-date = Date
+ssh-drawer-logs-col-operation = Operation
+ssh-drawer-logs-col-system = System
+ssh-drawer-logs-col-status = Status
+ssh-drawer-logs-col-duration = Duration
+ssh-drawer-logs-col-error = Error
+
+# SSH Drawer Host Tab
+ssh-drawer-host-heading = Host Information
+ssh-drawer-host-refresh = Refresh
+
+# SSH Drawer Docker Tab
+ssh-drawer-docker-heading = Docker Containers
+ssh-drawer-docker-refresh = Refresh
+
+# SSH Drawer Dure Tab
+ssh-drawer-dure-heading = Dure (mycart) Status
+ssh-drawer-dure-refresh = Refresh
+
+# SSH Error Messages
+ssh-error-load-config = Failed to load config: { $error }
+ssh-error-save-config = Failed to save config: { $error }
+ssh-error-host-exists = Host { $host } already exists
+ssh-error-invalid-port = Invalid port '{ $port }': { $error }
+ssh-error-no-profile = No active profile - please select or create a profile first
+ssh-error-wasm-not-supported = SSH management not available on WASM
+
+# Common Dialog Buttons (reuse existing where possible)
+button-add = Add
+button-save = Save
+button-cancel = Cancel
+button-close = Close
+button-ok = OK
+button-bind = Bind
+button-next = Next
+
+# Platform Tab
+
+## Main UI
+platform-main-heading = Cloud Platforms
+platform-main-desc = Manage cloud service platforms GCP for deployment and hosting.
+platform-button-add = Add Platform
+platform-main-empty = No platforms configured. Click 'Add Platform' to get started.
+
+## Table
+platform-table-col-project = Project
+platform-table-col-operations = Operations
+
+## Operation Buttons
+platform-button-refresh = Refresh
+platform-button-refresh-tooltip = Refresh platform data
+platform-button-reauth = Re-auth
+platform-button-reauth-tooltip = Re-authenticate to Google Cloud
+platform-button-billing = Billing
+platform-button-billing-tooltip = Estimated Billing
+platform-button-delete = Delete
+platform-button-delete-tooltip = Delete Platform
+
+# Platform tab - Operations
+platform-button-firewall = Firewall
+platform-button-restart = Restart
+platform-button-del-vm = Del VM
+
+# Platform tab - Add dialog
+platform-add-configure = Configure a new cloud platform:
+platform-add-type = Type:
+platform-add-project = Project:
+platform-add-project-id = New Project ID:
+platform-add-oauth-waiting = Waiting for authorization...
+platform-add-oauth-complete = Please complete the OAuth flow in your browser.
+platform-add-oauth-connect = Connect to Google Cloud
+platform-add-oauth-url = OAuth URL (copy to browser if needed):
+
+# Platform tab - Progress
+platform-progress-heading = Initialization Progress
+platform-progress-platform = Platform:
+
+# Platform tab - Delete VM dialog
+platform-delete-vm-confirm = Confirm Deletion
+platform-delete-vm-question = Are you sure you want to delete VM '{$name}'?
+platform-delete-vm-zone = Zone: {$zone}
+platform-delete-vm-select = Select VM to Delete
+platform-delete-vm-none = No VMs found in this project.
+platform-delete-vm-found = Found {$count} VM(s):
+platform-delete-vm-yes = Yes, Delete
+platform-delete-vm-cancel = Cancel
+platform-delete-vm-next = Next
+platform-delete-vm-manage-ips = Manage IPs in GCP Console
+
+# Platform tab - Select Project dialog
+platform-select-project-heading = Select Project
+platform-select-project-none = No projects found
+platform-select-project-button = Select
+
+# Platform tab - Drawer
+platform-drawer-no-vms = This platform has no VMs configured.
+
+# Platform tab - Billing dialog
+platform-billing-heading = Monthly Total Cost (Last 3 Months)
+platform-billing-project-id = Project ID:
+platform-billing-loading = Loading billing data...
+platform-billing-no-table = BigQuery billing export table does not exist yet.
+platform-billing-error = Error:
+platform-billing-help = To enable BigQuery billing export:
+platform-billing-no-data = No billing data found for the current month.
+
+## Platform Drawer
+platform-drawer-status-refreshed = Refreshed
+platform-drawer-status-ip = IP
+platform-drawer-status-no-ip = No external IP
+platform-drawer-status-updating = Updating...
+platform-drawer-status-firewall = Firewall
+platform-drawer-status-ssh = SSH
+platform-drawer-status-no-vm = No VM created
+platform-drawer-status-no-project = No project selected
+platform-drawer-status-vm = VM
+platform-drawer-status-project = Project
+
+platform-drawer-menu-ssh = SSH
+platform-drawer-menu-copy-ssh = Copy SSH Command
+platform-drawer-menu-copy-key = Copy Private Key
+platform-drawer-menu-copy-ip = Copy IP Address
+
+platform-drawer-ssh-not-found = Not found in keyring
+platform-drawer-ssh-key-label = SSH Key
+
+platform-drawer-time-just-now = just now
+platform-drawer-time-min-ago = {$minutes} min ago
+platform-drawer-time-hours-ago = {$hours} hours ago
+platform-drawer-time-days-ago = {$days} days ago
+
+platform-drawer-logs-title = Operation History
+platform-drawer-logs-level-all = All
+platform-drawer-logs-level-debug = DEBUG
+platform-drawer-logs-level-info = INFO
+platform-drawer-logs-level-warn = WARN
+platform-drawer-logs-level-error = ERROR
+
+## SSH Tab & Drawer
+ssh-operation-refresh = Refresh
+ssh-operation-ssh-check = SSH Check
+ssh-operation-base-check = Base Check
+ssh-operation-install-base = Install Base
+ssh-operation-docker-check = Docker Check
+ssh-operation-install-docker = Install Docker
+ssh-operation-remove-docker = Remove Docker
+ssh-operation-dure-check = Dure Check
+ssh-operation-install-dure = Install Dure
+ssh-operation-remove-dure = Remove Dure
+
+ssh-status-checking = Checking...
+ssh-status-installing = Installing...
+ssh-status-installed = Installed ({$version})
+ssh-status-failed = Failed ({$error})
+
+ssh-host-info-title = Host Information
+ssh-host-info-os = OS: {$os}
+ssh-host-info-uptime = Uptime: {$uptime}
+ssh-host-info-ip = External IP: {$ip}
+ssh-host-info-load = Load: {$load}
+ssh-host-info-memory = Memory: {$memory}
+ssh-host-info-disk = Disk: {$disk}
+
+ssh-logs-title = SSH Host Logs
+ssh-logs-network-title = Network Log (last 100 lines)
+
+ssh-op-last-operation = Last Operation
+ssh-op-operation = Operation
+ssh-op-completed = {$operation} completed ({$seconds}s ago)
+ssh-op-failed = {$operation} failed
+ssh-op-in-progress = {$operation} ({$seconds}s)
+
+ssh-button-refresh = Refresh
+
+ssh-error-no-profile = No active profile - please select or create a profile first
+ssh-error-wasm = SSH management not available on WASM
+ssh-error-load-config = Failed to load config: {$error}
+ssh-error-unknown = Unknown error
+
+## DNS Tab & Wizard
+dns-drawer-tab-status = Status
+dns-drawer-tab-logs = Logs
+dns-drawer-tab-operations = Operations
+
+dns-check-ns-title = NS Check
+dns-check-ns-found = Found {$count} NS record(s)
+dns-check-ns-none = No NS records found
+dns-check-ns-error = DNS query failed: {$error}
+dns-check-ns-parse-error = Failed to parse DNS response: {$error}
+
+dns-check-settings-title = Settings Check
+dns-check-settings-root = A record for root domain
+dns-check-settings-www = A/CNAME record for www subdomain
+dns-check-settings-cloudflare = Cloudflare API check not yet implemented - needs zone_id and API token
+
+dns-check-https-title = HTTPS Check
+dns-check-https-success = HTTPS connection successful
+dns-check-https-failed = HTTPS connection failed: {$error}
+
+dns-wizard-step1-title = Step 1: Cloudflare Authentication
+dns-wizard-step1-desc = Connect your Cloudflare account to manage DNS:
+dns-wizard-step1-oauth-wait = Waiting for OAuth authorization...
+dns-wizard-step1-oauth-complete = Please complete the authorization in your browser.
+dns-wizard-step1-oauth-redirect = You will be redirected to Cloudflare to authorize access.
+dns-wizard-step1-connected = Connected: {$email}
+dns-wizard-step1-account-connected = Account connected
+dns-wizard-step1-account-verified = API connection verified
+dns-wizard-step1-account-verifying = Verifying API connection...
+dns-wizard-step1-account-id = Account ID:
+dns-wizard-step1-account-required = Warning: Account ID required to continue
+
+dns-wizard-button-next = Next
+dns-wizard-button-previous = Previous
+dns-wizard-button-oauth = Open OAuth Screen
+dns-wizard-waiting = Waiting for operations...
+
+dns-wizard-progress-oauth-success = Success: OAuth successful
+dns-wizard-progress-oauth-error = Error: OAuth failed: {$error}
+dns-wizard-progress-loading = Loading: Waiting for OAuth authorization...
+platform-button-add-vm = Add VM
+platform-button-add-vm-tooltip = Add VM
+platform-button-bind-vm = Bind VM
+platform-button-bind-vm-tooltip = Bind VM to Platform
+
+## Drawer Tabs
+platform-drawer-tab-status = Status
+platform-drawer-tab-logs = Logs
+platform-drawer-tab-operations = Operations
+
+## Drawer Status Tab
+platform-drawer-status-email = Email
+platform-drawer-status-project = Project
+platform-drawer-status-vm = VM
+platform-drawer-status-ip = IP
+platform-drawer-status-firewall = Firewall
+platform-drawer-status-ssh = SSH
+platform-drawer-status-refreshed = Refreshed
+platform-drawer-status-not-connected = Not connected
+platform-drawer-status-no-external-ip = No external IP
+platform-drawer-status-updating = Updating...
+platform-drawer-status-no-vm = No VM created
+platform-drawer-status-no-project = No project selected
+platform-drawer-status-ssh-key = SSH Key
+platform-drawer-status-key-not-found = Not found in keyring
+platform-drawer-status-project-singular = project
+platform-drawer-status-project-plural = projects
+platform-drawer-status-project-unknown = ? projects
+
+## Drawer SSH Menu
+platform-drawer-ssh-menu-title = 💻SSH
+platform-drawer-ssh-copy-command = Copy SSH Command
+platform-drawer-ssh-copy-key = Copy Private Key
+platform-drawer-ssh-copy-ip = Copy IP Address
+
+## Drawer Logs Tab
+platform-drawer-logs-heading = Project Logs
+platform-drawer-logs-level = Level:
+platform-drawer-logs-level-all = All
+platform-drawer-logs-level-debug = DEBUG
+platform-drawer-logs-level-info = INFO
+platform-drawer-logs-level-warn = WARN
+platform-drawer-logs-level-error = ERROR
+platform-drawer-logs-loading = Loading logs...
+platform-drawer-logs-no-project = No project selected
+platform-drawer-logs-empty = No logs available
+
+## Drawer Operations Tab
+platform-drawer-ops-heading = Operation History
+platform-drawer-ops-loading = Loading operations...
+platform-drawer-ops-empty = No operations logged
+platform-drawer-ops-col-date = Date
+platform-drawer-ops-col-operation = Operation
+platform-drawer-ops-col-system = System
+platform-drawer-ops-col-status = Status
+platform-drawer-ops-col-duration = Duration
+platform-drawer-ops-col-error = Error
+
+platform-drawer-ops-status-running = ⏳ Running
+platform-drawer-ops-status-success = ✓ Success
+platform-drawer-ops-status-failed = ✗ Failed
+
+## Bind VM Dialog
+platform-dialog-bind-title = Bind VM
+platform-dialog-bind-heading = Bind VM to Platform
+platform-dialog-bind-loading = Loading VMs from GCP...
+platform-dialog-bind-no-vms = No VMs found
+platform-dialog-bind-select = Select VM to bind ({ $count })
+
+## Error Messages
+platform-error-no-profile = No active profile - please select or create a profile first
+platform-error-read-config = Failed to read config: { $error }
+platform-error-save-config = Failed to save config: { $error }
+platform-error-parse-config = Failed to parse config as V1 or V2: V2 error: { $v2_error }, V1 error: { $v1_error }
+

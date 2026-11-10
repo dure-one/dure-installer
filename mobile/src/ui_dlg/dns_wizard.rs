@@ -8,6 +8,7 @@
 
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
@@ -332,7 +333,7 @@ impl DnsWizard {
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
                     self.should_close = true;
                 }
 
@@ -340,7 +341,7 @@ impl DnsWizard {
 
                 // Show "Open OAuth Screen" button if OAuth was attempted
                 if self.oauth_promise.is_some() || self.oauth_result.is_some() {
-                    if ui.add(MaterialButton::outlined("Open OAuth Screen")).clicked() {
+                    if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-oauth"))).clicked() {
                         self.start_oauth();
                     }
                     ui.add_space(4.0);
@@ -348,7 +349,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step1(),
-                    MaterialButton::filled("Next")
+                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::DomainRegistration;
@@ -363,7 +364,7 @@ impl DnsWizard {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
-                            ui.label("Waiting for operations...");
+                            ui.label(tr!("dns-wizard-waiting"));
                         } else {
                             for log in &self.progress_log {
                                 ui.label(log);
@@ -376,10 +377,10 @@ impl DnsWizard {
 
             // Content area (reversed order in bottom_up layout)
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.heading("Step 1: Cloudflare Authentication");
+                ui.heading(tr!("dns-wizard-step1-title"));
                 ui.add_space(4.0);
 
-                ui.label("Connect your Cloudflare account to manage DNS:");
+                ui.label(tr!("dns-wizard-step1-desc"));
 
                 ui.add_space(4.0);
 
@@ -389,7 +390,7 @@ impl DnsWizard {
                         match result {
                             Ok(oauth_result) => {
                                 self.oauth_result = Some(oauth_result.clone());
-                                self.progress_log.push("Success: OAuth successful".to_string());
+                                self.progress_log.push(tr!("dns-wizard-progress-oauth-success"));
 
                                 // Verify API token
                                 self.verify_api_token();
@@ -403,15 +404,15 @@ impl DnsWizard {
                             }
                         }
                     } else {
-                        ui.label("Loading: Waiting for OAuth authorization...");
-                        ui.label("Please complete the authorization in your browser.");
+                        ui.label(tr!("dns-wizard-progress-loading"));
+                        ui.label(tr!("dns-wizard-step1-oauth-complete"));
                         // Put promise back if not ready
                         self.oauth_promise = Some(promise);
                     }
                 } else if self.oauth_result.is_none() {
                     // Not started OAuth yet
                     if ui
-                        .add(MaterialButton::filled("Connect Cloudflare Account"))
+                        .add(MaterialButton::filled(tr!("dns-wizard-oauth-button")))
                         .on_hover_text("Opens browser for OAuth authentication")
                         .clicked()
                     {
@@ -428,16 +429,16 @@ impl DnsWizard {
                     ));
 
                     if self.api_connection_ok {
-                        ui.label("API connection verified");
+                        ui.label(tr!("dns-wizard-step1-account-verified"));
                     } else {
-                        ui.label("Verifying API connection...");
+                        ui.label(tr!("dns-wizard-step1-account-verifying"));
                     }
 
                     ui.add_space(4.0);
 
                     // Account ID input
                     ui.horizontal(|ui| {
-                        ui.label("Account ID:");
+                        ui.label(tr!("dns-wizard-step1-account-id"));
                         ui.text_edit_singleline(&mut self.cloudflare_account_id);
                     });
 
@@ -465,13 +466,13 @@ impl DnsWizard {
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
                     self.state = DnsWizardState::CloudflareAuth;
                 }
 
@@ -479,7 +480,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step2(),
-                    MaterialButton::filled("Next")
+                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::VmConfiguration;
@@ -494,7 +495,7 @@ impl DnsWizard {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
-                            ui.label("Waiting for operations...");
+                            ui.label(tr!("dns-wizard-waiting"));
                         } else {
                             for log in self.progress_log.iter().rev().take(5).rev() {
                                 ui.label(log);
@@ -632,13 +633,13 @@ impl DnsWizard {
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
                     self.state = DnsWizardState::DomainRegistration;
                 }
 
@@ -646,7 +647,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step3(),
-                    MaterialButton::filled("Next")
+                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::Confirmation;
@@ -763,13 +764,13 @@ impl DnsWizard {
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
                     self.state = DnsWizardState::VmConfiguration;
                 }
 

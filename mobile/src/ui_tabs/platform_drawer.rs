@@ -1,6 +1,7 @@
 //! Platform drawer UI with Status/Logs/Operations tabs
 
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::tabs_primary;
 
 use crate::storage::models::opslog::OperationLog;
@@ -21,9 +22,9 @@ pub fn render_drawer(
         tabs_primary(&mut temp_selected)
             .id_salt("platform_drawer_tabs")
             .height(32.0)
-            .tab("Status")
-            .tab("Logs")
-            .tab("Operations")
+            .tab(&tr!("platform-drawer-tab-status"))
+            .tab(&tr!("platform-drawer-tab-logs"))
+            .tab(&tr!("platform-drawer-tab-operations"))
     );
     if temp_selected != drawer_state.active_tab.to_index() {
         *on_tab_switch = Some(DrawerTab::from_index(temp_selected));
@@ -57,60 +58,60 @@ fn render_status_tab(
     // Connection info
     if let Some(email) = &row.email {
         let count_display = format_project_count_display(row.total_project_count);
-        StatusLine::new("Email", &format!("{} ({})", email, count_display)).show(ui);
+        StatusLine::new(&tr!("platform-drawer-status-email"), &format!("{} ({})", email, count_display)).show(ui);
     } else {
-        StatusLine::new("Email", "Not connected").show(ui);
+        StatusLine::new(&tr!("platform-drawer-status-email"), tr!("platform-drawer-status-not-connected")).show(ui);
     }
 
-    ui.add_space(4.0);
+    // ui.add_space(4.0);
 
     // Project info
     if let Some(project_id) = &row.selected_project_id {
-        StatusLine::new("Project", project_id).show(ui);
-        ui.add_space(4.0);
+        StatusLine::new(&tr!("platform-drawer-status-project"), project_id).show(ui);
+        // ui.add_space(4.0);
 
         // Refresh staleness
         if let Some(last_refresh) = row.last_refresh_time {
             let elapsed = chrono::Utc::now().timestamp() - last_refresh;
             let (time_text, is_warning) = if elapsed < 60 {
-                ("just now".to_string(), false)
+                (tr!("platform-drawer-time-just-now"), false)
             } else if elapsed < 3600 {
-                (format!("{} min ago", elapsed / 60), false)
+                (tr!("platform-drawer-time-min-ago", {minutes: elapsed / 60}), false)
             } else if elapsed < 86400 {
-                (format!("{} hours ago", elapsed / 3600), true)
+                (tr!("platform-drawer-time-hours-ago", {hours: elapsed / 3600}), true)
             } else {
-                (format!("{} days ago", elapsed / 86400), true)
+                (tr!("platform-drawer-time-days-ago", {days: elapsed / 86400}), true)
             };
 
-            let mut status_line = StatusLine::new("Refreshed", &time_text);
+            let mut status_line = StatusLine::new(&tr!("platform-drawer-status-refreshed"), &time_text);
             if is_warning {
                 status_line = status_line.warning();
             }
             status_line.show(ui);
-            ui.add_space(4.0);
+            // ui.add_space(4.0);
         }
 
         // VM details
         if let Some(vm_name) = &row.vm_name {
-            StatusLine::new("VM", vm_name).show(ui);
-            ui.add_space(4.0);
+            StatusLine::new(&tr!("platform-drawer-status-vm"), vm_name).show(ui);
+            // ui.add_space(4.0);
 
             // IP address
             if let Some(ip) = &row.vm_external_ip {
-                StatusLine::new("IP", ip).show(ui);
+                StatusLine::new(&tr!("platform-drawer-status-ip"), ip).show(ui);
             } else {
-                StatusLine::new("IP", "No external IP")
+                StatusLine::new(&tr!("platform-drawer-status-ip"), &tr!("platform-drawer-status-no-ip"))
                     .warning()
                     .show(ui);
             }
-            ui.add_space(4.0);
+            // ui.add_space(4.0);
 
             // Firewall status (check operation state)
             let (firewall_text, firewall_type) = match &row.operation_state {
                 crate::ui_tabs::platform::OperationState::InProgress { operation, .. }
                     if operation.to_lowercase().contains("firewall") =>
                 {
-                    ("Updating...".to_string(), 1) // warning
+                    (tr!("platform-drawer-status-updating").to_string(), 1) // warning
                 }
                 crate::ui_tabs::platform::OperationState::Failed { operation, error, .. }
                     if operation.to_lowercase().contains("firewall") =>
@@ -119,25 +120,25 @@ fn render_status_tab(
                 }
                 _ => (row.firewall_status.clone(), 0), // normal
             };
-            let mut firewall_line = StatusLine::new("Firewall", &firewall_text);
+            let mut firewall_line = StatusLine::new(&tr!("platform-drawer-status-firewall"), &firewall_text);
             if firewall_type == 1 {
                 firewall_line = firewall_line.warning();
             } else if firewall_type == 2 {
                 firewall_line = firewall_line.error();
             }
             firewall_line.show(ui);
-            ui.add_space(4.0);
+            // ui.add_space(4.0);
 
             // SSH status
-            StatusLine::new("SSH", &row.ssh_status).show(ui);
+            StatusLine::new(&tr!("platform-drawer-status-ssh"), &row.ssh_status).show(ui);
         } else {
-            StatusLine::new("VM", "No VM created").show(ui);
+            StatusLine::new(&tr!("platform-drawer-status-vm"), &tr!("platform-drawer-status-no-vm")).show(ui);
         }
     } else {
-        StatusLine::new("Project", "No project selected").show(ui);
+        StatusLine::new(&tr!("platform-drawer-status-project"), &tr!("platform-drawer-status-no-project")).show(ui);
     }
 
-    ui.add_space(8.0);
+    // ui.add_space(8.0);
 
     // SSH action menu - load key on-demand when drawer is shown
     if let Some(external_ip) = &row.vm_external_ip {
@@ -169,7 +170,7 @@ fn render_status_tab(
             };
 
             if let Some(private_key) = private_key {
-                ui.add_space(8.0);
+                // ui.add_space(8.0);
 
                 let ssh_command = format!(
                     "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K root@{} && rm $K",
@@ -178,9 +179,9 @@ fn render_status_tab(
                 );
 
                 let mut menu = ActionMenu::new("💻SSH");
-                menu.add_action("Copy SSH Command");
-                menu.add_action("Copy Private Key");
-                menu.add_action("Copy IP Address");
+                menu.add_action(&tr!("platform-drawer-menu-copy-ssh"));
+                menu.add_action(&tr!("platform-drawer-menu-copy-key"));
+                menu.add_action(&tr!("platform-drawer-menu-copy-ip"));
 
                 if let Some(action_idx) = menu.show(ui) {
                     let text_to_copy = match action_idx {
@@ -193,8 +194,8 @@ fn render_status_tab(
                     ui.ctx().copy_text(text_to_copy.to_string());
                 }
             } else {
-                ui.add_space(8.0);
-                StatusLine::new("SSH Key", "Not found in keyring")
+                // ui.add_space(8.0);
+                StatusLine::new(&tr!("platform-drawer-ssh-key-label"), &tr!("platform-drawer-ssh-not-found"))
                     .warning()
                     .show(ui);
             }
@@ -205,8 +206,8 @@ fn render_status_tab(
 /// Helper function to format project count display
 fn format_project_count_display(count: Option<usize>) -> String {
     match count {
-        Some(n) => format!("{} project{}", n, if n == 1 { "" } else { "s" }),
-        None => "? projects".to_string(),
+        Some(n) => format!("{} {}", n, if n == 1 { tr!("platform-drawer-status-project-singular") } else { tr!("platform-drawer-status-project-plural") }),
+        None => tr!("platform-drawer-status-project-unknown"),
     }
 }
 
@@ -234,7 +235,7 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     }
 
     ui.horizontal(|ui| {
-        ui.heading("Project Logs");
+        ui.heading(tr!("platform-drawer-logs-heading"));
         ui.add_space(8.0);
 
         // New logs indicator - show badge when logs are added
@@ -260,7 +261,7 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         ui.add_space(8.0);
 
         // Log level filter
-        ui.label("Level:");
+        ui.label(tr!("platform-drawer-logs-level"));
         let filter_id = egui::Id::new("log_level_filter");
         let mut log_level_filter = ui.data(|d| d.get_temp::<String>(filter_id))
             .unwrap_or_else(|| "All".to_string());
@@ -268,11 +269,11 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         egui::ComboBox::from_label("")
             .selected_text(&log_level_filter)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
-                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
-                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
-                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
-                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), tr!("platform-drawer-logs-level-all"));
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), tr!("platform-drawer-logs-level-debug"));
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), tr!("platform-drawer-logs-level-info"));
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), tr!("platform-drawer-logs-level-warn"));
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), tr!("platform-drawer-logs-level-error"));
             });
 
         ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
@@ -282,17 +283,17 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
     if drawer_state.loading {
         ui.spinner();
-        ui.label("Loading logs...");
+        ui.label(tr!("platform-drawer-logs-loading"));
         return;
     }
 
     if drawer_state.project_id.is_none() {
-        ui.label("No project selected");
+        ui.label(tr!("platform-drawer-logs-no-project"));
         return;
     }
 
     if drawer_state.logs.is_empty() {
-        ui.label("No logs available");
+        ui.label(tr!("platform-drawer-logs-empty"));
         return;
     }
 
@@ -344,17 +345,17 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         }
     }
 
-    ui.heading("Operation History");
+    ui.heading(tr!("platform-drawer-ops-heading"));
     ui.add_space(8.0);
 
     if drawer_state.loading {
         ui.spinner();
-        ui.label("Loading operations...");
+        ui.label(tr!("platform-drawer-ops-loading"));
         return;
     }
 
     if drawer_state.operations.is_empty() {
-        ui.label("No operations logged");
+        ui.label(tr!("platform-drawer-ops-empty"));
         return;
     }
 
@@ -381,12 +382,12 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
         .column(Column::auto().at_least(60.0))  // Duration
         .column(Column::remainder())             // Error
         .header(20.0, |mut header| {
-            header.col(|ui| { ui.heading("Date"); });
-            header.col(|ui| { ui.heading("Operation"); });
-            header.col(|ui| { ui.heading("System"); });
-            header.col(|ui| { ui.heading("Status"); });
-            header.col(|ui| { ui.heading("Duration"); });
-            header.col(|ui| { ui.heading("Error"); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-date")); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-operation")); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-system")); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-status")); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-duration")); });
+            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-error")); });
         })
         .body(|mut body| {
             for op in operations {
@@ -412,10 +413,10 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
                     // Status with color
                     row.col(|ui| {
                         let (text, color) = match op.status.as_str() {
-                            "running" => ("⏳ Running", egui::Color32::from_rgb(100, 150, 255)),
-                            "success" => ("✓ Success", egui::Color32::from_rgb(50, 200, 50)),
-                            "failed" => ("✗ Failed", egui::Color32::from_rgb(255, 80, 80)),
-                            _ => (&op.status[..], egui::Color32::GRAY),
+                            "running" => (tr!("platform-drawer-ops-status-running"), egui::Color32::from_rgb(100, 150, 255)),
+                            "success" => (tr!("platform-drawer-ops-status-success"), egui::Color32::from_rgb(50, 200, 50)),
+                            "failed" => (tr!("platform-drawer-ops-status-failed"), egui::Color32::from_rgb(255, 80, 80)),
+                            _ => (op.status.clone(), egui::Color32::GRAY),
                         };
                         ui.colored_label(color, text);
                     });

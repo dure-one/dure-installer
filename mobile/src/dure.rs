@@ -1364,13 +1364,22 @@ impl DureApp {
         if let Some(profile) = &self.current_profile {
             self.settings = Settings::load_or_default(&profile.settings_file);
             dure_info!("Settings loaded from {:?}", profile.settings_file);
-            dure_info!("Settings: show_logs={}, log_level={}", self.settings.show_logs, self.settings.log_level);
+            dure_info!("Settings: show_logs={}, log_level={}, language={}",
+                self.settings.show_logs, self.settings.log_level, self.settings.language);
 
             // Apply loaded settings to global state
             crate::log_capture::update_log_settings(
                 self.settings.show_logs,
                 crate::LogLevel::from_str(&self.settings.log_level),
             );
+
+            // Apply language setting to i18n system
+            #[cfg(feature = "gui")]
+            if let Err(e) = crate::i18n::set_language(&self.settings.language) {
+                dure_warn!("Failed to apply language setting: {}", e);
+            } else {
+                dure_info!("Language applied: {}", self.settings.language);
+            }
 
             // Test logging at various levels
             dure_debug!("Profile loaded successfully: {}", profile.name);
