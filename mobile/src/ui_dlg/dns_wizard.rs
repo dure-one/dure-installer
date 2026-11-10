@@ -327,6 +327,9 @@ impl DnsWizard {
     /// Step 1: Cloudflare OAuth
     fn render_step1_oauth(&mut self, ui: &mut egui::Ui) {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Bottom padding (rendered first = appears at bottom)
+            ui.add_space(30.0);
+
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
                 if ui.add(MaterialButton::outlined("Close")).clicked() {
@@ -354,11 +357,11 @@ impl DnsWizard {
 
             ui.add_space(4.0);
 
-            // Progress log (always visible, 4 lines max, auto-scroll to bottom)
+            // Progress log (always visible, 4 lines max)
             ui.group(|ui| {
-                ui.set_max_height(60.0);
                 egui::ScrollArea::vertical()
-                    .stick_to_bottom(true)
+                    .max_height(60.0)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
                             ui.label("Waiting for operations...");
@@ -458,6 +461,9 @@ impl DnsWizard {
         }
 
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Bottom padding (rendered first = appears at bottom)
+            ui.add_space(30.0);
+
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
                 if ui.add(MaterialButton::outlined("Close")).clicked() {
@@ -485,9 +491,9 @@ impl DnsWizard {
 
             // Progress log
             ui.group(|ui| {
-                ui.set_max_height(60.0);
                 egui::ScrollArea::vertical()
-                    .stick_to_bottom(true)
+                    .max_height(60.0)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
                             ui.label("Waiting for operations...");
@@ -623,6 +629,9 @@ impl DnsWizard {
     /// Step 3: VM configuration
     fn render_step3_vm(&mut self, ui: &mut egui::Ui) {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Bottom padding (rendered first = appears at bottom)
+            ui.add_space(30.0);
+
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
                 if ui.add(MaterialButton::outlined("Close")).clicked() {
@@ -751,6 +760,9 @@ impl DnsWizard {
         }
 
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Bottom padding (rendered first = appears at bottom)
+            ui.add_space(30.0);
+
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
                 if ui.add(MaterialButton::outlined("Close")).clicked() {
@@ -784,11 +796,11 @@ impl DnsWizard {
 
             ui.add_space(4.0);
 
-            // DNS operation log (always visible, 4 lines max, auto-scroll to bottom)
+            // DNS operation log (always visible, 4 lines max)
             ui.group(|ui| {
-                ui.set_max_height(60.0);
                 egui::ScrollArea::vertical()
-                    .stick_to_bottom(true)
+                    .max_height(60.0)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.dns_operation_log.is_empty() {
                             ui.label("Waiting for DNS operations...");
