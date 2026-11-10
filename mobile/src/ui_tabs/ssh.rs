@@ -163,9 +163,15 @@ fn render_operations_column(
     row: &SshRow,
     action_trigger: &mut Option<SshAction>,
 ) {
+    use egui_material3::linear_progress;
+
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
         ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+
+        let operation_in_progress = matches!(row.operation_state, OperationState::InProgress { .. });
+        let overlay_pos = ui.cursor().min;
+        let column_width = ui.available_width();
 
         // Row 1: Basic operations
         ui.horizontal(|ui| {
@@ -265,6 +271,25 @@ fn render_operations_column(
                 }
             }
         });
+
+        // Overlay progress on foreground layer
+        if operation_in_progress {
+            let current_area_id = ui.layer_id().id;
+            let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
+
+            ui.with_layer_id(foreground_layer, |ui| {
+                let progress_rect = egui::Rect::from_min_size(overlay_pos, egui::vec2(column_width, 30.0));
+                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240));
+
+                ui.allocate_ui_at_rect(progress_rect, |ui| {
+                    ui.add_space(2.0);
+                    if let OperationState::InProgress { operation, .. } = &row.operation_state {
+                        ui.label(operation);
+                    }
+                    ui.add(linear_progress().indeterminate(true).width(column_width - 20.0).height(4.0).four_color_enabled(true));
+                });
+            });
+        }
     });
 }
 
@@ -875,12 +900,20 @@ impl SshTab {
 
             match action {
                 SshAction::Refresh(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-refresh"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.refresh_ssh_host(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Refresh triggered for {}", host);
                     }
                 }
                 SshAction::SshCheck(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-ssh-check"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.ssh_check(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "SSH check triggered for {}", host);
@@ -893,36 +926,60 @@ impl SshTab {
                     self.delete_host(&host, profile);
                 }
                 SshAction::CheckBase(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-base-check"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.check_base(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Base check triggered for {}", host);
                     }
                 }
                 SshAction::InstallBase(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-install-base"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.install_base(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Base installation triggered for {}", host);
                     }
                 }
                 SshAction::CheckDocker(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-docker-check"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.check_docker(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Docker check triggered for {}", host);
                     }
                 }
                 SshAction::InstallDocker(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-install-docker"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.install_docker_daemon(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Docker installation triggered for {}", host);
                     }
                 }
                 SshAction::RemoveDocker(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-remove-docker"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.remove_docker(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Docker removal triggered for {}", host);
                     }
                 }
                 SshAction::CheckDure(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-dure-check"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.check_dure(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = host, "Dure check triggered for {}", host);
@@ -933,6 +990,10 @@ impl SshTab {
                     // TODO: Show .env configuration dialog before calling vm.install_dure()
                 }
                 SshAction::RemoveDure(host) => {
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-remove-dure"));
+                    }
                     if let Some(ref vm) = vm {
                         let _ = vm.remove_dure(host.clone(), (*current_profile_kdbx).clone());
                         dure_info!("Dure removal triggered for {}", host);
@@ -1627,5 +1688,52 @@ mod operation_state_tests {
         let cloned = result.clone();
         assert_eq!(result.connected, cloned.connected);
         assert_eq!(result.checked_at, cloned.checked_at);
+    }
+
+    #[test]
+    fn test_operation_starts_with_in_progress_state() {
+        // When operation button clicked, state should be InProgress
+        let state = OperationState::start("Refresh");
+
+        match state {
+            OperationState::InProgress { operation, .. } => {
+                assert_eq!(operation, "Refresh");
+            }
+            _ => panic!("Expected InProgress state when operation starts"),
+        }
+    }
+
+    #[test]
+    fn test_multiple_operations_tracked_by_name() {
+        // Different operations should be distinguishable by name
+        let refresh = OperationState::start("Refresh");
+        let ssh_check = OperationState::start("SSH Check");
+
+        match (&refresh, &ssh_check) {
+            (
+                OperationState::InProgress { operation: op1, .. },
+                OperationState::InProgress { operation: op2, .. }
+            ) => {
+                assert_eq!(op1, "Refresh");
+                assert_eq!(op2, "SSH Check");
+                assert_ne!(op1, op2);
+            }
+            _ => panic!("Both should be InProgress"),
+        }
+    }
+
+    #[test]
+    fn test_operation_state_has_timestamp() {
+        // InProgress state should include start timestamp
+        let state = OperationState::start("Docker Install");
+
+        match state {
+            OperationState::InProgress { started_at, .. } => {
+                // Timestamp should be recent (within last second)
+                let now = chrono::Utc::now().timestamp();
+                assert!(started_at <= now && started_at > now - 2);
+            }
+            _ => panic!("Expected InProgress state"),
+        }
     }
 }

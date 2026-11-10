@@ -19,6 +19,67 @@ use crate::calc::profile::ProfileContext;
 const BUTTON_VERTICAL_SPACING: f32 = 4.0;
 const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
 
+/// Operation state for visual feedback with timestamps
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationState {
+    Idle,
+    InProgress {
+        operation: String,
+        started_at: i64, // Unix timestamp
+    },
+    Completed {
+        operation: String,
+        completed_at: i64,
+    },
+    Failed {
+        operation: String,
+        error: String,
+        failed_at: i64,
+    },
+}
+
+impl OperationState {
+    pub fn start(operation: impl Into<String>) -> Self {
+        Self::InProgress {
+            operation: operation.into(),
+            started_at: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn complete(self) -> Self {
+        if let Self::InProgress { operation, .. } = self {
+            Self::Completed {
+                operation,
+                completed_at: chrono::Utc::now().timestamp(),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn fail(self, error: impl Into<String>) -> Self {
+        if let Self::InProgress { operation, .. } = self {
+            Self::Failed {
+                operation,
+                error: error.into(),
+                failed_at: chrono::Utc::now().timestamp(),
+            }
+        } else {
+            self
+        }
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::Idle;
+    }
+}
+
+impl Default for OperationState {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
 /// DNS tab state
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct DnsTab {
@@ -99,6 +160,9 @@ pub struct DnsDomainRow {
     pub last_ns_check: Option<NsCheckResult>,
     pub last_settings_check: Option<SettingsCheckResult>,
     pub last_https_check: Option<HttpsCheckResult>,
+
+    // Operation state tracking
+    pub operation_state: OperationState,
 
     // Drawer state
     pub drawer_state: DnsDrawerState,
@@ -389,10 +453,19 @@ impl DnsTab {
                     })
                     .cell_widget(move |ui| {
                         // Operations column: buttons
+                        use egui_material3::linear_progress;
+
                         ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
-                        
+                        ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
+
                         let domain = row_for_ops.domain.clone();
-                        ui.horizontal_wrapped(|ui| {
+                        let operation_in_progress = matches!(row_for_ops.operation_state, OperationState::InProgress { .. });
+
+                        ui.vertical(|ui| {
+                            let overlay_pos = ui.cursor().min;
+                            let column_width = ui.available_width();
+
+                            ui.horizontal_wrapped(|ui| {
                             if ui
                                 .add(MaterialButton::outlined(tr!("dns-button-check-ns")).small())
                                 .on_hover_text(tr!("dns-button-check-ns-tooltip"))
@@ -436,7 +509,27 @@ impl DnsTab {
                                     domain.clone()
                                 ));
                             }
-                        });
+                        }); // Close ui.horizontal_wrapped
+
+                        // Overlay progress on foreground layer
+                        if operation_in_progress {
+                            let current_area_id = ui.layer_id().id;
+                            let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
+
+                            ui.with_layer_id(foreground_layer, |ui| {
+                                let progress_rect = egui::Rect::from_min_size(overlay_pos, egui::vec2(column_width, 30.0));
+                                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240));
+
+                                ui.allocate_ui_at_rect(progress_rect, |ui| {
+                                    ui.add_space(2.0);
+                                    if let OperationState::InProgress { operation, .. } = &row_for_ops.operation_state {
+                                        ui.label(operation);
+                                    }
+                                    ui.add(linear_progress().indeterminate(true).width(column_width - 20.0).height(4.0).four_color_enabled(true));
+                                });
+                            });
+                        }
+                        }); // Close ui.vertical
                     })
                     .drawer(move |ui| {
                         // Drawer with tabs
@@ -467,6 +560,11 @@ impl DnsTab {
     /// Check NS server records using DNS over HTTPS
     fn check_ns_server(&mut self, domain: &str) {
         dure_info!("Checking NS server for domain: {}", domain);
+
+        // Set operation state to InProgress
+        if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+            row.operation_state = OperationState::start(tr!("dns-operation-check-ns"));
+        }
 
         // Store which domain is being checked
         self.selected_domain = Some(domain.to_string());
@@ -566,6 +664,11 @@ impl DnsTab {
     fn check_dns_settings(&mut self, domain: &str) {
         dure_info!("Checking DNS settings for domain: {}", domain);
 
+        // Set operation state to InProgress
+        if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+            row.operation_state = OperationState::start(tr!("dns-operation-check-settings"));
+        }
+
         // Find domain row to get zone_id, vm_ip, and API credentials
         let row = self.domain_rows.iter().find(|r| r.domain == domain);
         if row.is_none() {
@@ -609,6 +712,11 @@ impl DnsTab {
     /// Check HTTPS connection and verify IP resolution
     fn check_https_connection(&mut self, domain: &str) {
         dure_info!("Checking HTTPS connection for domain: {}", domain);
+
+        // Set operation state to InProgress
+        if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+            row.operation_state = OperationState::start(tr!("dns-operation-check-https"));
+        }
 
         // Find domain row to get expected VM IP
         let row = self.domain_rows.iter().find(|r| r.domain == domain);
@@ -727,6 +835,7 @@ impl DnsTab {
                                 last_ns_check: None,
                                 last_settings_check: None,
                                 last_https_check: None,
+                                operation_state: OperationState::Idle,
                                 drawer_state: DnsDrawerState::default(),
                             });
 
@@ -756,19 +865,22 @@ impl DnsTab {
                     match result {
                         Ok((check_result, display_results)) => {
                             self.ns_check_results = display_results.clone();
-                            // Update domain row with check result
+                            // Update domain row with check result and operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_ns_check = Some(check_result.clone());
+                                    row.operation_state = row.operation_state.clone().complete();
                                 }
                             }
                         }
                         Err((check_result, display_results)) => {
                             self.ns_check_results = display_results.clone();
-                            // Store error result too
+                            // Store error result and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_ns_check = Some(check_result.clone());
+                                    let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
+                                    row.operation_state = row.operation_state.clone().fail(error_msg);
                                 }
                             }
                         }
@@ -816,10 +928,11 @@ impl DnsTab {
                 if let Some(result) = promise.ready() {
                     match result {
                         Ok((check_result, display_results)) => {
-                            // Store result in domain row
+                            // Store result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_settings_check = Some(check_result.clone());
+                                    row.operation_state = row.operation_state.clone().complete();
                                 }
                             }
                             // Convert display strings to DnsRecordCheck for legacy dialog
@@ -834,10 +947,12 @@ impl DnsTab {
                             }).collect();
                         }
                         Err((check_result, display_results)) => {
-                            // Store error result in domain row
+                            // Store error result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_settings_check = Some(check_result.clone());
+                                    let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
+                                    row.operation_state = row.operation_state.clone().fail(error_msg);
                                 }
                             }
                             // Convert display strings to DnsRecordCheck for legacy dialog
@@ -949,10 +1064,11 @@ impl DnsTab {
                     match result {
                         Ok(check_result) => {
                             self.https_check_result = Some(check_result.clone());
-                            // Store result in domain row
+                            // Store result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_https_check = Some(check_result.clone());
+                                    row.operation_state = row.operation_state.clone().complete();
                                 }
                             }
                         }
@@ -965,10 +1081,11 @@ impl DnsTab {
                                 error: Some(err.clone()),
                             };
                             self.https_check_result = Some(error_result.clone());
-                            // Store error result in domain row
+                            // Store error result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_https_check = Some(error_result);
+                                    row.operation_state = row.operation_state.clone().fail(err);
                                 }
                             }
                         }
@@ -1180,6 +1297,7 @@ impl DnsTab {
                 last_ns_check: None,
                 last_settings_check: None,
                 last_https_check: None,
+                operation_state: OperationState::Idle,
                 drawer_state: DnsDrawerState::default(),
             });
         }
@@ -1279,5 +1397,46 @@ mod tests {
         assert_eq!(tabs[0], DnsDrawerTab::Status);
         assert_eq!(tabs[1], DnsDrawerTab::Logs);
         assert_eq!(tabs[2], DnsDrawerTab::Operations);
+    }
+
+    #[test]
+    fn test_operation_state_lifecycle() {
+        let state = OperationState::start("Check NS");
+
+        match &state {
+            OperationState::InProgress { operation, .. } => {
+                assert_eq!(operation, "Check NS");
+            }
+            _ => panic!("Expected InProgress state"),
+        }
+
+        let state = state.complete();
+
+        match &state {
+            OperationState::Completed { operation, .. } => {
+                assert_eq!(operation, "Check NS");
+            }
+            _ => panic!("Expected Completed state"),
+        }
+    }
+
+    #[test]
+    fn test_operation_state_failure() {
+        let state = OperationState::start("HTTPS Check");
+        let state = state.fail("DNS resolution failed");
+
+        match &state {
+            OperationState::Failed { operation, error, .. } => {
+                assert_eq!(operation, "HTTPS Check");
+                assert_eq!(error, "DNS resolution failed");
+            }
+            _ => panic!("Expected Failed state"),
+        }
+    }
+
+    #[test]
+    fn test_operation_state_default_is_idle() {
+        let state = OperationState::default();
+        assert_eq!(state, OperationState::Idle);
     }
 }
