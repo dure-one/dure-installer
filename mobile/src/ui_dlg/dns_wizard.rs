@@ -359,9 +359,8 @@ impl DnsWizard {
 
             // Progress log (always visible, 4 lines max)
             ui.group(|ui| {
+                ui.set_height(60.0);
                 egui::ScrollArea::vertical()
-                    .max_height(60.0)
-                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
                             ui.label("Waiting for operations...");
@@ -491,9 +490,8 @@ impl DnsWizard {
 
             // Progress log
             ui.group(|ui| {
+                ui.set_height(60.0);
                 egui::ScrollArea::vertical()
-                    .max_height(60.0)
-                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.progress_log.is_empty() {
                             ui.label("Waiting for operations...");
@@ -798,9 +796,8 @@ impl DnsWizard {
 
             // DNS operation log (always visible, 4 lines max)
             ui.group(|ui| {
+                ui.set_height(60.0);
                 egui::ScrollArea::vertical()
-                    .max_height(60.0)
-                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                         if self.dns_operation_log.is_empty() {
                             ui.label("Waiting for DNS operations...");
