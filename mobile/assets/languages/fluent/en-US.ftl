@@ -729,6 +729,11 @@ platform-button-bind-vm-tooltip = Bind VM to Platform
 
 platform-drawer-ssh-copy-ip = Copy IP Address
 
+## Platform Drawer Tabs
+platform-drawer-tab-status = Status
+platform-drawer-tab-logs = Logs
+platform-drawer-tab-operations = Operations
+
 ## Drawer Logs Tab
 platform-drawer-logs-heading = Project Logs
 platform-drawer-logs-level = Level:

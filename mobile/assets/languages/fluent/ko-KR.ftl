@@ -725,6 +725,11 @@ platform-button-bind-vm-tooltip = 플랫폼에 VM 바인딩
 
 platform-drawer-ssh-copy-ip = IP 주소 복사
 
+## Platform Drawer Tabs
+platform-drawer-tab-status = 상태
+platform-drawer-tab-logs = 로그
+platform-drawer-tab-operations = 작업
+
 ## Drawer Logs Tab
 platform-drawer-logs-heading = 프로젝트 로그
 platform-drawer-logs-level = 레벨:
