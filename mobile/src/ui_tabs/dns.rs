@@ -692,9 +692,9 @@ impl DnsTab {
                     .scroll([false, true])
                     .min_width(400.0)
                     .max_width(400.0)
-                    .min_height(400.0)
+                    .min_height(460.0)
                     .resize(|r| {
-                        r.default_size([400.0, 450.0])
+                        r.default_size([400.0, 518.0])
                     })
                     .show(ui.ctx(), |ui| {
                         wizard.ui(ui, profile);

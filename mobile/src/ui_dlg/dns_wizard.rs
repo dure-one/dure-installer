@@ -326,365 +326,379 @@ impl DnsWizard {
 
     /// Step 1: Cloudflare OAuth
     fn render_step1_oauth(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Step 1: Cloudflare Authentication");
-        ui.add_space(4.0);
-
-        ui.label("Connect your Cloudflare account to manage DNS:");
-
-        ui.add_space(4.0);
-
-        // Check OAuth promise status
-        if let Some(promise) = self.oauth_promise.take() {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(oauth_result) => {
-                        self.oauth_result = Some(oauth_result.clone());
-                        self.progress_log.push("Success: OAuth successful".to_string());
-
-                        // Verify API token
-                        self.verify_api_token();
-
-                        // Auto-fetch Account ID from API v4
-                        self.fetch_account_id();
-                    }
-                    Err(err) => {
-                        self.progress_log.push(format!("Error: OAuth failed: {}", err));
-                        self.state = DnsWizardState::Error(err.clone());
-                    }
-                }
-            } else {
-                ui.label("Loading: Waiting for OAuth authorization...");
-                ui.label("Please complete the authorization in your browser.");
-                // Put promise back if not ready
-                self.oauth_promise = Some(promise);
-            }
-        } else if self.oauth_result.is_none() {
-            // Not started OAuth yet
-            if ui
-                .add(MaterialButton::filled("Connect Cloudflare Account"))
-                .on_hover_text("Opens browser for OAuth authentication")
-                .clicked()
-            {
-                self.start_oauth();
-            }
-
-            ui.add_space(4.0);
-            ui.label("You will be redirected to Cloudflare to authorize access.");
-        } else {
-            // OAuth complete
-            ui.label(format!(
-                "Connected: {}",
-                self.connected_email.as_ref().unwrap_or(&"Account connected".to_string())
-            ));
-
-            if self.api_connection_ok {
-                ui.label("API connection verified");
-            } else {
-                ui.label("Verifying API connection...");
-            }
-
-            ui.add_space(4.0);
-
-            // Account ID input
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                ui.label("Account ID:");
-                ui.text_edit_singleline(&mut self.cloudflare_account_id);
+                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                    self.should_close = true;
+                }
+
+                ui.add_space(4.0);
+
+                // Show "Open OAuth Screen" button if OAuth was attempted
+                if self.oauth_promise.is_some() || self.oauth_result.is_some() {
+                    if ui.add(MaterialButton::outlined("Open OAuth Screen")).clicked() {
+                        self.start_oauth();
+                    }
+                    ui.add_space(4.0);
+                }
+
+                let next_btn = ui.add_enabled(
+                    self.can_proceed_from_step1(),
+                    MaterialButton::filled("Next")
+                );
+                if next_btn.clicked() {
+                    self.state = DnsWizardState::DomainRegistration;
+                }
             });
 
-            if self.cloudflare_account_id.is_empty() {
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 165, 0),
-                    "Warning: Account ID required to continue"
-                );
-            }
-        }
+            ui.add_space(4.0);
 
-        // Progress log (always visible, 4 lines max, auto-scroll to bottom)
-        ui.add_space(4.0);
-        ui.group(|ui| {
-            ui.set_max_height(60.0);
-            egui::ScrollArea::vertical()
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    if self.progress_log.is_empty() {
-                        ui.label("Waiting for operations...");
-                    } else {
-                        for log in &self.progress_log {
-                            ui.label(log);
+            // Progress log (always visible, 4 lines max, auto-scroll to bottom)
+            ui.group(|ui| {
+                ui.set_max_height(60.0);
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if self.progress_log.is_empty() {
+                            ui.label("Waiting for operations...");
+                        } else {
+                            for log in &self.progress_log {
+                                ui.label(log);
+                            }
                         }
-                    }
-                });
-        });
-
-        // Buttons at bottom
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Close")).clicked() {
-                self.should_close = true;
-            }
+                    });
+            });
 
             ui.add_space(4.0);
 
-            // Show "Open OAuth Screen" button if OAuth was attempted
-            if self.oauth_promise.is_some() || self.oauth_result.is_some() {
-                if ui.add(MaterialButton::outlined("Open OAuth Screen")).clicked() {
-                    self.start_oauth();
-                }
+            // Content area (reversed order in bottom_up layout)
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.heading("Step 1: Cloudflare Authentication");
                 ui.add_space(4.0);
-            }
 
-            let next_btn = ui.add_enabled(
-                self.can_proceed_from_step1(),
-                MaterialButton::filled("Next")
-            );
-            if next_btn.clicked() {
-                self.state = DnsWizardState::DomainRegistration;
-            }
+                ui.label("Connect your Cloudflare account to manage DNS:");
+
+                ui.add_space(4.0);
+
+                // Check OAuth promise status
+                if let Some(promise) = self.oauth_promise.take() {
+                    if let Some(result) = promise.ready() {
+                        match result {
+                            Ok(oauth_result) => {
+                                self.oauth_result = Some(oauth_result.clone());
+                                self.progress_log.push("Success: OAuth successful".to_string());
+
+                                // Verify API token
+                                self.verify_api_token();
+
+                                // Auto-fetch Account ID from API v4
+                                self.fetch_account_id();
+                            }
+                            Err(err) => {
+                                self.progress_log.push(format!("Error: OAuth failed: {}", err));
+                                self.state = DnsWizardState::Error(err.clone());
+                            }
+                        }
+                    } else {
+                        ui.label("Loading: Waiting for OAuth authorization...");
+                        ui.label("Please complete the authorization in your browser.");
+                        // Put promise back if not ready
+                        self.oauth_promise = Some(promise);
+                    }
+                } else if self.oauth_result.is_none() {
+                    // Not started OAuth yet
+                    if ui
+                        .add(MaterialButton::filled("Connect Cloudflare Account"))
+                        .on_hover_text("Opens browser for OAuth authentication")
+                        .clicked()
+                    {
+                        self.start_oauth();
+                    }
+
+                    ui.add_space(4.0);
+                    ui.label("You will be redirected to Cloudflare to authorize access.");
+                } else {
+                    // OAuth complete
+                    ui.label(format!(
+                        "Connected: {}",
+                        self.connected_email.as_ref().unwrap_or(&"Account connected".to_string())
+                    ));
+
+                    if self.api_connection_ok {
+                        ui.label("API connection verified");
+                    } else {
+                        ui.label("Verifying API connection...");
+                    }
+
+                    ui.add_space(4.0);
+
+                    // Account ID input
+                    ui.horizontal(|ui| {
+                        ui.label("Account ID:");
+                        ui.text_edit_singleline(&mut self.cloudflare_account_id);
+                    });
+
+                    if self.cloudflare_account_id.is_empty() {
+                        ui.colored_label(
+                            egui::Color32::from_rgb(255, 165, 0),
+                            "Warning: Account ID required to continue"
+                        );
+                    }
+                }
+            });
         });
     }
 
     /// Step 2: Domain registration
     fn render_step2_domain(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Step 2: Domain Selection");
-        ui.add_space(4.0);
-
         // Auto-fetch domains on first render
         if self.domains_list.is_empty() && self.fetch_domains_promise.is_none() {
             self.fetch_domains();
         }
 
-        // Handle fetch domains promise
-        if let Some(promise) = self.fetch_domains_promise.take() {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(zones) => {
-                        let count = zones.len();
-                        self.domains_list = zones.clone();
-                        self.progress_log.push(format!("Loaded {} domains", count));
-                    }
-                    Err(err) => {
-                        self.progress_log.push(format!("Error: Failed to fetch domains: {}", err));
-                    }
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Buttons at bottom (rendered first in bottom_up layout)
+            ui.horizontal(|ui| {
+                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                    self.should_close = true;
                 }
-            } else {
-                ui.spinner();
-                ui.label("Loading domains...");
-                self.fetch_domains_promise = Some(promise);
-            }
-        }
 
-        // Handle add domain promise
-        if let Some(promise) = self.add_domain_promise.take() {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(domain) => {
-                        self.progress_log.push(format!("Added domain: {}", domain));
-                        self.fetch_domains(); // Refresh list
-                        self.domain_name.clear();
-                    }
-                    Err(err) => {
-                        self.progress_log.push(format!("Error: Failed to add domain: {}", err));
-                    }
+                ui.add_space(4.0);
+
+                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                    self.state = DnsWizardState::CloudflareAuth;
                 }
-            } else {
-                ui.spinner();
-                ui.label("Adding domain...");
-                self.add_domain_promise = Some(promise);
-            }
-        }
 
-        // I have domain section
-        ui.heading("I have domain");
-        ui.add_space(4.0);
+                ui.add_space(4.0);
 
-        ui.horizontal(|ui| {
-            ui.label("Domain:");
-            ui.text_edit_singleline(&mut self.domain_name);
-
-            ui.add_space(4.0);
-            let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
-            if ui.add_enabled(can_add, MaterialButton::filled("Add").small()).clicked() {
-                self.add_domain_to_account(&self.domain_name.clone());
-            }
-        });
-        ui.add_space(4.0);
-        ui.separator();
-        ui.add_space(4.0);
-
-        // I want to register domain section
-        ui.heading("I want to register domain");
-        ui.add_space(4.0);
-
-        ui.horizontal(|ui| {
-            ui.label("Domain:");
-            ui.text_edit_singleline(&mut self.search_query);
-
-            if ui.add(MaterialButton::filled("Search").small()).clicked() {
-                if !self.search_query.is_empty() {
-                    let url = format!(
-                        "https://dash.cloudflare.com/{}/domains/registrations/purchase?query={}",
-                        self.cloudflare_account_id,
-                        urlencoding::encode(&self.search_query)
-                    );
-                    if let Err(e) = webbrowser::open(&url) {
-                        self.progress_log.push(format!("Error: Failed to open browser: {}", e));
-                    } else {
-                        self.progress_log.push("Opened Cloudflare dashboard".to_string());
-                    }
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-        ui.separator();
-        ui.add_space(4.0);
-
-        // Domain dropdown from Cloudflare account
-        ui.label("Select domain to use:");
-        ui.add_space(4.0);
-
-        egui::ComboBox::from_label("")
-            .selected_text(
-                self.selected_domain
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("Select a domain")
-            )
-            .show_ui(ui, |ui| {
-                for domain in &self.domains_list {
-                    let domain_name = &domain.name;
-                    let zone_id = &domain.id;
-                    if ui.selectable_label(
-                        self.selected_domain.as_ref() == Some(domain_name),
-                        domain_name
-                    ).clicked() {
-                        self.selected_domain = Some(domain_name.clone());
-                        self.selected_zone_id = Some(zone_id.clone());
-                    }
+                let next_btn = ui.add_enabled(
+                    self.can_proceed_from_step2(),
+                    MaterialButton::filled("Next")
+                );
+                if next_btn.clicked() {
+                    self.state = DnsWizardState::VmConfiguration;
                 }
             });
 
-        // Progress log (always visible, 4 lines max, auto-scroll to bottom)
-        ui.add_space(4.0);
-        ui.group(|ui| {
-            ui.set_max_height(60.0);
-            egui::ScrollArea::vertical()
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    if self.progress_log.is_empty() {
-                        ui.label("Waiting for operations...");
+            ui.add_space(4.0);
+
+            // Progress log
+            ui.group(|ui| {
+                ui.set_max_height(60.0);
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if self.progress_log.is_empty() {
+                            ui.label("Waiting for operations...");
+                        } else {
+                            for log in self.progress_log.iter().rev().take(5).rev() {
+                                ui.label(log);
+                            }
+                        }
+                    });
+            });
+
+            ui.add_space(4.0);
+
+            // Content (reversed in bottom_up)
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.heading("Step 2: Domain Selection");
+                ui.add_space(4.0);
+
+                // Handle fetch domains promise
+                if let Some(promise) = self.fetch_domains_promise.take() {
+                    if let Some(result) = promise.ready() {
+                        match result {
+                            Ok(zones) => {
+                                let count = zones.len();
+                                self.domains_list = zones.clone();
+                                self.progress_log.push(format!("Loaded {} domains", count));
+                            }
+                            Err(err) => {
+                                self.progress_log.push(format!("Error: Failed to fetch domains: {}", err));
+                            }
+                        }
                     } else {
-                        for log in self.progress_log.iter().rev().take(5).rev() {
-                            ui.label(log);
+                        ui.spinner();
+                        ui.label("Loading domains...");
+                        self.fetch_domains_promise = Some(promise);
+                    }
+                }
+
+                // Handle add domain promise
+                if let Some(promise) = self.add_domain_promise.take() {
+                    if let Some(result) = promise.ready() {
+                        match result {
+                            Ok(domain) => {
+                                self.progress_log.push(format!("Added domain: {}", domain));
+                                self.fetch_domains(); // Refresh list
+                                self.domain_name.clear();
+                            }
+                            Err(err) => {
+                                self.progress_log.push(format!("Error: Failed to add domain: {}", err));
+                            }
+                        }
+                    } else {
+                        ui.spinner();
+                        ui.label("Adding domain...");
+                        self.add_domain_promise = Some(promise);
+                    }
+                }
+
+                // I have domain section
+                ui.heading("I have domain");
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label("Domain:");
+                    ui.text_edit_singleline(&mut self.domain_name);
+
+                    ui.add_space(4.0);
+                    let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
+                    if ui.add_enabled(can_add, MaterialButton::filled("Add").small()).clicked() {
+                        self.add_domain_to_account(&self.domain_name.clone());
+                    }
+                });
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(4.0);
+
+                // I want to register domain section
+                ui.heading("I want to register domain");
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label("Domain:");
+                    ui.text_edit_singleline(&mut self.search_query);
+
+                    if ui.add(MaterialButton::filled("Search").small()).clicked() {
+                        if !self.search_query.is_empty() {
+                            let url = format!(
+                                "https://dash.cloudflare.com/{}/domains/registrations/purchase?query={}",
+                                self.cloudflare_account_id,
+                                urlencoding::encode(&self.search_query)
+                            );
+                            if let Err(e) = webbrowser::open(&url) {
+                                self.progress_log.push(format!("Error: Failed to open browser: {}", e));
+                            } else {
+                                self.progress_log.push("Opened Cloudflare dashboard".to_string());
+                            }
                         }
                     }
                 });
-        });
 
-        // Buttons at bottom
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Close")).clicked() {
-                self.should_close = true;
-            }
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(4.0);
 
-            ui.add_space(4.0);
+                // Domain dropdown from Cloudflare account
+                ui.label("Select domain to use:");
+                ui.add_space(4.0);
 
-            if ui.add(MaterialButton::outlined("Previous")).clicked() {
-                self.state = DnsWizardState::CloudflareAuth;
-            }
-
-            ui.add_space(4.0);
-
-            let next_btn = ui.add_enabled(
-                self.can_proceed_from_step2(),
-                MaterialButton::filled("Next")
-            );
-            if next_btn.clicked() {
-                self.state = DnsWizardState::VmConfiguration;
-            }
+                egui::ComboBox::from_label("")
+                    .selected_text(
+                        self.selected_domain
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("Select a domain")
+                    )
+                    .show_ui(ui, |ui| {
+                        for domain in &self.domains_list {
+                            let domain_name = &domain.name;
+                            let zone_id = &domain.id;
+                            if ui.selectable_label(
+                                self.selected_domain.as_ref() == Some(domain_name),
+                                domain_name
+                            ).clicked() {
+                                self.selected_domain = Some(domain_name.clone());
+                                self.selected_zone_id = Some(zone_id.clone());
+                            }
+                        }
+                    });
+            });
         });
     }
 
     /// Step 3: VM configuration
     fn render_step3_vm(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Step 3: VM Selection");
-        ui.add_space(4.0);
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Buttons at bottom (rendered first in bottom_up layout)
+            ui.horizontal(|ui| {
+                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                    self.should_close = true;
+                }
 
-        ui.label("Select VM to bind with DNS:");
-        ui.add_space(4.0);
+                ui.add_space(4.0);
 
-        // Platform list with Material-like styling
-        if self.available_platforms.is_empty() {
-            ui.label("No platforms available. Please add a platform in Platform tab first.");
-        } else {
-            egui::ScrollArea::vertical()
-                .max_height(300.0)
-                .show(ui, |ui| {
-                    for platform in &self.available_platforms.clone() {
-                        let is_selected = self.selected_vm.as_ref() == Some(&platform.project_id);
+                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                    self.state = DnsWizardState::DomainRegistration;
+                }
 
-                        ui.horizontal(|ui| {
-                            if ui.radio(is_selected, "").clicked() {
-                                self.selected_vm = Some(platform.project_id.clone());
-                                self.vm_ip = Some(platform.vm_external_ip.clone());
+                ui.add_space(4.0);
+
+                let next_btn = ui.add_enabled(
+                    self.can_proceed_from_step3(),
+                    MaterialButton::filled("Next")
+                );
+                if next_btn.clicked() {
+                    self.state = DnsWizardState::Confirmation;
+                }
+            });
+
+            ui.add_space(4.0);
+
+            // Content (reversed in bottom_up)
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.heading("Step 3: VM Selection");
+                ui.add_space(4.0);
+
+                ui.label("Select VM to bind with DNS:");
+                ui.add_space(4.0);
+
+                // Platform list with Material-like styling
+                if self.available_platforms.is_empty() {
+                    ui.label("No platforms available. Please add a platform in Platform tab first.");
+                } else {
+                    egui::ScrollArea::vertical()
+                        .max_height(300.0)
+                        .show(ui, |ui| {
+                            for platform in &self.available_platforms.clone() {
+                                let is_selected = self.selected_vm.as_ref() == Some(&platform.project_id);
+
+                                ui.horizontal(|ui| {
+                                    if ui.radio(is_selected, "").clicked() {
+                                        self.selected_vm = Some(platform.project_id.clone());
+                                        self.vm_ip = Some(platform.vm_external_ip.clone());
+                                    }
+
+                                    ui.vertical(|ui| {
+                                        ui.heading(&platform.platform_name);
+                                        ui.label(format!(
+                                            "Project: {} | VM: {} | IP: {}",
+                                            platform.project_id,
+                                            platform.vm_name,
+                                            platform.vm_external_ip
+                                        ));
+                                    });
+                                });
+
+                                ui.add_space(4.0);
                             }
-
-                            ui.vertical(|ui| {
-                                ui.heading(&platform.platform_name);
-                                ui.label(format!(
-                                    "Project: {} | VM: {} | IP: {}",
-                                    platform.project_id,
-                                    platform.vm_name,
-                                    platform.vm_external_ip
-                                ));
-                            });
                         });
-
-                        ui.add_space(4.0);
-                    }
-                });
-        }
-
-        ui.add_space(4.0);
-        ui.label("* Select VM to bind and continue");
-
-        // Buttons at bottom
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Close")).clicked() {
-                self.should_close = true;
-            }
-
-            ui.add_space(4.0);
-
-            if ui.add(MaterialButton::outlined("Previous")).clicked() {
-                self.state = DnsWizardState::DomainRegistration;
-            }
-
-            ui.add_space(4.0);
-
-            let next_btn = ui.add_enabled(
-                self.can_proceed_from_step3(),
-                MaterialButton::filled("Next")
-            );
-            if next_btn.clicked() {
-                self.state = DnsWizardState::Confirmation;
-            }
+                }
+            });
         });
     }
 
     /// Step 4: DNS Setup
     fn render_step4_confirmation(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Step 4: DNS Setup");
-        ui.add_space(4.0);
-
         // Auto-verify DNS on first render of this step
         if self.verify_dns_promise.is_none() && self.dns_verified.is_none() {
             self.verify_dns_records();
         }
 
-        // Handle verify DNS promise
+        // Handle verify DNS promise (early return for spinner)
         if let Some(promise) = self.verify_dns_promise.take() {
             if let Some(result) = promise.ready() {
                 match result {
@@ -705,11 +719,11 @@ impl DnsWizard {
                 ui.spinner();
                 ui.label("Verifying DNS records...");
                 self.verify_dns_promise = Some(promise);
-                return; // Skip rest of UI while verifying
+                return;
             }
         }
 
-        // Handle create DNS records promise
+        // Handle create DNS records promise (early return for spinner)
         if let Some(promise) = self.create_dns_promise.take() {
             if let Some(result) = promise.ready() {
                 match result {
@@ -719,7 +733,6 @@ impl DnsWizard {
                         self.dns_operation_log.push("DNS records created or updated successfully".to_string());
                     }
                     Err(err) => {
-                        // If error contains "already exists", mark as configured anyway
                         if err.contains("already exists") || err.contains("duplicate") {
                             self.ns_records_configured = true;
                             self.dns_verified = Some(true);
@@ -733,99 +746,103 @@ impl DnsWizard {
                 ui.spinner();
                 ui.label("Setting up DNS records...");
                 self.create_dns_promise = Some(promise);
-                return; // Skip rest of UI while creating
+                return;
             }
         }
 
-        // Show status and setup button
-        ui.label("Status of DNS settings:");
-        ui.add_space(4.0);
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            // Buttons at bottom (rendered first in bottom_up layout)
+            ui.horizontal(|ui| {
+                if ui.add(MaterialButton::outlined("Close")).clicked() {
+                    self.should_close = true;
+                }
 
-        // Button enabled if: not verified OR verification failed OR create not in progress
-        let dns_needs_setup = self.dns_verified != Some(true);
-        let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
+                ui.add_space(4.0);
 
-        let setup_btn = ui.add_enabled(
-            can_setup,
-            MaterialButton::filled("Setup DNS").small()
-        );
-        if setup_btn.clicked() {
-            self.dns_operation_log.push("Starting DNS setup...".to_string());
-            self.create_dns_records();
-        }
+                if ui.add(MaterialButton::outlined("Previous")).clicked() {
+                    self.state = DnsWizardState::VmConfiguration;
+                }
 
-        ui.add_space(4.0);
-        ui.label("setup dns will overwrite to next values for your domain.");
+                ui.add_space(4.0);
 
-        ui.add_space(4.0);
+                let add_btn = ui.add_enabled(
+                    self.ns_records_configured,
+                    MaterialButton::filled("Add")
+                );
+                if add_btn.clicked() {
+                    if let Some(domain) = &self.selected_domain {
+                        self.completed_domain = Some((
+                            "cloudflare".to_string(),
+                            domain.clone(),
+                            self.selected_zone_id.clone(),
+                            Some(self.cloudflare_account_id.clone()),
+                        ));
+                    }
+                    self.should_close = true;
+                }
+            });
 
-        // Show default DNS records
-        ui.group(|ui| {
-            ui.label("Default settings:");
             ui.add_space(4.0);
 
-            if let Some(ip) = &self.vm_ip {
-                let domain = self.selected_domain.as_deref().unwrap_or("example.com");
-
-                ui.monospace(format!("{}        A    {} (GCP SERVER)", domain, ip));
-                ui.monospace(format!("xmpp.{}    A    {} (GCP SERVER)", domain, ip));
-                ui.monospace(format!("www.{}    CNAME    {}", domain, domain));
-                ui.monospace(format!("_xmpp-client    SRV    5 5222 xmpp.{}", domain));
-                ui.monospace(format!("_xmpp-server    SRV    5 5269 xmpp.{}", domain));
-                ui.monospace(format!("_xmpps-client    SRV    5 5223 xmpp.{}", domain));
-                ui.monospace(format!("_xmpps-server    SRV    5 5270 xmpp.{}", domain));
-            }
-        });
-
-        // DNS operation log (always visible, 4 lines max, auto-scroll to bottom)
-        ui.add_space(4.0);
-        ui.group(|ui| {
-            ui.set_max_height(60.0);
-            egui::ScrollArea::vertical()
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    if self.dns_operation_log.is_empty() {
-                        ui.label("Waiting for DNS operations...");
-                    } else {
-                        for log in self.dns_operation_log.iter().rev().take(10).rev() {
-                            ui.label(log);
+            // DNS operation log (always visible, 4 lines max, auto-scroll to bottom)
+            ui.group(|ui| {
+                ui.set_max_height(60.0);
+                egui::ScrollArea::vertical()
+                    .stick_to_bottom(true)
+                    .show(ui, |ui| {
+                        if self.dns_operation_log.is_empty() {
+                            ui.label("Waiting for DNS operations...");
+                        } else {
+                            for log in self.dns_operation_log.iter().rev().take(10).rev() {
+                                ui.label(log);
+                            }
                         }
+                    });
+            });
+
+            ui.add_space(4.0);
+
+            // Content (reversed in bottom_up)
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.heading("Step 4: DNS Setup");
+                ui.add_space(4.0);
+
+                ui.label("Status of DNS settings:");
+                ui.add_space(4.0);
+
+                let dns_needs_setup = self.dns_verified != Some(true);
+                let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
+
+                let setup_btn = ui.add_enabled(
+                    can_setup,
+                    MaterialButton::filled("Setup DNS").small()
+                );
+                if setup_btn.clicked() {
+                    self.dns_operation_log.push("Starting DNS setup...".to_string());
+                    self.create_dns_records();
+                }
+
+                ui.add_space(4.0);
+                ui.label("setup dns will overwrite to next values for your domain.");
+                ui.add_space(4.0);
+
+                ui.group(|ui| {
+                    ui.label("Default settings:");
+                    ui.add_space(4.0);
+
+                    if let Some(ip) = &self.vm_ip {
+                        let domain = self.selected_domain.as_deref().unwrap_or("example.com");
+
+                        ui.monospace(format!("{}        A    {} (GCP SERVER)", domain, ip));
+                        ui.monospace(format!("xmpp.{}    A    {} (GCP SERVER)", domain, ip));
+                        ui.monospace(format!("www.{}    CNAME    {}", domain, domain));
+                        ui.monospace(format!("_xmpp-client    SRV    5 5222 xmpp.{}", domain));
+                        ui.monospace(format!("_xmpp-server    SRV    5 5269 xmpp.{}", domain));
+                        ui.monospace(format!("_xmpps-client    SRV    5 5223 xmpp.{}", domain));
+                        ui.monospace(format!("_xmpps-server    SRV    5 5270 xmpp.{}", domain));
                     }
                 });
-        });
-
-        // Buttons at bottom
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Close")).clicked() {
-                self.should_close = true;
-            }
-
-            ui.add_space(4.0);
-
-            if ui.add(MaterialButton::outlined("Previous")).clicked() {
-                self.state = DnsWizardState::VmConfiguration;
-            }
-
-            ui.add_space(4.0);
-
-            let add_btn = ui.add_enabled(
-                self.ns_records_configured,
-                MaterialButton::filled("Add")
-            );
-            if add_btn.clicked() {
-                // Store completed domain info for DNS tab (provider, domain, zone_id, account_id)
-                if let Some(domain) = &self.selected_domain {
-                    self.completed_domain = Some((
-                        "cloudflare".to_string(),
-                        domain.clone(),
-                        self.selected_zone_id.clone(),
-                        Some(self.cloudflare_account_id.clone()),
-                    ));
-                }
-                // Close dialog instead of going to Complete screen
-                self.should_close = true;
-            }
+            });
         });
     }
 
