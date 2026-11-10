@@ -722,30 +722,18 @@ pub fn load_ssh_key_from_keyring(
     use crate::calc::keyring;
 
     let domain = match keyring_domain.as_ref() {
-        Some(d) => {
-            dure_debug!(project_id = project_id, "Loading SSH key for domain: {}", d);
-            d
-        }
-        None => {
-            dure_debug!(project_id = project_id, "No keyring domain provided");
-            return (None, None);
-        }
+        Some(d) => d,
+        None => return (None, None),
     };
 
     // Require profile keyring handle
     let handle = match kdbx_handle {
         Some(h) => h,
-        None => {
-            dure_debug!(project_id = project_id, "No profile keyring handle available");
-            return (None, None);
-        }
+        None => return (None, None),
     };
 
     let keys = match keyring::list_keys_from_handle(handle) {
-        Ok(k) => {
-            dure_debug!(project_id = project_id, "Found {} keys in profile keyring", k.len());
-            k
-        }
+        Ok(k) => k,
         Err(e) => {
             dure_debug!(project_id = project_id, "Failed to list keys from profile keyring: {}", e);
             return (None, None);
@@ -754,42 +742,26 @@ pub fn load_ssh_key_from_keyring(
 
     // Find the key with matching domain
     let key_entry = match keys.iter().find(|k| &k.domain == domain) {
-        Some(e) => {
-            dure_debug!(project_id = project_id, "Found matching key entry");
-            e
-        }
-        None => {
-            dure_debug!(project_id = project_id, "No key found for domain: {}", domain);
-            return (None, None);
-        }
+        Some(e) => e,
+        None => return (None, None),
     };
 
     // Try to get SSH key from binary attachment
     if let Some(ssh_key_bytes) = &key_entry.ssh_key {
-        dure_debug!(project_id = project_id, "SSH key bytes length: {}", ssh_key_bytes.len());
-
         // Derive public key from raw bytes
         let public_key = derive_public_key_from_raw(ssh_key_bytes);
-        if let Some(ref pk) = public_key {
-            dure_debug!(project_id = project_id, "Derived public key: {}", pk);
-        } else {
-            dure_debug!(project_id = project_id, "Failed to derive public key");
-        }
 
         // Try to interpret as UTF-8 string first (already in OpenSSH format)
         if let Ok(key_str) = String::from_utf8(ssh_key_bytes.clone()) {
             if key_str.contains("BEGIN") && key_str.contains("PRIVATE KEY") {
-                dure_debug!(project_id = project_id, "Key already in OpenSSH format");
                 return (Some(key_str), public_key);
             }
         }
 
         // Otherwise, try to convert raw Ed25519 bytes to OpenSSH format
-        dure_debug!("Converting raw bytes to OpenSSH format");
         let private_key = convert_ed25519_to_openssh(ssh_key_bytes);
         (private_key, public_key)
     } else {
-        dure_debug!("Key entry has no SSH key attachment");
         (None, None)
     }
 }

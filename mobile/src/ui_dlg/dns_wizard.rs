@@ -399,18 +399,22 @@ impl DnsWizard {
             }
         }
 
-        // Progress log (4 lines max)
-        if !self.progress_log.is_empty() {
-            ui.add_space(4.0);
-            ui.group(|ui| {
-                ui.set_max_height(60.0);
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for log in &self.progress_log {
-                        ui.label(log);
+        // Progress log (always visible, 4 lines max, auto-scroll to bottom)
+        ui.add_space(4.0);
+        ui.group(|ui| {
+            ui.set_max_height(60.0);
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    if self.progress_log.is_empty() {
+                        ui.label("Waiting for operations...");
+                    } else {
+                        for log in &self.progress_log {
+                            ui.label(log);
+                        }
                     }
                 });
-            });
-        }
+        });
 
         // Buttons at bottom
         ui.add_space(8.0);
@@ -560,21 +564,22 @@ impl DnsWizard {
                 }
             });
 
+        // Progress log (always visible, 4 lines max, auto-scroll to bottom)
         ui.add_space(4.0);
-        ui.label("* select domain to use and continue");
-
-        // Progress log (4 lines max)
-        if !self.progress_log.is_empty() {
-            ui.add_space(4.0);
-            ui.group(|ui| {
-                ui.set_max_height(60.0);
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for log in self.progress_log.iter().rev().take(5).rev() {
-                        ui.label(log);
+        ui.group(|ui| {
+            ui.set_max_height(60.0);
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    if self.progress_log.is_empty() {
+                        ui.label("Waiting for operations...");
+                    } else {
+                        for log in self.progress_log.iter().rev().take(5).rev() {
+                            ui.label(log);
+                        }
                     }
                 });
-            });
-        }
+        });
 
         // Buttons at bottom
         ui.add_space(8.0);
@@ -732,22 +737,6 @@ impl DnsWizard {
             }
         }
 
-        // DNS operation log (4 lines max)
-        if !self.dns_operation_log.is_empty() {
-            ui.group(|ui| {
-                ui.label("DNS Operations:");
-                ui.add_space(4.0);
-                egui::ScrollArea::vertical()
-                    .max_height(60.0)
-                    .show(ui, |ui| {
-                        for log in self.dns_operation_log.iter().rev().take(10).rev() {
-                            ui.label(log);
-                        }
-                    });
-            });
-            ui.add_space(4.0);
-        }
-
         // Show status and setup button
         ui.label("Status of DNS settings:");
         ui.add_space(4.0);
@@ -786,6 +775,23 @@ impl DnsWizard {
                 ui.monospace(format!("_xmpps-client    SRV    5 5223 xmpp.{}", domain));
                 ui.monospace(format!("_xmpps-server    SRV    5 5270 xmpp.{}", domain));
             }
+        });
+
+        // DNS operation log (always visible, 4 lines max, auto-scroll to bottom)
+        ui.add_space(4.0);
+        ui.group(|ui| {
+            ui.set_max_height(60.0);
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .show(ui, |ui| {
+                    if self.dns_operation_log.is_empty() {
+                        ui.label("Waiting for DNS operations...");
+                    } else {
+                        for log in self.dns_operation_log.iter().rev().take(10).rev() {
+                            ui.label(log);
+                        }
+                    }
+                });
         });
 
         // Buttons at bottom
