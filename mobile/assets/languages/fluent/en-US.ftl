@@ -720,8 +720,13 @@ dns-wizard-waiting = Waiting for operations...
 dns-wizard-progress-oauth-success = Success: OAuth successful
 dns-wizard-progress-oauth-error = Error: OAuth failed: {$error}
 dns-wizard-progress-loading = Loading: Waiting for OAuth authorization...
+
+# Platform Tab
 platform-button-add-vm = Add VM
 platform-button-add-vm-tooltip = Add VM
+platform-button-bind-vm = Bind VM
+platform-button-bind-vm-tooltip = Bind VM to Platform
+
 platform-drawer-ssh-copy-ip = Copy IP Address
 
 ## Drawer Logs Tab

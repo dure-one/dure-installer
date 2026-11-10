@@ -716,7 +716,13 @@ dns-wizard-button-next = 다음
 dns-wizard-button-previous = 이전
 dns-wizard-button-oauth = OAuth 화면 열기
 dns-wizard-waiting = 작업 대기 중...
+
+# Platform Tab
+platform-button-add-vm = VM 추가
 platform-button-add-vm-tooltip = VM 추가
+platform-button-bind-vm = VM 바인딩
+platform-button-bind-vm-tooltip = 플랫폼에 VM 바인딩
+
 platform-drawer-ssh-copy-ip = IP 주소 복사
 
 ## Drawer Logs Tab
