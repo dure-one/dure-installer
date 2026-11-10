@@ -176,6 +176,10 @@ jobs:
         if: |
           (contains(matrix.platform.name, 'Android APK arm64')) &&
           (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'android' || github.event.inputs.platforms == '')
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          CLOUDFLARE_OAUTH_CLIENT_ID: ${{ secrets.CLOUDFLARE_OAUTH_CLIENT_ID }}
         run: |
           echo "storePassword=${{ secrets.STORE_PASSWORD }}" > ./mobile/app/keystore.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> ./mobile/app/keystore.properties
@@ -207,6 +211,7 @@ jobs:
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          CLOUDFLARE_OAUTH_CLIENT_ID: ${{ secrets.CLOUDFLARE_OAUTH_CLIENT_ID }}
           PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
           RUSTFLAGS: ${{ matrix.platform.rustflags }}
@@ -256,6 +261,7 @@ jobs:
             export PKG_CONFIG_PATH=/usr/local/libdata/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig
             export GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
             export GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+            export CLOUDFLARE_OAUTH_CLIENT_ID=${{ secrets.CLOUDFLARE_OAUTH_CLIENT_ID }}
             cargo build --release --package ${{ env.PACKAGE_NAME }} --bin ${{ env.BIN_NAME }} --target ${{ matrix.platform.target }}
 
       - name: Windows - Install OpenSSL
