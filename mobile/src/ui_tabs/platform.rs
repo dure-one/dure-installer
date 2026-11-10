@@ -744,12 +744,6 @@ pub fn load_ssh_key_from_keyring(
     let keys = match keyring::list_keys_from_handle(handle) {
         Ok(k) => {
             dure_debug!(project_id = project_id, "Found {} keys in profile keyring", k.len());
-            for key in &k {
-                dure_debug!(project_id = project_id, "  - Domain: {}, Username: {}, Has SSH: {}", key.domain,
-                    key.username,
-                    key.ssh_key.is_some()
-                );
-            }
             k
         }
         Err(e) => {

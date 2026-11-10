@@ -90,20 +90,25 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
         }
     }
 
-    // Docker Status
-    let docker_status = if row.docker_installed { "Installed" } else { "Not Installed" };
-    let mut docker_line = StatusLine::new("Docker", docker_status);
+    // Docker Status (single line with version)
+    let docker_status = if row.docker_installed {
+        if let Some(check_result) = &row.last_docker_check {
+            if let Some(version) = &check_result.version {
+                format!("Installed ({})", version)
+            } else {
+                "Installed".to_string()
+            }
+        } else {
+            "Installed".to_string()
+        }
+    } else {
+        "Not Installed".to_string()
+    };
+    let mut docker_line = StatusLine::new("Docker", &docker_status);
     if !row.docker_installed {
         docker_line = docker_line.warning();
     }
     docker_line.show(ui);
-
-    // Show docker version
-    if let Some(check_result) = &row.last_docker_check {
-        if let Some(version) = &check_result.version {
-            ui.label(format!("  Version: {}", version));
-        }
-    }
 
     // Dure Status
     let dure_status = if row.dure_installed { "Installed" } else { "Not Installed" };
