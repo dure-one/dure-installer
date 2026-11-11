@@ -444,11 +444,11 @@ impl DnsTab {
                                     .color(BadgeColor::Primary)
                                     .size(BadgeSize::Small)
                             );
-                            let text_color = ui.style().visuals.text_color();
+                            use egui_material3::theme::get_global_color;
                             ui.label(egui::RichText::new(&row_for_cells.domain)
                                 .size(16.0)
                                 .strong()
-                                .color(text_color));
+                                .color(get_global_color("onSurface")));
                         });
                     })
                     .cell_widget(move |ui| {
@@ -517,8 +517,10 @@ impl DnsTab {
                             let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
 
                             ui.with_layer_id(foreground_layer, |ui| {
+                                use egui_material3::theme::get_global_color;
                                 let progress_rect = egui::Rect::from_min_size(overlay_pos, egui::vec2(column_width, 30.0));
-                                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240));
+                                let overlay_color = get_global_color("surfaceContainer");
+                                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), overlay_color);
 
                                 ui.allocate_ui_at_rect(progress_rect, |ui| {
                                     ui.add_space(2.0);
@@ -1016,10 +1018,11 @@ impl DnsTab {
                                             }
                                         });
                                         row.col(|ui| {
+                                            use egui_material3::theme::get_global_color;
                                             if check.valid {
-                                                ui.colored_label(egui::Color32::GREEN, "✓");
+                                                ui.label("✓");
                                             } else {
-                                                ui.colored_label(egui::Color32::RED, "✗");
+                                                ui.colored_label(get_global_color("error"), "✗");
                                             }
                                         });
                                     });
@@ -1129,15 +1132,16 @@ impl DnsTab {
                         ui.horizontal(|ui| {
                             ui.label(tr!("dns-dialog-https-matches-vm"));
                             if result.resolves_to_vm {
-                                ui.colored_label(egui::Color32::GREEN, tr!("dns-dialog-https-yes"));
+                                ui.label(tr!("dns-dialog-https-yes"));
                             } else {
-                                ui.colored_label(egui::Color32::RED, tr!("dns-dialog-https-no"));
+                                ui.colored_label(egui::Color32::from_rgb(255, 193, 7), tr!("dns-dialog-https-no"));
                             }
                         });
 
                         if let Some(err_msg) = &result.error {
+                            use egui_material3::theme::get_global_color;
                             ui.add_space(10.0);
-                            ui.colored_label(egui::Color32::RED, format!("{} {}", tr!("dns-dialog-https-error-prefix"), err_msg));
+                            ui.colored_label(get_global_color("error"), format!("{} {}", tr!("dns-dialog-https-error-prefix"), err_msg));
                         }
                     } else {
                         ui.spinner();

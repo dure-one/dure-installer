@@ -79,7 +79,7 @@ impl DlgProfileDelete {
 
                 // Warning message
                 ui.colored_label(
-                    egui::Color32::from_rgb(255, 165, 0),
+                    egui::Color32::from_rgb(255, 193, 7), // Warning amber
                     tr!("profile-delete-warning"),
                 );
                 ui.add_space(12.0);

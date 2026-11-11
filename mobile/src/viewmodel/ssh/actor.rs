@@ -597,21 +597,11 @@ impl SshActor {
             SshCommand::CheckDure { host, profile_kdbx } => {
                 self.handle_check_dure(host, profile_kdbx).await
             }
-            SshCommand::InstallDure { host, env_config: _, profile_kdbx: _ } => {
-                self.send_event(SshEvent::DureInstallCompleted {
-                    host: host.clone(),
-                    success: false,
-                    error: Some("Not implemented".to_string()),
-                }).await;
-                Ok(())
+            SshCommand::InstallDure { host, env_config, profile_kdbx } => {
+                self.handle_install_dure(host, env_config, profile_kdbx).await
             }
-            SshCommand::RemoveDure { host, profile_kdbx: _ } => {
-                self.send_event(SshEvent::DureRemoveCompleted {
-                    host: host.clone(),
-                    success: false,
-                    error: Some("Not implemented".to_string()),
-                }).await;
-                Ok(())
+            SshCommand::RemoveDure { host, profile_kdbx } => {
+                self.handle_remove_dure(host, profile_kdbx).await
             }
             SshCommand::Drawer(_drawer_cmd) => {
                 Err(anyhow::anyhow!("Drawer command not yet implemented"))
@@ -2294,6 +2284,15 @@ impl SshActor {
             SshEvent::OperationFailed { host, operation, .. } => {
                 format!("OperationFailed({}, {})", host, operation)
             }
+            SshEvent::HostStatusRetrieved { host, raw_output } => {
+                format!("HostStatusRetrieved({}, {} bytes)", host, raw_output.len())
+            }
+            SshEvent::DockerStatusRawRetrieved { host, raw_output } => {
+                format!("DockerStatusRawRetrieved({}, {} bytes)", host, raw_output.len())
+            }
+            SshEvent::DureComposeLogsRetrieved { host, logs } => {
+                format!("DureComposeLogsRetrieved({}, {} bytes)", host, logs.len())
+            }
             SshEvent::Drawer(_) => {
                 format!("Drawer(...)")
             }
@@ -2496,6 +2495,8 @@ impl SshActor {
         };
 
         let host_config = self.load_host_config(&host)?;
+
+        // Step 1: Check base packages
         let result = crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
@@ -2508,17 +2509,11 @@ impl SshActor {
                 };
                 dure_info!(project_id = host.clone(), "Base packages check: {}", status);
 
-                // Complete operation log
-                if op_id >= 0 {
-                    let _ = self.complete_operation_log(op_id, installed, None::<String>).await;
-                }
-
                 self.send_event(SshEvent::BaseCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed,
                     missing_packages: missing,
                 }).await;
-                Ok(())
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Base check failed: {}", e);
@@ -2529,11 +2524,40 @@ impl SshActor {
                 }
 
                 self.send_event(SshEvent::BaseCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed: false,
                     missing_packages: vec![],
                 }).await;
-                Err(e)
+                return Err(e);
+            }
+        }
+
+        // Step 2: Get comprehensive system status
+        dure_info!(project_id = host.clone(), "Retrieving system status for {}", host);
+        match crate::calc::ssh::get_comprehensive_system_status(&host_config, profile_kdbx.as_ref()).await {
+            Ok(raw_output) => {
+                dure_info!(project_id = host.clone(), "System status retrieved ({} bytes)", raw_output.len());
+
+                // Complete operation log with success
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, None::<String>).await;
+                }
+
+                self.send_event(SshEvent::HostStatusRetrieved {
+                    host,
+                    raw_output,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "System status retrieval failed: {}", e);
+
+                // Complete operation log (partial success - base check worked)
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, Some(format!("System status failed: {}", e))).await;
+                }
+
+                Ok(())
             }
         }
     }
@@ -2555,6 +2579,8 @@ impl SshActor {
         };
 
         let host_config = self.load_host_config(&host)?;
+
+        // Step 1: Check Docker version
         let result = crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
@@ -2567,17 +2593,11 @@ impl SshActor {
                 };
                 dure_info!(project_id = host.clone(), "Docker check: {}", status);
 
-                // Complete operation log
-                if op_id >= 0 {
-                    let _ = self.complete_operation_log(op_id, installed, None::<String>).await;
-                }
-
                 self.send_event(SshEvent::DockerCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed,
                     version,
                 }).await;
-                Ok(())
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Docker check failed: {}", e);
@@ -2588,13 +2608,163 @@ impl SshActor {
                 }
 
                 self.send_event(SshEvent::DockerCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed: false,
                     version: None,
                 }).await;
-                Err(e)
+                return Err(e);
             }
         }
+
+        // Step 2: Get Docker container status
+        dure_info!(project_id = host.clone(), "Retrieving Docker status for {}", host);
+        match crate::calc::ssh::get_docker_status(&host_config, profile_kdbx.as_ref()).await {
+            Ok(raw_output) => {
+                dure_info!(project_id = host.clone(), "Docker status retrieved ({} bytes)", raw_output.len());
+
+                // Complete operation log with success
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, None::<String>).await;
+                }
+
+                self.send_event(SshEvent::DockerStatusRawRetrieved {
+                    host,
+                    raw_output,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Docker status retrieval failed: {}", e);
+
+                // Complete operation log (partial success - version check worked)
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, Some(format!("Docker status failed: {}", e))).await;
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    async fn handle_install_dure(
+        &mut self,
+        host: String,
+        env_config: std::collections::HashMap<String, String>,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Installing Dure on {}", host);
+
+        let op_id = match self.start_operation_log(&host, "dure_install").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
+                -1
+            }
+        };
+
+        let host_config = match self.load_host_config(&host) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::DureInstallCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        let domain = env_config.get("DOMAIN").cloned().unwrap_or_else(|| "example.com".to_string());
+
+        match crate::calc::dure_mycart::install_dure_mycart(&host_config, &domain, profile_kdbx.as_ref()).await {
+            Ok(_progress) => {
+                dure_info!(project_id = host.clone(), "Dure installed successfully");
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, None).await;
+                }
+
+                self.send_event(SshEvent::DureInstallCompleted {
+                    host,
+                    success: true,
+                    error: None,
+                }).await;
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "Dure install failed: {}", e);
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
+                }
+
+                self.send_event(SshEvent::DureInstallCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                }).await;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_remove_dure(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        dure_info!(project_id = host.clone(), "Removing Dure from {}", host);
+
+        let op_id = match self.start_operation_log(&host, "dure_remove").await {
+            Ok(id) => id,
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
+                -1
+            }
+        };
+
+        let host_config = match self.load_host_config(&host) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                self.send_event(SshEvent::DureRemoveCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                }).await;
+                return Ok(());
+            }
+        };
+
+        match crate::calc::dure_mycart::uninstall_dure_mycart(&host_config, profile_kdbx.as_ref()).await {
+            Ok(_progress) => {
+                dure_info!(project_id = host.clone(), "Dure removed successfully");
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, true, None).await;
+                }
+
+                self.send_event(SshEvent::DureRemoveCompleted {
+                    host,
+                    success: true,
+                    error: None,
+                }).await;
+            }
+            Err(e) => {
+                dure_error!(project_id = host.clone(), "Dure remove failed: {}", e);
+
+                if op_id >= 0 {
+                    let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
+                }
+
+                self.send_event(SshEvent::DureRemoveCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                }).await;
+            }
+        }
+
+        Ok(())
     }
 
     async fn handle_check_dure(
@@ -2605,6 +2775,8 @@ impl SshActor {
         dure_info!(project_id = host.clone(), "Checking Dure on {}", host);
 
         let host_config = self.load_host_config(&host)?;
+
+        // Step 1: Check Dure service status
         let result = crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
@@ -2619,23 +2791,40 @@ impl SshActor {
                 dure_info!(project_id = host.clone(), "Dure check: {}", status);
 
                 self.send_event(SshEvent::DureCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed,
                     running,
                     services,
                 }).await;
-                Ok(())
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Dure check failed: {}", e);
 
                 self.send_event(SshEvent::DureCheckCompleted {
-                    host,
+                    host: host.clone(),
                     installed: false,
                     running: false,
                     services: vec![],
                 }).await;
-                Err(e)
+                return Err(e);
+            }
+        }
+
+        // Step 2: Get Dure compose logs
+        dure_info!(project_id = host.clone(), "Retrieving Dure compose logs for {}", host);
+        match crate::calc::ssh::get_dure_compose_logs(&host_config, profile_kdbx.as_ref()).await {
+            Ok(logs) => {
+                dure_info!(project_id = host.clone(), "Dure compose logs retrieved ({} bytes)", logs.len());
+
+                self.send_event(SshEvent::DureComposeLogsRetrieved {
+                    host,
+                    logs,
+                }).await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_warn!(project_id = host.clone(), "Dure compose logs retrieval failed: {}", e);
+                Ok(())
             }
         }
     }

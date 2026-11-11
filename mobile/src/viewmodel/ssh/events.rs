@@ -316,6 +316,24 @@ pub enum SshEvent {
         error: String,
     },
 
+    /// Host status raw output retrieved
+    HostStatusRetrieved {
+        host: String,
+        raw_output: String,
+    },
+
+    /// Docker status raw output retrieved
+    DockerStatusRawRetrieved {
+        host: String,
+        raw_output: String,
+    },
+
+    /// Dure compose logs retrieved
+    DureComposeLogsRetrieved {
+        host: String,
+        logs: String,
+    },
+
     /// Drawer event passthrough
     Drawer(DrawerEvent),
 }

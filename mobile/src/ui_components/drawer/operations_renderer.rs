@@ -79,10 +79,10 @@ impl OperationsRenderer {
                         // Status with color
                         row.col(|ui| {
                             let (text, color) = match op.status.as_str() {
-                                "running" => ("⏳ Running", Color32::from_rgb(100, 150, 255)),
-                                "success" => ("✓ Success", Color32::from_rgb(50, 200, 50)),
-                                "failed" => ("✗ Failed", Color32::from_rgb(255, 80, 80)),
-                                _ => (&op.status[..], Color32::GRAY),
+                                "running" => ("⏳ Running", Color32::from_rgb(100, 181, 246)), // Info blue
+                                "success" => ("✓ Success", Color32::from_rgb(76, 175, 80)), // Success green
+                                "failed" => ("✗ Failed", egui_material3::theme::get_global_color("error")),
+                                _ => (&op.status[..], egui_material3::theme::get_global_color("onSurfaceVariant")),
                             };
                             ui.colored_label(color, text);
                         });

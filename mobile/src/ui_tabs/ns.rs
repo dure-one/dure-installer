@@ -282,7 +282,7 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
     if domain.records.is_empty() {
         ui.label(
             egui::RichText::new("No records yet")
-                .color(ui.visuals().weak_text_color())
+                .color(egui_material3::theme::get_global_color("onSurfaceVariant"))
         );
         ui.add_space(4.0);
     } else {
@@ -1189,7 +1189,7 @@ impl NsTab {
 
         // Show error if any
         if let Some(ref error) = self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("Error: {}", error));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("Error: {}", error));
             ui.add_space(8.0);
         }
 
@@ -1434,10 +1434,7 @@ impl NsTab {
                     }
 
                     if let Some(email) = &self.add_gcp_connected_email {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(72, 187, 120),
-                            format!("✓ Connected as: {}", email),
-                        );
+                        ui.label(format!("✓ Connected as: {}", email));
                         ui.add_space(8.0);
 
                         // Load projects if not loaded yet
@@ -1448,7 +1445,7 @@ impl NsTab {
                         // Show error if project loading failed
                         if let Some(error) = &self.add_gcp_projects_error {
                             ui.colored_label(
-                                egui::Color32::from_rgb(245, 101, 101),
+                                egui_material3::theme::get_global_color("error"),
                                 format!("⚠ {}", error),
                             );
                             ui.add_space(4.0);
@@ -1528,7 +1525,7 @@ impl NsTab {
 
                             ui.add_space(4.0);
                             ui.colored_label(
-                                egui::Color32::GRAY,
+                                egui_material3::theme::get_global_color("onSurfaceVariant"),
                                 format!(
                                     "ℹ Found {} active project{}",
                                     active_projects.len(),
@@ -1537,7 +1534,7 @@ impl NsTab {
                             );
                         } else if self.add_gcp_projects_loaded {
                             ui.colored_label(
-                                egui::Color32::from_rgb(255, 152, 0),
+                                egui::Color32::from_rgb(255, 193, 7),
                                 "⚠ No active projects found",
                             );
                             ui.add_space(4.0);
@@ -1558,7 +1555,7 @@ impl NsTab {
                             self.start_gcp_oauth();
                         }
                         ui.add_space(4.0);
-                        ui.colored_label(egui::Color32::GRAY, "⚠ Connection required for GCP DNS");
+                        ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "⚠ Connection required for GCP DNS");
                     }
 
                     ui.add_space(8.0);
@@ -1699,7 +1696,7 @@ impl NsTab {
                     ui.add_space(8.0);
                     if self.add_domain_existing_gcp_accounts.is_empty() {
                         ui.colored_label(
-                            egui::Color32::from_rgb(255, 152, 0),
+                            egui::Color32::from_rgb(255, 193, 7),
                             "⚠ No Google Cloud DNS accounts found",
                         );
                         ui.label("Please add a Google Cloud DNS provider first.");
@@ -1723,11 +1720,11 @@ impl NsTab {
                 if self.add_domain_provider == "porkbun" {
                     ui.add_space(8.0);
                     ui.colored_label(
-                        egui::Color32::from_rgb(255, 152, 0),
+                        egui::Color32::from_rgb(255, 193, 7),
                         "⚠ For porkbun domain registration, visit porkbun.com.",
                     );
                     ui.colored_label(
-                        egui::Color32::from_rgb(255, 152, 0),
+                        egui::Color32::from_rgb(255, 193, 7),
                         "   Not allowed with API.",
                     );
                 }
@@ -1736,7 +1733,7 @@ impl NsTab {
                 if self.add_domain_provider == "duckdns" {
                     ui.add_space(8.0);
                     ui.colored_label(
-                        egui::Color32::from_rgb(100, 149, 237),
+                        egui_material3::theme::get_global_color("onSurfaceVariant"),
                         "ℹ Format: xxx.duckdns.org",
                     );
                 }
@@ -3640,12 +3637,11 @@ impl NsTab {
                             // Compare and highlight matches
                             for ns in &self.ns_dialog_actual_ns {
                                 let matches = self.ns_dialog_provider_ns.contains(ns);
-                                let color = if matches {
-                                    egui::Color32::from_rgb(76, 175, 80) // Green if matches
+                                if matches {
+                                    ui.label(format!("• {}", ns));
                                 } else {
-                                    egui::Color32::from_rgb(255, 152, 0) // Orange if different
-                                };
-                                ui.colored_label(color, format!("• {}", ns));
+                                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), format!("• {}", ns));
+                                }
                             }
                         }
                     });
@@ -3661,13 +3657,10 @@ impl NsTab {
                         .all(|ns| self.ns_dialog_provider_ns.contains(ns));
 
                     if all_match {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(76, 175, 80),
-                            "✓ DNS is correctly configured",
-                        );
+                        ui.label("✓ DNS is correctly configured");
                     } else {
                         ui.colored_label(
-                            egui::Color32::from_rgb(255, 152, 0),
+                            egui::Color32::from_rgb(255, 193, 7),
                             "⚠ DNS nameservers don't match - DNS may not be propagated yet",
                         );
                     }

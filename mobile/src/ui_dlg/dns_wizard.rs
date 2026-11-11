@@ -444,7 +444,7 @@ impl DnsWizard {
 
                     if self.cloudflare_account_id.is_empty() {
                         ui.colored_label(
-                            egui::Color32::from_rgb(255, 165, 0),
+                            egui::Color32::from_rgb(255, 193, 7), // Warning amber
                             "Warning: Account ID required to continue"
                         );
                     }
@@ -867,7 +867,7 @@ impl DnsWizard {
     fn render_error(&self, ui: &mut egui::Ui, error: &str) {
         ui.heading("Error");
         ui.add_space(4.0);
-        ui.colored_label(egui::Color32::RED, error);
+        ui.colored_label(egui_material3::theme::get_global_color("error"), error);
     }
 
     /// Start OAuth flow
@@ -1031,18 +1031,28 @@ impl DnsWizard {
 
     /// Fetch domains from Cloudflare account
     pub fn fetch_domains(&mut self) {
+        dure_info!("Fetching domains from Cloudflare account");
+
         let token = match &self.oauth_result {
             Some(result) => result.access_token.clone(),
             None => {
-                dure_error!("No OAuth token available");
+                dure_error!("No OAuth token available for fetching domains");
                 return;
             }
         };
 
         let promise = poll_promise::Promise::spawn_thread("fetch_domains", move || {
+            dure_debug!("Starting fetch_domains thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            client.list_zones()
-                .map_err(|e| format!("Failed to fetch domains: {}", e))
+            let result = client.list_zones()
+                .map_err(|e| format!("Failed to fetch domains: {}", e));
+
+            match &result {
+                Ok(zones) => dure_info!("Fetched {} domains successfully", zones.len()),
+                Err(e) => dure_error!("Failed to fetch domains: {}", e),
+            }
+
+            result
         });
 
         self.fetch_domains_promise = Some(promise);
@@ -1050,20 +1060,30 @@ impl DnsWizard {
 
     /// Add domain to Cloudflare account
     pub fn add_domain_to_account(&mut self, domain: &str) {
+        dure_info!("Adding domain to Cloudflare account: {}", domain);
+
         let token = match &self.oauth_result {
             Some(result) => result.access_token.clone(),
             None => {
-                dure_error!("No OAuth token available");
+                dure_error!("No OAuth token available for adding domain");
                 return;
             }
         };
 
         let domain = domain.to_string();
         let promise = poll_promise::Promise::spawn_thread("add_domain", move || {
+            dure_debug!("Starting add_domain thread for: {}", domain);
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            client.create_zone(&domain)
+            let result = client.create_zone(&domain)
                 .map(|zone| zone.name)
-                .map_err(|e| format!("Failed to add domain: {}", e))
+                .map_err(|e| format!("Failed to add domain: {}", e));
+
+            match &result {
+                Ok(name) => dure_info!("Domain added successfully: {}", name),
+                Err(e) => dure_error!("Failed to add domain: {}", e),
+            }
+
+            result
         });
 
         self.add_domain_promise = Some(promise);
@@ -1071,10 +1091,12 @@ impl DnsWizard {
 
     /// Create DNS records for selected domain and VM
     pub fn create_dns_records(&mut self) {
+        dure_info!("Starting DNS records creation");
+
         let token = match &self.oauth_result {
             Some(result) => result.access_token.clone(),
             None => {
-                dure_error!("No OAuth token available");
+                dure_error!("No OAuth token available for DNS creation");
                 return;
             }
         };
@@ -1082,7 +1104,7 @@ impl DnsWizard {
         let zone_id = match &self.selected_zone_id {
             Some(id) => id.clone(),
             None => {
-                dure_error!("No zone ID available");
+                dure_error!("No zone ID available for DNS creation");
                 return;
             }
         };
@@ -1090,7 +1112,7 @@ impl DnsWizard {
         let domain = match &self.selected_domain {
             Some(d) => d.clone(),
             None => {
-                dure_error!("No domain selected");
+                dure_error!("No domain selected for DNS creation");
                 return;
             }
         };
@@ -1098,15 +1120,25 @@ impl DnsWizard {
         let ip = match &self.vm_ip {
             Some(i) => i.clone(),
             None => {
-                dure_error!("No VM IP available");
+                dure_error!("No VM IP available for DNS creation");
                 return;
             }
         };
 
+        dure_info!("Creating DNS records - Domain: {}, Zone ID: {}, VM IP: {}", domain, zone_id, ip);
+
         let promise = poll_promise::Promise::spawn_thread("create_dns", move || {
+            dure_debug!("Starting create_dns thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            client.create_default_xmpp_records(&zone_id, &domain, &ip)
-                .map_err(|e| format!("Failed to create DNS records: {}", e))
+            let result = client.create_default_xmpp_records(&zone_id, &domain, &ip)
+                .map_err(|e| format!("Failed to create DNS records: {}", e));
+
+            match &result {
+                Ok(_) => dure_info!("DNS records created/updated successfully"),
+                Err(e) => dure_error!("Failed to create DNS records: {}", e),
+            }
+
+            result
         });
 
         self.create_dns_promise = Some(promise);
@@ -1114,10 +1146,12 @@ impl DnsWizard {
 
     /// Verify existing DNS records match desired configuration
     pub fn verify_dns_records(&mut self) {
+        dure_info!("Starting DNS records verification");
+
         let token = match &self.oauth_result {
             Some(result) => result.access_token.clone(),
             None => {
-                dure_error!("No OAuth token available");
+                dure_error!("No OAuth token available for DNS verification");
                 return;
             }
         };
@@ -1125,7 +1159,7 @@ impl DnsWizard {
         let zone_id = match &self.selected_zone_id {
             Some(id) => id.clone(),
             None => {
-                dure_error!("No zone ID available");
+                dure_error!("No zone ID available for DNS verification");
                 return;
             }
         };
@@ -1133,7 +1167,7 @@ impl DnsWizard {
         let domain = match &self.selected_domain {
             Some(d) => d.clone(),
             None => {
-                dure_error!("No domain selected");
+                dure_error!("No domain selected for DNS verification");
                 return;
             }
         };
@@ -1141,15 +1175,31 @@ impl DnsWizard {
         let ip = match &self.vm_ip {
             Some(i) => i.clone(),
             None => {
-                dure_error!("No VM IP available");
+                dure_error!("No VM IP available for DNS verification");
                 return;
             }
         };
 
+        dure_info!("Verifying DNS records - Domain: {}, Zone ID: {}, VM IP: {}", domain, zone_id, ip);
+
         let promise = poll_promise::Promise::spawn_thread("verify_dns", move || {
+            dure_debug!("Starting verify_dns thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            client.verify_default_xmpp_records(&zone_id, &domain, &ip)
-                .map_err(|e| format!("Failed to verify DNS records: {}", e))
+            let result = client.verify_default_xmpp_records(&zone_id, &domain, &ip)
+                .map_err(|e| format!("Failed to verify DNS records: {}", e));
+
+            match &result {
+                Ok(verified) => {
+                    if *verified {
+                        dure_info!("DNS records verification passed - all records correct");
+                    } else {
+                        dure_warn!("DNS records verification failed - records missing or incorrect");
+                    }
+                }
+                Err(e) => dure_error!("DNS verification error: {}", e),
+            }
+
+            result
         });
 
         self.verify_dns_promise = Some(promise);

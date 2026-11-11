@@ -1303,9 +1303,10 @@ impl PlatformTab {
                 .rev()
                 .next()
             {
+                use egui_material3::theme::get_global_color;
                 EmojiLabel::new(
                     egui::RichText::new(format!("⚠️ Error in {}: {}", error.operation, error.error))
-                        .color(egui::Color32::from_rgb(255, 100, 100))
+                        .color(get_global_color("error"))
                 ).show(ui);
                 ui.add_space(4.0);
             }
@@ -1467,11 +1468,11 @@ impl PlatformTab {
                                         .color(BadgeColor::Primary)
                                         .size(BadgeSize::Small)
                                 );
-                                let text_color = ui.style().visuals.text_color();
+                                use egui_material3::theme::get_global_color;
                                 ui.label(egui::RichText::new(&row_for_cells.project_id)
                                     .size(16.0)
                                     .strong()
-                                    .color(text_color));
+                                    .color(get_global_color("onSurface")));
 
                                 // Display domain badge if bound
                                 if let Some(domain) = &row_for_cells.bound_domain {
@@ -1717,10 +1718,12 @@ impl PlatformTab {
                                         );
 
                                         // Semi-transparent background
+                                        use egui_material3::theme::get_global_color;
+                                        let overlay_color = get_global_color("surfaceContainer");
                                         ui.painter().rect_filled(
                                             progress_rect,
                                             egui::Rounding::same(4),
-                                            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240)
+                                            overlay_color
                                         );
 
                                         // Draw progress label and bar
@@ -1772,7 +1775,7 @@ impl PlatformTab {
                 // Optimistic update: Show "Refreshing..." state
                 if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                     row.operation_state = OperationState::InProgress {
-                        operation: "Refreshing".to_string(),
+                        operation: tr!("refreshing"),
                         started_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -2652,7 +2655,7 @@ impl PlatformTab {
 
                     if let Some(email) = &self.add_platform_connected_email {
                         ui.colored_label(
-                            egui::Color32::from_rgb(72, 187, 120),
+                            egui::Color32::from_rgb(76, 175, 80), // Success green
                             format!("Connected as: {}", email)
                         );
 
@@ -2701,7 +2704,7 @@ impl PlatformTab {
                                 ui.text_edit_singleline(&mut self.add_platform_new_project_id);
                                 ui.add_space(4.0);
                                 ui.colored_label(
-                                    egui::Color32::GRAY,
+                                    egui_material3::theme::get_global_color("onSurfaceVariant"),
                                     "Project ID must be 6-30 characters, lowercase letters, digits, hyphens"
                                 );
                             } else {
@@ -3250,7 +3253,7 @@ impl PlatformTab {
                             ui.label(tr!("platform-delete-vm-question", {name: name.clone()}));
                             ui.add_space(4.0);
                             ui.colored_label(
-                                egui::Color32::from_rgb(245, 101, 101),
+                                egui_material3::theme::get_global_color("error"),
                                 "This action cannot be undone!",
                             );
                             ui.add_space(4.0);
@@ -3262,7 +3265,7 @@ impl PlatformTab {
                             ui.checkbox(&mut self.delete_vm_hard_delete, "Skip graceful shutdown");
                             ui.add_space(4.0);
                             ui.colored_label(
-                                egui::Color32::GRAY,
+                                egui_material3::theme::get_global_color("onSurfaceVariant"),
                                 "VM will be terminated immediately without graceful shutdown",
                             );
 
@@ -3319,7 +3322,7 @@ impl PlatformTab {
                         ui.label(tr!("platform-delete-vm-none"));
                         ui.add_space(8.0);
                         ui.colored_label(
-                            egui::Color32::GRAY,
+                            egui_material3::theme::get_global_color("onSurfaceVariant"),
                             "Note: Only VMs in common zones are shown.",
                         );
                     } else {
@@ -3387,7 +3390,7 @@ impl PlatformTab {
                 .show(ctx, |ui| {
                     ui.add_space(8.0);
                     ui.colored_label(
-                        egui::Color32::from_rgb(244, 67, 54),
+                        egui_material3::theme::get_global_color("error"),
                         &error,
                     );
                     ui.add_space(12.0);
@@ -3802,7 +3805,7 @@ impl PlatformTab {
 
                 if self.delete_platform_vm_count > 0 {
                     ui.colored_label(
-                        egui::Color32::from_rgb(245, 101, 101),
+                        egui_material3::theme::get_global_color("error"),
                         format!(
                             "This will also remove {} VM(s) from config!",
                             self.delete_platform_vm_count
@@ -3810,16 +3813,16 @@ impl PlatformTab {
                     );
                     ui.add_space(4.0);
                     ui.colored_label(
-                        egui::Color32::from_rgb(255, 152, 0),
+                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
                         "Note: VMs will be removed from config but NOT deleted from GCP.",
                     );
                 } else {
-                    ui.colored_label(egui::Color32::GRAY, tr!("platform-drawer-no-vms"));
+                    ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), tr!("platform-drawer-no-vms"));
                 }
 
                 ui.add_space(8.0);
                 ui.colored_label(
-                    egui::Color32::from_rgb(245, 101, 101),
+                    egui_material3::theme::get_global_color("error"),
                     "This action cannot be undone!",
                 );
 
@@ -3878,7 +3881,7 @@ impl PlatformTab {
                 ui.add_space(8.0);
 
                 if self.select_project_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), tr!("platform-select-project-none"));
+                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), tr!("platform-select-project-none")); // Warning amber
                 } else {
                     ui.label(format!(
                         "Found {} projects:",
@@ -4197,13 +4200,13 @@ impl PlatformTab {
 
                     if is_table_not_found {
                         ui.colored_label(
-                            egui::Color32::from_rgb(255, 152, 0),
+                            egui::Color32::from_rgb(255, 193, 7), // Warning amber
                             "⚠️ Billing Export Not Configured",
                         );
                         ui.add_space(4.0);
                         ui.label(tr!("platform-billing-no-table"));
                     } else {
-                        ui.colored_label(egui::Color32::from_rgb(255, 82, 82), tr!("platform-billing-error"));
+                        ui.colored_label(egui_material3::theme::get_global_color("error"), tr!("platform-billing-error"));
                         ui.add_space(4.0);
                         ui.label(error);
                     }
@@ -4292,7 +4295,7 @@ impl PlatformTab {
 
                                     let (color, text) = if record.total_net_cost < 0.0 {
                                         (
-                                            egui::Color32::from_rgb(72, 187, 120),
+                                            egui::Color32::from_rgb(76, 175, 80), // Success green
                                             format!(
                                                 "{} (credit)",
                                                 format_currency(
@@ -4303,7 +4306,7 @@ impl PlatformTab {
                                         )
                                     } else if record.total_net_cost == 0.0 {
                                         (
-                                            egui::Color32::GRAY,
+                                            egui_material3::theme::get_global_color("onSurfaceVariant"),
                                             format!(
                                                 "{} (no charges)",
                                                 format_currency(0.0, &record.currency)
@@ -4311,7 +4314,7 @@ impl PlatformTab {
                                         )
                                     } else {
                                         (
-                                            egui::Color32::from_rgb(255, 200, 87),
+                                            egui::Color32::from_rgb(255, 193, 7), // Warning amber
                                             format_currency(
                                                 record.total_net_cost,
                                                 &record.currency,
@@ -4401,7 +4404,7 @@ impl PlatformTab {
                     ui.spinner();
                     ui.label(tr!("platform-dialog-bind-loading"));
                 } else if bind_vm_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 152, 0), tr!("platform-dialog-bind-no-vms"));
+                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), tr!("platform-dialog-bind-no-vms")); // Warning amber
                 } else {
                     ui.label(tr!("platform-dialog-bind-select", {count: bind_vm_list.len()}));
                     ui.add_space(8.0);
@@ -4705,7 +4708,7 @@ impl PlatformTab {
                             ui.heading("Flush All IPs");
                             ui.add_space(8.0);
                             ui.colored_label(
-                                egui::Color32::from_rgb(245, 101, 101),
+                                egui_material3::theme::get_global_color("error"),
                                 format!("Clear all IPs from rule '{}'?", rule.name)
                             );
                             ui.label("This cannot be undone.");

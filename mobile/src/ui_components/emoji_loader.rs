@@ -205,8 +205,9 @@ impl EmojiCache {
             }
             None => {
                 // Fallback to Unicode emoji
+                use egui_material3::theme::get_global_color;
                 let unicode = emoji.to_unicode();
-                ui.label(egui::RichText::new(unicode).size(size));
+                ui.label(egui::RichText::new(unicode).size(size).color(get_global_color("onSurface")));
             }
         }
     }

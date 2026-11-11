@@ -63,11 +63,12 @@ impl StatusGrid {
     }
 
     pub fn show(&self, ui: &mut egui::Ui) {
+        use egui_material3::theme::get_global_color;
         let available_width = ui.available_width();
         let columns = self.calculate_columns(available_width);
 
         // Get theme text color for proper visibility
-        let text_color = ui.style().visuals.text_color();
+        let text_color = get_global_color("onSurface");
 
         // Use egui Grid for layout
         egui::Grid::new("status_grid")
@@ -84,16 +85,16 @@ impl StatusGrid {
                     // Value with state color (or theme color if no state)
                     let value_text = match item.state {
                         Some(ItemState::InProgress) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 152, 0))
+                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(100, 181, 246)) // Info blue
                         }
                         Some(ItemState::Success) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(76, 175, 80))
+                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(76, 175, 80)) // Success green (already standard)
                         }
                         Some(ItemState::Error) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(244, 67, 54))
+                            egui::RichText::new(&item.value).color(get_global_color("error"))
                         }
                         Some(ItemState::Warning) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 193, 7))
+                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 193, 7)) // Warning amber (already standard)
                         }
                         None => egui::RichText::new(&item.value).color(text_color),
                     };

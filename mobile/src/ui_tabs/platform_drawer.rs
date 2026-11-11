@@ -247,7 +247,7 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
             // Show "NEW" badge when logs are added
             ui.label(
                 egui::RichText::new("🆕 NEW")
-                    .color(egui::Color32::from_rgb(76, 175, 80))
+                    .color(egui::Color32::from_rgb(255, 193, 7)) // Amber warning color
                     .strong()
             );
 
@@ -413,10 +413,10 @@ fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
                     // Status with color
                     row.col(|ui| {
                         let (text, color) = match op.status.as_str() {
-                            "running" => (tr!("platform-drawer-ops-status-running"), egui::Color32::from_rgb(100, 150, 255)),
-                            "success" => (tr!("platform-drawer-ops-status-success"), egui::Color32::from_rgb(50, 200, 50)),
-                            "failed" => (tr!("platform-drawer-ops-status-failed"), egui::Color32::from_rgb(255, 80, 80)),
-                            _ => (op.status.clone(), egui::Color32::GRAY),
+                            "running" => (tr!("platform-drawer-ops-status-running"), egui::Color32::from_rgb(100, 181, 246)), // Info blue
+                            "success" => (tr!("platform-drawer-ops-status-success"), egui::Color32::from_rgb(76, 175, 80)), // Success green
+                            "failed" => (tr!("platform-drawer-ops-status-failed"), egui_material3::theme::get_global_color("error")),
+                            _ => (op.status.clone(), egui_material3::theme::get_global_color("onSurfaceVariant")),
                         };
                         ui.colored_label(color, text);
                     });

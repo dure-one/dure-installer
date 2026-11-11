@@ -106,7 +106,7 @@ impl AuditSubTab {
         }
 
         if let Some(err) = &self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("⚠ {err}"));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {err}"));
             ui.add_space(4.0);
         }
 
@@ -123,7 +123,7 @@ impl AuditSubTab {
             ui.add_space(10.0);
             ui.label(format!("Total records: {}", rows_count));
         } else {
-            ui.colored_label(egui::Color32::YELLOW, "⚠ Spreadsheet not initialized");
+            ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "⚠ Spreadsheet not initialized");
         }
     }
 
@@ -309,7 +309,7 @@ impl DnsClientSubTab {
         }
 
         if let Some(err) = &self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("⚠ {err}"));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {err}"));
             ui.add_space(4.0);
         }
 
@@ -326,7 +326,7 @@ impl DnsClientSubTab {
             ui.add_space(10.0);
             ui.label(format!("Total cached records: {}", rows_count));
         } else {
-            ui.colored_label(egui::Color32::YELLOW, "⚠ Spreadsheet not initialized");
+            ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "⚠ Spreadsheet not initialized");
         }
 
         ui.add_space(16.0);
@@ -672,7 +672,7 @@ impl CryptCodecSubTab {
             ui.add_space(4.0);
 
             if let Some(err) = &self.load_error {
-                ui.colored_label(egui::Color32::RED, format!("⚠ {}", err));
+                ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", err));
             } else if let (Some(device_id), Some(pubkey)) = (&self.device_id, &self.device_pubkey) {
                 ui.horizontal(|ui| {
                     ui.label("Device ID:");
@@ -732,7 +732,7 @@ impl CryptCodecSubTab {
             ui.add_space(4.0);
 
             if let Some(err) = &self.enc_error {
-                ui.colored_label(egui::Color32::RED, format!("⚠ Error: {}", err));
+                ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ Error: {}", err));
             }
 
             if let Some(result) = &self.enc_result {
@@ -792,7 +792,7 @@ impl CryptCodecSubTab {
             ui.add_space(4.0);
 
             if let Some(err) = &self.dec_error {
-                ui.colored_label(egui::Color32::RED, format!("⚠ Error: {}", err));
+                ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ Error: {}", err));
             }
 
             if let Some(result) = &self.dec_result {
@@ -1091,13 +1091,13 @@ impl KeyMgmtSubTab {
 
         // Operation message (success/error)
         if let Some(msg) = &self.operation_message {
-            ui.colored_label(egui::Color32::from_rgb(100, 200, 100), format!("✓ {}", msg));
+            ui.label(format!("✓ {}", msg));
             ui.add_space(4.0);
         }
 
         // Load error
         if let Some(err) = &self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("⚠ {}", err));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", err));
             ui.add_space(4.0);
         }
 
@@ -1120,7 +1120,7 @@ impl KeyMgmtSubTab {
             ui.add_space(10.0);
             ui.label(format!("Total keys: {}", rows_count));
         } else if self.load_error.is_none() {
-            ui.colored_label(egui::Color32::YELLOW, "⚠ No keys loaded yet");
+            ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "⚠ No keys loaded yet");
         }
 
         ui.add_space(12.0);

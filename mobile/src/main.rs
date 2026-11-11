@@ -383,24 +383,16 @@ fn run_gui_mode() -> Result<()> {
             use egui_material3::theme::{
                 load_fonts, load_theme_from_json_str, load_themes, setup_local_fonts_from_bytes,
             };
-            use rand::seq::SliceRandom;
 
-            // Randomly select a Material theme
-            let themes = [
-                ("green", THEME_GREEN),
-                ("lightblue", THEME_LIGHTBLUE),
-                ("lightpink", THEME_LIGHTPINK),
-                ("yellow", THEME_YELLOW),
-            ];
-            let (theme_name, theme_json) = themes
-                .choose(&mut rand::thread_rng())
-                .unwrap_or(&("lightblue", THEME_LIGHTBLUE));
+            // Load default theme at startup (profile settings will override this after login)
+            let theme_name = "default";
+            let theme_json = THEME_LIGHTBLUE; // Default until profile loads
 
-            dure_info!("Randomly selected Material theme: {}", theme_name);
+            dure_info!("Loading default Material theme (profile settings will apply after login)");
 
-            // Load the selected theme from JSON string
+            // Load the default theme from JSON string
             if let Err(e) = load_theme_from_json_str(theme_json) {
-                dure_error!("Failed to load theme '{}': {}", theme_name, e);
+                dure_error!("Failed to load default theme: {}", e);
             }
 
             // Prepare local fonts including Material Symbols (using include_bytes!)

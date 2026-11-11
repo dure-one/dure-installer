@@ -141,14 +141,14 @@ impl DlgSettings {
                                 }
 
                                 let dark_selected = theme.theme_mode == ThemeMode::Dark;
-                                if ui
-                                    .selectable_label(dark_selected, tr!("dark-mode"))
-                                    .clicked()
-                                {
-                                    theme.theme_mode = ThemeMode::Dark;
-                                    settings.theme_mode =
-                                        Self::theme_mode_to_string(ThemeMode::Dark);
-                                }
+                                //if ui
+                                //    .selectable_label(dark_selected, tr!("dark-mode"))
+                                //    .clicked()
+                                //{
+                                //    theme.theme_mode = ThemeMode::Dark;
+                                //    settings.theme_mode =
+                                //        Self::theme_mode_to_string(ThemeMode::Dark);
+                                //}
                             }
                         });
 
@@ -204,8 +204,10 @@ impl DlgSettings {
                                     ui.selectable_value(&mut override_text_style, None, "None");
                                     let all_text_styles = ui.style().text_styles();
                                     for style in all_text_styles {
+                                        use egui_material3::theme::get_global_color;
                                         let text = egui::RichText::new(style.to_string())
-                                            .text_style(style.clone());
+                                            .text_style(style.clone())
+                                            .color(get_global_color("onSurface"));
                                         ui.selectable_value(
                                             &mut override_text_style,
                                             Some(style),

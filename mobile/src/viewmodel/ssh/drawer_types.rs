@@ -228,6 +228,8 @@ pub struct DrawerState {
     pub dure_status: Option<DureStatus>,
     /// Network log lines (for Host tab)
     pub network_log: Vec<String>,
+    /// Raw host status output (for Host tab)
+    pub host_status_raw: Option<String>,
     /// Raw docker ps -a output (for Docker tab)
     pub docker_ps_raw: Option<String>,
     /// Docker compose status output (for Dure tab)
@@ -249,6 +251,7 @@ impl DrawerState {
             containers: Vec::new(),
             dure_status: None,
             network_log: Vec::new(),
+            host_status_raw: None,
             docker_ps_raw: None,
             dure_compose_status: None,
             dure_compose_logs: Vec::new(),
@@ -265,6 +268,7 @@ impl DrawerState {
         self.containers.clear();
         self.dure_status = None;
         self.network_log.clear();
+        self.host_status_raw = None;
         self.docker_ps_raw = None;
         self.dure_compose_status = None;
         self.dure_compose_logs.clear();

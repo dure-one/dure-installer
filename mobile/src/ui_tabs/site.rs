@@ -143,7 +143,7 @@ impl SiteTab {
         }
 
         if let Some(err) = &self.load_error {
-            ui.colored_label(egui::Color32::RED, format!("⚠ {err}"));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {err}"));
             ui.add_space(4.0);
         }
 
@@ -270,16 +270,17 @@ impl SiteTab {
                 });
 
                 ui.add_space(8.0);
+                use egui_material3::theme::get_global_color;
                 ui.label(
                     egui::RichText::new(
                         "Note: Ensure the public key is published in DNS TXT record",
                     )
-                    .color(ui.visuals().weak_text_color()),
+                    .color(get_global_color("onSurfaceVariant")),
                 );
 
                 if !self.add_status_message.is_empty() {
                     ui.add_space(8.0);
-                    ui.colored_label(egui::Color32::RED, &self.add_status_message);
+                    ui.colored_label(egui_material3::theme::get_global_color("error"), &self.add_status_message);
                 }
 
                 ui.add_space(12.0);

@@ -22,16 +22,17 @@ impl StatusLine {
     }
 
     pub fn error(mut self) -> Self {
-        self.color = Some(Color32::from_rgb(244, 67, 54));
+        self.color = Some(egui_material3::theme::get_global_color("error"));
         self
     }
 
     pub fn show(&self, ui: &mut Ui) {
+        use egui_material3::theme::get_global_color;
         let text = format!("{}: {}", self.label, self.value);
         if let Some(color) = self.color {
             ui.label(RichText::new(text).color(color));
         } else {
-            ui.label(text);
+            ui.label(RichText::new(text).color(get_global_color("onSurface")));
         }
         ui.add_space(4.0);
     }
@@ -54,9 +55,10 @@ pub fn format_elapsed(seconds: i64) -> String {
 }
 
 /// Get color based on staleness (for refresh timestamps)
-pub fn staleness_color(seconds: i64, ui: &Ui) -> Color32 {
+pub fn staleness_color(seconds: i64, _ui: &Ui) -> Color32 {
+    use egui_material3::theme::get_global_color;
     if seconds < 3600 {
-        ui.style().visuals.text_color()
+        get_global_color("onSurface")
     } else {
         Color32::from_rgb(255, 193, 7) // Warning color
     }
@@ -111,7 +113,8 @@ mod tests {
         let status = StatusLine::new("Status", "Error").error();
         assert_eq!(status.label, "Status");
         assert_eq!(status.value, "Error");
-        assert_eq!(status.color, Some(Color32::from_rgb(244, 67, 54)));
+        // Color is theme-dependent via get_global_color("error")
+        assert!(status.color.is_some());
     }
 
     #[test]

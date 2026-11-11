@@ -84,7 +84,7 @@ impl DlgProfileLogin {
                 // Error message display
                 if !self.error_message.is_empty() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(220, 20, 60),
+                        egui_material3::theme::get_global_color("error"),
                         &self.error_message,
                     );
                     ui.add_space(8.0);

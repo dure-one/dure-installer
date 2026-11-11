@@ -102,7 +102,8 @@ impl DlgAbout {
                         ui.add_space(12.0);
 
                         // Credits section
-                        ui.label(egui::RichText::new(&credits_label).strong());
+                        use egui_material3::theme::get_global_color;
+                        ui.label(egui::RichText::new(&credits_label).strong().color(get_global_color("onSurface")));
                         ui.add_space(4.0);
 
                         ui.heading(tr!("about-reference-projects"));

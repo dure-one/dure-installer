@@ -28,15 +28,16 @@ impl<T: DrawerTabTrait + 'static> TabBar<T> {
 
     /// Show tab bar and return clicked tab if any
     pub fn show(&self, ui: &mut egui::Ui, current_tab: T) -> Option<T> {
+        use egui_material3::theme::get_global_color;
         let mut clicked_tab = None;
 
-        // Use dark green theme color for selected tab background (matching button color)
-        let primary_color = egui::Color32::from_rgb(46, 125, 50); // Material Design Green 700
+        // Use Material 3 primary container for selected tab background
+        let primary_color = get_global_color("primaryContainer");
 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = self.spacing;
 
-            // Override selection color to dark green
+            // Override selection color with Material 3 primary container
             let original_bg = ui.visuals().selection.bg_fill;
             ui.visuals_mut().selection.bg_fill = primary_color;
 

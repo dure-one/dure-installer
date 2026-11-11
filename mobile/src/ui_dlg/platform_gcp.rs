@@ -483,11 +483,11 @@ impl GcpWizard {
                 let is_past = self.is_past_step(step_state);
 
                 let color = if is_current {
-                    egui::Color32::from_rgb(103, 126, 234) // Primary color
+                    egui_material3::theme::get_global_color("primary")
                 } else if is_past {
-                    egui::Color32::from_rgb(72, 187, 120) // Green
+                    egui::Color32::from_rgb(76, 175, 80) // Success green
                 } else {
-                    egui::Color32::GRAY
+                    egui_material3::theme::get_global_color("onSurfaceVariant")
                 };
 
                 ui.colored_label(
@@ -525,7 +525,7 @@ impl GcpWizard {
         // Check if any platforms are available
         if self.available_platforms.is_empty() {
             ui.colored_label(
-                egui::Color32::from_rgb(255, 152, 0),
+                egui::Color32::from_rgb(255, 193, 7), // Warning amber
                 "No connected Google Cloud platforms found",
             );
             ui.add_space(8.0);
@@ -636,7 +636,7 @@ impl GcpWizard {
             // Check if it's the API not enabled error
             if error.contains("Cloud Resource Manager API") && error.contains("not been used") {
                 ui.colored_label(
-                    egui::Color32::from_rgb(255, 152, 0),
+                    egui::Color32::from_rgb(255, 193, 7), // Warning amber
                     "⚠ Cloud Resource Manager API Not Enabled",
                 );
                 ui.add_space(8.0);
@@ -665,7 +665,7 @@ impl GcpWizard {
                         self.projects_load_error = None;
                     }
 
-                    ui.colored_label(egui::Color32::GRAY, "After enabling, click Retry");
+                    ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "After enabling, click Retry");
                 });
 
                 ui.add_space(12.0);
@@ -676,7 +676,7 @@ impl GcpWizard {
                 ui.add_space(8.0);
             } else {
                 ui.colored_label(
-                    egui::Color32::from_rgb(245, 101, 101),
+                    egui_material3::theme::get_global_color("error"),
                     format!("⚠ {}", error),
                 );
                 ui.add_space(8.0);
@@ -703,7 +703,7 @@ impl GcpWizard {
         // Show simple info about active projects found
         if self.projects_loaded && !active_projects.is_empty() {
             ui.colored_label(
-                egui::Color32::GRAY,
+                egui_material3::theme::get_global_color("onSurfaceVariant"),
                 format!(
                     "ℹ Found {} active project{}",
                     active_projects.len(),
@@ -715,7 +715,7 @@ impl GcpWizard {
             && self.oauth_result.is_some()
             && self.projects_load_error.is_none()
         {
-            ui.colored_label(egui::Color32::GRAY, "⏳ Loading projects...");
+            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "⏳ Loading projects...");
             ui.add_space(4.0);
         }
 
@@ -844,14 +844,14 @@ impl GcpWizard {
 
                     ui.add_space(4.0);
                     ui.colored_label(
-                        egui::Color32::GRAY,
+                        egui_material3::theme::get_global_color("onSurfaceVariant"),
                         "💡 Project ID: 6-30 characters, lowercase letters, digits, hyphens",
                     );
 
                     // Show validation error
                     if !is_valid && !is_empty {
                         ui.colored_label(
-                            egui::Color32::from_rgb(245, 101, 101),
+                            egui_material3::theme::get_global_color("error"),
                             "⚠ Invalid project ID format",
                         );
                     }
@@ -962,7 +962,7 @@ impl GcpWizard {
                     ui.label("✓ Valid name");
                 } else {
                     ui.colored_label(
-                        egui::Color32::from_rgb(245, 101, 101),
+                        egui_material3::theme::get_global_color("error"),
                         "⚠ Name must start with letter, contain only lowercase letters, numbers, hyphens"
                     );
                 }
@@ -1010,12 +1010,12 @@ impl GcpWizard {
         ui.horizontal(|ui| {
             ui.label("Disk Size (GB):");
             ui.add(egui::TextEdit::singleline(&mut self.disk_size_gb).desired_width(80.0));
-            ui.colored_label(egui::Color32::GRAY, "Minimum: 10 GB");
+            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "Minimum: 10 GB");
         });
 
         // Validation
         if let Err(e) = validate_disk_size(&self.disk_size_gb) {
-            ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
+            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", e));
         }
 
         ui.add_space(8.0);
@@ -1026,13 +1026,13 @@ impl GcpWizard {
             ui.add(egui::TextEdit::singleline(&mut self.swap_size_gb)
                 .desired_width(80.0)
                 .hint_text("Auto"));
-            ui.colored_label(egui::Color32::GRAY, "Leave empty for automatic (0-8GB)");
+            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "Leave empty for automatic (0-8GB)");
         });
 
         // Validation
         if !self.swap_size_gb.is_empty() {
             if let Err(e) = validate_swap_size(&self.swap_size_gb) {
-                ui.colored_label(egui::Color32::from_rgb(245, 101, 101), format!("⚠ {}", e));
+                ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", e));
             }
         }
 
@@ -1231,7 +1231,7 @@ impl GcpWizard {
         ui.label("Please wait while we create your GCP Compute Engine instance...");
 
         ui.add_space(8.0);
-        ui.colored_label(egui::Color32::GRAY, "This usually takes 1-2 minutes...");
+        ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "This usually takes 1-2 minutes...");
 
         ui.add_space(16.0);
 
@@ -1276,12 +1276,12 @@ impl GcpWizard {
 
             if is_running {
                 ui.colored_label(
-                    egui::Color32::from_rgb(72, 187, 120),
+                    egui::Color32::from_rgb(76, 175, 80), // Success green
                     "✓ Instance is RUNNING and ready to use!",
                 );
             } else {
                 ui.colored_label(
-                    egui::Color32::from_rgb(255, 193, 7),
+                    egui::Color32::from_rgb(255, 193, 7), // Warning amber
                     format!(
                         "⏳ Instance status: {} (waiting for RUNNING)",
                         instance.status
@@ -1304,15 +1304,15 @@ impl GcpWizard {
                 ui.add_space(4.0);
 
                 let status_color = if is_running {
-                    egui::Color32::from_rgb(72, 187, 120)
+                    egui::Color32::from_rgb(76, 175, 80) // Success green
                 } else {
-                    egui::Color32::from_rgb(255, 193, 7)
+                    egui::Color32::from_rgb(255, 193, 7) // Warning amber
                 };
                 ui.colored_label(status_color, format!("📊 Status: {}", instance.status));
 
                 if let Some(ip) = &instance.external_ip {
                     ui.colored_label(
-                        egui::Color32::from_rgb(103, 126, 234),
+                        egui_material3::theme::get_global_color("primary"),
                         format!("🌐 External IP: {}", ip),
                     );
 
@@ -1354,7 +1354,7 @@ impl GcpWizard {
                 ),
             );
         } else {
-            ui.colored_label(egui::Color32::RED, "⚠ Instance information not available");
+            ui.colored_label(egui_material3::theme::get_global_color("error"), "⚠ Instance information not available");
             ui.label("The creation may have failed. Check the GCP Console.");
         }
 
@@ -1511,7 +1511,7 @@ impl GcpWizard {
             };
 
             ui.colored_label(
-                egui::Color32::from_rgb(255, 152, 0), // Orange
+                egui::Color32::from_rgb(255, 193, 7), // Warning amber
                 error.split('\n').next().unwrap_or(error),
             );
 
@@ -1550,7 +1550,7 @@ impl GcpWizard {
 
             ui.add_space(12.0);
             ui.colored_label(
-                egui::Color32::GRAY,
+                egui_material3::theme::get_global_color("onSurfaceVariant"),
                 "Note: This needs to be done once per GCP project.",
             );
 
@@ -1573,7 +1573,7 @@ impl GcpWizard {
             egui::ScrollArea::vertical()
                 .max_height(300.0)
                 .show(ui, |ui| {
-                    ui.colored_label(egui::Color32::RED, error);
+                    ui.colored_label(egui_material3::theme::get_global_color("error"), error);
                 });
 
             ui.add_space(16.0);

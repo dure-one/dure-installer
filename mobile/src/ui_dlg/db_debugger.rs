@@ -207,7 +207,7 @@ impl DlgDbDebugger {
                 ui.separator();
 
                 if let Some(err) = &self.error_message {
-                    ui.colored_label(egui::Color32::RED, format!("Error: {}", err));
+                    ui.colored_label(egui_material3::theme::get_global_color("error"), format!("Error: {}", err));
                     ui.separator();
                 }
 

@@ -57,7 +57,8 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     StatusLine::new("Provider", &provider_display).show(ui);
 
     ui.add_space(8.0);
-    ui.label(egui::RichText::new("Platform Binding").strong().color(egui::Color32::BLACK));
+    use egui_material3::theme::get_global_color;
+    ui.label(egui::RichText::new("Platform Binding").strong().color(get_global_color("onSurface")));
     ui.separator();
 
     // Platform info
@@ -82,7 +83,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     }
 
     ui.add_space(8.0);
-    ui.label(egui::RichText::new("Check Status").strong().color(egui::Color32::BLACK));
+    ui.label(egui::RichText::new("Check Status").strong().color(get_global_color("onSurface")));
     ui.separator();
 
     // NS Check Status

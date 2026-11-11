@@ -187,153 +187,46 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
 
 /// Render Host tab (system information)
 fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    ui.horizontal(|ui| {
-        ui.heading(tr!("ssh-host-info-title"));
-        ui.add_space(8.0);
-
-        if ui.button(tr!("ssh-button-refresh")).clicked() {
-            ui.data_mut(|d| {
-                d.insert_temp(
-                    egui::Id::new("ssh_drawer_action_refresh_host"),
-                    drawer_state.ssh_host.clone().unwrap_or_default(),
-                );
-            });
-        }
-    });
-
-    ui.separator();
-
-    if let Some(host_info) = &drawer_state.host_info {
-        ui.label(tr!("ssh-host-info-os", {os: &host_info.os}));
-        ui.label(tr!("ssh-host-info-uptime", {uptime: &host_info.uptime}));
-        ui.label(tr!("ssh-host-info-ip", {ip: &host_info.external_ip}));
-        ui.label(tr!("ssh-host-info-load", {load: &host_info.load_average}));
-        ui.label(tr!("ssh-host-info-memory", {memory: &host_info.memory_usage}));
-        ui.label(tr!("ssh-host-info-disk", {disk: &host_info.disk_usage}));
-
-        ui.add_space(8.0);
-        ui.separator();
-        ui.heading(tr!("ssh-logs-network-title"));
-        ui.separator();
-
+    if let Some(raw_output) = &drawer_state.host_status_raw {
         egui::ScrollArea::vertical()
-            .max_height(300.0)
-            .stick_to_bottom(true)
+            .max_height(480.0)
             .show(ui, |ui| {
-                ui.style_mut().override_font_id = Some(egui::FontId::monospace(12.0));
-                for line in &drawer_state.network_log {
-                    ui.label(line);
-                }
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
+                ui.label(raw_output);
             });
     } else {
-        ui.label("Loading host information...");
+        ui.label("Click 'Check Base' to retrieve system status");
     }
 }
 
 /// Render Docker tab
 fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    ui.horizontal(|ui| {
-        ui.heading("Docker Containers");
-        ui.add_space(8.0);
-
-        if ui.button(tr!("ssh-button-refresh")).clicked() {
-            ui.data_mut(|d| {
-                d.insert_temp(
-                    egui::Id::new("ssh_drawer_action_refresh_docker"),
-                    drawer_state.ssh_host.clone().unwrap_or_default(),
-                );
+    if let Some(raw_output) = &drawer_state.docker_ps_raw {
+        egui::ScrollArea::vertical()
+            .max_height(480.0)
+            .show(ui, |ui| {
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
+                ui.label(raw_output);
             });
-        }
-    });
-
-    ui.separator();
-
-    if let Some(docker_status) = &drawer_state.docker_status {
-        if docker_status.installed {
-            if let Some(version) = &docker_status.version {
-                ui.label(format!("Docker Version: {}", version));
-            }
-
-            ui.add_space(8.0);
-            ui.separator();
-
-            // Raw docker ps -a output (monospace)
-            egui::ScrollArea::vertical()
-                .max_height(400.0)
-                .show(ui, |ui| {
-                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
-
-                    if let Some(raw_output) = &drawer_state.docker_ps_raw {
-                        ui.label(raw_output);
-                    }
-                });
-        } else {
-            ui.label("Docker is not installed on this host.");
-        }
     } else {
-        ui.label("Loading docker information...");
+        ui.label("Click 'Check Docker' to retrieve container status");
     }
 }
 
 /// Render Dure tab
 fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    ui.horizontal(|ui| {
-        ui.heading("Dure (mycart) Status");
-        ui.add_space(8.0);
-
-        if ui.button(tr!("ssh-button-refresh")).clicked() {
-            ui.data_mut(|d| {
-                d.insert_temp(
-                    egui::Id::new("ssh_drawer_action_refresh_dure"),
-                    drawer_state.ssh_host.clone().unwrap_or_default(),
-                );
+    if !drawer_state.dure_compose_logs.is_empty() {
+        egui::ScrollArea::vertical()
+            .max_height(480.0)
+            .stick_to_bottom(true)
+            .show(ui, |ui| {
+                ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
+                for line in &drawer_state.dure_compose_logs {
+                    ui.label(line);
+                }
             });
-        }
-    });
-
-    ui.separator();
-
-    if let Some(dure_status) = &drawer_state.dure_status {
-        if dure_status.installed {
-            ui.label(format!("Installed: Yes"));
-            ui.label(format!("Running: {}", if dure_status.running { "Yes" } else { "No" }));
-
-            ui.add_space(8.0);
-            ui.separator();
-            ui.heading("docker-compose ps");
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .max_height(150.0)
-                .show(ui, |ui| {
-                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
-
-                    if let Some(status) = &drawer_state.dure_compose_status {
-                        ui.label(status);
-                    }
-                });
-
-            ui.add_space(8.0);
-            ui.separator();
-            ui.heading("docker-compose logs (last 50 lines)");
-            ui.separator();
-
-            egui::ScrollArea::vertical()
-                .max_height(200.0)
-                .stick_to_bottom(true)
-                .show(ui, |ui| {
-                    ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
-
-                    for line in &drawer_state.dure_compose_logs {
-                        ui.label(line);
-                    }
-                });
-        } else {
-            ui.label("Dure is not installed on this host.");
-            ui.label("Use 'Install Dure' button in the operations column.");
-        }
     } else {
-        ui.label("Loading dure information...");
+        ui.label("Click 'Check Dure' to retrieve compose logs");
     }
 }
 

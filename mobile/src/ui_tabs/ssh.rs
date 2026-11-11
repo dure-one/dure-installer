@@ -278,8 +278,10 @@ fn render_operations_column(
             let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
 
             ui.with_layer_id(foreground_layer, |ui| {
+                use egui_material3::theme::get_global_color;
                 let progress_rect = egui::Rect::from_min_size(overlay_pos, egui::vec2(column_width, 30.0));
-                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), egui::Color32::from_rgba_unmultiplied(255, 255, 255, 240));
+                let overlay_color = get_global_color("surfaceContainer");
+                ui.painter().rect_filled(progress_rect, egui::Rounding::same(4), overlay_color);
 
                 ui.allocate_ui_at_rect(progress_rect, |ui| {
                     ui.add_space(2.0);
@@ -511,6 +513,65 @@ impl SshTab {
     pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
         // WASM doesn't have config files
         false
+    }
+
+    /// Find domain for SSH host by looking up platform config
+    ///
+    /// Logic:
+    /// 1. Extract IP from host string (e.g., "root@1.2.3.4" → "1.2.3.4")
+    /// 2. Find platform containing VM with matching external_ip
+    /// 3. Check platform.bound_domain first
+    /// 4. Fall back to dns_domains entry with matching platform_id
+    #[cfg(not(target_arch = "wasm32"))]
+    fn find_domain_for_host(host: &str, config_path: &std::path::PathBuf) -> Option<String> {
+        use crate::config::AppConfig;
+
+        // Extract IP from host (format: "user@ip" or "ip")
+        let ip = host.split('@').last().unwrap_or(host);
+
+        // Load config
+        let config = AppConfig::load(config_path).ok()?;
+
+        // Find platform with VM matching this IP
+        for platform in &config.platforms {
+            for vm in &platform.vms {
+                if vm.external_ip.as_deref() == Some(ip) {
+                    // Found matching platform, check bound_domain first
+                    if let Some(ref domain) = platform.bound_domain {
+                        dure_info!("Found bound_domain {} for host {}", domain, host);
+                        return Some(domain.clone());
+                    }
+
+                    // Get platform identifier (GCP uses gcp_selected_project_id)
+                    let platform_id = if platform.platform_type == "gcp" {
+                        platform.gcp_selected_project_id.as_ref()
+                    } else if platform.platform_type == "firebase" {
+                        platform.firebase_project_id.as_ref()
+                    } else if platform.platform_type == "supabase" {
+                        platform.supabase_project_ref.as_ref()
+                    } else {
+                        None
+                    };
+
+                    // Look for domain in dns_domains with matching platform_id
+                    if let Some(pid) = platform_id {
+                        for dns_domain in &config.dns_domains {
+                            if dns_domain.platform_id.as_ref() == Some(pid) {
+                                dure_info!("Found dns_domain {} for platform_id {} (host {})",
+                                    dns_domain.domain, pid, host);
+                                return Some(dns_domain.domain.clone());
+                            }
+                        }
+                    }
+
+                    dure_error!("Platform found for host {} but no domain configured", host);
+                    return None;
+                }
+            }
+        }
+
+        dure_error!("No platform found with VM matching host {}", host);
+        None
     }
 
     /// Handle ViewModel events to update UI state
@@ -754,6 +815,27 @@ impl SshTab {
                 }
             }
 
+            ViewModelEvent::Ssh(SshEvent::HostStatusRetrieved { host, raw_output }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.drawer_state.host_status_raw = Some(raw_output);
+                    dure_info!("Host status updated for {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DockerStatusRawRetrieved { host, raw_output }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.drawer_state.docker_ps_raw = Some(raw_output);
+                    dure_info!("Docker status updated for {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::DureComposeLogsRetrieved { host, logs }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.drawer_state.dure_compose_logs = logs.lines().map(|s| s.to_string()).collect();
+                    dure_info!("Dure compose logs updated for {}", host);
+                }
+            }
+
             _ => {}
         }
     }
@@ -986,8 +1068,28 @@ impl SshTab {
                     }
                 }
                 SshAction::InstallDure(host) => {
-                    dure_info!(project_id = host, "Install Dure on {} (env dialog not implemented)", host);
-                    // TODO: Show .env configuration dialog before calling vm.install_dure()
+                    // Set operation state to InProgress before starting
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.operation_state = OperationState::start(tr!("ssh-operation-install-dure"));
+                    }
+                    if let Some(ref vm) = vm {
+                        // Find domain from platform config
+                        let domain = if let Some(ref profile) = profile {
+                            Self::find_domain_for_host(&host, &profile.config_file)
+                                .unwrap_or_else(|| {
+                                    dure_error!("No domain found for host {}, using host as fallback", host);
+                                    host.clone()
+                                })
+                        } else {
+                            dure_error!("No profile context, using host {} as domain fallback", host);
+                            host.clone()
+                        };
+
+                        let mut env_config = std::collections::HashMap::new();
+                        env_config.insert("DOMAIN".to_string(), domain.clone());
+                        let _ = vm.install_dure(host.clone(), env_config, (*current_profile_kdbx).clone());
+                        dure_info!("Dure installation triggered for {} with domain {}", host, domain);
+                    }
                 }
                 SshAction::RemoveDure(host) => {
                     // Set operation state to InProgress before starting

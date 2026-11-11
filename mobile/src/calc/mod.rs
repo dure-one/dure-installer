@@ -9,6 +9,7 @@ pub mod dns;
 pub mod docker;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ansible;
+pub mod dure_mycart;
 pub mod dure_wss;
 pub mod gcp;
 pub mod hosting_gcp;

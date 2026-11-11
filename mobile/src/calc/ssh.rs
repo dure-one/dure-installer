@@ -744,7 +744,7 @@ table inet filter {
         }
 
         // Check docker compose status
-        let check_compose = "cd /srv/dure-mycart/xmpp-proxy-stack && docker compose ps --format '{{.Service}}:{{.State}}' 2>/dev/null || echo error";
+        let check_compose = "cd /srv/dure-mycart/prosody-mycart-stack && docker compose ps --format '{{.Service}}:{{.State}}' 2>/dev/null || echo error";
         let compose_output = execute_command(host_config, check_compose, None).await?;
 
         if compose_output.trim() == "error" {
@@ -943,6 +943,227 @@ pub async fn check_dure_mycart(
     let running = output.trim() == "active";
     let services = vec![];
     Ok((installed, running, services))
+}
+
+/// Get comprehensive system status using full monitoring script
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn get_comprehensive_system_status(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    let script = r#"#!/bin/bash
+if [[ $EUID -ne 0 ]]; then
+   echo "WARNING: Running as non-root. 'Listening Ports' process names will be hidden."
+   echo "For a complete report, run with: sudo $0"
+   echo "=========================================="
+fi
+
+echo "=========================================="
+echo "          LINUX SYSTEM STATUS             "
+echo "=========================================="
+echo "Date / Time : $(date)"
+echo "Hostname    : $(hostname)"
+echo "Kernel      : $(uname -r)"
+echo "------------------------------------------"
+
+if [[ -f /proc/uptime ]]; then
+    read -r up_sec idle_sec < /proc/uptime
+    up_seconds=${up_sec%.*}
+    days=$(( up_seconds / 86400 ))
+    hours=$(( (up_seconds % 86400) / 3600 ))
+    mins=$(( (up_seconds % 3600) / 60 ))
+    echo "Uptime      : ${days}d ${hours}h ${mins}m"
+fi
+
+if [[ -f /proc/cpuinfo ]]; then
+    cpu_model=$(grep -m 1 'model name' /proc/cpuinfo | awk -F: '{print $2}' | xargs)
+    cpu_cores=$(grep -c '^processor' /proc/cpuinfo)
+    echo "CPU Model   : $cpu_model"
+    echo "CPU Cores   : $cpu_cores"
+fi
+
+if [[ -f /proc/stat ]]; then
+    read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+    prev_idle=$((idle + iowait))
+    prev_total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+    sleep 0.2
+    read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+    idle=$((idle + iowait))
+    total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+    diff_idle=$((idle - prev_idle))
+    diff_total=$((total - prev_total))
+    cpu_usage=$(( 100 * (diff_total - diff_idle) / diff_total ))
+    echo "CPU Usage   : ${cpu_usage}%"
+fi
+
+if [[ -f /proc/loadavg ]]; then
+    read -r load1 load5 load15 _ < /proc/loadavg
+    echo "Load Avg    : $load1 (1m), $load5 (5m), $load15 (15m)"
+fi
+
+if [[ -f /proc/meminfo ]]; then
+    mem_total_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+    mem_avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+    mem_total_mb=$((mem_total_kb / 1024))
+    mem_avail_mb=$((mem_avail_kb / 1024))
+    mem_used_mb=$((mem_total_mb - mem_avail_mb))
+    echo "Memory      : Used ${mem_used_mb}MB / Total ${mem_total_mb}MB (Available: ${mem_avail_mb}MB)"
+fi
+
+echo "------------------------------------------"
+echo "Disk Usage:"
+df -h --type=ext4 --type=ext3 --type=xfs --type=btrfs 2>/dev/null | awk 'NR>1 {printf "  %-15s Mount: %-5s Used: %s/%s (%s)\n", $1, $6, $3, $2, $5}'
+
+if [[ -f /proc/net/dev ]]; then
+    echo "------------------------------------------"
+    echo "Network Interfaces (Bytes Sent/Received):"
+    awk 'NR>2 {
+        interface=$1; gsub(/:/, "", interface);
+        if (interface != "lo") {
+            printf "  %-10s RX: %.2f MB | TX: %.2f MB\n", interface, $2/1024/1024, $10/1024/1024
+        }
+    }' /proc/net/dev
+fi
+
+echo "------------------------------------------"
+echo "Top 20 User Processes (Sorted by Memory Usage):"
+printf "  %-7s %-15s %-8s %-10s %-10s %s\n" "PID" "Process" "Status" "RAM (MB)" "CPU Time" "Uptime"
+
+clk_tck=$(getconf CLK_TCK)
+page_size_kb=$(getconf PAGESIZE)
+page_size_kb=$((page_size_kb / 1024))
+
+for pid_dir in /proc/[0-9]*/; do
+    pid=$(basename "$pid_dir")
+    if [[ -f "${pid_dir}stat" && -f "${pid_dir}statm" && -f "${pid_dir}comm" ]]; then
+        p_name=$(cat "${pid_dir}comm")
+        read -r -a stat_fields < "${pid_dir}stat"
+        p_status="${stat_fields[2]}"
+        p_utime="${stat_fields[13]}"
+        p_stime="${stat_fields[14]}"
+        p_starttime="${stat_fields[21]}"
+        p_vsize="${stat_fields[22]}"
+        if [[ "$p_vsize" == "0" || -z "$p_vsize" ]]; then
+            continue
+        fi
+        read -r _ rss_pages _ < "${pid_dir}statm"
+        p_ram_mb=$(( (rss_pages * page_size_kb) / 1024 ))
+        case "$p_status" in
+            R) status_desc="Running" ;;
+            S) status_desc="Sleeping" ;;
+            D) status_desc="DiskSleep" ;;
+            Z) status_desc="Zombie" ;;
+            T) status_desc="Stopped" ;;
+            *) status_desc="Other" ;;
+        esac
+        total_cpu_ticks=$(( p_utime + p_stime ))
+        total_cpu_sec=$(( total_cpu_ticks / clk_tck ))
+        c_mins=$(( total_cpu_sec / 60 ))
+        c_secs=$(( total_cpu_sec % 60 ))
+        cpu_time_str="${c_mins}m${c_secs}s"
+        if [[ -n "$p_starttime" && -n "$up_seconds" ]]; then
+            p_start_sec=$(( p_starttime / clk_tck ))
+            p_age_sec=$(( up_seconds - p_start_sec ))
+            p_days=$(( p_age_sec / 86400 ))
+            p_hours=$(( (p_age_sec % 86400) / 3600 ))
+            p_mins=$(( (p_age_sec % 3600) / 60 ))
+            if (( p_days > 0 )); then
+                uptime_str="${p_days}d${p_hours}h"
+            elif (( p_hours > 0 )); then
+                uptime_str="${p_hours}h${p_mins}m"
+            else
+                uptime_str="${p_mins}m"
+            fi
+            printf "%010d %-7s %-15s %-8s %-10d %-10s %s\n" "$p_ram_mb" "$pid" "${p_name:0:15}" "$status_desc" "$p_ram_mb" "$cpu_time_str" "$uptime_str"
+        fi
+    fi
+done | sort -rn | head -n 20 | awk '{print "  " $2, $3, $4, $5, $6, $7}' | column -t
+
+echo "------------------------------------------"
+echo "Active Listening Ports (TCP/UDP):"
+printf "  %-5s %-25s %s\n" "NETID" "LOCAL ADDRESS:PORT" "PROCESS"
+
+if command -v ss &> /dev/null; then
+    ss -nltup | awk 'NR>1 {
+        proc = $7;
+        if (match($7, /users:\(\(\"[^\"]+\"/)) {
+            split($7, arr, "\"");
+            pname = arr[2];
+            split($7, arr2, ",");
+            gsub(/[^0-9]/, "", arr2[2]);
+            proc = pname " (pid:" arr2[2] ")";
+        }
+        if (proc == "") proc = "-";
+        printf "  %-5s %-25s %s\n", $1, $5, proc
+    }'
+elif command -v netstat &> /dev/null; then
+    netstat -tulnp 2>/dev/null | awk 'NR>2 {
+        netid = $1;
+        loc = $4;
+        prog = $NF;
+        if (prog ~ /\//) {
+            split(prog, p, "/");
+            proc = p[2] " (pid:" p[1] ")";
+        } else {
+            proc = "-";
+        }
+        printf "  %-5s %-25s %s\n", netid, loc, proc
+    }'
+else
+    echo "  [ERROR] Neither 'ss' nor 'netstat' utilities found."
+fi
+
+echo "=========================================="
+"#;
+
+    let output = execute_command(host_config, script, profile_keyring).await?;
+    Ok(output)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_comprehensive_system_status(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    Ok(String::new())
+}
+
+/// Get Docker container status
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn get_docker_status(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    let cmd = r#"docker ps --format "table {{.Label \"com.docker.compose.project\"}}\t{{.Names}}\t{{.Status}}" | sort"#;
+    let output = execute_command(host_config, cmd, profile_keyring).await?;
+    Ok(output)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_docker_status(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    Ok(String::new())
+}
+
+/// Get Dure compose logs
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+pub async fn get_dure_compose_logs(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    let cmd = "docker compose -p prosody-mycart-stack logs";
+    let output = execute_command(host_config, cmd, profile_keyring).await?;
+    Ok(output)
+}
+
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+pub async fn get_dure_compose_logs(
+    _host_config: &SshHostConfig,
+    _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) -> Result<String> {
+    Ok(String::new())
 }
 
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
