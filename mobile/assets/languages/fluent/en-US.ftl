@@ -547,6 +547,36 @@ button-close = Close
 button-ok = OK
 button-bind = Bind
 button-next = Next
+button-next-arrow = Next →
+button-back-configure = ← Back to Configure
+button-create-server = Create Server
+button-manage-ips = Manage IPs in GCP Console
+button-add-my-ip = Add My IP
+button-remove-ip = Remove IP...
+button-flush-ips = Flush All IPs
+button-remove = Remove
+button-refresh-cache = Refresh Cache
+button-clear-expired = Clear Expired
+button-encrypt = Encrypt
+button-decrypt = Decrypt
+button-load = Load
+button-delete-selected = Delete Selected
+button-add-site = Add Site
+button-add-domain = Add Domain
+button-add-record = Add Record
+button-nameservers = Nameservers
+button-add-ns-provider = Add Nameserver Provider
+button-connect-gcloud = Connect to Google Cloud
+button-query = Query
+button-search = Search
+button-setup-dns = Setup DNS
+button-star = Star
+button-like = Like
+button-settings = Settings
+button-share = Share
+button-featured = Featured
+button-download = Download
+button-long-tooltip = Long Tooltip
 
 # Platform Tab
 

@@ -1775,7 +1775,7 @@ impl PlatformTab {
                 // Optimistic update: Show "Refreshing..." state
                 if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                     row.operation_state = OperationState::InProgress {
-                        operation: tr!("refreshing"),
+                        operation: tr!("refresh"),
                         started_at: chrono::Utc::now().timestamp(),
                     };
                 }
@@ -4560,15 +4560,15 @@ impl PlatformTab {
                             columns[1].add_space(12.0);
 
                             // Action buttons
-                            if columns[1].add(MaterialButton::outlined("Add My IP").small()).clicked() {
+                            if columns[1].add(MaterialButton::outlined(tr!("button-add-my-ip")).small()).clicked() {
                                 add_ip_requested.set(true);
                                 selected_rule_name.set(rule.name.clone());
                             }
-                            if columns[1].add(MaterialButton::outlined("Remove IP...").small()).clicked() {
+                            if columns[1].add(MaterialButton::outlined(tr!("button-remove-ip")).small()).clicked() {
                                 remove_ip_requested.set(true);
                                 selected_rule_name.set(rule.name.clone());
                             }
-                            if columns[1].add(MaterialButton::outlined("Flush All IPs").small()).clicked() {
+                            if columns[1].add(MaterialButton::outlined(tr!("button-flush-ips")).small()).clicked() {
                                 flush_requested.set(true);
                                 selected_rule_name.set(rule.name.clone());
                             }
@@ -4654,7 +4654,7 @@ impl PlatformTab {
                     ui.add_space(8.0);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("Remove")).clicked() {
+                        if ui.add(MaterialButton::filled(tr!("button-remove"))).clicked() {
                             remove_confirmed.set(true);
                             *open = false;
                         }
@@ -4717,7 +4717,7 @@ impl PlatformTab {
                             ui.add_space(8.0);
 
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.add(MaterialButton::filled("Flush")).clicked() {
+                                if ui.add(MaterialButton::filled(tr!("flush"))).clicked() {
                                     flush_confirmed.set(true);
                                     *open = false;
                                 }

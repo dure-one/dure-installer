@@ -2,6 +2,7 @@
 
 use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use eframe::egui;
+use egui_i18n::tr;
 #[cfg(feature = "spreadsheet")]
 use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 use egui_material3::{MaterialButton, tabs_secondary};
@@ -83,7 +84,7 @@ impl AuditSubTab {
 
         // Control buttons
         ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("refresh"))).clicked() {
                 self.load_audit_records();
             }
 
@@ -272,7 +273,7 @@ impl DnsClientSubTab {
                     });
 
                 ui.add_space(8.0);
-                if ui.add(MaterialButton::filled("Query")).clicked() {
+                if ui.add(MaterialButton::filled(tr!("button-query"))).clicked() {
                     self.execute_query();
                 }
             });
@@ -345,7 +346,7 @@ impl DnsClientSubTab {
         ui.horizontal(|ui| {
             ui.label("Add NS:");
             ui.text_edit_singleline(&mut self.ns_input);
-            if ui.add(MaterialButton::outlined("Add")).clicked() && !self.ns_input.is_empty() {
+            if ui.add(MaterialButton::outlined(tr!("add"))).clicked() && !self.ns_input.is_empty() {
                 self.nameservers.push(self.ns_input.clone());
                 self.ns_input.clear();
             }
@@ -366,7 +367,7 @@ impl DnsClientSubTab {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if ui.add(MaterialButton::outlined("Delete").small()).clicked()
+                                    if ui.add(MaterialButton::outlined(tr!("delete")).small()).clicked()
                                     {
                                         to_remove = Some(idx);
                                     }
@@ -723,7 +724,7 @@ impl CryptCodecSubTab {
             ui.horizontal(|ui| {
                 ui.checkbox(&mut self.output_hex, "Use hex encoding (default: base64)");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Encrypt")).clicked() {
+                    if ui.add(MaterialButton::filled(tr!("button-encrypt"))).clicked() {
                         self.execute_encrypt();
                     }
                 });
@@ -783,7 +784,7 @@ impl CryptCodecSubTab {
 
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Decrypt")).clicked() {
+                    if ui.add(MaterialButton::filled(tr!("button-decrypt"))).clicked() {
                         self.execute_decrypt();
                     }
                 });
@@ -1064,7 +1065,7 @@ impl KeyMgmtSubTab {
 
         // Control buttons
         ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("refresh"))).clicked() {
                 self.load_keys();
             }
 
@@ -1073,7 +1074,7 @@ impl KeyMgmtSubTab {
             // Save button with path input
             ui.label("Save to:");
             ui.add(egui::TextEdit::singleline(&mut self.save_path).desired_width(150.0));
-            if ui.add(MaterialButton::outlined("Save")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("save"))).clicked() {
                 self.execute_save();
             }
 
@@ -1082,7 +1083,7 @@ impl KeyMgmtSubTab {
             // Load button with path input
             ui.label("Load from:");
             ui.add(egui::TextEdit::singleline(&mut self.load_path).desired_width(150.0));
-            if ui.add(MaterialButton::outlined("Load")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-load"))).clicked() {
                 self.execute_load();
             }
         });

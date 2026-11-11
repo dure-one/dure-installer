@@ -547,6 +547,36 @@ button-close = 닫기
 button-ok = 확인
 button-bind = 바인딩
 button-next = 다음
+button-next-arrow = 다음 →
+button-back-configure = ← 구성으로 돌아가기
+button-create-server = 서버 생성
+button-manage-ips = GCP 콘솔에서 IP 관리
+button-add-my-ip = 내 IP 추가
+button-remove-ip = IP 제거...
+button-flush-ips = 모든 IP 초기화
+button-remove = 제거
+button-refresh-cache = 캐시 새로고침
+button-clear-expired = 만료된 항목 정리
+button-encrypt = 암호화
+button-decrypt = 복호화
+button-load = 불러오기
+button-delete-selected = 선택 항목 삭제
+button-add-site = 사이트 추가
+button-add-domain = 도메인 추가
+button-add-record = 레코드 추가
+button-nameservers = 네임서버
+button-add-ns-provider = 네임서버 제공자 추가
+button-connect-gcloud = Google Cloud에 연결
+button-query = 조회
+button-search = 검색
+button-setup-dns = DNS 설정
+button-star = 별표
+button-like = 좋아요
+button-settings = 설정
+button-share = 공유
+button-featured = 추천
+button-download = 다운로드
+button-long-tooltip = 긴 툴팁
 
 # Platform Tab
 

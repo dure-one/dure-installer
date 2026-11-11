@@ -44,6 +44,7 @@
 
 use eframe::egui;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
@@ -541,7 +542,7 @@ impl GcpWizard {
             ui.add_space(16.0);
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                     self.hide();
                 }
             });
@@ -570,11 +571,11 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                 self.hide();
             }
 
-            if ui.add(MaterialButton::outlined("Next →")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-next-arrow"))).clicked() {
                 // Load OAuth from selected platform and refresh if expired
                 if let Some(platform) = self
                     .available_platforms
@@ -887,12 +888,12 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                 self.hide();
             }
 
             ui.add_enabled_ui(can_proceed, |ui| {
-                if ui.add(MaterialButton::outlined("Next →")).clicked() {
+                if ui.add(MaterialButton::outlined(tr!("button-next-arrow"))).clicked() {
                     // If we couldn't load projects due to API error, try to proceed anyway
                     // The project might exist even if we couldn't list it
                     if has_load_error && !is_new_project {
@@ -1177,7 +1178,7 @@ impl GcpWizard {
 
         if !self.available_reserved_ips.is_empty() {
             ui.add_space(4.0);
-            if ui.add(MaterialButton::text("Manage IPs in GCP Console").small()).clicked() {
+            if ui.add(MaterialButton::text(tr!("button-manage-ips")).small()).clicked() {
                 let url = format!(
                     "https://console.cloud.google.com/networking/addresses/list?project={}",
                     self.selected_project_id
@@ -1211,12 +1212,12 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
                 self.hide();
             }
 
             ui.add_enabled_ui(can_create, |ui| {
-                if ui.add(MaterialButton::outlined("Create Server")).clicked() {
+                if ui.add(MaterialButton::outlined(tr!("button-create-server"))).clicked() {
                     self.start_server_creation();
                 }
             });
@@ -1361,7 +1362,7 @@ impl GcpWizard {
         ui.add_space(16.0);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined("Close")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("button-close"))).clicked() {
                 self.hide();
             }
         });
@@ -1558,7 +1559,7 @@ impl GcpWizard {
 
             ui.horizontal(|ui| {
                 if ui
-                    .add(MaterialButton::filled("← Back to Configure"))
+                    .add(MaterialButton::filled(tr!("button-back-configure")))
                     .clicked()
                 {
                     self.state = WizardState::ConfigureServer;
