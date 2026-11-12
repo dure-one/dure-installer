@@ -23,6 +23,13 @@ struct ZoneListResponse {
     errors: Vec<ApiError>,
 }
 
+/// Zone account information
+#[derive(Debug, Clone, Deserialize)]
+pub struct ZoneAccount {
+    pub id: String,
+    pub name: String,
+}
+
 /// Zone information
 #[derive(Debug, Clone, Deserialize)]
 pub struct Zone {
@@ -30,6 +37,7 @@ pub struct Zone {
     pub name: String,
     #[serde(default)]
     pub name_servers: Vec<String>,
+    pub account: ZoneAccount,
 }
 
 /// Zone creation request

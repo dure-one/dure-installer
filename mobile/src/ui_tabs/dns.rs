@@ -356,6 +356,52 @@ impl Default for DnsTab {
     }
 }
 
+/// Helper function to refresh OAuth token (can be called from Promise thread)
+///
+/// Returns (access_token, expires_at, refresh_token) on success
+fn refresh_oauth_token_standalone(
+    domain: &str,
+    refresh_token: &str,
+    config_path: &std::path::PathBuf,
+) -> Result<(String, u64, String), String> {
+    if refresh_token.is_empty() {
+        return Err("No refresh token available".to_string());
+    }
+
+    dure_info!("OAuth token expired, attempting auto-refresh for domain: {}", domain);
+
+    // Use Cloudflare OAuth refresh (PKCE flow - no client secret needed)
+    use crate::api::cloudflare::oauth;
+
+    let oauth_result = oauth::refresh_access_token(refresh_token)
+        .map_err(|e| format!("Token refresh failed: {}", e))?;
+
+    // Update config with new token
+    if let Ok(mut config) = crate::config::AppConfig::load(config_path) {
+        if let Some(dns_domain) = config.dns_domains.iter_mut().find(|d| d.domain == domain) {
+            dns_domain.oauth_access_token = Some(oauth_result.access_token.clone());
+            dns_domain.oauth_token_expiry = Some(oauth_result.expires_at);
+
+            if let Err(e) = config.save(config_path) {
+                dure_error!("Failed to save refreshed token to config: {}", e);
+                return Err(format!("Config save failed: {}", e));
+            }
+
+            dure_info!("✓ OAuth token refreshed and saved to config");
+        } else {
+            return Err("Domain not found in config".to_string());
+        }
+    } else {
+        return Err("Failed to load config".to_string());
+    }
+
+    Ok((
+        oauth_result.access_token,
+        oauth_result.expires_at,
+        oauth_result.refresh_token.unwrap_or_else(|| refresh_token.to_string()),
+    ))
+}
+
 impl DnsTab {
     /// Render the DNS tab
     pub fn ui(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
@@ -381,14 +427,14 @@ impl DnsTab {
             if let Some(domain) = refresh_all {
                 // Run all 3 checks in background (no dialogs)
                 self.check_ns_server_impl(&domain, false);
-                self.check_dns_settings_impl(&domain, false);
+                self.check_dns_settings_impl(&domain, false, profile);
                 self.check_https_connection_impl(&domain, false);
             }
             if let Some(domain) = check_ns {
                 self.check_ns_server(&domain);
             }
             if let Some(domain) = check_settings {
-                self.check_dns_settings(&domain);
+                self.check_dns_settings(&domain, profile);
             }
             if let Some(domain) = check_https {
                 self.check_https_connection(&domain);
@@ -786,12 +832,44 @@ impl DnsTab {
         }
     }
 
-    /// Check DNS settings via Cloudflare API
-    fn check_dns_settings(&mut self, domain: &str) {
-        self.check_dns_settings_impl(domain, true);
+    /// Refresh OAuth token using refresh_token
+    ///
+    /// Returns (access_token, expires_at) on success
+    fn refresh_dns_oauth_token(
+        &self,
+        domain: &str,
+        refresh_token: Option<&str>,
+    ) -> Result<(String, u64), String> {
+        // Validate refresh_token
+        let refresh_tok = match refresh_token {
+            Some(t) if !t.is_empty() => t,
+            _ => return Err("No refresh token available".to_string()),
+        };
+
+        // Check domain exists
+        if !self.domain_rows.iter().any(|r| r.domain == domain) {
+            return Err("Domain not found in config".to_string());
+        }
+
+        dure_info!("OAuth token expired, attempting auto-refresh for domain: {}", domain);
+
+        // Use Cloudflare OAuth refresh (PKCE flow - no client secret needed)
+        use crate::api::cloudflare::oauth;
+
+        let oauth_result = oauth::refresh_access_token(refresh_tok)
+            .map_err(|e| format!("Token refresh failed: {}", e))?;
+
+        dure_info!("✓ OAuth token refreshed successfully");
+
+        Ok((oauth_result.access_token, oauth_result.expires_at))
     }
 
-    fn check_dns_settings_impl(&mut self, domain: &str, show_dialog: bool) {
+    /// Check DNS settings via Cloudflare API
+    fn check_dns_settings(&mut self, domain: &str, profile: &ProfileContext) {
+        self.check_dns_settings_impl(domain, true, profile);
+    }
+
+    fn check_dns_settings_impl(&mut self, domain: &str, show_dialog: bool, profile: &ProfileContext) {
         dure_info!("Checking DNS settings for domain: {}", domain);
 
         // Set operation state to InProgress
@@ -799,12 +877,13 @@ impl DnsTab {
             row.operation_state = OperationState::start(tr!("dns-operation-check-settings"));
         }
 
-        // Get domain row data (zone_id, vm_ip, oauth_access_token, token_expiry)
+        // Get domain row data (zone_id, vm_ip, oauth_access_token, token_expiry, refresh_token)
         let row = self.domain_rows.iter().find(|r| r.domain == domain);
         let zone_id = row.and_then(|r| r.zone_id.clone());
         let vm_ip = row.and_then(|r| r.vm_external_ip.clone());
-        let access_token = row.and_then(|r| r.oauth_access_token.clone());
+        let mut access_token = row.and_then(|r| r.oauth_access_token.clone());
         let token_expiry = row.and_then(|r| r.oauth_token_expiry);
+        let refresh_token = row.and_then(|r| r.oauth_refresh_token.clone());
 
         self.selected_domain = Some(domain.to_string());
 
@@ -819,22 +898,53 @@ impl DnsTab {
         }
 
         let domain = domain.to_string();
+        let config_path = profile.config_file.clone();
         let promise = Promise::spawn_thread("check_dns_settings", move || {
-            // Check if OAuth token expired
+            // Check if OAuth token expired and attempt auto-refresh
             if let Some(expiry) = token_expiry {
                 let now = chrono::Utc::now().timestamp() as u64;
                 if now > expiry {
                     let expired_ago = now - expiry;
                     dure_error!("OAuth token expired {} seconds ago (expiry: {}, now: {})", expired_ago, expiry, now);
-                    return Err((
-                        SettingsCheckResult {
-                            checked_at: chrono::Utc::now().timestamp(),
-                            records_valid: false,
-                            missing_records: Vec::new(),
-                            error: Some(format!("OAuth token expired {} seconds ago - please re-authenticate via wizard", expired_ago)),
-                        },
-                        vec![format!("✗ OAuth token expired - please re-add domain via DNS wizard to refresh credentials")]
-                    ));
+
+                    // Debug: Check if refresh_token is available
+                    dure_debug!("Refresh token available: {}", refresh_token.is_some());
+
+                    // Attempt token refresh if refresh_token available
+                    if let Some(ref refresh_tok) = refresh_token {
+                        match refresh_oauth_token_standalone(&domain, refresh_tok, &config_path) {
+                            Ok((new_access, new_expiry, _new_refresh)) => {
+                                dure_info!("✓ Token auto-refreshed, retrying DNS check");
+                                // Update access_token for this check
+                                access_token = Some(new_access);
+                                // Note: token_expiry not used below, so no need to update
+                            }
+                            Err(e) => {
+                                dure_error!("Token refresh failed: {}", e);
+                                return Err((
+                                    SettingsCheckResult {
+                                        checked_at: chrono::Utc::now().timestamp(),
+                                        records_valid: false,
+                                        missing_records: Vec::new(),
+                                        error: Some(format!("Token refresh failed: {} - please re-authenticate via wizard", e)),
+                                    },
+                                    vec![format!("✗ OAuth token expired and refresh failed - please re-add domain via DNS wizard")]
+                                ));
+                            }
+                        }
+                    } else {
+                        // No refresh token, can't auto-refresh
+                        dure_warn!("No refresh token available for domain - auto-refresh not possible");
+                        return Err((
+                            SettingsCheckResult {
+                                checked_at: chrono::Utc::now().timestamp(),
+                                records_valid: false,
+                                missing_records: Vec::new(),
+                                error: Some(format!("OAuth token expired {} seconds ago - no refresh token available", expired_ago)),
+                            },
+                            vec![format!("✗ OAuth token expired - please re-add domain via DNS wizard to enable auto-refresh")]
+                        ));
+                    }
                 }
             }
 
@@ -1297,7 +1407,7 @@ impl DnsTab {
                             self.dns_operation_log.push(tr!("dns-create-success"));
                             // Trigger re-check
                             if let Some(domain) = self.selected_domain.clone() {
-                                self.check_dns_settings(&domain);
+                                self.check_dns_settings(&domain, profile);
                             }
                         }
                         Err(e) => {
@@ -1783,6 +1893,22 @@ impl DnsTab {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    // Helper to create mock ProfileContext for tests
+    fn mock_profile() -> ProfileContext {
+        ProfileContext {
+            name: "test".to_string(),
+            config_dir: PathBuf::from("/tmp/test-config"),
+            data_dir: PathBuf::from("/tmp/test-data"),
+            config_file: PathBuf::from("/tmp/test-config/config.yml"),
+            settings_file: PathBuf::from("/tmp/test-config/settings.yml"),
+            db_path: PathBuf::from("/tmp/test-data/dure.db"),
+            kdbx_path: PathBuf::from("/tmp/test-config/key.kdbx"),
+            kpkey_path: PathBuf::from("/tmp/test-config/id_ed25519"),
+            kppubkey_path: PathBuf::from("/tmp/test-config/id_ed25519.pub"),
+        }
+    }
 
     #[test]
     fn test_dns_drawer_state_default() {
@@ -1927,7 +2053,8 @@ mod tests {
             drawer_state: DnsDrawerState::default(),
         });
 
-        tab.check_dns_settings("test.com");
+        let profile = mock_profile();
+        tab.check_dns_settings("test.com", &profile);
 
         // Promise should be created
         assert!(tab.dns_settings_promise.is_some());
@@ -1974,7 +2101,8 @@ mod tests {
             drawer_state: DnsDrawerState::default(),
         });
 
-        tab.check_dns_settings("test.com");
+        let profile = mock_profile();
+        tab.check_dns_settings("test.com", &profile);
 
         // Promise should be created
         assert!(tab.dns_settings_promise.is_some());
@@ -2021,7 +2149,8 @@ mod tests {
             drawer_state: DnsDrawerState::default(),
         });
 
-        tab.check_dns_settings("test.com");
+        let profile = mock_profile();
+        tab.check_dns_settings("test.com", &profile);
 
         // Promise should return error for missing VM IP
         if let Some(promise) = tab.dns_settings_promise {
@@ -2138,7 +2267,8 @@ mod tests {
             drawer_state: DnsDrawerState::default(),
         });
 
-        tab.check_dns_settings("test.com");
+        let profile = mock_profile();
+        tab.check_dns_settings("test.com", &profile);
 
         // Operation log should be cleared
         assert!(tab.dns_operation_log.is_empty());
@@ -2157,5 +2287,25 @@ mod tests {
 
         assert!(tab.dns_create_promise.is_some());
         assert!(tab.dns_operation_log.iter().any(|log| log.contains("dns-create-starting")));
+    }
+
+    #[test]
+    fn test_refresh_dns_oauth_token_no_refresh_token() {
+        let tab = DnsTab::default();
+
+        let result = tab.refresh_dns_oauth_token("test.com", None);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No refresh token"));
+    }
+
+    #[test]
+    fn test_refresh_dns_oauth_token_domain_not_found() {
+        let tab = DnsTab::default();
+
+        let result = tab.refresh_dns_oauth_token("nonexistent.com", Some("refresh-token"));
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Domain not found"));
     }
 }

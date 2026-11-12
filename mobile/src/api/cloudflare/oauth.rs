@@ -42,10 +42,12 @@ fn get_oauth_client_id() -> &'static str {
 
 /// Cloudflare OAuth scopes - MUST match exactly what's configured in OAuth app
 /// Note: offline_access scope enables refresh tokens for automatic token renewal
-/// Commented out because OAuth app doesn't support this scope - tokens won't auto-refresh
 const CLOUDFLARE_SCOPES: &[&str] = &[
-    // Offline access - enables refresh tokens (disabled - OAuth app doesn't support it)
-    // "offline_access",
+    // Offline access - enables refresh tokens for automatic token renewal
+    "offline_access",
+
+    // User details - for token verification and user info
+    "user-details.read",
 
     // Account DNS Settings
     "account-dns-settings.read",
@@ -54,10 +56,6 @@ const CLOUDFLARE_SCOPES: &[&str] = &[
     // DNS Management
     "dns.read",
     "dns.write",
-
-    // DNS Views
-    "dns-view.read",
-    "dns-view.write",
 
     // Registrar Domains
     "registrar-domains.admin",
@@ -383,7 +381,52 @@ pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
 pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
     let url = "https://api.cloudflare.com/client/v4/accounts";
 
-    dure_debug!("Fetching account info from Cloudflare API v4...");
+    dure_debug!("Fetching account info from /accounts...");
+
+    let response = ureq::get(url)
+        .set("Authorization", &format!("Bearer {}", access_token))
+        .set("Content-Type", "application/json")
+        .call();
+
+    let response = match response {
+        Ok(resp) => resp,
+        Err(ureq::Error::Status(code, _)) => {
+            dure_warn!("Accounts API failed ({}), trying zones fallback", code);
+            return get_account_from_zones(access_token);
+        }
+        Err(ureq::Error::Transport(err)) => {
+            return Err(anyhow::anyhow!("Network error: {}", err));
+        }
+    };
+
+    let body = response.into_string()
+        .context("Failed to read response")?;
+
+    let api_response: ApiV4Response<Vec<CloudflareAccount>> = serde_json::from_str(&body)
+        .context(format!("Failed to parse accounts JSON: {}", body))?;
+
+    if !api_response.success || api_response.result.is_empty() {
+        dure_warn!("No accounts from /accounts, trying zones fallback");
+        return get_account_from_zones(access_token);
+    }
+
+    let account = &api_response.result[0];
+    dure_info!("✓ Account info: {} ({})", account.name, account.id);
+
+    Ok(UserInfo {
+        account_id: account.id.clone(),
+        account_name: account.name.clone(),
+    })
+}
+
+/// Fallback: Get account ID from zones endpoint
+/// Used when /accounts endpoint returns empty (insufficient permissions)
+fn get_account_from_zones(access_token: &str) -> Result<UserInfo> {
+    use crate::api::cloudflare::Zone;
+
+    let url = "https://api.cloudflare.com/client/v4/zones";
+
+    dure_debug!("Fetching account from zones endpoint...");
 
     let response = ureq::get(url)
         .set("Authorization", &format!("Bearer {}", access_token))
@@ -394,44 +437,39 @@ pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
         Ok(resp) => resp,
         Err(ureq::Error::Status(code, resp)) => {
             let error_text = resp.into_string().unwrap_or_default();
-            dure_error!("API v4 accounts request failed with status {}: {}", code, error_text);
-            return Err(anyhow::anyhow!("Failed to fetch accounts (HTTP {}): {}", code, error_text));
+            dure_error!("Zones API request failed with status {}: {}", code, error_text);
+            return Err(anyhow::anyhow!("Failed to fetch zones (HTTP {}): {}", code, error_text));
         }
         Err(ureq::Error::Transport(err)) => {
-            return Err(anyhow::anyhow!("Network error during accounts fetch: {}", err));
+            return Err(anyhow::anyhow!("Network error during zones fetch: {}", err));
         }
     };
 
     let body = response.into_string()
-        .context("Failed to read response body")?;
-
-    dure_debug!("Accounts API response: {}", body);
+        .context("Failed to read zones response")?;
 
     // Parse API v4 response
-    let api_response: ApiV4Response<Vec<CloudflareAccount>> = serde_json::from_str(&body)
-        .context(format!("Failed to parse accounts JSON: {}", body))?;
+    let api_response: ApiV4Response<Vec<Zone>> = serde_json::from_str(&body)
+        .context(format!("Failed to parse zones JSON: {}", body))?;
 
     if !api_response.success {
         let errors = serde_json::to_string(&api_response.errors).unwrap_or_default();
-        return Err(anyhow::anyhow!("API returned success=false: {}", errors));
+        return Err(anyhow::anyhow!("Zones API returned success=false: {}", errors));
     }
 
     if api_response.result.is_empty() {
-        return Err(anyhow::anyhow!("No accounts found for this user"));
+        return Err(anyhow::anyhow!("No zones found - cannot determine account ID. Please add at least one domain to your Cloudflare account."));
     }
 
-    let account = &api_response.result[0];
+    let zone = &api_response.result[0];
+    let account_id = zone.account.id.clone();
+    let account_name = zone.account.name.clone();
 
-    if api_response.result.len() > 1 {
-        dure_warn!("User has {} accounts - using first one: {} ({})",
-            api_response.result.len(), account.name, account.id);
-    }
-
-    dure_info!("✓ Account info retrieved: {} (ID: {})", account.name, account.id);
+    dure_info!("✓ Account info retrieved from zones: {} (ID: {})", account_name, account_id);
 
     Ok(UserInfo {
-        account_id: account.id.clone(),
-        account_name: account.name.clone(),
+        account_id,
+        account_name,
     })
 }
 
