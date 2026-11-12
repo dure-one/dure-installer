@@ -742,6 +742,7 @@ dns-wizard-step1-account-verifying = API 연결 확인 중...
 dns-wizard-step1-account-id = 계정 ID:
 dns-wizard-step1-account-required = 경고: 계속하려면 계정 ID가 필요합니다
 
+dns-wizard-button-close = 닫기
 dns-wizard-button-next = 다음
 dns-wizard-button-previous = 이전
 dns-wizard-button-oauth = OAuth 화면 열기

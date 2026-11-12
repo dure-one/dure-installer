@@ -164,6 +164,8 @@ impl DlgSettings {
                                     "lightblue" => "Light Blue",
                                     "lightpink" => "Light Pink",
                                     "yellow" => "Yellow",
+                                    "terracotta" => "Terracotta",
+                                    "oceanblue" => "Ocean Blue",
                                     _ => "Default",
                                 })
                                 .show_ui(ui, |ui| {
@@ -173,6 +175,8 @@ impl DlgSettings {
                                         ("lightblue", "Light Blue"),
                                         ("lightpink", "Light Pink"),
                                         ("yellow", "Yellow"),
+                                        ("terracotta", "Terracotta"),
+                                        ("oceanblue", "Ocean Blue"),
                                     ] {
                                         if ui
                                             .selectable_value(
@@ -279,7 +283,7 @@ impl DlgSettings {
                         close_clicked = true;
                     }
 
-                    if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                    if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
                         close_clicked = true;
                     }
                 });
@@ -346,6 +350,12 @@ mod tests {
 
         settings.theme_name = "yellow".to_string();
         assert_eq!(settings.theme_name, "yellow");
+
+        settings.theme_name = "terracotta".to_string();
+        assert_eq!(settings.theme_name, "terracotta");
+
+        settings.theme_name = "oceanblue".to_string();
+        assert_eq!(settings.theme_name, "oceanblue");
     }
 
     #[test]

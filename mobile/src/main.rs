@@ -40,6 +40,10 @@ const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblu
 const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_TERRACOTTA: &str = include_str!("../resources/material-theme-terracotta.json");
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+const THEME_OCEANBLUE: &str = include_str!("../resources/material-theme-oceanblue.json");
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {

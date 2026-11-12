@@ -918,8 +918,8 @@ impl SshTab {
             .allow_drawer(true)
             .min_row_height(100.0)
             .drawer_row_height(500.0)
-            .column("Host", 230.0 * width_ratio, false)
-            .column("Operations", 510.0 * width_ratio, false);
+            .column(&tr!("ssh-drawer-tab-host"), 230.0 * width_ratio, false)
+            .column(&tr!("ssh-drawer-tab-operations"), 510.0 * width_ratio, false);
 
         for row in self.rows.iter() {
             let row_for_cells = row.clone();

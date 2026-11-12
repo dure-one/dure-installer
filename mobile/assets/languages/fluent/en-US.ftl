@@ -742,6 +742,7 @@ dns-wizard-step1-account-verifying = Verifying API connection...
 dns-wizard-step1-account-id = Account ID:
 dns-wizard-step1-account-required = Warning: Account ID required to continue
 
+dns-wizard-button-close = Close
 dns-wizard-button-next = Next
 dns-wizard-button-previous = Previous
 dns-wizard-button-oauth = Open OAuth Screen
