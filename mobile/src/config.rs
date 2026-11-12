@@ -179,6 +179,18 @@ pub struct DnsDomainConfig {
     /// Platform ID binding (GCP project ID, optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform_id: Option<String>,
+
+    // Cloudflare OAuth tokens (similar to GCP pattern in CloudPlatformConfig)
+    // ponytail: Plain YAML storage (like GCP), upgrade to keyring when critical
+    /// OAuth access token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_access_token: Option<String>,
+    /// OAuth refresh token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_refresh_token: Option<String>,
+    /// OAuth token expiry (Unix timestamp)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth_token_expiry: Option<u64>,
 }
 
 /// SSH host configuration

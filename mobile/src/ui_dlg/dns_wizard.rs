@@ -118,8 +118,17 @@ pub struct DnsWizard {
     /// Should close wizard
     pub should_close: bool,
 
-    /// Completed domain setup (provider, domain, zone_id, account_id) - used by DNS tab to add row
-    pub completed_domain: Option<(String, String, Option<String>, Option<String>)>,
+    /// Completed domain setup - used by DNS tab to add row
+    /// (provider, domain, zone_id, account_id, access_token, refresh_token, expires_at)
+    pub completed_domain: Option<(
+        String,           // provider
+        String,           // domain
+        Option<String>,   // zone_id
+        Option<String>,   // account_id
+        Option<String>,   // oauth_access_token
+        Option<String>,   // oauth_refresh_token
+        Option<u64>,      // oauth_token_expiry
+    )>,
 }
 
 /// Platform with VM information for selection
@@ -871,11 +880,24 @@ impl DnsWizard {
                 );
                 if add_btn.clicked() {
                     if let Some(domain) = &self.selected_domain {
+                        // Extract OAuth tokens from oauth_result
+                        let (access_token, refresh_token, expires_at) = self.oauth_result
+                            .as_ref()
+                            .map(|r| (
+                                Some(r.access_token.clone()),
+                                r.refresh_token.clone(),
+                                Some(r.expires_at),
+                            ))
+                            .unwrap_or((None, None, None));
+
                         self.completed_domain = Some((
                             "cloudflare".to_string(),
                             domain.clone(),
                             self.selected_zone_id.clone(),
                             Some(self.cloudflare_account_id.clone()),
+                            access_token,
+                            refresh_token,
+                            expires_at,
                         ));
                     }
                     self.should_close = true;

@@ -138,6 +138,22 @@ pub struct DnsTab {
     /// Flag to track if domain rows have been loaded from config
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
+    /// OAuth result for DNS settings check re-authentication
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dns_oauth_result: Option<crate::api::cloudflare::oauth::OAuthResult>,
+
+    /// OAuth promise for DNS settings check
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dns_oauth_promise: Option<Promise<Result<crate::api::cloudflare::oauth::OAuthResult, String>>>,
+
+    /// DNS records creation promise
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dns_create_promise: Option<Promise<Result<(), String>>>,
+
+    /// DNS operation log for settings check dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    dns_operation_log: Vec<String>,
 }
 
 /// Domain row data for table
@@ -155,6 +171,12 @@ pub struct DnsDomainRow {
 
     // Provider metadata
     pub account_id: Option<String>,
+    pub zone_id: Option<String>,  // Cloudflare zone ID
+
+    // OAuth tokens (from wizard OAuth flow)
+    pub oauth_access_token: Option<String>,
+    pub oauth_refresh_token: Option<String>,
+    pub oauth_token_expiry: Option<u64>,
 
     // Check results
     pub last_ns_check: Option<NsCheckResult>,
@@ -326,6 +348,10 @@ impl Default for DnsTab {
             dns_settings_promise: None,
             https_check_promise: None,
             loaded: false,
+            dns_oauth_result: None,
+            dns_oauth_promise: None,
+            dns_create_promise: None,
+            dns_operation_log: Vec::new(),
         }
     }
 }
@@ -664,6 +690,77 @@ impl DnsTab {
         self.show_ns_check_dialog = true;
     }
 
+    /// Start OAuth authentication for DNS settings check
+    fn start_dns_oauth(&mut self, domain: &str) {
+        dure_info!("Starting DNS OAuth for domain: {}", domain);
+
+        let domain = domain.to_string();
+        self.dns_operation_log.push(tr!("dns-oauth-starting"));
+
+        let promise = Promise::spawn_thread("dns_oauth", move || {
+            use crate::api::cloudflare::oauth::CloudflareOAuthHandler;
+
+            let handler = CloudflareOAuthHandler::new();
+            handler.run_oauth_flow()
+                .map_err(|e| format!("OAuth failed: {}", e))
+        });
+
+        self.dns_oauth_promise = Some(promise);
+    }
+
+    /// Create DNS records for domain using OAuth token
+    fn create_dns_records_for_domain(&mut self, domain: &str, zone_id: &str, vm_ip: &str, access_token: &str) {
+        dure_info!("Creating DNS records for domain: {}", domain);
+
+        let domain = domain.to_string();
+        let zone_id = zone_id.to_string();
+        let vm_ip = vm_ip.to_string();
+        let access_token = access_token.to_string();
+
+        self.dns_operation_log.push(tr!("dns-create-starting"));
+
+        let promise = Promise::spawn_thread("create_dns_records", move || {
+            use crate::api::cloudflare::dns::CloudflareClient;
+
+            let client = CloudflareClient::new(access_token);
+            client.create_default_xmpp_records(&zone_id, &domain, &vm_ip)
+                .map_err(|e| format!("Create failed: {}", e))
+        });
+
+        self.dns_create_promise = Some(promise);
+    }
+
+    /// Update domain OAuth tokens in config and domain row
+    fn update_domain_oauth_tokens(
+        &mut self,
+        domain: &str,
+        access_token: String,
+        refresh_token: Option<String>,
+        expires_at: u64,
+        profile: &ProfileContext,
+    ) {
+        // Update domain row
+        if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+            row.oauth_access_token = Some(access_token.clone());
+            row.oauth_refresh_token = refresh_token.clone();
+            row.oauth_token_expiry = Some(expires_at);
+        }
+
+        // Update config file
+        let config_path = profile.config_file.clone();
+        if let Ok(mut config) = crate::config::AppConfig::load(&config_path) {
+            if let Some(dns_domain) = config.dns_domains.iter_mut().find(|d| d.domain == domain) {
+                dns_domain.oauth_access_token = Some(access_token);
+                dns_domain.oauth_refresh_token = refresh_token;
+                dns_domain.oauth_token_expiry = Some(expires_at);
+
+                if let Err(e) = config.save(&config_path) {
+                    dure_error!("Failed to save OAuth tokens to config: {}", e);
+                }
+            }
+        }
+    }
+
     /// Check DNS settings via Cloudflare API
     fn check_dns_settings(&mut self, domain: &str) {
         dure_info!("Checking DNS settings for domain: {}", domain);
@@ -673,43 +770,108 @@ impl DnsTab {
             row.operation_state = OperationState::start(tr!("dns-operation-check-settings"));
         }
 
-        // Find domain row to get zone_id, vm_ip, and API credentials
+        // Get domain row data (zone_id, vm_ip, oauth_access_token)
         let row = self.domain_rows.iter().find(|r| r.domain == domain);
-        if row.is_none() {
-            dure_warn!("Domain row not found for: {}", domain);
-            return;
-        }
-
-        // TODO: Get Cloudflare API token and zone_id from config
-        // For now, create placeholder promise
-        let domain = domain.to_string();
+        let zone_id = row.and_then(|r| r.zone_id.clone());
         let vm_ip = row.and_then(|r| r.vm_external_ip.clone());
+        let access_token = row.and_then(|r| r.oauth_access_token.clone());
 
-        self.selected_domain = Some(domain.clone());
+        self.selected_domain = Some(domain.to_string());
 
+        let domain = domain.to_string();
         let promise = Promise::spawn_thread("check_dns_settings", move || {
-            // TODO: Implement Cloudflare API check
-            // For now, return error indicating not implemented
-            let check_result = SettingsCheckResult {
-                checked_at: chrono::Utc::now().timestamp(),
-                records_valid: false,
-                missing_records: vec![
-                    tr!("dns-check-settings-root"),
-                    tr!("dns-check-settings-www"),
-                ],
-                error: Some("Cloudflare API check not yet implemented - needs zone_id and API token".to_string()),
+            // Validate OAuth token
+            let token = match access_token {
+                Some(t) => t,
+                None => {
+                    return Err((
+                        SettingsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            records_valid: false,
+                            missing_records: Vec::new(),
+                            error: Some("No OAuth token - please re-add domain via wizard".to_string()),
+                        },
+                        vec!["✗ No OAuth token - re-add domain to refresh credentials".to_string()]
+                    ));
+                }
             };
 
-            let display = vec![
-                "⚠ Cloudflare API check not implemented".to_string(),
-                "  Missing: A record for root domain".to_string(),
-                "  Missing: A/CNAME for www subdomain".to_string(),
-            ];
+            // Validate zone_id
+            let zone_id = match zone_id {
+                Some(id) => id,
+                None => {
+                    return Err((
+                        SettingsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            records_valid: false,
+                            missing_records: Vec::new(),
+                            error: Some("No zone ID - add domain via wizard first".to_string()),
+                        },
+                        vec!["✗ No zone ID - please add domain via DNS wizard".to_string()]
+                    ));
+                }
+            };
 
-            Err((check_result, display))
+            // Validate VM IP
+            let vm_ip = match vm_ip {
+                Some(ip) => ip,
+                None => {
+                    return Err((
+                        SettingsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            records_valid: false,
+                            missing_records: Vec::new(),
+                            error: Some("No VM IP - bind domain to platform first".to_string()),
+                        },
+                        vec!["✗ No VM IP - please bind domain to platform in wizard".to_string()]
+                    ));
+                }
+            };
+
+            // Call Cloudflare API to verify DNS records
+            use crate::api::cloudflare::dns::CloudflareClient;
+            let client = CloudflareClient::new(token);
+
+            match client.verify_default_xmpp_records(&zone_id, &domain, &vm_ip) {
+                Ok(verified) => {
+                    if verified {
+                        Ok((
+                            SettingsCheckResult {
+                                checked_at: chrono::Utc::now().timestamp(),
+                                records_valid: true,
+                                missing_records: Vec::new(),
+                                error: None,
+                            },
+                            vec!["✓ All DNS records configured correctly".to_string()]
+                        ))
+                    } else {
+                        Err((
+                            SettingsCheckResult {
+                                checked_at: chrono::Utc::now().timestamp(),
+                                records_valid: false,
+                                missing_records: vec!["Some records missing or incorrect".to_string()],
+                                error: None,
+                            },
+                            vec!["⚠ DNS records missing or incorrect - click Setup DNS in wizard".to_string()]
+                        ))
+                    }
+                }
+                Err(e) => {
+                    Err((
+                        SettingsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            records_valid: false,
+                            missing_records: Vec::new(),
+                            error: Some(e.to_string()),
+                        },
+                        vec![format!("✗ Check failed: {}", e)]
+                    ))
+                }
+            }
         });
 
         self.dns_settings_promise = Some(promise);
+        self.dns_operation_log.clear();
         self.show_dns_settings_dialog = true;
     }
 
@@ -820,7 +982,15 @@ impl DnsTab {
                 // Close wizard if requested or window closed
                 if !open || wizard.should_close {
                     // Check if wizard completed a domain setup
-                    if let Some((provider, domain, zone_id, account_id)) = &wizard.completed_domain {
+                    if let Some((
+                        provider,
+                        domain,
+                        zone_id,
+                        account_id,
+                        access_token,
+                        refresh_token,
+                        expires_at,
+                    )) = &wizard.completed_domain {
                         // Extract platform/VM info from wizard
                         let (platform_id, platform_name, vm_name, vm_external_ip) =
                             wizard.get_selected_platform_info();
@@ -836,6 +1006,10 @@ impl DnsTab {
                                 vm_name,
                                 vm_external_ip,
                                 account_id: account_id.clone(),
+                                zone_id: zone_id.clone(),
+                                oauth_access_token: access_token.clone(),
+                                oauth_refresh_token: refresh_token.clone(),
+                                oauth_token_expiry: *expires_at,
                                 last_ns_check: None,
                                 last_settings_check: None,
                                 last_https_check: None,
@@ -851,6 +1025,9 @@ impl DnsTab {
                                 zone_id,
                                 account_id,
                                 &platform_id,
+                                access_token,
+                                refresh_token,
+                                expires_at,
                             );
                         }
                     }
@@ -927,6 +1104,55 @@ impl DnsTab {
 
         // DNS settings check dialog with promise polling
         if self.show_dns_settings_dialog {
+            // Poll DNS OAuth promise
+            if let Some(promise) = self.dns_oauth_promise.take() {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(oauth_result) => {
+                            self.dns_oauth_result = Some(oauth_result.clone());
+                            self.dns_operation_log.push(tr!("dns-oauth-success"));
+                            // Update domain row with new OAuth tokens
+                            if let Some(domain) = self.selected_domain.clone() {
+                                self.update_domain_oauth_tokens(
+                                    &domain,
+                                    oauth_result.access_token.clone(),
+                                    oauth_result.refresh_token.clone(),
+                                    oauth_result.expires_at,
+                                    profile,
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            self.dns_operation_log.push(format!("✗ {}", e));
+                        }
+                    }
+                } else {
+                    ui.ctx().request_repaint();
+                    self.dns_oauth_promise = Some(promise);
+                }
+            }
+
+            // Poll DNS create promise
+            if let Some(promise) = self.dns_create_promise.take() {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(()) => {
+                            self.dns_operation_log.push(tr!("dns-create-success"));
+                            // Trigger re-check
+                            if let Some(domain) = self.selected_domain.clone() {
+                                self.check_dns_settings(&domain);
+                            }
+                        }
+                        Err(e) => {
+                            self.dns_operation_log.push(format!("✗ {}", e));
+                        }
+                    }
+                } else {
+                    ui.ctx().request_repaint();
+                    self.dns_create_promise = Some(promise);
+                }
+            }
+
             // Poll DNS settings check promise
             if let Some(promise) = self.dns_settings_promise.take() {
                 if let Some(result) = promise.ready() {
@@ -960,8 +1186,15 @@ impl DnsTab {
             }
 
             let dns_settings_result = self.dns_settings_result.clone();
+            let domain = self.selected_domain.clone();
+            let has_oauth_token = domain.as_ref()
+                .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
+                .and_then(|r| r.oauth_access_token.clone())
+                .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))
+                .is_some();
 
-            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut self.show_dns_settings_dialog)
+            let mut show_dialog = self.show_dns_settings_dialog;
+            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut show_dialog)
                 .min_width(500.0)
                 .max_width(500.0)
                 .max_height(450.0)
@@ -1008,10 +1241,77 @@ impl DnsTab {
                             use egui_material3::theme::get_global_color;
                             ui.add_space(8.0);
                             ui.colored_label(get_global_color("error"), format!("Error: {}", error));
+
+                            // Show authentication button if no OAuth token
+                            if !has_oauth_token {
+                                ui.add_space(8.0);
+                                if ui.add(MaterialButton::filled("Authenticate with Cloudflare")).clicked() {
+                                    if let Some(domain) = &domain {
+                                        self.start_dns_oauth(domain);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show Setup DNS button if authenticated and records missing
+                        if has_oauth_token && !check_result.records_valid && !check_result.missing_records.is_empty() {
+                            ui.add_space(8.0);
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            ui.label("You can setup these DNS records automatically:");
+                            ui.add_space(4.0);
+
+                            // DNS record preview (collect data first to avoid borrow conflicts)
+                            let vm_ip_preview = domain.as_ref()
+                                .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
+                                .and_then(|r| r.vm_external_ip.clone());
+
+                            if let (Some(domain_str), Some(vm_ip)) = (&domain, &vm_ip_preview) {
+                                ui.group(|ui| {
+                                    ui.label(format!("A    {}  →  {}", domain_str, vm_ip));
+                                    ui.label(format!("CNAME    conference.{}  →  {}", domain_str, domain_str));
+                                    ui.label(format!("SRV    _xmpp-client._tcp.{}  →  {}", domain_str, domain_str));
+                                    ui.label(format!("SRV    _xmpp-server._tcp.{}  →  {}", domain_str, domain_str));
+                                });
+                            }
+
+                            ui.add_space(8.0);
+
+                            // Collect all needed data before button click handler
+                            let setup_data = domain.as_ref()
+                                .and_then(|d| {
+                                    self.domain_rows.iter().find(|r| &r.domain == d).and_then(|row| {
+                                        let zone_id = row.zone_id.clone()?;
+                                        let vm_ip = row.vm_external_ip.clone()?;
+                                        let token = row.oauth_access_token.clone()
+                                            .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))?;
+                                        Some((d.clone(), zone_id, vm_ip, token))
+                                    })
+                                });
+
+                            if ui.add(MaterialButton::filled("Setup DNS Records")).clicked() {
+                                if let Some((domain, zone_id, vm_ip, token)) = setup_data {
+                                    self.create_dns_records_for_domain(&domain, &zone_id, &vm_ip, &token);
+                                }
+                            }
                         }
                     } else {
                         ui.spinner();
                         ui.label("Checking DNS settings...");
+                    }
+
+                    // Show operation log if any
+                    if !self.dns_operation_log.is_empty() {
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        ui.label("Operation Log:");
+                        ui.group(|ui| {
+                            for log_entry in &self.dns_operation_log {
+                                ui.label(log_entry);
+                            }
+                        });
                     }
 
                     ui.add_space(12.0);
@@ -1025,6 +1325,8 @@ impl DnsTab {
                     });
                 })
                 .show(ui.ctx());
+
+            self.show_dns_settings_dialog = show_dialog;
         }
 
         // HTTPS check dialog
@@ -1164,6 +1466,9 @@ impl DnsTab {
         zone_id: &Option<String>,
         account_id: &Option<String>,
         platform_id: &Option<String>,
+        access_token: &Option<String>,
+        refresh_token: &Option<String>,
+        expires_at: &Option<u64>,
     ) {
         use crate::config::{AppConfig, DnsDomainConfig};
 
@@ -1177,6 +1482,8 @@ impl DnsTab {
             return;
         }
 
+        // ponytail: OAuth tokens stored in plain YAML (like GCP)
+        // Upgrade when: keyring crate available, but GCP already uses this pattern
         // Add new domain
         config.dns_domains.push(DnsDomainConfig {
             provider: provider.to_string(),
@@ -1184,13 +1491,16 @@ impl DnsTab {
             zone_id: zone_id.clone(),
             account_id: account_id.clone(),
             platform_id: platform_id.clone(),
+            oauth_access_token: access_token.clone(),
+            oauth_refresh_token: refresh_token.clone(),
+            oauth_token_expiry: *expires_at,
         });
 
         // Save config
         if let Err(e) = config.save(&config_file.to_path_buf()) {
             dure_error!("Failed to save DNS domain to config: {}", e);
         } else {
-            dure_info!("Saved DNS domain {} to config", domain);
+            dure_info!("Saved DNS domain {} with OAuth tokens to config", domain);
         }
     }
 
@@ -1266,6 +1576,10 @@ impl DnsTab {
                 vm_name,
                 vm_external_ip,
                 account_id: dns_config.account_id.clone(),
+                zone_id: dns_config.zone_id.clone(),
+                oauth_access_token: dns_config.oauth_access_token.clone(),
+                oauth_refresh_token: dns_config.oauth_refresh_token.clone(),
+                oauth_token_expiry: dns_config.oauth_token_expiry,
                 last_ns_check: None,
                 last_settings_check: None,
                 last_https_check: None,
@@ -1356,10 +1670,191 @@ mod tests {
     }
 
     #[test]
-    fn test_dns_drawer_tab_as_str() {
-        assert_eq!(DnsDrawerTab::Status.as_str(), "status");
-        assert_eq!(DnsDrawerTab::Logs.as_str(), "logs");
-        assert_eq!(DnsDrawerTab::Operations.as_str(), "operations");
+    fn test_dns_domain_row_has_zone_id() {
+        let row = DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: None,
+            account_id: Some("acc-123".to_string()),
+            zone_id: Some("zone-456".to_string()),
+            oauth_access_token: None,
+            oauth_refresh_token: None,
+            oauth_token_expiry: None,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        };
+
+        assert_eq!(row.zone_id, Some("zone-456".to_string()));
+    }
+
+    #[test]
+    fn test_dns_domain_row_has_oauth_fields() {
+        let row = DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: Some("1.2.3.4".to_string()),
+            account_id: Some("acc-123".to_string()),
+            zone_id: Some("zone-456".to_string()),
+            oauth_access_token: Some("token_abc123".to_string()),
+            oauth_refresh_token: Some("refresh_xyz789".to_string()),
+            oauth_token_expiry: Some(1234567890),
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        };
+
+        assert_eq!(row.oauth_access_token, Some("token_abc123".to_string()));
+        assert_eq!(row.oauth_refresh_token, Some("refresh_xyz789".to_string()));
+        assert_eq!(row.oauth_token_expiry, Some(1234567890));
+    }
+
+    #[test]
+    fn test_check_dns_settings_promise_no_oauth_token() {
+        let mut tab = DnsTab::default();
+
+        // Add domain without OAuth token
+        tab.domain_rows.push(DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: Some("1.2.3.4".to_string()),
+            account_id: Some("acc-123".to_string()),
+            zone_id: Some("zone-456".to_string()),
+            oauth_access_token: None,  // Missing OAuth token
+            oauth_refresh_token: None,
+            oauth_token_expiry: None,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        });
+
+        tab.check_dns_settings("test.com");
+
+        // Promise should be created
+        assert!(tab.dns_settings_promise.is_some());
+        assert!(tab.show_dns_settings_dialog);
+        assert_eq!(tab.selected_domain, Some("test.com".to_string()));
+
+        // Promise should return error for missing OAuth token
+        if let Some(promise) = tab.dns_settings_promise {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Err((check_result, msgs)) => {
+                        assert!(!check_result.records_valid);
+                        assert!(check_result.error.is_some());
+                        assert!(msgs.iter().any(|m| m.contains("OAuth token")));
+                    }
+                    Ok(_) => panic!("Expected error for missing OAuth token"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_check_dns_settings_promise_no_zone_id() {
+        let mut tab = DnsTab::default();
+
+        // Add domain without zone_id
+        tab.domain_rows.push(DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: Some("1.2.3.4".to_string()),
+            account_id: Some("acc-123".to_string()),
+            zone_id: None,  // Missing zone_id
+            oauth_access_token: Some("token123".to_string()),
+            oauth_refresh_token: None,
+            oauth_token_expiry: None,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        });
+
+        tab.check_dns_settings("test.com");
+
+        // Promise should be created
+        assert!(tab.dns_settings_promise.is_some());
+        assert!(tab.show_dns_settings_dialog);
+        assert_eq!(tab.selected_domain, Some("test.com".to_string()));
+
+        // Promise should return error for missing zone_id
+        if let Some(promise) = tab.dns_settings_promise {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Err((check_result, msgs)) => {
+                        assert!(!check_result.records_valid);
+                        assert!(check_result.error.is_some());
+                        assert!(msgs.iter().any(|m| m.contains("zone ID")));
+                    }
+                    Ok(_) => panic!("Expected error for missing zone_id"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_check_dns_settings_promise_no_vm_ip() {
+        let mut tab = DnsTab::default();
+
+        // Add domain without VM IP
+        tab.domain_rows.push(DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: None,  // Missing VM IP
+            account_id: Some("acc-123".to_string()),
+            zone_id: Some("zone-456".to_string()),
+            oauth_access_token: Some("token123".to_string()),
+            oauth_refresh_token: None,
+            oauth_token_expiry: None,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        });
+
+        tab.check_dns_settings("test.com");
+
+        // Promise should return error for missing VM IP
+        if let Some(promise) = tab.dns_settings_promise {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Err((check_result, msgs)) => {
+                        assert!(!check_result.records_valid);
+                        assert!(check_result.error.is_some());
+                        assert!(msgs.iter().any(|m| m.contains("VM IP")));
+                    }
+                    Ok(_) => panic!("Expected error for missing VM IP"),
+                }
+            }
+        }
     }
 
     #[test]
@@ -1410,5 +1905,76 @@ mod tests {
     fn test_operation_state_default_is_idle() {
         let state = OperationState::default();
         assert_eq!(state, OperationState::Idle);
+    }
+
+    #[test]
+    fn test_dns_tab_has_oauth_fields() {
+        let tab = DnsTab::default();
+        assert!(tab.dns_oauth_result.is_none());
+        assert!(tab.dns_oauth_promise.is_none());
+        assert!(tab.dns_create_promise.is_none());
+        assert!(tab.dns_operation_log.is_empty());
+    }
+
+    #[test]
+    fn test_start_dns_oauth_creates_promise() {
+        let mut tab = DnsTab::default();
+
+        tab.start_dns_oauth("test.com");
+
+        assert!(tab.dns_oauth_promise.is_some());
+        assert!(!tab.dns_operation_log.is_empty());
+        assert!(tab.dns_operation_log.iter().any(|log| log.contains("dns-oauth-starting")));
+    }
+
+    #[test]
+    fn test_dns_operation_log_cleared_on_check() {
+        let mut tab = DnsTab::default();
+
+        // Pre-populate operation log
+        tab.dns_operation_log.push("Old log entry 1".to_string());
+        tab.dns_operation_log.push("Old log entry 2".to_string());
+        assert_eq!(tab.dns_operation_log.len(), 2);
+
+        // Add domain for check
+        tab.domain_rows.push(DnsDomainRow {
+            provider: "cloudflare".to_string(),
+            domain: "test.com".to_string(),
+            status: DomainStatus::Configured,
+            platform_id: None,
+            platform_name: None,
+            vm_name: None,
+            vm_external_ip: Some("1.2.3.4".to_string()),
+            account_id: Some("acc-123".to_string()),
+            zone_id: Some("zone-456".to_string()),
+            oauth_access_token: Some("token123".to_string()),
+            oauth_refresh_token: None,
+            oauth_token_expiry: None,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
+            operation_state: OperationState::Idle,
+            drawer_state: DnsDrawerState::default(),
+        });
+
+        tab.check_dns_settings("test.com");
+
+        // Operation log should be cleared
+        assert!(tab.dns_operation_log.is_empty());
+    }
+
+    #[test]
+    fn test_create_dns_records_for_domain() {
+        let mut tab = DnsTab::default();
+
+        tab.create_dns_records_for_domain(
+            "test.com",
+            "zone-123",
+            "1.2.3.4",
+            "token-abc"
+        );
+
+        assert!(tab.dns_create_promise.is_some());
+        assert!(tab.dns_operation_log.iter().any(|log| log.contains("dns-create-starting")));
     }
 }
