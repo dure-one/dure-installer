@@ -876,3 +876,16 @@ dns-settings-op-log-label = Operation Log:
 ## Logs Renderer
 logs-no-logs-yet = No logs yet
 
+
+# Firewall Management
+firewall-dialog-title = Manage Firewall Rules
+firewall-current-ip = Current IP
+firewall-warning-ip-missing = current IP is not on the list
+firewall-warning-full-access = { $count } IPs have full access (0.0.0.0/0)
+firewall-warning-ssh-access = { $count } IPs have SSH access
+firewall-warning-http-missing = HTTP port (80) not exposed
+firewall-warning-https-missing = HTTPS port (443) not exposed
+firewall-validation-title = Warnings & Validations
+firewall-button-add-row = Add Row
+firewall-button-delete-selected = Delete Selected
+firewall-button-reset = Reset

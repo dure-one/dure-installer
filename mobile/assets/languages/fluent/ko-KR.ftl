@@ -872,3 +872,16 @@ dns-settings-op-log-label = 작업 로그:
 ## Logs Renderer
 logs-no-logs-yet = 아직 로그가 없습니다
 
+
+# Firewall Management
+firewall-dialog-title = 방화벽 규칙 관리
+firewall-current-ip = 현재 IP
+firewall-warning-ip-missing = 현재 IP가 목록에 없습니다
+firewall-warning-full-access = { $count }개 IP가 전체 액세스 권한 보유 (0.0.0.0/0)
+firewall-warning-ssh-access = { $count }개 IP가 SSH 액세스 권한 보유
+firewall-warning-http-missing = HTTP 포트 (80)가 노출되지 않음
+firewall-warning-https-missing = HTTPS 포트 (443)가 노출되지 않음
+firewall-validation-title = 경고 및 검증
+firewall-button-add-row = 행 추가
+firewall-button-delete-selected = 선택 항목 삭제
+firewall-button-reset = 재설정
