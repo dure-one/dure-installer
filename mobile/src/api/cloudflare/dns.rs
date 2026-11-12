@@ -133,9 +133,18 @@ impl CloudflareClient {
                 let error_text = resp
                     .into_string()
                     .unwrap_or_else(|_| format!("HTTP error {}", code));
-                anyhow::bail!("Cloudflare API returned status {}: {}", code, error_text);
+
+                // Detect OAuth token expiration/authentication errors
+                if code == 401 || code == 403 {
+                    dure_error!("Cloudflare API authentication failed (HTTP {}): {} - OAuth token likely expired or invalid", code, error_text);
+                    anyhow::bail!("Cloudflare API authentication failed - OAuth token expired or invalid (HTTP {})", code);
+                } else {
+                    dure_error!("Cloudflare API error (HTTP {}): {}", code, error_text);
+                    anyhow::bail!("Cloudflare API returned status {}: {}", code, error_text);
+                }
             }
             Err(ureq::Error::Transport(transport_err)) => {
+                dure_error!("Network error calling Cloudflare API: {}", transport_err);
                 anyhow::bail!("Network error calling Cloudflare API: {}", transport_err);
             }
         };
@@ -193,9 +202,17 @@ impl CloudflareClient {
                 let error_text = resp
                     .into_string()
                     .unwrap_or_else(|_| format!("HTTP error {}", code));
-                anyhow::bail!("Cloudflare API returned status {}: {}", code, error_text);
+
+                if code == 401 || code == 403 {
+                    dure_error!("Cloudflare API authentication failed (HTTP {}): {} - OAuth token likely expired or invalid", code, error_text);
+                    anyhow::bail!("Cloudflare API authentication failed - OAuth token expired or invalid (HTTP {})", code);
+                } else {
+                    dure_error!("Cloudflare API error (HTTP {}): {}", code, error_text);
+                    anyhow::bail!("Cloudflare API returned status {}: {}", code, error_text);
+                }
             }
             Err(ureq::Error::Transport(transport_err)) => {
+                dure_error!("Network error calling Cloudflare API: {}", transport_err);
                 anyhow::bail!("Network error calling Cloudflare API: {}", transport_err);
             }
         };
@@ -229,10 +246,29 @@ impl CloudflareClient {
 
         let url = format!("{}/zones/{}/dns_records", API_BASE, zone_id);
 
-        let response = ureq::get(&url)
+        let response = match ureq::get(&url)
             .set("Authorization", &format!("Bearer {}", self.api_token))
             .call()
-            .context("Failed to call Cloudflare API")?;
+        {
+            Ok(resp) => resp,
+            Err(ureq::Error::Status(code, resp)) => {
+                let error_text = resp
+                    .into_string()
+                    .unwrap_or_else(|_| format!("HTTP error {}", code));
+
+                if code == 401 || code == 403 {
+                    dure_error!("Cloudflare API authentication failed (HTTP {}): {} - OAuth token likely expired or invalid", code, error_text);
+                    anyhow::bail!("Cloudflare API authentication failed - OAuth token expired or invalid (HTTP {})", code);
+                } else {
+                    dure_error!("Cloudflare API error (HTTP {}): {}", code, error_text);
+                    anyhow::bail!("Cloudflare API returned status {}: {}", code, error_text);
+                }
+            }
+            Err(ureq::Error::Transport(transport_err)) => {
+                dure_error!("Network error calling Cloudflare API: {}", transport_err);
+                anyhow::bail!("Network error calling Cloudflare API: {}", transport_err);
+            }
+        };
 
         let result: DnsRecordsResponse = response
             .into_json()

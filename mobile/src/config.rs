@@ -229,6 +229,20 @@ pub struct SshHostConfig {
     /// Dure-WSS service configuration
     #[serde(default)]
     pub dure_wss_config: Option<DureWssConfig>,
+
+    // Cached check results
+    /// Last SSH connection check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_ssh_check: Option<crate::ui_tabs::ssh::SshCheckResult>,
+    /// Last base packages check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_base_check: Option<crate::ui_tabs::ssh::BaseCheckResult>,
+    /// Last Docker check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_docker_check: Option<crate::ui_tabs::ssh::DockerCheckResult>,
+    /// Last Dure service check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_dure_check: Option<crate::ui_tabs::ssh::DureCheckResult>,
 }
 
 fn default_ssh_port() -> u16 {
@@ -249,6 +263,10 @@ impl Default for SshHostConfig {
             docker_containers: Vec::new(),
             ansible_roles: Vec::new(),
             dure_wss_config: None,
+            last_ssh_check: None,
+            last_base_check: None,
+            last_docker_check: None,
+            last_dure_check: None,
         }
     }
 }

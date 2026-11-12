@@ -2016,6 +2016,10 @@ impl PlatformActor {
                 docker_containers: Vec::new(),
                 ansible_roles: Vec::new(),
                 dure_wss_config: None,
+                last_ssh_check: None,
+                last_base_check: None,
+                last_docker_check: None,
+                last_dure_check: None,
             };
 
             // Run test connection with profile keyring

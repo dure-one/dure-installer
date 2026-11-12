@@ -659,6 +659,10 @@ impl SshActor {
                     docker_containers: Vec::new(),
                     ansible_roles: Vec::new(),
                     dure_wss_config: None,
+                    last_ssh_check: None,
+                    last_base_check: None,
+                    last_docker_check: None,
+                    last_dure_check: None,
                 };
 
                 app_config.ssh_hosts.push(ssh_host);
@@ -2365,6 +2369,11 @@ impl SshActor {
                     base_installed: false,
                     docker_installed: false,
                     dure_installed: false,
+                    ssh_error: Some("Host config not found".to_string()),
+                    base_missing_packages: None,
+                    docker_version: None,
+                    dure_running: None,
+                    dure_services: None,
                 };
             }
         };
@@ -2372,22 +2381,34 @@ impl SshActor {
         // Run 4 checks
         let ssh_result = crate::calc::ssh::test_connection(&host_config, profile_kdbx.as_ref()).await;
         let ssh_connected = ssh_result.as_ref().map(|r| r.success).unwrap_or(false);
+        let ssh_error = if !ssh_connected {
+            Some(ssh_result.as_ref().map(|r| r.message.clone()).unwrap_or_else(|_| "Connection failed".to_string()))
+        } else {
+            None
+        };
 
-        let base_result = if ssh_connected {
-            crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await.map(|missing| missing.is_empty())
+        let base_missing_packages = if ssh_connected {
+            crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await.ok()
         } else {
-            Ok(false)
+            None
         };
-        let docker_result = if ssh_connected {
-            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await.map(|v| v.is_some())
+        let base_installed = base_missing_packages.as_ref().map(|p| p.is_empty()).unwrap_or(false);
+
+        let docker_version = if ssh_connected {
+            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await.ok().flatten()
         } else {
-            Ok(false)
+            None
         };
-        let dure_result = if ssh_connected {
-            crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await.map(|(installed, _, _)| installed)
+        let docker_installed = docker_version.is_some();
+
+        let dure_check = if ssh_connected {
+            crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await.ok()
         } else {
-            Ok(false)
+            None
         };
+        let dure_installed = dure_check.as_ref().map(|(installed, _, _)| *installed).unwrap_or(false);
+        let dure_running = dure_check.as_ref().map(|(_, running, _)| *running);
+        let dure_services = dure_check.map(|(_, _, services)| services);
 
         // Complete operation log
         if op_id >= 0 {
@@ -2399,9 +2420,14 @@ impl SshActor {
         SshEvent::RefreshCompleted {
             host,
             ssh_connected,
-            base_installed: base_result.unwrap_or(false),
-            docker_installed: docker_result.unwrap_or(false),
-            dure_installed: dure_result.unwrap_or(false),
+            base_installed,
+            docker_installed,
+            dure_installed,
+            ssh_error,
+            base_missing_packages,
+            docker_version,
+            dure_running,
+            dure_services,
         }
     }
 
@@ -3018,9 +3044,9 @@ ARG PORT=8080
         // Test that RefreshCompleted event has all required fields
         smol::block_on(async {
             let (tx, _rx) = smol::channel::unbounded();
-            let mut actor = SshActor::new(smol::channel::unbounded::<SshCommand>().1, tx);
+            let mut actor = SshActor::new(smol::channel::unbounded::<SshCommand>().1, tx, None);
 
-            let event = actor.handle_refresh("localhost".to_string()).await;
+            let event = actor.handle_refresh("localhost".to_string(), None).await;
 
             match event {
                 SshEvent::RefreshCompleted {
@@ -3029,6 +3055,7 @@ ARG PORT=8080
                     base_installed,
                     docker_installed,
                     dure_installed,
+                    ..
                 } => {
                     assert_eq!(host, "localhost");
                     // Fields should be initialized (placeholder values)

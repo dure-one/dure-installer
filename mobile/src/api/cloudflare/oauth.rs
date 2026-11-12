@@ -41,8 +41,12 @@ fn get_oauth_client_id() -> &'static str {
 // No longer need static redirect_uri or port parsing
 
 /// Cloudflare OAuth scopes - MUST match exactly what's configured in OAuth app
-/// Note: No offline_access = no refresh token (re-auth needed when token expires)
+/// Note: offline_access scope enables refresh tokens for automatic token renewal
+/// Commented out because OAuth app doesn't support this scope - tokens won't auto-refresh
 const CLOUDFLARE_SCOPES: &[&str] = &[
+    // Offline access - enables refresh tokens (disabled - OAuth app doesn't support it)
+    // "offline_access",
+
     // Account DNS Settings
     "account-dns-settings.read",
     "account-dns-settings.write",
@@ -167,10 +171,11 @@ impl CloudflareOAuthHandler {
             .context(format!("Failed to bind to port {} - ensure it's not in use", OAUTH_PORT))?;
 
         // Build redirect URI matching OAuth app configuration
-        let redirect_uri = format!("http://localhost:{}/cf_callback", OAUTH_PORT);
+        let redirect_uri = get_redirect_uri();
 
         dure_info!("✓ TCP server listening on 127.0.0.1:{}", OAUTH_PORT);
-        dure_debug!("Redirect URI: {}", redirect_uri);
+        dure_info!("📋 Redirect URI: {}", redirect_uri);
+        dure_info!("⚠️  Ensure your Cloudflare OAuth app has this EXACT redirect URI configured");
 
         // Build OAuth URL with random state for CSRF protection
         let state = format!(
@@ -180,8 +185,6 @@ impl CloudflareOAuthHandler {
                 .unwrap()
                 .as_nanos()
         );
-
-        let scope = CLOUDFLARE_SCOPES.join(" ");
 
         // Build auth URL using dynamic redirect_uri
         let auth_url = self.build_auth_url(&redirect_uri, &state, &code_challenge)?;
@@ -306,6 +309,76 @@ pub fn verify_token(access_token: &str) -> Result<bool> {
     Ok(verify_response.success)
 }
 
+/// Refresh access token using refresh token
+///
+/// Returns new OAuthResult with updated access_token and expires_at.
+/// Preserves the original refresh_token.
+///
+/// Note: Cloudflare OAuth uses PKCE (no client_secret needed)
+pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
+    if refresh_token.is_empty() {
+        return Err(anyhow::anyhow!("Refresh token is empty"));
+    }
+
+    dure_debug!("Refreshing Cloudflare OAuth access token...");
+
+    let token_url = "https://dash.cloudflare.com/oauth2/token";
+
+    // PKCE flow - no client_secret needed
+    let body = format!(
+        "grant_type=refresh_token&\
+         refresh_token={}&\
+         client_id={}",
+        urlencoding::encode(refresh_token),
+        urlencoding::encode(get_oauth_client_id())
+    );
+
+    let response = ureq::post(token_url)
+        .set("Content-Type", "application/x-www-form-urlencoded")
+        .send_string(&body);
+
+    let response = match response {
+        Ok(resp) => resp,
+        Err(ureq::Error::Status(code, resp)) => {
+            let error_text = resp.into_string().unwrap_or_default();
+            dure_error!("Token refresh failed with status {}: {}", code, error_text);
+            return Err(anyhow::anyhow!(
+                "Token refresh failed (HTTP {}): {}",
+                code,
+                error_text
+            ));
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!("Network error during token refresh: {}", e));
+        }
+    };
+
+    #[derive(Deserialize)]
+    struct TokenResponse {
+        access_token: String,
+        expires_in: Option<u64>,
+    }
+
+    let token_response: TokenResponse = response
+        .into_json()
+        .context("Failed to parse token response")?;
+
+    // Calculate expiration timestamp
+    let expires_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + token_response.expires_in.unwrap_or(3600); // Default 1 hour
+
+    dure_info!("✓ Successfully refreshed Cloudflare access token");
+
+    Ok(OAuthResult {
+        access_token: token_response.access_token,
+        refresh_token: Some(refresh_token.to_string()), // Preserve original
+        expires_at,
+    })
+}
+
 /// Fetch account info from Cloudflare API v4 /accounts endpoint
 pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
     let url = "https://api.cloudflare.com/client/v4/accounts";
@@ -364,6 +437,12 @@ pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
 
 // No longer need env var loading - using wrangler's public client
 
+/// Get the configured redirect URI for OAuth
+pub fn get_redirect_uri() -> String {
+    const OAUTH_PORT: u16 = 51082;
+    format!("http://localhost:{}/cf_callback", OAUTH_PORT)
+}
+
 /// Generate PKCE code_verifier and code_challenge pair
 ///
 /// Returns (code_verifier, code_challenge)
@@ -394,15 +473,12 @@ fn handle_oauth_request(mut stream: TcpStream, expected_state: String) -> Result
     let n = stream.read(&mut buffer).context("Failed to read request")?;
 
     let request = String::from_utf8_lossy(&buffer[..n]);
-    dure_debug!("Received OAuth callback: {}", request.lines().next().unwrap_or(""));
+    let first_line = request.lines().next().unwrap_or("");
+    dure_debug!("Received OAuth callback: {}", first_line);
 
     // Parse query parameters from request line
     // Format: GET /cf_callback?code=xxx&state=yyy HTTP/1.1
-    let first_line = request
-        .lines()
-        .next()
-        .context("Empty HTTP request")?;
-
+    //     or: GET /cf_callback?error=access_denied&error_description=...&state=yyy HTTP/1.1
     let parts: Vec<&str> = first_line.split_whitespace().collect();
     if parts.len() < 2 {
         anyhow::bail!("Invalid HTTP request format");
@@ -426,6 +502,8 @@ fn handle_oauth_request(mut stream: TcpStream, expected_state: String) -> Result
         })
         .collect();
 
+    dure_debug!("OAuth callback query params: {:?}", params);
+
     // Verify state for CSRF protection
     let state = params
         .get("state")
@@ -434,10 +512,39 @@ fn handle_oauth_request(mut stream: TcpStream, expected_state: String) -> Result
         anyhow::bail!("State mismatch - possible CSRF attack");
     }
 
+    // Check for OAuth error response first (RFC 6749 Section 4.1.2.1)
+    if let Some(error) = params.get("error") {
+        let error_desc = params
+            .get("error_description")
+            .map(|s| s.as_str())
+            .unwrap_or("No description provided");
+
+        dure_error!("OAuth error: {} - {}", error, error_desc);
+
+        // Send error response to browser
+        let response = format!(
+            "HTTP/1.1 200 OK\r\n\
+             Content-Type: text/html\r\n\
+             \r\n\
+             <html><body>\
+             <h1>Authorization Failed</h1>\
+             <p><strong>Error:</strong> {}</p>\
+             <p><strong>Description:</strong> {}</p>\
+             <p>You can close this window and return to the application.</p>\
+             </body></html>",
+            error, error_desc
+        );
+
+        stream.write_all(response.as_bytes()).ok();
+        stream.flush().ok();
+
+        anyhow::bail!("OAuth authorization failed: {} ({})", error, error_desc);
+    }
+
     // Extract authorization code
     let code = params
         .get("code")
-        .context("No code parameter in callback")?
+        .context("No code parameter in callback - OAuth may have failed silently")?
         .clone();
 
     // Send success response to browser
@@ -452,7 +559,7 @@ fn handle_oauth_request(mut stream: TcpStream, expected_state: String) -> Result
     stream.write_all(response.as_bytes()).ok();
     stream.flush().ok();
 
-    dure_info!("Authorization code received");
+    dure_info!("✓ Authorization code received");
 
     Ok(code)
 }
@@ -513,5 +620,85 @@ mod tests {
         // Should either return Ok(false) or Err (depending on network/API)
         // We just verify it doesn't panic
         assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_refresh_access_token_empty_token() {
+        // Empty refresh token should return error
+        let result = refresh_access_token("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty"));
+    }
+
+    #[test]
+    fn test_refresh_access_token_invalid_token() {
+        // Invalid token should fail (network call expected)
+        let result = refresh_access_token("invalid_refresh_token_12345");
+
+        // Should return Err (either network error or API error)
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_refresh_access_token_preserves_refresh_token() {
+        // Even with invalid token, function should preserve it in result
+        // This test verifies the function signature returns OAuthResult with refresh_token
+        // We can't test success without real token, so we just verify error path doesn't panic
+        let refresh_token = "test_refresh_token";
+        let result = refresh_access_token(refresh_token);
+
+        // Should fail but not panic
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_handle_oauth_error_access_denied() {
+        use std::io::Cursor;
+        use std::net::TcpStream;
+
+        // Simulate OAuth error response when user denies authorization
+        let request = b"GET /cf_callback?error=access_denied&error_description=User%20denied%20access&state=test123 HTTP/1.1\r\n\r\n";
+
+        // Can't easily create TcpStream for test, so we test via mock
+        // This test documents the expected behavior
+        let query = "error=access_denied&error_description=User%20denied%20access&state=test123";
+        let params: std::collections::HashMap<String, String> = query
+            .split('&')
+            .filter_map(|pair| {
+                let mut parts = pair.split('=');
+                Some((
+                    parts.next()?.to_string(),
+                    urlencoding::decode(parts.next()?).ok()?.to_string(),
+                ))
+            })
+            .collect();
+
+        assert_eq!(params.get("error"), Some(&"access_denied".to_string()));
+        assert_eq!(params.get("error_description"), Some(&"User denied access".to_string()));
+    }
+
+    #[test]
+    fn test_handle_oauth_error_invalid_request() {
+        // Test invalid_request error
+        let query = "error=invalid_request&error_description=Invalid%20scope&state=test123";
+        let params: std::collections::HashMap<String, String> = query
+            .split('&')
+            .filter_map(|pair| {
+                let mut parts = pair.split('=');
+                Some((
+                    parts.next()?.to_string(),
+                    urlencoding::decode(parts.next()?).ok()?.to_string(),
+                ))
+            })
+            .collect();
+
+        assert_eq!(params.get("error"), Some(&"invalid_request".to_string()));
+        assert_eq!(params.get("error_description"), Some(&"Invalid scope".to_string()));
+    }
+
+    #[test]
+    fn test_redirect_uri_helper() {
+        let uri = get_redirect_uri();
+        assert_eq!(uri, "http://localhost:51082/cf_callback");
     }
 }

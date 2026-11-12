@@ -796,3 +796,58 @@ platform-error-read-config = 구성 읽기 실패: { $error }
 platform-error-save-config = 구성 저장 실패: { $error }
 platform-error-parse-config = V1 또는 V2로 구성 파싱 실패: V2 오류: { $v2_error }, V1 오류: { $v1_error }
 
+## Platform Drawer - Additional
+platform-drawer-status-email = 이메일
+platform-drawer-status-project-singular = 프로젝트
+platform-drawer-status-project-plural = 프로젝트
+platform-drawer-status-project-unknown = ? 프로젝트
+
+## Billing Dialog
+platform-billing-title = 예상 청구 금액
+platform-billing-monthly-total = 월별 순 비용 합계 (모든 크레딧 포함) - { $count }개 레코드
+
+## SSH Drawer - Status Tab
+ssh-drawer-status-operation = 작업
+ssh-drawer-status-last-operation = 마지막 작업
+ssh-op-completed-ago = { $operation } 완료 ({ $seconds }초 전)
+ssh-op-failed-text = { $operation } 실패
+ssh-op-in-progress-text = { $operation } ({ $seconds }초)
+
+## SSH Drawer - Tab Placeholders
+ssh-host-placeholder = '기본 확인'을 클릭하여 시스템 상태 조회
+ssh-docker-placeholder = 'Docker 확인'을 클릭하여 컨테이너 상태 조회
+ssh-dure-placeholder = 'Dure 확인'을 클릭하여 compose 로그 조회
+
+## Operations Table (used in Platform, SSH, DNS drawers)
+ops-col-date = 날짜
+ops-col-operation = 작업
+ops-col-system = 시스템
+ops-col-status = 상태
+ops-col-duration = 기간
+ops-col-error = 오류
+ops-no-operations = 아직 작업이 없습니다
+
+## DNS Status Tab Attributes
+dns-status-domain = 도메인
+dns-status-provider = 제공자
+dns-status-platform-binding = 플랫폼 바인딩
+dns-status-platform-id = 플랫폼 ID
+dns-status-platform = 플랫폼
+dns-status-vm-name = VM 이름
+dns-status-vm-ip = VM IP
+dns-status-check-status = 확인 상태
+dns-status-ns-check = NS 확인
+dns-status-settings-check = 설정 확인
+dns-status-https-check = HTTPS 확인
+dns-status-not-bound = 바인딩되지 않음
+dns-status-not-checked = 확인되지 않음
+dns-status-using-cloudflare = ✓ Cloudflare 사용 중 - { $nameservers }
+dns-status-not-using-cloudflare = ✗ Cloudflare 미사용
+dns-status-all-records-configured = ✓ 모든 레코드 구성됨
+dns-status-missing-records = ✗ { $count }개 레코드 누락 - { $list }
+dns-status-resolves-to-vm = ✓ { $ip }(VM IP)로 해석됨
+dns-status-resolves-correctly = ✓ 올바르게 해석됨
+dns-status-resolves-mismatch = ✗ { $resolved }로 해석됨 (예상: { $expected })
+dns-status-not-resolve-to-vm = ✗ VM으로 해석되지 않음
+dns-logs-heading = DNS 작업 로그
+

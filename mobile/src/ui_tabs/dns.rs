@@ -770,20 +770,40 @@ impl DnsTab {
             row.operation_state = OperationState::start(tr!("dns-operation-check-settings"));
         }
 
-        // Get domain row data (zone_id, vm_ip, oauth_access_token)
+        // Get domain row data (zone_id, vm_ip, oauth_access_token, token_expiry)
         let row = self.domain_rows.iter().find(|r| r.domain == domain);
         let zone_id = row.and_then(|r| r.zone_id.clone());
         let vm_ip = row.and_then(|r| r.vm_external_ip.clone());
         let access_token = row.and_then(|r| r.oauth_access_token.clone());
+        let token_expiry = row.and_then(|r| r.oauth_token_expiry);
 
         self.selected_domain = Some(domain.to_string());
 
         let domain = domain.to_string();
         let promise = Promise::spawn_thread("check_dns_settings", move || {
+            // Check if OAuth token expired
+            if let Some(expiry) = token_expiry {
+                let now = chrono::Utc::now().timestamp() as u64;
+                if now > expiry {
+                    let expired_ago = now - expiry;
+                    dure_error!("OAuth token expired {} seconds ago (expiry: {}, now: {})", expired_ago, expiry, now);
+                    return Err((
+                        SettingsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            records_valid: false,
+                            missing_records: Vec::new(),
+                            error: Some(format!("OAuth token expired {} seconds ago - please re-authenticate via wizard", expired_ago)),
+                        },
+                        vec![format!("✗ OAuth token expired - please re-add domain via DNS wizard to refresh credentials")]
+                    ));
+                }
+            }
+
             // Validate OAuth token
             let token = match access_token {
                 Some(t) => t,
                 None => {
+                    dure_error!("No OAuth token found for domain");
                     return Err((
                         SettingsCheckResult {
                             checked_at: chrono::Utc::now().timestamp(),

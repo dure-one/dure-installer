@@ -11,7 +11,7 @@ mod tests {
             let (cmd_tx, cmd_rx) = smol::channel::unbounded();
             let (event_tx, event_rx) = smol::channel::unbounded();
 
-            let actor = super::super::SshActor::new(cmd_rx, event_tx);
+            let actor = super::super::SshActor::new(cmd_rx, event_tx, None);
             smol::spawn(actor.run()).detach();
 
             cmd_tx.send(super::super::SshCommand::ListHosts).await.unwrap();
@@ -47,34 +47,44 @@ mod tests {
         // Verify all operation commands compile and can be constructed
         let _cmd1 = super::super::SshCommand::Refresh {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd2 = super::super::SshCommand::SshCheck {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd3 = super::super::SshCommand::CheckBase {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd4 = super::super::SshCommand::InstallBase {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd5 = super::super::SshCommand::CheckDocker {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd6 = super::super::SshCommand::InstallDockerDaemon {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd7 = super::super::SshCommand::RemoveDocker {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd8 = super::super::SshCommand::CheckDure {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
         let _cmd9 = super::super::SshCommand::InstallDure {
             host: "test-host".to_string(),
             env_config: std::collections::HashMap::new(),
+            profile_kdbx: None,
         };
         let _cmd10 = super::super::SshCommand::RemoveDure {
             host: "test-host".to_string(),
+            profile_kdbx: None,
         };
     }
 
@@ -87,6 +97,11 @@ mod tests {
             base_installed: false,
             docker_installed: false,
             dure_installed: false,
+            ssh_error: None,
+            base_missing_packages: None,
+            docker_version: None,
+            dure_running: None,
+            dure_services: None,
         };
         let _ev2 = super::super::SshEvent::SshCheckCompleted {
             host: "test-host".to_string(),
@@ -145,6 +160,7 @@ mod tests {
     fn test_operation_commands_debug() {
         let cmd = super::super::SshCommand::Refresh {
             host: "example.com".to_string(),
+            profile_kdbx: None,
         };
         let debug_str = format!("{:?}", cmd);
         assert!(debug_str.contains("Refresh"));
@@ -159,6 +175,11 @@ mod tests {
             base_installed: true,
             docker_installed: true,
             dure_installed: true,
+            ssh_error: None,
+            base_missing_packages: None,
+            docker_version: None,
+            dure_running: None,
+            dure_services: None,
         };
         let debug_str = format!("{:?}", event);
         assert!(debug_str.contains("RefreshCompleted"));

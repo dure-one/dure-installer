@@ -1,6 +1,7 @@
 use crate::storage::models::opslog::{OperationLog, OperationStatus};
 use eframe::egui::{self, Color32, RichText, ScrollArea, Ui};
 use egui_extras::{Column, TableBuilder};
+use egui_i18n::tr;
 
 /// Renders operation history from the operation log database
 pub struct OperationsRenderer {
@@ -25,7 +26,7 @@ impl OperationsRenderer {
         if operations.is_empty() {
             // ui.heading("Operation History");
             // ui.separator();
-            ui.label("No operations yet");
+            ui.label(tr!("ops-no-operations"));
             return;
         }
 
@@ -48,12 +49,12 @@ impl OperationsRenderer {
             .column(Column::auto().at_least(60.0))  // Duration
             .column(Column::remainder())             // Error
             .header(20.0, |mut header| {
-                header.col(|ui| { ui.heading("Date"); });
-                header.col(|ui| { ui.heading("Operation"); });
-                header.col(|ui| { ui.heading("System"); });
-                header.col(|ui| { ui.heading("Status"); });
-                header.col(|ui| { ui.heading("Duration"); });
-                header.col(|ui| { ui.heading("Error"); });
+                header.col(|ui| { ui.heading(tr!("ops-col-date")); });
+                header.col(|ui| { ui.heading(tr!("ops-col-operation")); });
+                header.col(|ui| { ui.heading(tr!("ops-col-system")); });
+                header.col(|ui| { ui.heading(tr!("ops-col-status")); });
+                header.col(|ui| { ui.heading(tr!("ops-col-duration")); });
+                header.col(|ui| { ui.heading(tr!("ops-col-error")); });
             })
             .body(|mut body| {
                 for op in operations {

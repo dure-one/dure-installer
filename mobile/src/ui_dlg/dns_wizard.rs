@@ -360,9 +360,30 @@ impl DnsWizard {
                         self.fetch_account_id();
                     }
                     Err(err) => {
-                        self.progress_log.push(format!("Error: OAuth failed: {}", err));
+                        // Enhanced error message with troubleshooting hints
+                        let error_msg = if err.contains("OAuth authorization failed") {
+                            format!(
+                                "❌ {}\n\n\
+                                 Troubleshooting:\n\
+                                 1. Check Cloudflare OAuth app redirect URI: http://localhost:51082/cf_callback\n\
+                                 2. Verify all required scopes are granted\n\
+                                 3. Try the OAuth flow again",
+                                err
+                            )
+                        } else if err.contains("Failed to bind to port") {
+                            format!(
+                                "❌ {}\n\n\
+                                 Port 51082 is already in use.\n\
+                                 Close any other applications using this port and try again.",
+                                err
+                            )
+                        } else {
+                            format!("❌ OAuth failed: {}", err)
+                        };
+
+                        self.progress_log.push(error_msg.clone());
                         ui.ctx().request_repaint();
-                        self.state = DnsWizardState::Error(err.clone());
+                        self.state = DnsWizardState::Error(error_msg);
                     }
                 }
             } else {

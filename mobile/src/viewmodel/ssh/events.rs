@@ -243,6 +243,12 @@ pub enum SshEvent {
         base_installed: bool,
         docker_installed: bool,
         dure_installed: bool,
+        // Cache results
+        ssh_error: Option<String>,
+        base_missing_packages: Option<Vec<String>>,
+        docker_version: Option<String>,
+        dure_running: Option<bool>,
+        dure_services: Option<Vec<String>>,
     },
 
     /// SSH connection check completed

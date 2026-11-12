@@ -125,18 +125,18 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     match &row.operation_state {
         OperationState::InProgress { operation, started_at } => {
             let elapsed = chrono::Utc::now().timestamp() - started_at;
-            StatusLine::new("Operation", &format!("{} ({}s)", operation, elapsed))
+            StatusLine::new(&tr!("ssh-drawer-status-operation"), &tr!("ssh-op-in-progress-text", {operation: operation.clone(), seconds: elapsed}))
                 .show(ui);
         }
         OperationState::Failed { operation, error, .. } => {
-            StatusLine::new("Last Operation", &format!("{} failed", operation))
+            StatusLine::new(&tr!("ssh-drawer-status-last-operation"), &tr!("ssh-op-failed-text", {operation: operation.clone()}))
                 .error()
                 .show(ui);
             ui.label(format!("  Error: {}", error));
         }
         OperationState::Completed { operation, completed_at } => {
             let ago = chrono::Utc::now().timestamp() - completed_at;
-            StatusLine::new("Last Operation", &format!("{} completed ({}s ago)", operation, ago))
+            StatusLine::new(&tr!("ssh-drawer-status-last-operation"), &tr!("ssh-op-completed-ago", {operation: operation.clone(), seconds: ago}))
                 .show(ui);
         }
         OperationState::Idle => {}
@@ -190,12 +190,13 @@ fn render_host_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     if let Some(raw_output) = &drawer_state.host_status_raw {
         egui::ScrollArea::vertical()
             .max_height(480.0)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
                 ui.label(raw_output);
             });
     } else {
-        ui.label("Click 'Check Base' to retrieve system status");
+        ui.label(tr!("ssh-host-placeholder"));
     }
 }
 
@@ -209,7 +210,7 @@ fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
                 ui.label(raw_output);
             });
     } else {
-        ui.label("Click 'Check Docker' to retrieve container status");
+        ui.label(tr!("ssh-docker-placeholder"));
     }
 }
 
@@ -226,7 +227,7 @@ fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
                 }
             });
     } else {
-        ui.label("Click 'Check Dure' to retrieve compose logs");
+        ui.label(tr!("ssh-dure-placeholder"));
     }
 }
 

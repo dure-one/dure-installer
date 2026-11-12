@@ -4167,7 +4167,7 @@ impl PlatformTab {
 
         let refresh_requested = Cell::new(false);
 
-        dialog("billing_dialog", "Estimated Billing", &mut self.show_billing_dialog)
+        dialog("billing_dialog", &tr!("platform-billing-title"), &mut self.show_billing_dialog)
             .max_width(600.0)
             .max_height(600.0)
             .scrollable(true)
@@ -4227,10 +4227,7 @@ impl PlatformTab {
                         ui.label("• Data is still being processed (can take up to 5 days)");
                     } else {
                         // Display monthly totals
-                        ui.label(format!(
-                            "Monthly Total Net Cost (including all credits) - {} record(s):",
-                            records.len()
-                        ));
+                        ui.label(tr!("platform-billing-monthly-total", {count: records.len()}));
                         ui.add_space(8.0);
 
                         for record in records {
@@ -4341,11 +4338,11 @@ impl PlatformTab {
 
                 // Action buttons
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Close")).clicked() {
+                    if ui.add(MaterialButton::filled(&tr!("close"))).clicked() {
                         *open = false;
                     }
 
-                    if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+                    if ui.add(MaterialButton::outlined(&tr!("refresh"))).clicked() {
                         refresh_requested.set(true);
                     }
                 });

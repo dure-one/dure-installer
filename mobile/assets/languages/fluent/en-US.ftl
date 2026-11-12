@@ -800,3 +800,58 @@ platform-error-read-config = Failed to read config: { $error }
 platform-error-save-config = Failed to save config: { $error }
 platform-error-parse-config = Failed to parse config as V1 or V2: V2 error: { $v2_error }, V1 error: { $v1_error }
 
+## Platform Drawer - Additional
+platform-drawer-status-email = Email
+platform-drawer-status-project-singular = project
+platform-drawer-status-project-plural = projects
+platform-drawer-status-project-unknown = ? projects
+
+## Billing Dialog
+platform-billing-title = Estimated Billing
+platform-billing-monthly-total = Monthly Total Net Cost (including all credits) - { $count } record(s)
+
+## SSH Drawer - Status Tab
+ssh-drawer-status-operation = Operation
+ssh-drawer-status-last-operation = Last Operation
+ssh-op-completed-ago = { $operation } completed ({ $seconds }s ago)
+ssh-op-failed-text = { $operation } failed
+ssh-op-in-progress-text = { $operation } ({ $seconds }s)
+
+## SSH Drawer - Tab Placeholders
+ssh-host-placeholder = Click 'Check Base' to retrieve system status
+ssh-docker-placeholder = Click 'Check Docker' to retrieve container status
+ssh-dure-placeholder = Click 'Check Dure' to retrieve compose logs
+
+## Operations Table (used in Platform, SSH, DNS drawers)
+ops-col-date = Date
+ops-col-operation = Operation
+ops-col-system = System
+ops-col-status = Status
+ops-col-duration = Duration
+ops-col-error = Error
+ops-no-operations = No operations yet
+
+## DNS Status Tab Attributes
+dns-status-domain = Domain
+dns-status-provider = Provider
+dns-status-platform-binding = Platform Binding
+dns-status-platform-id = Platform ID
+dns-status-platform = Platform
+dns-status-vm-name = VM Name
+dns-status-vm-ip = VM IP
+dns-status-check-status = Check Status
+dns-status-ns-check = NS Check
+dns-status-settings-check = Settings Check
+dns-status-https-check = HTTPS Check
+dns-status-not-bound = Not bound
+dns-status-not-checked = Not checked
+dns-status-using-cloudflare = ✓ Using Cloudflare - { $nameservers }
+dns-status-not-using-cloudflare = ✗ Not using Cloudflare
+dns-status-all-records-configured = ✓ All records configured
+dns-status-missing-records = ✗ { $count } missing records - { $list }
+dns-status-resolves-to-vm = ✓ Resolves to { $ip } (VM IP)
+dns-status-resolves-correctly = ✓ Resolves correctly
+dns-status-resolves-mismatch = ✗ Resolves to { $resolved } (expected { $expected })
+dns-status-not-resolve-to-vm = ✗ Does not resolve to VM
+dns-logs-heading = DNS Operation Logs
+

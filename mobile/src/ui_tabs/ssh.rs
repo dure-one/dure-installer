@@ -4,6 +4,7 @@ use crate::{dure_debug, dure_error, dure_info};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{MaterialButton, dialog};
+use serde::{Deserialize, Serialize};
 
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
@@ -75,7 +76,7 @@ impl Default for OperationState {
 }
 
 /// SSH connection check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SshCheckResult {
     pub connected: bool,
     pub error: Option<String>,
@@ -83,7 +84,7 @@ pub struct SshCheckResult {
 }
 
 /// Base system check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BaseCheckResult {
     pub installed: bool,
     pub missing_packages: Vec<String>,
@@ -91,7 +92,7 @@ pub struct BaseCheckResult {
 }
 
 /// Docker installation check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DockerCheckResult {
     pub installed: bool,
     pub version: Option<String>,
@@ -99,7 +100,7 @@ pub struct DockerCheckResult {
 }
 
 /// Dure service check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DureCheckResult {
     pub installed: bool,
     pub running: bool,
@@ -452,19 +453,19 @@ impl SshTab {
                         self.rows.push(SshRow {
                             host: host_config.host.clone(),
                             port: host_config.port,
-                            platform_id: host_config.platform_name.clone(), // Platform connection (if any)
-                            ssh_connected: false, // Updated via event handlers
-                            base_installed: false, // Updated via event handlers
-                            docker_installed: !host_config.docker_containers.is_empty(),
-                            dure_installed: host_config.dure_wss_config.is_some(),
+                            platform_id: host_config.platform_name.clone(),
+                            ssh_connected: host_config.last_ssh_check.as_ref().map(|c| c.connected).unwrap_or(false),
+                            base_installed: host_config.last_base_check.as_ref().map(|c| c.installed).unwrap_or(false),
+                            docker_installed: host_config.last_docker_check.as_ref().map(|c| c.installed).unwrap_or_else(|| !host_config.docker_containers.is_empty()),
+                            dure_installed: host_config.last_dure_check.as_ref().map(|c| c.installed).unwrap_or_else(|| host_config.dure_wss_config.is_some()),
                             ssh_private_key: host_config.private_key_path.clone(),
                             drawer_open: false,
                             drawer_state,
                             operation_state: OperationState::Idle,
-                            last_ssh_check: None,
-                            last_base_check: None,
-                            last_docker_check: None,
-                            last_dure_check: None,
+                            last_ssh_check: host_config.last_ssh_check.clone(),
+                            last_base_check: host_config.last_base_check.clone(),
+                            last_docker_check: host_config.last_docker_check.clone(),
+                            last_dure_check: host_config.last_dure_check.clone(),
                         });
                     }
                     self.loaded = true;
@@ -513,6 +514,42 @@ impl SshTab {
     pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
         // WASM doesn't have config files
         false
+    }
+
+    /// Save SSH check cache results to config
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_ssh_cache(
+        &self,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+        host: &str,
+        last_ssh_check: Option<SshCheckResult>,
+        last_base_check: Option<BaseCheckResult>,
+        last_docker_check: Option<DockerCheckResult>,
+        last_dure_check: Option<DureCheckResult>,
+    ) {
+        dure_info!("Saving SSH cache for host: {}", host);
+        match load_config(profile) {
+            Ok((mut app_config, config_path)) => {
+                dure_info!("Config loaded from: {:?}", config_path);
+                if let Some(host_config) = app_config.ssh_hosts.iter_mut().find(|h| h.host == host) {
+                    dure_info!("Found host config for: {}", host);
+                    host_config.last_ssh_check = last_ssh_check;
+                    host_config.last_base_check = last_base_check;
+                    host_config.last_docker_check = last_docker_check;
+                    host_config.last_dure_check = last_dure_check;
+
+                    match app_config.save(&config_path) {
+                        Ok(_) => dure_info!("SSH cache saved successfully to: {:?}", config_path),
+                        Err(e) => dure_error!("Failed to save SSH cache to config: {}", e),
+                    }
+                } else {
+                    dure_error!("Host '{}' not found in config. Available hosts: {:?}", host, app_config.ssh_hosts.iter().map(|h| &h.host).collect::<Vec<_>>());
+                }
+            }
+            Err(e) => {
+                dure_error!("Failed to load config for saving SSH cache: {}", e);
+            }
+        }
     }
 
     /// Find domain for SSH host by looking up platform config
@@ -608,7 +645,75 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::RefreshCompleted { host, ssh_connected, base_installed, docker_installed, dure_installed }) => {
+            ViewModelEvent::Ssh(SshEvent::RefreshCompleted {
+                host,
+                ssh_connected,
+                base_installed,
+                docker_installed,
+                dure_installed,
+                ssh_error,
+                base_missing_packages,
+                docker_version,
+                dure_running,
+                dure_services,
+            }) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let cache_data = {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        let now = chrono::Utc::now().timestamp();
+
+                        row.ssh_connected = ssh_connected;
+                        row.base_installed = base_installed;
+                        row.docker_installed = docker_installed;
+                        row.dure_installed = dure_installed;
+                        row.operation_state = OperationState::Completed {
+                            operation: tr!("ssh-operation-refresh"),
+                            completed_at: now,
+                        };
+
+                        // Update cache from refresh results
+                        row.last_ssh_check = Some(SshCheckResult {
+                            connected: ssh_connected,
+                            error: ssh_error.clone(),
+                            checked_at: now,
+                        });
+
+                        row.last_base_check = Some(BaseCheckResult {
+                            installed: base_installed,
+                            missing_packages: base_missing_packages.clone().unwrap_or_default(),
+                            checked_at: now,
+                        });
+
+                        row.last_docker_check = Some(DockerCheckResult {
+                            installed: docker_installed,
+                            version: docker_version.clone(),
+                            checked_at: now,
+                        });
+
+                        row.last_dure_check = Some(DureCheckResult {
+                            installed: dure_installed,
+                            running: dure_running.unwrap_or(false),
+                            services: dure_services.clone().unwrap_or_default(),
+                            checked_at: now,
+                        });
+
+                        Some((
+                            row.last_ssh_check.clone(),
+                            row.last_base_check.clone(),
+                            row.last_docker_check.clone(),
+                            row.last_dure_check.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some((ssh, base, docker, dure)) = cache_data {
+                    self.save_ssh_cache(profile, &host, ssh, base, docker, dure);
+                }
+
+                #[cfg(target_arch = "wasm32")]
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.ssh_connected = ssh_connected;
                     row.base_installed = base_installed;
@@ -619,10 +724,49 @@ impl SshTab {
                         completed_at: chrono::Utc::now().timestamp(),
                     };
                 }
+
                 dure_info!("Refresh completed for host {}", host);
             }
 
             ViewModelEvent::Ssh(SshEvent::SshCheckCompleted { host, connected, error }) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let cache_data = {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.ssh_connected = connected;
+                        row.last_ssh_check = Some(SshCheckResult {
+                            connected,
+                            error: error.clone(),
+                            checked_at: chrono::Utc::now().timestamp(),
+                        });
+                        row.operation_state = if error.is_none() {
+                            OperationState::Completed {
+                                operation: tr!("ssh-operation-ssh-check"),
+                                completed_at: chrono::Utc::now().timestamp(),
+                            }
+                        } else {
+                            OperationState::Failed {
+                                operation: tr!("ssh-operation-ssh-check"),
+                                error: error.unwrap(),
+                                failed_at: chrono::Utc::now().timestamp(),
+                            }
+                        };
+                        Some((
+                            row.last_ssh_check.clone(),
+                            row.last_base_check.clone(),
+                            row.last_docker_check.clone(),
+                            row.last_dure_check.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some((ssh, base, docker, dure)) = cache_data {
+                    self.save_ssh_cache(profile, &host, ssh, base, docker, dure);
+                }
+
+                #[cfg(target_arch = "wasm32")]
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.ssh_connected = connected;
                     row.last_ssh_check = Some(SshCheckResult {
@@ -646,6 +790,36 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::BaseCheckCompleted { host, installed, missing_packages }) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let cache_data = {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.base_installed = installed;
+                        row.last_base_check = Some(BaseCheckResult {
+                            installed,
+                            missing_packages,
+                            checked_at: chrono::Utc::now().timestamp(),
+                        });
+                        row.operation_state = OperationState::Completed {
+                            operation: tr!("ssh-operation-base-check"),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        };
+                        Some((
+                            row.last_ssh_check.clone(),
+                            row.last_base_check.clone(),
+                            row.last_docker_check.clone(),
+                            row.last_dure_check.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some((ssh, base, docker, dure)) = cache_data {
+                    self.save_ssh_cache(profile, &host, ssh, base, docker, dure);
+                }
+
+                #[cfg(target_arch = "wasm32")]
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.base_installed = installed;
                     row.last_base_check = Some(BaseCheckResult {
@@ -684,6 +858,36 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::DockerCheckCompleted { host, installed, version }) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let cache_data = {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.docker_installed = installed;
+                        row.last_docker_check = Some(DockerCheckResult {
+                            installed,
+                            version,
+                            checked_at: chrono::Utc::now().timestamp(),
+                        });
+                        row.operation_state = OperationState::Completed {
+                            operation: tr!("ssh-operation-docker-check"),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        };
+                        Some((
+                            row.last_ssh_check.clone(),
+                            row.last_base_check.clone(),
+                            row.last_docker_check.clone(),
+                            row.last_dure_check.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some((ssh, base, docker, dure)) = cache_data {
+                    self.save_ssh_cache(profile, &host, ssh, base, docker, dure);
+                }
+
+                #[cfg(target_arch = "wasm32")]
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.docker_installed = installed;
                     row.last_docker_check = Some(DockerCheckResult {
@@ -745,6 +949,37 @@ impl SshTab {
             }
 
             ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services }) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let cache_data = {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        row.dure_installed = installed;
+                        row.last_dure_check = Some(DureCheckResult {
+                            installed,
+                            running,
+                            services,
+                            checked_at: chrono::Utc::now().timestamp(),
+                        });
+                        row.operation_state = OperationState::Completed {
+                            operation: tr!("ssh-operation-dure-check"),
+                            completed_at: chrono::Utc::now().timestamp(),
+                        };
+                        Some((
+                            row.last_ssh_check.clone(),
+                            row.last_base_check.clone(),
+                            row.last_docker_check.clone(),
+                            row.last_dure_check.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some((ssh, base, docker, dure)) = cache_data {
+                    self.save_ssh_cache(profile, &host, ssh, base, docker, dure);
+                }
+
+                #[cfg(target_arch = "wasm32")]
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     row.dure_installed = installed;
                     row.last_dure_check = Some(DureCheckResult {
@@ -1274,6 +1509,10 @@ impl SshTab {
                         docker_containers: Vec::new(),
                         ansible_roles: Vec::new(),
                         dure_wss_config: None,
+                        last_ssh_check: None,
+                        last_base_check: None,
+                        last_docker_check: None,
+                        last_dure_check: None,
                     };
 
                     app_config.ssh_hosts.push(host_config);

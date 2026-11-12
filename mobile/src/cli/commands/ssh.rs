@@ -138,6 +138,10 @@ pub fn execute_ssh_add(
         docker_containers: Vec::new(),
         ansible_roles: Vec::new(),
         dure_wss_config: None,
+        last_ssh_check: None,
+        last_base_check: None,
+        last_docker_check: None,
+        last_dure_check: None,
     };
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
