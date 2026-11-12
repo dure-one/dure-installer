@@ -1,8 +1,8 @@
-use crate::Settings;
 use crate::ui_dlg::settings_stt::*;
+use crate::Settings;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{MaterialButton, ThemeMode, get_global_theme};
+use egui_material3::{get_global_theme, MaterialButton, ThemeMode};
 use sys_locale::get_locale;
 
 impl DlgSettings {
@@ -160,10 +160,10 @@ impl DlgSettings {
                             let mut selected_theme = settings.theme_name.clone();
                             egui::ComboBox::from_id_salt("theme_selector")
                                 .selected_text(match selected_theme.as_str() {
-                                    "green" => "Green",
-                                    "lightblue" => "Light Blue",
-                                    "lightpink" => "Light Pink",
-                                    "yellow" => "Yellow",
+                                    "leafgreen" => "Leaf Green",
+                                    "verysoftblue" => "Very Soft Blue",
+                                    "deepcrimson" => "Deep Crimson",
+                                    "goldenboy" => "Golden Boy",
                                     "terracotta" => "Terracotta",
                                     "oceanblue" => "Ocean Blue",
                                     _ => "Default",
@@ -171,10 +171,10 @@ impl DlgSettings {
                                 .show_ui(ui, |ui| {
                                     for (value, label) in [
                                         ("default", "Default"),
-                                        ("green", "Green"),
-                                        ("lightblue", "Light Blue"),
-                                        ("lightpink", "Light Pink"),
-                                        ("yellow", "Yellow"),
+                                        ("leafgreen", "Leaf Green"),
+                                        ("verysoftblue", "Very Soft Blue"),
+                                        ("deepcrimson", "Deep Crimson"),
+                                        ("goldenboy", "Golden Boy"),
                                         ("terracotta", "Terracotta"),
                                         ("oceanblue", "Ocean Blue"),
                                     ] {
@@ -238,9 +238,13 @@ impl DlgSettings {
                         // Show Logs and Log Level
                         ui.horizontal(|ui| {
                             ui.label(tr!("show-logs"));
-                            let show_logs_changed = ui.checkbox(&mut settings.show_logs, tr!("show")).changed();
+                            let show_logs_changed =
+                                ui.checkbox(&mut settings.show_logs, tr!("show")).changed();
                             if show_logs_changed {
-                                crate::dure_info!("🔧 Show Logs checkbox toggled: show_logs={}", settings.show_logs);
+                                crate::dure_info!(
+                                    "🔧 Show Logs checkbox toggled: show_logs={}",
+                                    settings.show_logs
+                                );
                             }
 
                             use crate::LogLevel;
@@ -268,7 +272,7 @@ impl DlgSettings {
                             if show_logs_changed || level_changed {
                                 crate::log_capture::update_log_settings(
                                     settings.show_logs,
-                                    LogLevel::from_str(&settings.log_level)
+                                    LogLevel::from_str(&settings.log_level),
                                 );
                             }
                         });
@@ -325,10 +329,22 @@ mod tests {
 
     #[test]
     fn test_string_to_theme_mode() {
-        assert!(matches!(DlgSettings::string_to_theme_mode("Light"), ThemeMode::Light));
-        assert!(matches!(DlgSettings::string_to_theme_mode("Dark"), ThemeMode::Dark));
-        assert!(matches!(DlgSettings::string_to_theme_mode("Auto"), ThemeMode::Auto));
-        assert!(matches!(DlgSettings::string_to_theme_mode("Invalid"), ThemeMode::Auto));
+        assert!(matches!(
+            DlgSettings::string_to_theme_mode("Light"),
+            ThemeMode::Light
+        ));
+        assert!(matches!(
+            DlgSettings::string_to_theme_mode("Dark"),
+            ThemeMode::Dark
+        ));
+        assert!(matches!(
+            DlgSettings::string_to_theme_mode("Auto"),
+            ThemeMode::Auto
+        ));
+        assert!(matches!(
+            DlgSettings::string_to_theme_mode("Invalid"),
+            ThemeMode::Auto
+        ));
     }
 
     #[test]
@@ -338,18 +354,18 @@ mod tests {
         let mut settings = Settings::default();
         assert_eq!(settings.theme_name, "default");
 
-        // Simulate selecting a different theme
-        settings.theme_name = "green".to_string();
-        assert_eq!(settings.theme_name, "green");
+        // User-friendly theme names
+        settings.theme_name = "leafgreen".to_string();
+        assert_eq!(settings.theme_name, "leafgreen");
 
-        settings.theme_name = "lightblue".to_string();
-        assert_eq!(settings.theme_name, "lightblue");
+        settings.theme_name = "verysoftblue".to_string();
+        assert_eq!(settings.theme_name, "verysoftblue");
 
-        settings.theme_name = "lightpink".to_string();
-        assert_eq!(settings.theme_name, "lightpink");
+        settings.theme_name = "deepcrimson".to_string();
+        assert_eq!(settings.theme_name, "deepcrimson");
 
-        settings.theme_name = "yellow".to_string();
-        assert_eq!(settings.theme_name, "yellow");
+        settings.theme_name = "goldenboy".to_string();
+        assert_eq!(settings.theme_name, "goldenboy");
 
         settings.theme_name = "terracotta".to_string();
         assert_eq!(settings.theme_name, "terracotta");
@@ -366,14 +382,14 @@ mod tests {
 
         // Color Mode (Light/Dark/Auto) should be separate from Theme Mode (colors)
         settings.theme_mode = "Dark".to_string();
-        settings.theme_name = "green".to_string();
+        settings.theme_name = "leafgreen".to_string();
 
         assert_eq!(settings.theme_mode, "Dark"); // Window color scheme
-        assert_eq!(settings.theme_name, "green"); // Material color theme
+        assert_eq!(settings.theme_name, "leafgreen"); // Material color theme
 
         // Both can be changed independently
         settings.theme_mode = "Light".to_string();
         assert_eq!(settings.theme_mode, "Light");
-        assert_eq!(settings.theme_name, "green"); // Theme name unchanged
+        assert_eq!(settings.theme_name, "leafgreen"); // Theme name unchanged
     }
 }

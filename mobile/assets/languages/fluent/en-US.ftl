@@ -364,6 +364,7 @@ dns-button-set-records-note = (Not implemented - requires Cloudflare API token)
 dns-status-not-implemented = ⚠ Cloudflare API check not implemented
 dns-status-missing-a-record = Missing: A record for root domain
 dns-status-missing-cname = Missing: A/CNAME for www subdomain
+dns-settings-all-configured = ✓ All DNS records configured correctly
 
 # DNS HTTPS Check Dialog
 dns-dialog-https-title = HTTPS Connection Check

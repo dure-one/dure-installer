@@ -23,27 +23,17 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 use anyhow::Result;
-use dure::{dure_debug, dure_error, dure_info, dure_warn};
 #[cfg(not(target_arch = "wasm32"))]
 // Logging provided by standard log crate
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 use dure::dure::DureApp;
+use dure::{dure_debug, dure_error, dure_info, dure_warn};
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::IsTerminal;
 
-// Embedded Material theme data
+// Default theme constant for startup (profile settings will override after login)
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_GREEN: &str = include_str!("../resources/material-theme-green.json");
-#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblue.json");
-#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
-#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
-#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_TERRACOTTA: &str = include_str!("../resources/material-theme-terracotta.json");
-#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
-const THEME_OCEANBLUE: &str = include_str!("../resources/material-theme-oceanblue.json");
+const THEME_DEFAULT: &str = include_str!("../resources/material-theme.json");
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
@@ -333,7 +323,11 @@ fn main() -> Result<()> {
             dure_info!("*** Joining tray thread ***");
             tray_handle.join()?;
         }
-        #[cfg(all(feature = "gui", not(feature = "tray-icon"), not(target_os = "openbsd")))]
+        #[cfg(all(
+            feature = "gui",
+            not(feature = "tray-icon"),
+            not(target_os = "openbsd")
+        ))]
         {
             // Tray not available but GUI is - run GUI mode instead
             dure_info!("Tray mode not available (no terminal detected), running GUI mode");
@@ -389,13 +383,10 @@ fn run_gui_mode() -> Result<()> {
             };
 
             // Load default theme at startup (profile settings will override this after login)
-            let theme_name = "default";
-            let theme_json = THEME_LIGHTBLUE; // Default until profile loads
-
             dure_info!("Loading default Material theme (profile settings will apply after login)");
 
             // Load the default theme from JSON string
-            if let Err(e) = load_theme_from_json_str(theme_json) {
+            if let Err(e) = load_theme_from_json_str(THEME_DEFAULT) {
                 dure_error!("Failed to load default theme: {}", e);
             }
 

@@ -3,12 +3,12 @@
 //! This module provides the main eframe application UI that works across all platforms.
 //! Platform-specific functionality is injected via traits.
 
-use crate::{dure_info, dure_debug, dure_trace, dure_warn, dure_error};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::api::desktop::check_user_mismatch;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::install;
 use crate::ui_dlg::DlgSettings;
+use crate::{dure_debug, dure_error, dure_info, dure_trace, dure_warn};
 use crate::{Config, Settings};
 
 // ViewModel (MVVM architecture)
@@ -23,8 +23,8 @@ use egui_i18n::tr;
 use egui_material3::*;
 use log::info;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 // Static variables for menu and search toggles
 pub static MENU_TOGGLE: AtomicBool = AtomicBool::new(false);
@@ -199,8 +199,8 @@ impl Default for DureApp {
         let ehttp_cache = {
             let cache_dir = config.as_ref().map(|c| c.cache_dir.join("ehttp"));
             Some(Arc::new(crate::api::ehttp_cache::EhttpCache::new(
-                        cache_dir,
-                        7 * 24 * 3600, // 7 days TTL for image responses
+                cache_dir,
+                7 * 24 * 3600, // 7 days TTL for image responses
             )))
         };
 
@@ -275,13 +275,20 @@ impl Default for DureApp {
 
 impl eframe::App for DureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        dure_trace!("🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}", self.active_tab, self.scrolling_selected);
+        dure_trace!(
+            "🔥 UPDATE CALLED - active_tab: {:?}, scrolling: {}",
+            self.active_tab,
+            self.scrolling_selected
+        );
 
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
             info!("🔥 Initializing ViewModel");
             let profile_config_path = self.current_profile.as_ref().map(|p| p.config_file.clone());
-            self.viewmodel = Some(crate::viewmodel::ViewModel::new(ctx.clone(), profile_config_path));
+            self.viewmodel = Some(crate::viewmodel::ViewModel::new(
+                ctx.clone(),
+                profile_config_path,
+            ));
         }
 
         // NOTE: Event polling moved to individual tabs to avoid consuming events centrally
@@ -292,7 +299,10 @@ impl eframe::App for DureApp {
 
         // Apply material theme (color scheme) if profile settings just loaded
         if self.theme_needs_reload {
-            dure_info!("🎨 Applying material theme from settings: {}", self.settings.theme_name);
+            dure_info!(
+                "🎨 Applying material theme from settings: {}",
+                self.settings.theme_name
+            );
             Self::apply_material_theme(&self.settings.theme_name, ctx);
             self.theme_needs_reload = false;
         }
@@ -346,7 +356,10 @@ impl eframe::App for DureApp {
         // Show settings dialog
         self.dlg_settings.show(ctx, &mut self.settings);
         // Handle save and theme changes from settings dialog
-        dure_debug!("🔍 After settings dialog: show_logs={}", self.settings.show_logs);
+        dure_debug!(
+            "🔍 After settings dialog: show_logs={}",
+            self.settings.show_logs
+        );
         if self.dlg_settings.save_clicked {
             self.dlg_settings.save_clicked = false; // Reset flag after processing
 
@@ -356,7 +369,11 @@ impl eframe::App for DureApp {
                 match self.settings.save(&profile.settings_file) {
                     Ok(_) => {
                         dure_info!("Settings saved to {:?}", profile.settings_file);
-                        dure_info!("Log settings: show={}, level={}", self.settings.show_logs, self.settings.log_level);
+                        dure_info!(
+                            "Log settings: show={}, level={}",
+                            self.settings.show_logs,
+                            self.settings.log_level
+                        );
 
                         // Update log settings in global state
                         crate::log_capture::update_log_settings(
@@ -407,7 +424,8 @@ impl eframe::App for DureApp {
                     self.dlg_db_debugger.show(ctx, Some(&mut conn));
                 }
                 Err(e) => {
-                    self.dlg_db_debugger.error_message = Some(format!("DB connection failed: {}", e));
+                    self.dlg_db_debugger.error_message =
+                        Some(format!("DB connection failed: {}", e));
                     self.dlg_db_debugger.show(ctx, None);
                 }
             }
@@ -426,7 +444,11 @@ impl eframe::App for DureApp {
 
 impl DureApp {
     fn ui(&mut self, ui: &mut egui::Ui) {
-        dure_trace!("🔥 UI CALLED - scrolling: {}, active_tab: {:?}", self.scrolling_selected, self.active_tab);
+        dure_trace!(
+            "🔥 UI CALLED - scrolling: {}, active_tab: {:?}",
+            self.scrolling_selected,
+            self.active_tab
+        );
 
         // Ensure the UI never exceeds window width
         ui.set_max_width(ui.available_width());
@@ -442,8 +464,8 @@ impl DureApp {
 
         egui::ScrollArea::horizontal()
             .id_source("top_profile_scroll_area")
-            .auto_shrink([false, true])  // Keep horizontal scroll, allow vertical shrink
-            .max_height(80.0)             // Limit height to prevent hiding tabs
+            .auto_shrink([false, true]) // Keep horizontal scroll, allow vertical shrink
+            .max_height(80.0) // Limit height to prevent hiding tabs
             .show(ui, |ui| {
                 // Profile selector (top-left)
                 ui.horizontal(|ui| {
@@ -457,7 +479,8 @@ impl DureApp {
                         });
 
                     // Find current profile index in the profiles list
-                    let mut selected_profile_idx: Option<usize> = self.current_profile
+                    let mut selected_profile_idx: Option<usize> = self
+                        .current_profile
                         .as_ref()
                         .and_then(|p| profiles.iter().position(|name| name == &p.name));
 
@@ -490,7 +513,12 @@ impl DureApp {
                     }
 
                     // Add "+ Create New Profile" button
-                    if ui.add(egui_material3::MaterialButton::outlined(tr!("create-profile")).small()).clicked() {
+                    if ui
+                        .add(
+                            egui_material3::MaterialButton::outlined(tr!("create-profile")).small(),
+                        )
+                        .clicked()
+                    {
                         dure_info!("Create new profile clicked");
                         self.dlg_profile_create.open();
                     }
@@ -498,13 +526,22 @@ impl DureApp {
                     // Add "Delete Profile 'name'" button (only when a profile is selected)
                     if let Some(ref profile) = self.current_profile {
                         let delete_text = format!("{}", tr!("delete-profile"));
-                        if ui.add(egui_material3::MaterialButton::outlined(delete_text).small()).clicked() {
+                        if ui
+                            .add(egui_material3::MaterialButton::outlined(delete_text).small())
+                            .clicked()
+                        {
                             dure_info!("Delete profile clicked: {}", profile.name);
                             self.dlg_profile_delete.open(profile.name.clone());
                         }
 
                         // Add "Close Profile" button
-                        if ui.add(egui_material3::MaterialButton::outlined(tr!("close-profile")).small()).clicked() {
+                        if ui
+                            .add(
+                                egui_material3::MaterialButton::outlined(tr!("close-profile"))
+                                    .small(),
+                            )
+                            .clicked()
+                        {
                             dure_info!("Close profile clicked: {}", profile.name);
                             // Clear current profile and keyring
                             self.current_profile = None;
@@ -514,13 +551,15 @@ impl DureApp {
                         }
 
                         // Add "Settings" button
-                        if ui.add(egui_material3::MaterialButton::outlined(tr!("settings")).small()).clicked() {
+                        if ui
+                            .add(egui_material3::MaterialButton::outlined(tr!("settings")).small())
+                            .clicked()
+                        {
                             dure_info!("Settings clicked");
                             self.dlg_settings.open();
                         }
                     }
                 });
-
             });
 
         ui.add_space(10.0);
@@ -528,11 +567,11 @@ impl DureApp {
         // Tabs navigation
         ui.add(
             tabs_primary(&mut self.scrolling_selected)
-            .id_salt("scrolling_primary")
-            .tab(tr!("tab-platform"))
-            .tab(tr!("tab-ssh"))
-            .tab(tr!("tab-domains"))
-            .tab(tr!("tab-site")),
+                .id_salt("scrolling_primary")
+                .tab(tr!("tab-platform"))
+                .tab(tr!("tab-ssh"))
+                .tab(tr!("tab-domains"))
+                .tab(tr!("tab-site")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -549,7 +588,10 @@ impl DureApp {
         if self.previous_tab != Some(self.active_tab) {
             match self.active_tab {
                 Tab::Platform => {
-                    if self.tab_platform.should_reload_config(&self.current_profile) {
+                    if self
+                        .tab_platform
+                        .should_reload_config(&self.current_profile)
+                    {
                         self.tab_platform.reset_loaded();
                     }
                 }
@@ -585,18 +627,29 @@ impl DureApp {
 
         // Render active tab content in container with limited height
         dure_trace!("🔥 RENDERING TAB: {:?}", self.active_tab);
-        ui.allocate_ui(egui::vec2(ui.available_width(), tab_max_height), |ui| {
-            match self.active_tab {
-                Tab::Platform => self.tab_platform.ui(&self.current_profile, &self.current_profile_kdbx, ui, self.viewmodel.as_mut()),
-                Tab::Ssh => self.tab_ssh.ui(&self.current_profile, ui, self.viewmodel.as_mut(), &self.current_profile_kdbx),
+        ui.allocate_ui(
+            egui::vec2(ui.available_width(), tab_max_height),
+            |ui| match self.active_tab {
+                Tab::Platform => self.tab_platform.ui(
+                    &self.current_profile,
+                    &self.current_profile_kdbx,
+                    ui,
+                    self.viewmodel.as_mut(),
+                ),
+                Tab::Ssh => self.tab_ssh.ui(
+                    &self.current_profile,
+                    ui,
+                    self.viewmodel.as_mut(),
+                    &self.current_profile_kdbx,
+                ),
                 Tab::Dns => {
                     if let Some(profile) = &self.current_profile {
                         self.tab_dns.ui(ui, profile)
                     }
-                },
+                }
                 Tab::Site => self.tab_site.ui(&self.current_profile, ui),
-            }
-        });
+            },
+        );
 
         // Show log pane if enabled
         #[cfg(not(target_arch = "wasm32"))]
@@ -605,37 +658,46 @@ impl DureApp {
             if self.settings.show_logs {
                 dure_trace!("Rendering log pane (show_logs=true)");
 
-            ui.add_space(16.0);
-            ui.separator();
-            ui.add_space(8.0);
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(8.0);
 
-            ui.horizontal(|ui| {
-                use egui_material3::theme::get_global_color;
-                ui.label(egui::RichText::new("Logs").strong().size(16.0).color(get_global_color("onSurface")));
-                ui.label(format!("(Log Level: {})", self.settings.log_level));
-            });
-
-            egui::ScrollArea::vertical()
-                .id_source("log_scroll_area")
-                .max_height(200.0)
-                .min_scrolled_height(150.0)
-                .stick_to_bottom(true)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    let logs = crate::log_capture::get_logs();
-                    if logs.is_empty() {
-                        use egui_material3::theme::get_global_color;
-                        ui.label(egui::RichText::new("No logs yet...").italics().color(get_global_color("onSurfaceVariant")));
-                    } else {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut logs.as_str())
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(f32::INFINITY)
-                                .desired_rows(10)
-                                .interactive(false)
-                        );
-                    }
+                ui.horizontal(|ui| {
+                    use egui_material3::theme::get_global_color;
+                    ui.label(
+                        egui::RichText::new("Logs")
+                            .strong()
+                            .size(16.0)
+                            .color(get_global_color("onSurface")),
+                    );
+                    ui.label(format!("(Log Level: {})", self.settings.log_level));
                 });
+
+                egui::ScrollArea::vertical()
+                    .id_source("log_scroll_area")
+                    .max_height(200.0)
+                    .min_scrolled_height(150.0)
+                    .stick_to_bottom(true)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let logs = crate::log_capture::get_logs();
+                        if logs.is_empty() {
+                            use egui_material3::theme::get_global_color;
+                            ui.label(
+                                egui::RichText::new("No logs yet...")
+                                    .italics()
+                                    .color(get_global_color("onSurfaceVariant")),
+                            );
+                        } else {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut logs.as_str())
+                                    .font(egui::TextStyle::Monospace)
+                                    .desired_width(f32::INFINITY)
+                                    .desired_rows(10)
+                                    .interactive(false),
+                            );
+                        }
+                    });
             }
         }
     }
@@ -644,20 +706,20 @@ impl DureApp {
     fn apply_material_theme(theme_name: &str, ctx: &egui::Context) {
         use egui_material3::theme::load_theme_from_json_str;
 
-        // Theme JSON constants (from main.rs)
-        const THEME_GREEN: &str = include_str!("../resources/material-theme-green.json");
-        const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblue.json");
-        const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
-        const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
+        // Theme JSON constants
+        const THEME_LEAFGREEN: &str = include_str!("../resources/leafgreen.json");
+        const THEME_VERYSOFTBLUE: &str = include_str!("../resources/verysoftblue.json");
+        const THEME_DEEPCRIMSON: &str = include_str!("../resources/deepcrimson.json");
+        const THEME_GOLDENBOY: &str = include_str!("../resources/goldenboy.json");
         const THEME_TERRACOTTA: &str = include_str!("../resources/material-theme-terracotta.json");
         const THEME_OCEANBLUE: &str = include_str!("../resources/material-theme-oceanblue.json");
         const THEME_DEFAULT: &str = include_str!("../resources/material-theme.json");
 
         let theme_json = match theme_name {
-            "green" => THEME_GREEN,
-            "lightblue" => THEME_LIGHTBLUE,
-            "lightpink" => THEME_LIGHTPINK,
-            "yellow" => THEME_YELLOW,
+            "leafgreen" => THEME_LEAFGREEN,
+            "verysoftblue" => THEME_VERYSOFTBLUE,
+            "deepcrimson" => THEME_DEEPCRIMSON,
+            "goldenboy" => THEME_GOLDENBOY,
             "terracotta" => THEME_TERRACOTTA,
             "oceanblue" => THEME_OCEANBLUE,
             _ => THEME_DEFAULT,
@@ -737,9 +799,9 @@ impl DureApp {
 
         // Set background colors to Material 3 surface tokens
         // This ensures dark mode shows dark backgrounds and light mode shows light backgrounds
-        visuals.window_fill = surface;  // Main application surface
-        visuals.panel_fill = surface_container;  // Mid-tier container for content sections
-        visuals.extreme_bg_color = surface_container_lowest;  // Lowest tier for maximum depth
+        visuals.window_fill = surface; // Main application surface
+        visuals.panel_fill = surface_container; // Mid-tier container for content sections
+        visuals.extreme_bg_color = surface_container_lowest; // Lowest tier for maximum depth
 
         // Apply the visuals with Material 3 colors
         ctx.set_visuals(visuals);
@@ -758,7 +820,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-        }
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -766,7 +828,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-        }
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -774,7 +836,7 @@ fn open_directory(path: &std::path::Path) -> Result<(), String> {
             .arg(path)
             .spawn()
             .map_err(|e| e.to_string())?;
-        }
+    }
 
     Ok(())
 }
@@ -1204,7 +1266,10 @@ impl DureApp {
                     let password = self.dlg_profile_login.password.clone();
 
                     // Verify password
-                    match crate::calc::profile::ProfileManager::verify_password(&profile_name, &password) {
+                    match crate::calc::profile::ProfileManager::verify_password(
+                        &profile_name,
+                        &password,
+                    ) {
                         Ok(()) => {
                             dure_info!("Password verified for profile: {}", profile_name);
 
@@ -1213,18 +1278,32 @@ impl DureApp {
                                 Ok(profile_ctx) => {
                                     // Migrate database from config to data directory if needed
                                     #[cfg(not(target_arch = "wasm32"))]
-                                    if let Err(e) = crate::config_migration::migrate_profile_database(&profile_ctx) {
-                                        dure_warn!("Database migration failed (continuing anyway): {}", e);
+                                    if let Err(e) =
+                                        crate::config_migration::migrate_profile_database(
+                                            &profile_ctx,
+                                        )
+                                    {
+                                        dure_warn!(
+                                            "Database migration failed (continuing anyway): {}",
+                                            e
+                                        );
                                     }
 
                                     // Update database path to profile's database
                                     let db_path = profile_ctx.db_path.to_string_lossy().to_string();
                                     crate::calc::db::set_db_path(db_path);
-                                    dure_info!("Database path updated to: {}", profile_ctx.db_path.display());
+                                    dure_info!(
+                                        "Database path updated to: {}",
+                                        profile_ctx.db_path.display()
+                                    );
 
                                     // Reload config from profile's config directory
-                                    self.config = Config::new(Some(profile_ctx.config_dir.clone())).ok();
-                                    dure_info!("Config reloaded from profile: {}", profile_ctx.config_file.display());
+                                    self.config =
+                                        Config::new(Some(profile_ctx.config_dir.clone())).ok();
+                                    dure_info!(
+                                        "Config reloaded from profile: {}",
+                                        profile_ctx.config_file.display()
+                                    );
 
                                     // Open KeePass database handle
                                     match crate::calc::keyring::DatabaseHandle::open(
@@ -1237,7 +1316,9 @@ impl DureApp {
                                             match handle.get_db_encryption_key() {
                                                 Ok(db_key) => {
                                                     crate::calc::db::set_db_encryption_key(db_key);
-                                                    dure_info!("SQLite encryption key loaded from keyring");
+                                                    dure_info!(
+                                                        "SQLite encryption key loaded from keyring"
+                                                    );
                                                 }
                                                 Err(e) => {
                                                     dure_warn!("Failed to load DB encryption key (profile may predate encryption): {}", e);
@@ -1245,9 +1326,13 @@ impl DureApp {
                                                 }
                                             }
 
-                                            self.current_profile_kdbx = Some(std::sync::Arc::new(handle));
+                                            self.current_profile_kdbx =
+                                                Some(std::sync::Arc::new(handle));
                                             self.current_profile = Some(profile_ctx);
-                                            dure_info!("Profile and keyring loaded successfully: {}", profile_name);
+                                            dure_info!(
+                                                "Profile and keyring loaded successfully: {}",
+                                                profile_name
+                                            );
 
                                             // Clear screen and reload profile configs
                                             self.clear_and_reload_profile();
@@ -1256,7 +1341,10 @@ impl DureApp {
                                         }
                                         Err(e) => {
                                             dure_error!("Failed to open keyring: {}", e);
-                                            self.dlg_profile_login.set_error(format!("Failed to open keyring: {}", e));
+                                            self.dlg_profile_login.set_error(format!(
+                                                "Failed to open keyring: {}",
+                                                e
+                                            ));
                                             self.dlg_profile_login.confirmed = false;
                                             self.dlg_profile_login.open = true;
                                         }
@@ -1264,7 +1352,8 @@ impl DureApp {
                                 }
                                 Err(e) => {
                                     dure_error!("Failed to load profile context: {}", e);
-                                    self.dlg_profile_login.set_error(format!("Failed to load profile: {}", e));
+                                    self.dlg_profile_login
+                                        .set_error(format!("Failed to load profile: {}", e));
                                     self.dlg_profile_login.confirmed = false;
                                     self.dlg_profile_login.open = true; // Reopen dialog to show error
                                 }
@@ -1272,7 +1361,8 @@ impl DureApp {
                         }
                         Err(e) => {
                             dure_warn!("Password verification failed: {}", e);
-                            self.dlg_profile_login.set_error("Incorrect password".to_string());
+                            self.dlg_profile_login
+                                .set_error("Incorrect password".to_string());
                             self.dlg_profile_login.confirmed = false;
                             self.dlg_profile_login.open = true; // Reopen dialog to show error
                         }
@@ -1297,7 +1387,8 @@ impl DureApp {
                 let password = self.dlg_profile_create.password.clone();
 
                 // Create profile
-                match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password) {
+                match crate::calc::profile::ProfileManager::create_profile(&profile_name, &password)
+                {
                     Ok(profile_ctx) => {
                         dure_info!("Profile created successfully: {}", profile_name);
 
@@ -1307,11 +1398,17 @@ impl DureApp {
                         // Update database path to profile's database
                         let db_path = profile_ctx.db_path.to_string_lossy().to_string();
                         crate::calc::db::set_db_path(db_path);
-                        dure_info!("Database path updated to: {}", profile_ctx.db_path.display());
+                        dure_info!(
+                            "Database path updated to: {}",
+                            profile_ctx.db_path.display()
+                        );
 
                         // Reload config from profile's config directory
                         self.config = Config::new(Some(profile_ctx.config_dir.clone())).ok();
-                        dure_info!("Config reloaded from profile: {}", profile_ctx.config_file.display());
+                        dure_info!(
+                            "Config reloaded from profile: {}",
+                            profile_ctx.config_file.display()
+                        );
 
                         // Open KeePass database handle
                         match crate::calc::keyring::DatabaseHandle::open(
@@ -1346,14 +1443,18 @@ impl DureApp {
                             }
                             Err(e) => {
                                 dure_error!("Failed to open keyring for new profile: {}", e);
-                                self.dlg_profile_create.set_error(format!("Profile created but failed to open keyring: {}", e));
+                                self.dlg_profile_create.set_error(format!(
+                                    "Profile created but failed to open keyring: {}",
+                                    e
+                                ));
                                 self.dlg_profile_create.confirmed = false;
                             }
                         }
                     }
                     Err(e) => {
                         dure_error!("Failed to create profile: {}", e);
-                        self.dlg_profile_create.set_error(format!("Failed to create profile: {}", e));
+                        self.dlg_profile_create
+                            .set_error(format!("Failed to create profile: {}", e));
                         self.dlg_profile_create.confirmed = false;
                     }
                 }
@@ -1369,7 +1470,8 @@ impl DureApp {
                 let profile_name = self.dlg_profile_delete.profile_name.clone();
 
                 // Check if deleting the currently active profile
-                let is_active = self.current_profile
+                let is_active = self
+                    .current_profile
                     .as_ref()
                     .map(|p| p.name == profile_name)
                     .unwrap_or(false);
@@ -1427,10 +1529,17 @@ impl DureApp {
         if let Some(profile) = &self.current_profile {
             self.settings = Settings::load_or_default(&profile.settings_file);
             dure_info!("Settings loaded from {:?}", profile.settings_file);
-            dure_info!("Settings: show_logs={}, log_level={}, language={}",
-                self.settings.show_logs, self.settings.log_level, self.settings.language);
-            dure_debug!("🎨 Theme settings loaded - mode: {}, name: {}",
-                self.settings.theme_mode, self.settings.theme_name);
+            dure_info!(
+                "Settings: show_logs={}, log_level={}, language={}",
+                self.settings.show_logs,
+                self.settings.log_level,
+                self.settings.language
+            );
+            dure_debug!(
+                "🎨 Theme settings loaded - mode: {}, name: {}",
+                self.settings.theme_mode,
+                self.settings.theme_name
+            );
 
             // Apply loaded settings to global state
             crate::log_capture::update_log_settings(
@@ -1449,11 +1558,14 @@ impl DureApp {
             // Apply theme settings (color scheme and dark mode)
             #[cfg(feature = "gui")]
             {
-                use egui_material3::{ThemeMode, get_global_theme};
+                use egui_material3::{get_global_theme, ThemeMode};
 
                 // Apply theme name (color scheme)
-                dure_info!("Applying theme from settings: {} (mode: {})",
-                    self.settings.theme_name, self.settings.theme_mode);
+                dure_info!(
+                    "Applying theme from settings: {} (mode: {})",
+                    self.settings.theme_name,
+                    self.settings.theme_mode
+                );
 
                 // This will be applied through apply_theme() in update loop
                 // Just update global theme mode here

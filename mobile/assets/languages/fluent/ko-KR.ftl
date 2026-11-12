@@ -364,6 +364,7 @@ dns-button-set-records-note = (구현되지 않음 - Cloudflare API 토큰 필�
 dns-status-not-implemented = ⚠ Cloudflare API 확인 구현되지 않음
 dns-status-missing-a-record = 누락: 루트 도메인의 A 레코드
 dns-status-missing-cname = 누락: www 서브도메인의 A/CNAME
+dns-settings-all-configured = ✓ 모든 DNS 레코드가 올바르게 구성되었습니다
 
 # DNS HTTPS Check Dialog
 dns-dialog-https-title = HTTPS 연결 확인
