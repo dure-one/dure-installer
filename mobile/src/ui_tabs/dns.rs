@@ -379,10 +379,10 @@ impl DnsTab {
             let delete_domain = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_delete_domain")));
 
             if let Some(domain) = refresh_all {
-                // Run all 3 checks sequentially
-                self.check_ns_server(&domain);
-                self.check_dns_settings(&domain);
-                self.check_https_connection(&domain);
+                // Run all 3 checks in background (no dialogs)
+                self.check_ns_server_impl(&domain, false);
+                self.check_dns_settings_impl(&domain, false);
+                self.check_https_connection_impl(&domain, false);
             }
             if let Some(domain) = check_ns {
                 self.check_ns_server(&domain);
@@ -608,6 +608,10 @@ impl DnsTab {
 
     /// Check NS server records using DNS over HTTPS
     fn check_ns_server(&mut self, domain: &str) {
+        self.check_ns_server_impl(domain, true);
+    }
+
+    fn check_ns_server_impl(&mut self, domain: &str, show_dialog: bool) {
         dure_info!("Checking NS server for domain: {}", domain);
 
         // Set operation state to InProgress
@@ -706,7 +710,9 @@ impl DnsTab {
         });
 
         self.ns_check_promise = Some(promise);
-        self.show_ns_check_dialog = true;
+        if show_dialog {
+            self.show_ns_check_dialog = true;
+        }
     }
 
     /// Start OAuth authentication for DNS settings check
@@ -782,6 +788,10 @@ impl DnsTab {
 
     /// Check DNS settings via Cloudflare API
     fn check_dns_settings(&mut self, domain: &str) {
+        self.check_dns_settings_impl(domain, true);
+    }
+
+    fn check_dns_settings_impl(&mut self, domain: &str, show_dialog: bool) {
         dure_info!("Checking DNS settings for domain: {}", domain);
 
         // Set operation state to InProgress
@@ -921,11 +931,17 @@ impl DnsTab {
 
         self.dns_settings_promise = Some(promise);
         self.dns_operation_log.clear();
-        self.show_dns_settings_dialog = true;
+        if show_dialog {
+            self.show_dns_settings_dialog = true;
+        }
     }
 
     /// Check HTTPS connection and verify IP resolution
     fn check_https_connection(&mut self, domain: &str) {
+        self.check_https_connection_impl(domain, true);
+    }
+
+    fn check_https_connection_impl(&mut self, domain: &str, show_dialog: bool) {
         dure_info!("Checking HTTPS connection for domain: {}", domain);
 
         // Set operation state to InProgress
@@ -1002,7 +1018,9 @@ impl DnsTab {
         });
 
         self.https_check_promise = Some(promise);
-        self.show_https_check_dialog = true;
+        if show_dialog {
+            self.show_https_check_dialog = true;
+        }
     }
 
     /// Render all dialogs
@@ -1261,19 +1279,7 @@ impl DnsTab {
                         ui.heading(&tr!("dns-settings-status-heading"));
                         ui.add_space(8.0);
 
-                        // Show check result status
-                        if check_result.records_valid {
-                            ui.label(tr!("dns-settings-all-ok"));
-                        } else {
-                            use egui_material3::theme::get_global_color;
-                            ui.colored_label(
-                                get_global_color("error"),
-                                tr!("dns-settings-incomplete")
-                            );
-                        }
-                        ui.add_space(8.0);
-
-                        // Show display messages
+                        // Show display messages (already contains status)
                         if !display_msgs.is_empty() {
                             ui.group(|ui| {
                                 for msg in display_msgs {
@@ -1353,9 +1359,6 @@ impl DnsTab {
                                 }
                             }
                         }
-                    } else {
-                        ui.spinner();
-                        ui.label(tr!("dns-settings-checking"));
                     }
 
                     // Show operation log if any
