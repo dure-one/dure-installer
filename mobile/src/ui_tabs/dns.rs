@@ -1105,44 +1105,69 @@ impl DnsTab {
             }
         }
 
-        // NS check dialog
-        if self.show_ns_check_dialog {
-            // Poll NS check promise
-            if let Some(promise) = self.ns_check_promise.take() {
-                if let Some(result) = promise.ready() {
-                    match result {
-                        Ok((check_result, display_results)) => {
-                            self.ns_check_results = display_results.clone();
-                            // Update domain row with check result and operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_ns_check = Some(check_result.clone());
-                                    row.operation_state = row.operation_state.clone().complete();
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
+        // Poll NS check promise (unconditional - runs even when dialog closed)
+        if let Some(promise) = self.ns_check_promise.take() {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok((check_result, display_results)) => {
+                        self.ns_check_results = display_results.clone();
+                        // Update domain row with check result and operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_ns_check = Some(check_result.clone());
+                                row.operation_state = row.operation_state.clone().complete();
+                                dure_info!("NS check completed for domain: {}", domain);
                             }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
                         }
-                        Err((check_result, display_results)) => {
-                            self.ns_check_results = display_results.clone();
-                            // Store error result and update operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_ns_check = Some(check_result.clone());
-                                    let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
-                                    row.operation_state = row.operation_state.clone().fail(error_msg);
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
+                    }
+                    Err((check_result, display_results)) => {
+                        self.ns_check_results = display_results.clone();
+                        // Store error result and update operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_ns_check = Some(check_result.clone());
+                                let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
+                                row.operation_state = row.operation_state.clone().fail(error_msg.clone());
+                                dure_warn!("NS check failed for domain {}: {}", domain, error_msg);
                             }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
                         }
+                    }
+                }
+            } else {
+                // Check timeout (30 seconds)
+                if let Some(domain) = &self.selected_domain {
+                    if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                        if let OperationState::InProgress { started_at, .. } = &row.operation_state {
+                            let now = chrono::Utc::now().timestamp();
+                            if now - started_at > 30 {
+                                row.operation_state = row.operation_state.clone().fail("Timeout after 30 seconds");
+                                dure_warn!("NS check timed out for domain: {}", domain);
+                                // Don't put promise back - let it die
+                            } else {
+                                ui.ctx().request_repaint();
+                                self.ns_check_promise = Some(promise);
+                            }
+                        } else {
+                            ui.ctx().request_repaint();
+                            self.ns_check_promise = Some(promise);
+                        }
+                    } else {
+                        ui.ctx().request_repaint();
+                        self.ns_check_promise = Some(promise);
                     }
                 } else {
                     ui.ctx().request_repaint();
                     self.ns_check_promise = Some(promise);
                 }
             }
+        }
 
+        // NS check dialog
+        if self.show_ns_check_dialog {
             let ns_check_results = self.ns_check_results.clone();
 
             dialog("ns_server_check_dialog", tr!("dns-dialog-ns-title"), &mut self.show_ns_check_dialog)
@@ -1173,9 +1198,70 @@ impl DnsTab {
                 .show(ui.ctx());
         }
 
-        // DNS settings check dialog with promise polling
+        // Poll DNS settings check promise (unconditional - runs even when dialog closed)
+        if let Some(promise) = self.dns_settings_promise.take() {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok((check_result, display_msgs)) => {
+                        self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
+                        // Store result in domain row and update operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_settings_check = Some(check_result.clone());
+                                row.operation_state = row.operation_state.clone().complete();
+                                dure_info!("DNS settings check completed for domain: {}", domain);
+                            }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
+                        }
+                    }
+                    Err((check_result, display_msgs)) => {
+                        self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
+                        // Store error result in domain row and update operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_settings_check = Some(check_result.clone());
+                                let error_msg = check_result.error.clone().unwrap_or_else(|| "DNS check failed".to_string());
+                                row.operation_state = row.operation_state.clone().fail(error_msg.clone());
+                                dure_warn!("DNS settings check failed for domain {}: {}", domain, error_msg);
+                            }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
+                        }
+                    }
+                }
+            } else {
+                // Check timeout (30 seconds)
+                if let Some(domain) = &self.selected_domain {
+                    if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                        if let OperationState::InProgress { started_at, .. } = &row.operation_state {
+                            let now = chrono::Utc::now().timestamp();
+                            if now - started_at > 30 {
+                                row.operation_state = row.operation_state.clone().fail("Timeout after 30 seconds");
+                                dure_warn!("DNS settings check timed out for domain: {}", domain);
+                                // Don't put promise back - let it die
+                            } else {
+                                ui.ctx().request_repaint();
+                                self.dns_settings_promise = Some(promise);
+                            }
+                        } else {
+                            ui.ctx().request_repaint();
+                            self.dns_settings_promise = Some(promise);
+                        }
+                    } else {
+                        ui.ctx().request_repaint();
+                        self.dns_settings_promise = Some(promise);
+                    }
+                } else {
+                    ui.ctx().request_repaint();
+                    self.dns_settings_promise = Some(promise);
+                }
+            }
+        }
+
+        // DNS settings check dialog with OAuth/create promise polling
         if self.show_dns_settings_dialog {
-            // Poll DNS OAuth promise
+            // Poll DNS OAuth promise (dialog-only operation)
             if let Some(promise) = self.dns_oauth_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
@@ -1203,7 +1289,7 @@ impl DnsTab {
                 }
             }
 
-            // Poll DNS create promise
+            // Poll DNS create promise (dialog-only operation)
             if let Some(promise) = self.dns_create_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
@@ -1221,42 +1307,6 @@ impl DnsTab {
                 } else {
                     ui.ctx().request_repaint();
                     self.dns_create_promise = Some(promise);
-                }
-            }
-
-            // Poll DNS settings check promise
-            if let Some(promise) = self.dns_settings_promise.take() {
-                if let Some(result) = promise.ready() {
-                    match result {
-                        Ok((check_result, display_msgs)) => {
-                            self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
-                            // Store result in domain row and update operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_settings_check = Some(check_result.clone());
-                                    row.operation_state = row.operation_state.clone().complete();
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
-                            }
-                        }
-                        Err((check_result, display_msgs)) => {
-                            self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
-                            // Store error result in domain row and update operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_settings_check = Some(check_result.clone());
-                                    let error_msg = check_result.error.clone().unwrap_or_else(|| "DNS check failed".to_string());
-                                    row.operation_state = row.operation_state.clone().fail(error_msg);
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
-                            }
-                        }
-                    }
-                } else {
-                    ui.ctx().request_repaint();
-                    self.dns_settings_promise = Some(promise);
                 }
             }
 
@@ -1389,50 +1439,75 @@ impl DnsTab {
             self.show_dns_settings_dialog = show_dialog;
         }
 
-        // HTTPS check dialog
-        if self.show_https_check_dialog {
-            // Poll HTTPS check promise
-            if let Some(promise) = self.https_check_promise.take() {
-                if let Some(result) = promise.ready() {
-                    match result {
-                        Ok(check_result) => {
-                            self.https_check_result = Some(check_result.clone());
-                            // Store result in domain row and update operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_https_check = Some(check_result.clone());
-                                    row.operation_state = row.operation_state.clone().complete();
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
+        // Poll HTTPS check promise (unconditional - runs even when dialog closed)
+        if let Some(promise) = self.https_check_promise.take() {
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(check_result) => {
+                        self.https_check_result = Some(check_result.clone());
+                        // Store result in domain row and update operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_https_check = Some(check_result.clone());
+                                row.operation_state = row.operation_state.clone().complete();
+                                dure_info!("HTTPS check completed for domain: {}", domain);
                             }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
                         }
-                        Err(err) => {
-                            let error_result = HttpsCheckResult {
-                                checked_at: chrono::Utc::now().timestamp(),
-                                resolves_to_vm: false,
-                                resolved_ip: None,
-                                expected_ip: None,
-                                error: Some(err.clone()),
-                            };
-                            self.https_check_result = Some(error_result.clone());
-                            // Store error result in domain row and update operation state
-                            if let Some(domain) = &self.selected_domain {
-                                if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
-                                    row.last_https_check = Some(error_result);
-                                    row.operation_state = row.operation_state.clone().fail(err);
-                                }
-                                // Save to config
-                                self.save_check_results_to_config(domain, profile);
+                    }
+                    Err(err) => {
+                        let error_result = HttpsCheckResult {
+                            checked_at: chrono::Utc::now().timestamp(),
+                            resolves_to_vm: false,
+                            resolved_ip: None,
+                            expected_ip: None,
+                            error: Some(err.clone()),
+                        };
+                        self.https_check_result = Some(error_result.clone());
+                        // Store error result in domain row and update operation state
+                        if let Some(domain) = &self.selected_domain {
+                            if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                                row.last_https_check = Some(error_result);
+                                row.operation_state = row.operation_state.clone().fail(err.clone());
+                                dure_warn!("HTTPS check failed for domain {}: {}", domain, err);
                             }
+                            // Save to config
+                            self.save_check_results_to_config(domain, profile);
                         }
+                    }
+                }
+            } else {
+                // Check timeout (30 seconds)
+                if let Some(domain) = &self.selected_domain {
+                    if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
+                        if let OperationState::InProgress { started_at, .. } = &row.operation_state {
+                            let now = chrono::Utc::now().timestamp();
+                            if now - started_at > 30 {
+                                row.operation_state = row.operation_state.clone().fail("Timeout after 30 seconds");
+                                dure_warn!("HTTPS check timed out for domain: {}", domain);
+                                // Don't put promise back - let it die
+                            } else {
+                                ui.ctx().request_repaint();
+                                self.https_check_promise = Some(promise);
+                            }
+                        } else {
+                            ui.ctx().request_repaint();
+                            self.https_check_promise = Some(promise);
+                        }
+                    } else {
+                        ui.ctx().request_repaint();
+                        self.https_check_promise = Some(promise);
                     }
                 } else {
                     ui.ctx().request_repaint();
                     self.https_check_promise = Some(promise);
                 }
             }
+        }
 
+        // HTTPS check dialog
+        if self.show_https_check_dialog {
             let https_check_result = self.https_check_result.clone();
 
             dialog("https_connection_check_dialog", tr!("dns-dialog-https-title"), &mut self.show_https_check_dialog)
