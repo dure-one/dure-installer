@@ -372,6 +372,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     firewall_selected_rows: Vec<bool>,  // Selection state for datatable
     #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_edit_data: std::collections::HashMap<usize, FirewallRule>,  // Edit state per row
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_add_firewall_dialog: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
     current_ip: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     show_remove_ip_dialog: bool,
@@ -479,6 +483,8 @@ impl Default for PlatformTab {
             firewall_rules: Vec::new(),
             firewall_selected: None,
             firewall_selected_rows: Vec::new(),
+            firewall_edit_data: std::collections::HashMap::new(),
+            show_add_firewall_dialog: false,
             current_ip: None,
             show_remove_ip_dialog: false,
             remove_ip_list: Vec::new(),
@@ -4723,6 +4729,9 @@ impl PlatformTab {
         let remove_ip_requested = Cell::new(false);
         let flush_requested = Cell::new(false);
         let selected_rule_name = Cell::new(String::new());
+        let add_requested = Cell::new(false);
+        let delete_requested = Cell::new(false);
+        let reset_requested = Cell::new(false);
 
         dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
             .min_width(900.0)
@@ -4784,16 +4793,13 @@ impl PlatformTab {
                 // Toolbar: Add/Delete/Reset buttons
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::filled(tr!("firewall-button-add-row"))).clicked() {
-                        // TODO: Open add rule dialog
-                        dure_info!("Add firewall rule clicked");
+                        add_requested.set(true);
                     }
                     if ui.add(MaterialButton::outlined(tr!("firewall-button-delete-selected"))).clicked() {
-                        // TODO: Delete selected rules
-                        dure_info!("Delete selected clicked");
+                        delete_requested.set(true);
                     }
                     if ui.add(MaterialButton::text(tr!("firewall-button-reset"))).clicked() {
-                        // TODO: Reset rules from GCP
-                        dure_info!("Reset clicked");
+                        reset_requested.set(true);
                     }
                 });
                 ui.add_space(8.0);
@@ -5017,6 +5023,39 @@ impl PlatformTab {
 
         // Update selection state
         self.firewall_selected = firewall_selected;
+
+        // Handle add row action
+        if add_requested.get() {
+            self.show_add_firewall_dialog = true;
+        }
+
+        // Handle delete selected action
+        if delete_requested.get() {
+            let selected_indices: Vec<usize> = self.firewall_selected_rows
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &selected)| if selected { Some(i) } else { None })
+                .collect();
+
+            if !selected_indices.is_empty() {
+                dure_info!("Delete selected rules: {} rules", selected_indices.len());
+                // TODO: Implement GCP delete_firewall API call
+                // for idx in selected_indices.iter().rev() {
+                //     if let Some(rule) = firewall_rule_list.get(*idx) {
+                //         gcp_client.delete_firewall(project_id, &rule.name)?;
+                //     }
+                // }
+                self.firewall_selected_rows.clear();
+            }
+        }
+
+        // Handle reset action
+        if reset_requested.get() {
+            dure_info!("Reset firewall rules from GCP");
+            // TODO: Implement GCP list_firewall_rules reload
+            // let rules = gcp_client.list_firewall_rules(project_id)?;
+            // self.firewall_rules = rules;
+        }
 
         // Handle add IP action
         if add_ip_requested.get() {

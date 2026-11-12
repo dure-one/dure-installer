@@ -994,6 +994,41 @@ impl GcpRestClient {
 
         Ok(filtered)
     }
+
+    /// Delete a firewall rule
+    pub fn delete_firewall(&self, project_id: &str, rule_name: &str) -> Result<Operation> {
+        let url = format!(
+            "{}/projects/{}/global/firewalls/{}",
+            GCP_COMPUTE_API_BASE, project_id, rule_name
+        );
+
+        dure_info!("🔥 Deleting firewall rule: {}", rule_name);
+        let response = self.delete(&url)?;
+        let operation: Operation = response.into_json()?;
+        self.wait_for_global_operation(project_id, &operation.name)
+    }
+
+    /// Update a firewall rule
+    pub fn update_firewall(&self, project_id: &str, rule_name: &str, body: &str) -> Result<()> {
+        let url = format!(
+            "{}/projects/{}/global/firewalls/{}",
+            GCP_COMPUTE_API_BASE, project_id, rule_name
+        );
+
+        dure_info!("🔥 Updating firewall rule: {}", rule_name);
+        let response = self.patch(&url, body)?;
+        let status = response.status();
+
+        if status != 200 && status != 202 {
+            let response_text = response.into_string().unwrap_or_default();
+            return Err(anyhow::anyhow!(
+                "Failed to update firewall rule (status {}): {}",
+                status, response_text
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
