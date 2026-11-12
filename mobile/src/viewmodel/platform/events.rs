@@ -35,11 +35,30 @@ pub struct SshStatus {
     pub error: Option<String>,
 }
 
-/// Firewall rule information with IP inclusion check
+/// Firewall rule information with IP inclusion check (simplified)
 #[derive(Debug, Clone)]
 pub struct FirewallRuleInfo {
     pub name: String,
     pub source_ranges: Vec<String>,
+    pub ip_included: bool,
+    pub allows_ssh: bool,
+}
+
+/// Complete firewall rule data with all GCP fields
+#[derive(Debug, Clone)]
+pub struct FullFirewallRule {
+    pub name: String,
+    pub network: String,
+    pub direction: String,
+    pub priority: u32,
+    pub source_ranges: Vec<String>,
+    pub dest_ranges: Vec<String>,
+    pub allowed: Vec<String>,  // Formatted as "tcp:22", "udp:53", "icmp"
+    pub denied: Vec<String>,
+    pub source_tags: Vec<String>,
+    pub source_service_accounts: Vec<String>,
+    pub target_tags: Vec<String>,
+    pub target_service_accounts: Vec<String>,
     pub ip_included: bool,
     pub allows_ssh: bool,
 }
@@ -115,7 +134,7 @@ pub enum PlatformEvent {
     },
     FirewallRulesFetched {
         platform_name: String,
-        rules: Vec<FirewallRuleInfo>,
+        rules: Vec<FullFirewallRule>,
         current_ip: String,
     },
     FirewallRuleUpdated {

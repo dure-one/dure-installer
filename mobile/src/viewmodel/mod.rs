@@ -477,6 +477,36 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn create_firewall_rule(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_data: platform::FirewallRuleData,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CreateFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_data,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn delete_firewall_rule(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        rule_name: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::DeleteFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn fetch_billing(
         &self,
         profile_config_path: std::path::PathBuf,

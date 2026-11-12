@@ -60,6 +60,8 @@ impl PlatformActor {
             PlatformCommand::UpdateFirewallRule { .. } => "update_firewall_rule",
             PlatformCommand::RemoveIpFromFirewall { .. } => "remove_ip_from_firewall",
             PlatformCommand::FlushFirewallRule { .. } => "flush_firewall_rule",
+            PlatformCommand::CreateFirewallRule { .. } => "create_firewall_rule",
+            PlatformCommand::DeleteFirewallRule { .. } => "delete_firewall_rule",
             PlatformCommand::FetchBilling { .. } => "fetch_billing",
             PlatformCommand::ListProjects { .. } => "list_projects",
             PlatformCommand::SelectProject { .. } => "select_project",
@@ -129,6 +131,16 @@ impl PlatformActor {
                 platform_name,
                 rule_name,
             } => self.flush_firewall_rule(profile_config_path, platform_name, rule_name).await,
+            PlatformCommand::CreateFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_data,
+            } => self.create_firewall_rule(profile_config_path, platform_name, rule_data).await,
+            PlatformCommand::DeleteFirewallRule {
+                profile_config_path,
+                platform_name,
+                rule_name,
+            } => self.delete_firewall_rule(profile_config_path, platform_name, rule_name).await,
             PlatformCommand::FetchBilling {
                 profile_config_path,
                 platform_name,
@@ -768,6 +780,30 @@ impl PlatformActor {
         result
     }
 
+    /// Helper: Format allowed/denied rules from GCP format to "protocol:port" strings
+    fn format_allowed_denied(rules: &[crate::api::gcp::compute::FirewallAllowed]) -> Vec<String> {
+        rules
+            .iter()
+            .flat_map(|rule| {
+                let protocol = &rule.ip_protocol;
+                if let Some(ports) = &rule.ports {
+                    ports.iter().map(|port| format!("{}:{}", protocol, port)).collect()
+                } else {
+                    vec![protocol.clone()]
+                }
+            })
+            .collect()
+    }
+
+    /// Helper: Extract network name from full GCP network URL
+    fn extract_network_name(network_url: &Option<String>) -> String {
+        network_url
+            .as_ref()
+            .and_then(|url| url.split('/').last())
+            .unwrap_or("default")
+            .to_string()
+    }
+
     async fn fetch_firewall_rules(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
         self.send_progress("fetch_firewall_rules", 0.3, "Fetching current IP...")
             .await;
@@ -802,7 +838,7 @@ impl PlatformActor {
         let rules = runtime::unblock({
             let project_id = project_id.clone();
             let current_ip = current_ip.clone();
-            move || -> anyhow::Result<Vec<crate::viewmodel::platform::FirewallRuleInfo>> {
+            move || -> anyhow::Result<Vec<crate::viewmodel::platform::FullFirewallRule>> {
                 let client = crate::api::gcp::GcpRestClient::new(access_token);
                 let gcp_rules = client.list_firewall_rules(&project_id)?;
 
@@ -822,9 +858,19 @@ impl PlatformActor {
                         let ip_included =
                             crate::api::gcp::ip_in_ranges(&current_ip, &source_ranges);
 
-                        crate::viewmodel::platform::FirewallRuleInfo {
-                            name: rule.name,
+                        crate::viewmodel::platform::FullFirewallRule {
+                            name: rule.name.clone(),
+                            network: Self::extract_network_name(&rule.network),
+                            direction: rule.direction.unwrap_or_else(|| "INGRESS".to_string()),
+                            priority: rule.priority.unwrap_or(1000),
                             source_ranges,
+                            dest_ranges: rule.destination_ranges.unwrap_or_default(),
+                            allowed: Self::format_allowed_denied(&rule.allowed),
+                            denied: Self::format_allowed_denied(&rule.denied),
+                            source_tags: rule.source_tags.unwrap_or_default(),
+                            source_service_accounts: rule.source_service_accounts.unwrap_or_default(),
+                            target_tags: rule.target_tags.unwrap_or_default(),
+                            target_service_accounts: rule.target_service_accounts.unwrap_or_default(),
                             ip_included,
                             allows_ssh,
                         }
@@ -1079,6 +1125,134 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "flush".to_string(),
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn create_firewall_rule(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        rule_data: super::FirewallRuleData,
+    ) -> anyhow::Result<()> {
+        self.send_progress("create_firewall_rule", 0.3, "Creating firewall rule...")
+            .await;
+
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        let rule_name = rule_data.name.clone();
+
+        runtime::unblock({
+            let project_id = project_id.clone();
+            move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+
+                // Convert FirewallRuleData to GCP FirewallRequest
+                let mut allowed = Vec::new();
+                for rule_str in &rule_data.allowed {
+                    if rule_str.is_empty() {
+                        continue;
+                    }
+                    let parts: Vec<&str> = rule_str.split(':').collect();
+                    if parts.len() == 2 {
+                        allowed.push(crate::api::gcp::compute::FirewallAllowed {
+                            ip_protocol: parts[0].to_string(),
+                            ports: Some(vec![parts[1].to_string()]),
+                        });
+                    } else {
+                        allowed.push(crate::api::gcp::compute::FirewallAllowed {
+                            ip_protocol: rule_str.to_string(),
+                            ports: None,
+                        });
+                    }
+                }
+
+                let firewall_request = crate::api::gcp::compute::FirewallRequest {
+                    name: rule_data.name,
+                    description: Some(format!("Created via Dure")),
+                    direction: rule_data.direction,
+                    priority: rule_data.priority,
+                    target_tags: rule_data.target_tags,
+                    allowed,
+                    source_ranges: rule_data.source_ranges,
+                };
+
+                client.create_firewall(&project_id, &firewall_request)?;
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRuleUpdated {
+            platform_name,
+            rule_name,
+            operation: "create".to_string(),
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn delete_firewall_rule(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+        rule_name: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("delete_firewall_rule", 0.3, "Deleting firewall rule...")
+            .await;
+
+        let (access_token, _) = Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await?;
+
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config.platforms.into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        runtime::unblock({
+            let project_id = project_id.clone();
+            let rule_name = rule_name.clone();
+            move || -> anyhow::Result<()> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                client.delete_firewall(&project_id, &rule_name)?;
+                Ok(())
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::FirewallRuleUpdated {
+            platform_name,
+            rule_name,
+            operation: "delete".to_string(),
         })
         .await;
 

@@ -156,13 +156,33 @@ pub struct FirewallAllowed {
     pub ports: Option<Vec<String>>,
 }
 
-/// GCP Firewall Rule
+/// GCP Firewall Rule (complete schema)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FirewallRule {
     pub name: String,
-    pub allowed: Vec<FirewallAllowed>,
-    #[serde(rename = "sourceRanges")]
+    #[serde(default)]
+    pub network: Option<String>,
+    #[serde(default)]
+    pub direction: Option<String>,
+    #[serde(default)]
+    pub priority: Option<u32>,
+    #[serde(default)]
     pub source_ranges: Option<Vec<String>>,
+    #[serde(default)]
+    pub destination_ranges: Option<Vec<String>>,
+    #[serde(default)]
+    pub allowed: Vec<FirewallAllowed>,
+    #[serde(default)]
+    pub denied: Vec<FirewallAllowed>,
+    #[serde(default)]
+    pub source_tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub source_service_accounts: Option<Vec<String>>,
+    #[serde(default)]
+    pub target_tags: Option<Vec<String>>,
+    #[serde(default)]
+    pub target_service_accounts: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
