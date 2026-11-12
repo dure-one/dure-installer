@@ -851,3 +851,23 @@ dns-status-resolves-mismatch = ✗ { $resolved }로 해석됨 (예상: { $expect
 dns-status-not-resolve-to-vm = ✗ VM으로 해석되지 않음
 dns-logs-heading = DNS 작업 로그
 
+## DNS Operations Column - Refresh Button
+dns-button-refresh = 새로고침
+dns-button-refresh-tooltip = 모든 DNS 검사 실행 (NS, 설정, HTTPS)
+
+## DNS Settings Check Dialog
+dns-settings-dialog-title = DNS 설정 확인
+dns-settings-status-heading = DNS 구성 상태
+dns-settings-all-ok = ✓ 모든 DNS 레코드가 올바르게 구성되었습니다
+dns-settings-incomplete = ⚠ DNS 구성이 불완전합니다
+dns-settings-missing-label = 누락된 레코드:
+dns-settings-error = 오류: {$error}
+dns-settings-auth-button = Cloudflare 인증
+dns-settings-setup-prompt = 다음 DNS 레코드를 자동으로 설정할 수 있습니다:
+dns-settings-setup-button = DNS 레코드 설정
+dns-settings-checking = DNS 설정 확인 중...
+dns-settings-op-log-label = 작업 로그:
+
+## Logs Renderer
+logs-no-logs-yet = 아직 로그가 없습니다
+

@@ -209,7 +209,7 @@ struct DnsRecordCheck {
 }
 
 /// HTTPS connection check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct HttpsCheckResult {
     pub checked_at: i64,
     pub resolves_to_vm: bool,
@@ -219,7 +219,7 @@ pub struct HttpsCheckResult {
 }
 
 /// NS check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NsCheckResult {
     pub checked_at: i64,
     pub uses_cloudflare: bool,
@@ -228,7 +228,7 @@ pub struct NsCheckResult {
 }
 
 /// DNS settings check result
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SettingsCheckResult {
     pub checked_at: i64,
     pub records_valid: bool,
@@ -372,11 +372,18 @@ impl DnsTab {
             self.render_domain_table(ui, profile);
 
             // Check for button click events stored in ui.data (consume with remove_temp)
+            let refresh_all = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_refresh_all")));
             let check_ns = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_ns")));
             let check_settings = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_settings")));
             let check_https = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_https")));
             let delete_domain = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_delete_domain")));
 
+            if let Some(domain) = refresh_all {
+                // Run all 3 checks sequentially
+                self.check_ns_server(&domain);
+                self.check_dns_settings(&domain);
+                self.check_https_connection(&domain);
+            }
             if let Some(domain) = check_ns {
                 self.check_ns_server(&domain);
             }
@@ -494,6 +501,18 @@ impl DnsTab {
                             let column_width = ui.available_width();
 
                             ui.horizontal_wrapped(|ui| {
+                            // Refresh button (first position)
+                            if ui
+                                .add(MaterialButton::outlined(tr!("dns-button-refresh")).small())
+                                .on_hover_text(tr!("dns-button-refresh-tooltip"))
+                                .clicked()
+                            {
+                                ui.data_mut(|d| d.insert_temp(
+                                    egui::Id::new("dns_refresh_all"),
+                                    domain.clone()
+                                ));
+                            }
+
                             if ui
                                 .add(MaterialButton::outlined(tr!("dns-button-check-ns")).small())
                                 .on_hover_text(tr!("dns-button-check-ns-tooltip"))
@@ -778,6 +797,16 @@ impl DnsTab {
         let token_expiry = row.and_then(|r| r.oauth_token_expiry);
 
         self.selected_domain = Some(domain.to_string());
+
+        // Show cached result immediately if available (Task 3)
+        if let Some(cached_check) = row.and_then(|r| r.last_settings_check.clone()) {
+            let display_msgs = if cached_check.records_valid {
+                vec!["✓ All DNS records configured correctly".to_string()]
+            } else {
+                vec!["⚠ DNS records missing or incorrect - click Setup DNS in wizard".to_string()]
+            };
+            self.dns_settings_result = Some((cached_check, display_msgs));
+        }
 
         let domain = domain.to_string();
         let promise = Promise::spawn_thread("check_dns_settings", move || {
@@ -1072,6 +1101,8 @@ impl DnsTab {
                                     row.last_ns_check = Some(check_result.clone());
                                     row.operation_state = row.operation_state.clone().complete();
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                         Err((check_result, display_results)) => {
@@ -1083,6 +1114,8 @@ impl DnsTab {
                                     let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
                                     row.operation_state = row.operation_state.clone().fail(error_msg);
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                     }
@@ -1185,6 +1218,8 @@ impl DnsTab {
                                     row.last_settings_check = Some(check_result.clone());
                                     row.operation_state = row.operation_state.clone().complete();
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                         Err((check_result, display_msgs)) => {
@@ -1196,6 +1231,8 @@ impl DnsTab {
                                     let error_msg = check_result.error.clone().unwrap_or_else(|| "DNS check failed".to_string());
                                     row.operation_state = row.operation_state.clone().fail(error_msg);
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                     }
@@ -1214,24 +1251,24 @@ impl DnsTab {
                 .is_some();
 
             let mut show_dialog = self.show_dns_settings_dialog;
-            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut show_dialog)
+            dialog("dns_settings_check_dialog", &tr!("dns-settings-dialog-title"), &mut show_dialog)
                 .min_width(500.0)
                 .max_width(500.0)
                 .max_height(450.0)
                 .scrollable(true)
                 .content(|ui, open| {
                     if let Some((check_result, display_msgs)) = &dns_settings_result {
-                        ui.heading("DNS Configuration Status");
+                        ui.heading(&tr!("dns-settings-status-heading"));
                         ui.add_space(8.0);
 
                         // Show check result status
                         if check_result.records_valid {
-                            ui.label("✓ All DNS records are configured correctly");
+                            ui.label(tr!("dns-settings-all-ok"));
                         } else {
                             use egui_material3::theme::get_global_color;
                             ui.colored_label(
                                 get_global_color("error"),
-                                "⚠ DNS configuration incomplete"
+                                tr!("dns-settings-incomplete")
                             );
                         }
                         ui.add_space(8.0);
@@ -1248,7 +1285,7 @@ impl DnsTab {
                         // Show missing records
                         if !check_result.missing_records.is_empty() {
                             ui.add_space(8.0);
-                            ui.label("Missing records:");
+                            ui.label(tr!("dns-settings-missing-label"));
                             ui.group(|ui| {
                                 for record in &check_result.missing_records {
                                     ui.label(format!("  • {}", record));
@@ -1260,12 +1297,12 @@ impl DnsTab {
                         if let Some(error) = &check_result.error {
                             use egui_material3::theme::get_global_color;
                             ui.add_space(8.0);
-                            ui.colored_label(get_global_color("error"), format!("Error: {}", error));
+                            ui.colored_label(get_global_color("error"), tr!("dns-settings-error", {error: error}));
 
                             // Show authentication button if no OAuth token
                             if !has_oauth_token {
                                 ui.add_space(8.0);
-                                if ui.add(MaterialButton::filled("Authenticate with Cloudflare")).clicked() {
+                                if ui.add(MaterialButton::filled(tr!("dns-settings-auth-button"))).clicked() {
                                     if let Some(domain) = &domain {
                                         self.start_dns_oauth(domain);
                                     }
@@ -1279,7 +1316,7 @@ impl DnsTab {
                             ui.separator();
                             ui.add_space(8.0);
 
-                            ui.label("You can setup these DNS records automatically:");
+                            ui.label(tr!("dns-settings-setup-prompt"));
                             ui.add_space(4.0);
 
                             // DNS record preview (collect data first to avoid borrow conflicts)
@@ -1310,7 +1347,7 @@ impl DnsTab {
                                     })
                                 });
 
-                            if ui.add(MaterialButton::filled("Setup DNS Records")).clicked() {
+                            if ui.add(MaterialButton::filled(tr!("dns-settings-setup-button"))).clicked() {
                                 if let Some((domain, zone_id, vm_ip, token)) = setup_data {
                                     self.create_dns_records_for_domain(&domain, &zone_id, &vm_ip, &token);
                                 }
@@ -1318,7 +1355,7 @@ impl DnsTab {
                         }
                     } else {
                         ui.spinner();
-                        ui.label("Checking DNS settings...");
+                        ui.label(tr!("dns-settings-checking"));
                     }
 
                     // Show operation log if any
@@ -1326,7 +1363,7 @@ impl DnsTab {
                         ui.add_space(12.0);
                         ui.separator();
                         ui.add_space(8.0);
-                        ui.label("Operation Log:");
+                        ui.label(tr!("dns-settings-op-log-label"));
                         ui.group(|ui| {
                             for log_entry in &self.dns_operation_log {
                                 ui.label(log_entry);
@@ -1339,7 +1376,7 @@ impl DnsTab {
                     ui.add_space(8.0);
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                        if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
                             *open = false;
                         }
                     });
@@ -1363,6 +1400,8 @@ impl DnsTab {
                                     row.last_https_check = Some(check_result.clone());
                                     row.operation_state = row.operation_state.clone().complete();
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                         Err(err) => {
@@ -1380,6 +1419,8 @@ impl DnsTab {
                                     row.last_https_check = Some(error_result);
                                     row.operation_state = row.operation_state.clone().fail(err);
                                 }
+                                // Save to config
+                                self.save_check_results_to_config(domain, profile);
                             }
                         }
                     }
@@ -1514,6 +1555,9 @@ impl DnsTab {
             oauth_access_token: access_token.clone(),
             oauth_refresh_token: refresh_token.clone(),
             oauth_token_expiry: *expires_at,
+            last_ns_check: None,
+            last_settings_check: None,
+            last_https_check: None,
         });
 
         // Save config
@@ -1600,9 +1644,9 @@ impl DnsTab {
                 oauth_access_token: dns_config.oauth_access_token.clone(),
                 oauth_refresh_token: dns_config.oauth_refresh_token.clone(),
                 oauth_token_expiry: dns_config.oauth_token_expiry,
-                last_ns_check: None,
-                last_settings_check: None,
-                last_https_check: None,
+                last_ns_check: dns_config.last_ns_check.clone(),
+                last_settings_check: dns_config.last_settings_check.clone(),
+                last_https_check: dns_config.last_https_check.clone(),
                 operation_state: OperationState::Idle,
                 drawer_state: DnsDrawerState::default(),
             });
@@ -1616,6 +1660,45 @@ impl DnsTab {
     #[cfg(target_arch = "wasm32")]
     fn load_domain_rows(&mut self, _profile: &ProfileContext) {
         self.loaded = true;
+    }
+
+    /// Save DNS check results to config
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_check_results_to_config(&self, domain: &str, profile: &ProfileContext) {
+        use crate::config::AppConfig;
+
+        let mut config = match AppConfig::load(&profile.config_file) {
+            Ok(c) => c,
+            Err(e) => {
+                dure_error!("Failed to load config for saving check results: {}", e);
+                return;
+            }
+        };
+
+        // Find domain row with check results
+        let row = match self.domain_rows.iter().find(|r| r.domain == domain) {
+            Some(r) => r,
+            None => return,
+        };
+
+        // Update config with check results
+        if let Some(dns_config) = config.dns_domains.iter_mut().find(|d| &d.domain == domain) {
+            dns_config.last_ns_check = row.last_ns_check.clone();
+            dns_config.last_settings_check = row.last_settings_check.clone();
+            dns_config.last_https_check = row.last_https_check.clone();
+
+            if let Err(e) = config.save(&profile.config_file) {
+                dure_error!("Failed to save DNS check results to config: {}", e);
+            } else {
+                dure_debug!("Saved DNS check results for {} to config", domain);
+            }
+        }
+    }
+
+    /// WASM stub for save_check_results_to_config
+    #[cfg(target_arch = "wasm32")]
+    fn save_check_results_to_config(&self, _domain: &str, _profile: &ProfileContext) {
+        // No-op on WASM
     }
 }
 

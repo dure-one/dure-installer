@@ -855,3 +855,23 @@ dns-status-resolves-mismatch = ✗ Resolves to { $resolved } (expected { $expect
 dns-status-not-resolve-to-vm = ✗ Does not resolve to VM
 dns-logs-heading = DNS Operation Logs
 
+## DNS Operations Column - Refresh Button
+dns-button-refresh = Refresh
+dns-button-refresh-tooltip = Run all DNS checks (NS, Settings, HTTPS)
+
+## DNS Settings Check Dialog
+dns-settings-dialog-title = DNS Settings Check
+dns-settings-status-heading = DNS Configuration Status
+dns-settings-all-ok = ✓ All DNS records are configured correctly
+dns-settings-incomplete = ⚠ DNS configuration incomplete
+dns-settings-missing-label = Missing records:
+dns-settings-error = Error: {$error}
+dns-settings-auth-button = Authenticate with Cloudflare
+dns-settings-setup-prompt = You can setup these DNS records automatically:
+dns-settings-setup-button = Setup DNS Records
+dns-settings-checking = Checking DNS settings...
+dns-settings-op-log-label = Operation Log:
+
+## Logs Renderer
+logs-no-logs-yet = No logs yet
+

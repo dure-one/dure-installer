@@ -191,6 +191,17 @@ pub struct DnsDomainConfig {
     /// OAuth token expiry (Unix timestamp)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth_token_expiry: Option<u64>,
+
+    // Cached check results (like SSH tab pattern)
+    /// Last NS server check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_ns_check: Option<crate::ui_tabs::dns::NsCheckResult>,
+    /// Last DNS settings check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_settings_check: Option<crate::ui_tabs::dns::SettingsCheckResult>,
+    /// Last HTTPS connection check result
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_https_check: Option<crate::ui_tabs::dns::HttpsCheckResult>,
 }
 
 /// SSH host configuration

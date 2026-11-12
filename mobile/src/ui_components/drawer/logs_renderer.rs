@@ -1,4 +1,5 @@
 use eframe::egui::{self, Color32, Id, RichText, ScrollArea, Ui};
+use egui_i18n::tr;
 
 /// Auto-refreshing log display component
 pub struct LogsRenderer {
@@ -75,7 +76,7 @@ impl LogsRenderer {
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 if logs.is_empty() {
-                    ui.label("No logs yet");
+                    ui.label(tr!("logs-no-logs-yet"));
                 } else {
                     for line in logs {
                         ui.label(line);
