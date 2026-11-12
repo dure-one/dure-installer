@@ -111,9 +111,9 @@ pub struct DnsTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     show_dns_settings_dialog: bool,
 
-    /// DNS settings check results
+    /// DNS settings check result
     #[cfg_attr(feature = "serde", serde(skip))]
-    dns_settings_results: Vec<DnsRecordCheck>,
+    dns_settings_result: Option<(SettingsCheckResult, Vec<String>)>,
 
     /// Show HTTPS connection check dialog
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -319,7 +319,7 @@ impl Default for DnsTab {
             show_ns_check_dialog: false,
             ns_check_results: Vec::new(),
             show_dns_settings_dialog: false,
-            dns_settings_results: Vec::new(),
+            dns_settings_result: None,
             show_https_check_dialog: false,
             https_check_result: None,
             ns_check_promise: None,
@@ -415,6 +415,8 @@ impl DnsTab {
 
             if self.domain_rows.is_empty() {
                 ui.label(tr!("dns-main-empty"));
+                // Add blank space to ensure log panel appears at bottom (>500px)
+                ui.add_space(520.0);
                 return;
             }
 
@@ -923,13 +925,14 @@ impl DnsTab {
                 .show(ui.ctx());
         }
 
-        // DNS settings check dialog
+        // DNS settings check dialog with promise polling
         if self.show_dns_settings_dialog {
             // Poll DNS settings check promise
             if let Some(promise) = self.dns_settings_promise.take() {
                 if let Some(result) = promise.ready() {
                     match result {
-                        Ok((check_result, display_results)) => {
+                        Ok((check_result, display_msgs)) => {
+                            self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
                             // Store result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
@@ -937,36 +940,17 @@ impl DnsTab {
                                     row.operation_state = row.operation_state.clone().complete();
                                 }
                             }
-                            // Convert display strings to DnsRecordCheck for legacy dialog
-                            self.dns_settings_results = display_results.iter().map(|msg| {
-                                DnsRecordCheck {
-                                    record_type: "INFO".to_string(),
-                                    name: msg.clone(),
-                                    expected: String::new(),
-                                    actual: None,
-                                    valid: !msg.contains('✗'),
-                                }
-                            }).collect();
                         }
-                        Err((check_result, display_results)) => {
+                        Err((check_result, display_msgs)) => {
+                            self.dns_settings_result = Some((check_result.clone(), display_msgs.clone()));
                             // Store error result in domain row and update operation state
                             if let Some(domain) = &self.selected_domain {
                                 if let Some(row) = self.domain_rows.iter_mut().find(|r| &r.domain == domain) {
                                     row.last_settings_check = Some(check_result.clone());
-                                    let error_msg = check_result.error.clone().unwrap_or_else(|| tr!("dns-error-unknown"));
+                                    let error_msg = check_result.error.clone().unwrap_or_else(|| "DNS check failed".to_string());
                                     row.operation_state = row.operation_state.clone().fail(error_msg);
                                 }
                             }
-                            // Convert display strings to DnsRecordCheck for legacy dialog
-                            self.dns_settings_results = display_results.iter().map(|msg| {
-                                DnsRecordCheck {
-                                    record_type: "ERROR".to_string(),
-                                    name: msg.clone(),
-                                    expected: String::new(),
-                                    actual: None,
-                                    valid: false,
-                                }
-                            }).collect();
                         }
                     }
                 } else {
@@ -975,75 +959,59 @@ impl DnsTab {
                 }
             }
 
-            let dns_settings_results = self.dns_settings_results.clone();
+            let dns_settings_result = self.dns_settings_result.clone();
 
-            dialog("dns_settings_check_dialog", tr!("dns-dialog-settings-title"), &mut self.show_dns_settings_dialog)
-                .min_width(600.0)
-                .max_height(500.0)
+            dialog("dns_settings_check_dialog", "DNS Settings Check", &mut self.show_dns_settings_dialog)
+                .min_width(500.0)
+                .max_width(500.0)
+                .max_height(450.0)
                 .scrollable(true)
                 .content(|ui, open| {
-                    if dns_settings_results.is_empty() {
-                        ui.spinner();
-                        ui.label(tr!("dns-dialog-settings-checking"));
-                    } else {
-                        ui.heading(tr!("dns-dialog-settings-verification"));
-                        ui.add_space(10.0);
-
-                        use egui_extras::{TableBuilder, Column};
-                        TableBuilder::new(ui)
-                            .striped(true)
-                            .column(Column::exact(60.0))  // Type
-                            .column(Column::remainder())  // Name
-                            .column(Column::remainder())  // Expected
-                            .column(Column::remainder())  // Actual
-                            .column(Column::exact(60.0))  // Status
-                            .header(20.0, |mut header| {
-                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-type")); });
-                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-name")); });
-                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-expected")); });
-                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-actual")); });
-                                header.col(|ui| { ui.strong(tr!("dns-dialog-settings-col-status")); });
-                            })
-                            .body(|mut body| {
-                                for check in &dns_settings_results {
-                                    body.row(18.0, |mut row| {
-                                        row.col(|ui| { ui.label(&check.record_type); });
-                                        row.col(|ui| { ui.label(&check.name); });
-                                        row.col(|ui| { ui.label(&check.expected); });
-                                        row.col(|ui| {
-                                            if let Some(actual) = &check.actual {
-                                                ui.label(actual);
-                                            } else {
-                                                ui.weak(tr!("dns-dialog-settings-not-found"));
-                                            }
-                                        });
-                                        row.col(|ui| {
-                                            use egui_material3::theme::get_global_color;
-                                            if check.valid {
-                                                ui.label("✓");
-                                            } else {
-                                                ui.colored_label(get_global_color("error"), "✗");
-                                            }
-                                        });
-                                    });
-                                }
-                            });
-
+                    if let Some((check_result, display_msgs)) = &dns_settings_result {
+                        ui.heading("DNS Configuration Status");
                         ui.add_space(8.0);
 
-                        // Show "Set Correct Records" button if there are invalid records
-                        if !dns_settings_results.is_empty() {
-                            let all_valid = dns_settings_results.iter().all(|r| r.valid);
-                            if !all_valid {
-                                ui.horizontal(|ui| {
-                                    if ui.add(MaterialButton::filled(tr!("dns-button-set-records"))).clicked() {
-                                        // TODO: Implement Cloudflare API call to update DNS records
-                                        dure_warn!("Set DNS records not implemented yet - needs Cloudflare API integration");
-                                    }
-                                    ui.label(tr!("dns-button-set-records-note"));
-                                });
-                            }
+                        // Show check result status
+                        if check_result.records_valid {
+                            ui.label("✓ All DNS records are configured correctly");
+                        } else {
+                            use egui_material3::theme::get_global_color;
+                            ui.colored_label(
+                                get_global_color("error"),
+                                "⚠ DNS configuration incomplete"
+                            );
                         }
+                        ui.add_space(8.0);
+
+                        // Show display messages
+                        if !display_msgs.is_empty() {
+                            ui.group(|ui| {
+                                for msg in display_msgs {
+                                    ui.label(msg);
+                                }
+                            });
+                        }
+
+                        // Show missing records
+                        if !check_result.missing_records.is_empty() {
+                            ui.add_space(8.0);
+                            ui.label("Missing records:");
+                            ui.group(|ui| {
+                                for record in &check_result.missing_records {
+                                    ui.label(format!("  • {}", record));
+                                }
+                            });
+                        }
+
+                        // Show error if any
+                        if let Some(error) = &check_result.error {
+                            use egui_material3::theme::get_global_color;
+                            ui.add_space(8.0);
+                            ui.colored_label(get_global_color("error"), format!("Error: {}", error));
+                        }
+                    } else {
+                        ui.spinner();
+                        ui.label("Checking DNS settings...");
                     }
 
                     ui.add_space(12.0);

@@ -649,6 +649,8 @@ impl DureApp {
         const THEME_LIGHTBLUE: &str = include_str!("../resources/material-theme-lightblue.json");
         const THEME_LIGHTPINK: &str = include_str!("../resources/material-theme-lightpink.json");
         const THEME_YELLOW: &str = include_str!("../resources/material-theme-yellow.json");
+        const THEME_TERRACOTTA: &str = include_str!("../resources/material-theme-terracotta.json");
+        const THEME_OCEANBLUE: &str = include_str!("../resources/material-theme-oceanblue.json");
         const THEME_DEFAULT: &str = include_str!("../resources/material-theme.json");
 
         let theme_json = match theme_name {
@@ -656,6 +658,8 @@ impl DureApp {
             "lightblue" => THEME_LIGHTBLUE,
             "lightpink" => THEME_LIGHTPINK,
             "yellow" => THEME_YELLOW,
+            "terracotta" => THEME_TERRACOTTA,
+            "oceanblue" => THEME_OCEANBLUE,
             _ => THEME_DEFAULT,
         };
 
