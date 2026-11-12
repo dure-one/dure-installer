@@ -4994,8 +4994,11 @@ impl PlatformTab {
                                    // Drawer action buttons
                                    ui.horizontal(|ui| {
                                        if ui.add(MaterialButton::filled("Save Changes")).clicked() {
-                                           // TODO: Save edited rule to GCP
                                            dure_info!("Save rule changes for: {}", name_clone);
+                                           // TODO: Make fields editable by storing in firewall_edit_data
+                                           // 1. On drawer open: edit_data.insert(idx, rule.clone())
+                                           // 2. Edit fields from edit_data[idx] (not clones)
+                                           // 3. On save: gcp_client.update_firewall(project_id, &rule.name, &body)?;
                                        }
                                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
                                            // Drawer auto-closes on click outside
@@ -5090,6 +5093,63 @@ impl PlatformTab {
         // Clear selection when dialog closes
         if !self.show_firewall_dialog {
             self.firewall_selected = None;
+        }
+
+        // Add Rule dialog
+        if self.show_add_firewall_dialog {
+            use egui_material3::{MaterialButton, MaterialInput};
+
+            let mut new_rule = FirewallRule::default();
+            let confirmed = Cell::new(false);
+
+            dialog("add_firewall_dialog", tr!("firewall-add-dialog-title"), &mut self.show_add_firewall_dialog)
+                .min_width(500.0)
+                .scrollable(true)
+                .content(|ui, _open| {
+                    ui.heading(tr!("firewall-add-dialog-title"));
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label(tr!("firewall-field-name"));
+                        ui.add(MaterialInput::filled(&mut new_rule.name).hint("allow-ssh-custom"));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(tr!("firewall-field-network"));
+                        ui.add(MaterialInput::filled(&mut new_rule.network).hint("default"));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(tr!("firewall-field-direction"));
+                        ui.add(MaterialInput::filled(&mut new_rule.direction).hint("INGRESS"));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label(tr!("firewall-field-priority"));
+                        let mut priority_str = new_rule.priority.to_string();
+                        ui.add(MaterialInput::filled(&mut priority_str).hint("1000"));
+                        if let Ok(val) = priority_str.parse::<u32>() {
+                            new_rule.priority = val;
+                        }
+                    });
+
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Create")).clicked() {
+                            confirmed.set(true);
+                        }
+                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                            // Dialog closes
+                        }
+                    });
+                })
+                .show(ctx);
+
+            if confirmed.get() {
+                dure_info!("Create new firewall rule: {}", new_rule.name);
+                // TODO: Call GCP create_firewall API
+                self.show_add_firewall_dialog = false;
+            }
         }
 
         // Remove IP submenu dialog
