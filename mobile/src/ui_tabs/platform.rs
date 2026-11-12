@@ -913,6 +913,61 @@ impl PlatformTab {
         false
     }
 
+    /// Save SSH test results to config (Task 6)
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_ssh_results_to_config(
+        &self,
+        completed: &[(String, Result<crate::calc::ssh::SshConnectionResult, String>)],
+        profile: &crate::calc::profile::ProfileContext,
+    ) {
+        if let Ok((mut config, config_path)) = load_config(&Some(profile.clone())) {
+            for (project_id, result) in completed {
+                if let Some(platform) = config.platforms.iter_mut()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(project_id))
+                {
+                    match result {
+                        Ok(conn_result) => {
+                            platform.cached_ssh_connection_success = Some(conn_result.success);
+                            platform.cached_ssh_connection_message = Some(conn_result.message.clone());
+                            dure_info!("Saved SSH test result for {}: {}", project_id,
+                                if conn_result.success { "success" } else { "failed" });
+                        }
+                        Err(err) => {
+                            platform.cached_ssh_connection_success = Some(false);
+                            platform.cached_ssh_connection_message = Some(err.clone());
+                            dure_warn!("Saved SSH test error for {}: {}", project_id, err);
+                        }
+                    }
+                }
+            }
+            if let Err(e) = config.save(&config_path) {
+                dure_warn!("Failed to save SSH test results to config: {}", e);
+            }
+        }
+    }
+
+    /// Save firewall status to config (Task 6)
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_firewall_status_to_config(
+        &self,
+        project_id: &str,
+        firewall_status: &str,
+        profile: &crate::calc::profile::ProfileContext,
+    ) {
+        if let Ok((mut config, config_path)) = load_config(&Some(profile.clone())) {
+            if let Some(platform) = config.platforms.iter_mut()
+                .find(|p| p.gcp_selected_project_id.as_deref() == Some(project_id))
+            {
+                platform.cached_firewall_status = Some(firewall_status.to_string());
+                dure_info!("Saved firewall status for {}: {}", project_id, firewall_status);
+
+                if let Err(e) = config.save(&config_path) {
+                    dure_warn!("Failed to save firewall status to config: {}", e);
+                }
+            }
+        }
+    }
+
     /// Render the platform tab UI
     pub fn ui(
         &mut self,
@@ -949,15 +1004,22 @@ impl PlatformTab {
                     }) => {
                         dure_debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
 
+                        let firewall_status = format!("✅ Whitelisted ({})", whitelisted_ip);
+
                         // Incremental update: Find and update specific row
                         if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
                             row.operation_state = OperationState::Completed {
                                 operation: "firewall".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
                             };
-                            row.firewall_status = format!("✅ Whitelisted ({})", whitelisted_ip);
+                            row.firewall_status = firewall_status.clone();
                             row.firewall_updated = true;
                         }
+
+                        // Save firewall status to config (Task 6)
+                        #[cfg(not(target_arch = "wasm32"))]
+                        self.save_firewall_status_to_config(&platform_name, &firewall_status, current_profile);
+
                         // Note: NO self.loaded = false! Incremental update only
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallRulesFetched {
@@ -1335,16 +1397,19 @@ impl PlatformTab {
             let mut completed = Vec::new();
             for (platform_name, promise) in &self.ssh_test_promises {
                 if let Some(result) = promise.ready() {
-                    completed.push(platform_name.clone());
+                    completed.push((platform_name.clone(), result.clone()));
                     self.ssh_test_results
                         .insert(platform_name.clone(), result.clone());
                 }
             }
             if !completed.is_empty() {
+                // Save SSH test results to config (Task 6)
+                self.save_ssh_results_to_config(&completed, &current_profile);
+
                 // Reload rows to update SSH status and keys in drawer
                 self.loaded = false;
             }
-            for platform_name in completed {
+            for (platform_name, _) in completed {
                 self.ssh_test_promises.remove(&platform_name);
             }
         }
@@ -2276,12 +2341,30 @@ impl PlatformTab {
                         // Compute SSH status from cached results only (no blocking)
                         let project_id_key = platform.gcp_selected_project_id.as_ref()
                             .map(|s| s.as_str()).unwrap_or("unknown");
+
+                        // Load cached SSH result from config if no live test result (Task 6)
+                        let ssh_test_result = self.ssh_test_results.get(project_id_key).cloned()
+                            .or_else(|| {
+                                // Check config cache
+                                if let (Some(success), Some(message)) = (
+                                    platform.cached_ssh_connection_success,
+                                    &platform.cached_ssh_connection_message
+                                ) {
+                                    Some(Ok(crate::calc::ssh::SshConnectionResult {
+                                        success,
+                                        message: message.clone(),
+                                    }))
+                                } else {
+                                    None
+                                }
+                            });
+
                         let ssh_status_str =
-                            compute_ssh_status(platform, self.ssh_test_results.get(project_id_key));
+                            compute_ssh_status(platform, ssh_test_result.as_ref());
 
                         // ssh_ready should match ssh_status: only true if actually connected
                         let ssh_ready =
-                            if let Some(result) = self.ssh_test_results.get(project_id_key) {
+                            if let Some(result) = &ssh_test_result {
                                 matches!(result, Ok(conn_result) if conn_result.success)
                             } else {
                                 false

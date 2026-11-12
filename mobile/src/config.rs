@@ -69,6 +69,13 @@ pub struct CloudPlatformConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_status_refresh: Option<i64>,
 
+    // SSH connection test result cache (Task 6)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_ssh_connection_success: Option<bool>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_ssh_connection_message: Option<String>,
+
     // DNS wizard domain binding
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bound_domain: Option<String>,
