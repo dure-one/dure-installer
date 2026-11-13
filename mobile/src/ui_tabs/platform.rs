@@ -4785,7 +4785,7 @@ impl PlatformTab {
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use std::cell::Cell;
         use std::sync::{Arc, Mutex};
