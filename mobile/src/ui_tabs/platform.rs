@@ -1,9 +1,12 @@
 //! Platform tab - Platform configuration and management
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{MaterialButton, data_table, linear_progress, badge, BadgeColor, BadgeSize, notification, NotificationAlign, dialog, DataTableCell};
+use egui_material3::{
+    badge, data_table, dialog, linear_progress, notification, BadgeColor, BadgeSize, DataTableCell,
+    MaterialButton, NotificationAlign,
+};
 use egui_twemoji::EmojiLabel;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -13,7 +16,7 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
 
-use crate::ui_components::{ActionMenu, SvgEmoji, EmojiProgressBar};
+use crate::ui_components::{ActionMenu, EmojiProgressBar, SvgEmoji};
 
 // Button spacing matching Platform tab
 const BUTTON_VERTICAL_SPACING: f32 = 4.0;
@@ -24,11 +27,11 @@ const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
 struct FirewallRule {
     name: String,
     network: String,
-    direction: String,  // "INGRESS" or "EGRESS"
+    direction: String, // "INGRESS" or "EGRESS"
     priority: u32,
     source_ranges: Vec<String>,
     dest_ranges: Vec<String>,
-    allowed: Vec<String>,  // e.g., ["tcp:22", "udp:53", "icmp"]
+    allowed: Vec<String>, // e.g., ["tcp:22", "udp:53", "icmp"]
     denied: Vec<String>,
     source_tags: Vec<String>,
     source_service_accounts: Vec<String>,
@@ -76,8 +79,11 @@ struct FirewallValidation {
 
 impl FirewallValidation {
     fn has_warnings(&self) -> bool {
-        self.current_ip_missing || self.full_access_count > 1 || !self.ssh_access_ips.is_empty()
-            || !self.http_exposed || !self.https_exposed
+        self.current_ip_missing
+            || self.full_access_count > 1
+            || !self.ssh_access_ips.is_empty()
+            || !self.http_exposed
+            || !self.https_exposed
     }
 }
 
@@ -135,9 +141,9 @@ fn validate_firewall_rules(rules: &[FirewallRule], current_ip: &str) -> Firewall
 #[derive(Clone, Debug)]
 pub struct PlatformRow {
     // Identity (CHANGED: project_id replaces platform_name)
-    pub project_id: String,              // GCP project ID (platform identifier)
-    pub project_display_name: String,    // Display name (may differ from ID)
-    pub platform_type: String,           // "GCP"
+    pub project_id: String,           // GCP project ID (platform identifier)
+    pub project_display_name: String, // Display name (may differ from ID)
+    pub platform_type: String,        // "GCP"
 
     // Connection state flags (for Steps column)
     pub gcp_connected: bool,    // Has OAuth access token
@@ -147,7 +153,7 @@ pub struct PlatformRow {
     pub ssh_ready: bool,        // VM has external_ip.is_some()
 
     // Drawer content data
-    pub email: Option<String>,      // Connected Google account
+    pub email: Option<String>,              // Connected Google account
     pub total_project_count: Option<usize>, // Cached project count (None = not yet loaded)
     pub selected_project_id: Option<String>,
     pub vm_name: Option<String>,            // First VM name
@@ -159,14 +165,14 @@ pub struct PlatformRow {
     pub ssh_status: String,                 // "✅ Ready" or "? No external IP"
 
     // NEW: Status cache metadata
-    pub last_refresh_time: Option<i64>,     // For staleness indicator
+    pub last_refresh_time: Option<i64>, // For staleness indicator
 
     // Operation state tracking (for visual feedback)
     pub operation_state: OperationState,
 
     // Action button state
-    pub has_vm: bool,            // Enable/disable VM operation buttons
-    pub vm_zone: Option<String>, // For VM operations (delete, restart, regen)
+    pub has_vm: bool,               // Enable/disable VM operation buttons
+    pub vm_zone: Option<String>,    // For VM operations (delete, restart, regen)
     pub oauth_refresh_failed: bool, // OAuth token refresh failed
 
     // DNS wizard domain binding
@@ -179,7 +185,7 @@ enum PlatformAction {
     UpdateFirewall(String), // project_id
     SelectProject(String),  // project_id
     DeleteVM {
-        project_id: String,  // CHANGED from platform_name
+        project_id: String, // CHANGED from platform_name
         vm_name: String,
         vm_zone: String,
     },
@@ -366,25 +372,25 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     firewall_rule_list: Vec<crate::viewmodel::platform::FullFirewallRule>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_rules: Vec<FirewallRule>,  // Full rule data for datatable
+    firewall_rules: Vec<FirewallRule>, // Full rule data for datatable
     #[cfg_attr(feature = "serde", serde(skip))]
     firewall_selected: Option<usize>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_selected_rows: Vec<bool>,  // Selection state for datatable
+    firewall_selected_rows: Vec<bool>, // Selection state for datatable
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_edit_data: std::collections::HashMap<usize, FirewallRule>,  // Edit state per row
+    firewall_edit_data: std::collections::HashMap<usize, FirewallRule>, // Edit state per row
     #[cfg_attr(feature = "serde", serde(skip))]
     show_add_firewall_dialog: bool,
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_form_data: FirewallRule,  // Form data for Add/Edit dialog
+    firewall_form_data: FirewallRule, // Form data for Add/Edit dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_form_edit_idx: Option<usize>,  // If Some, editing row; if None, adding new
+    firewall_form_edit_idx: Option<usize>, // If Some, editing row; if None, adding new
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_save_in_progress: bool,  // Track if save operation is running
+    firewall_save_in_progress: bool, // Track if save operation is running
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_save_error: Option<String>,  // Error message from failed operation
+    firewall_save_error: Option<String>, // Error message from failed operation
     #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_last_refresh_time: Option<std::time::Instant>,  // Last refresh timestamp for debouncing
+    firewall_last_refresh_time: Option<std::time::Instant>, // Last refresh timestamp for debouncing
     #[cfg_attr(feature = "serde", serde(skip))]
     current_ip: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -395,6 +401,12 @@ pub struct PlatformTab {
     remove_ip_selected: Vec<bool>,
     #[cfg_attr(feature = "serde", serde(skip))]
     show_flush_confirm: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_delete_firewall_confirm: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_firewall_rule_name: String,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    delete_firewall_rule_idx: Option<usize>,
 
     // SSH connection test state (per platform)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -505,6 +517,9 @@ impl Default for PlatformTab {
             remove_ip_list: Vec::new(),
             remove_ip_selected: Vec::new(),
             show_flush_confirm: false,
+            show_delete_firewall_confirm: false,
+            delete_firewall_rule_name: String::new(),
+            delete_firewall_rule_idx: None,
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
@@ -519,7 +534,9 @@ impl Default for PlatformTab {
 
 /// Get config file path
 #[cfg(not(target_arch = "wasm32"))]
-fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<std::path::PathBuf, String> {
+fn get_config_path(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<std::path::PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
         None => Err(tr!("platform-error-no-profile")),
@@ -528,8 +545,10 @@ fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Re
 
 /// Load application config with V1 to V2 migration
 #[cfg(not(target_arch = "wasm32"))]
-fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<(AppConfig, std::path::PathBuf), String> {
-    use crate::config_migration::{AppConfigV1, backup_config, migrate_config_v1_to_v2};
+fn load_config(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<(AppConfig, std::path::PathBuf), String> {
+    use crate::config_migration::{backup_config, migrate_config_v1_to_v2, AppConfigV1};
 
     let config_path = get_config_path(profile)?;
 
@@ -561,16 +580,22 @@ fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result
                     let v2_config = migrate_config_v1_to_v2(v1_config)?;
 
                     // Save migrated config immediately
-                    v2_config.save(&config_path)
+                    v2_config
+                        .save(&config_path)
                         .map_err(|e| tr!("platform-error-save-config", {error: e.to_string()}))?;
 
-                    dure_info!(" Migrated {} platform(s) to V2 format", v2_config.platforms.len());
+                    dure_info!(
+                        " Migrated {} platform(s) to V2 format",
+                        v2_config.platforms.len()
+                    );
 
                     Ok((v2_config, config_path))
                 }
                 Err(v1_err) => {
                     // Both V1 and V2 failed - config is corrupted
-                    Err(tr!("platform-error-parse-config", {v2_error: format!("{:?}", _v2_err), v1_error: format!("{:?}", v1_err)}))
+                    Err(
+                        tr!("platform-error-parse-config", {v2_error: format!("{:?}", _v2_err), v1_error: format!("{:?}", v1_err)}),
+                    )
                 }
             }
         }
@@ -589,7 +614,7 @@ fn load_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result
 fn compute_firewall_status(access_token: Option<&str>, project_id: Option<&str>) -> String {
     if let Some(project) = project_id {
         if let Some(token) = access_token {
-            use crate::api::gcp::{GcpRestClient, get_current_ip};
+            use crate::api::gcp::{get_current_ip, GcpRestClient};
 
             let client = GcpRestClient::new(token.to_string());
 
@@ -865,7 +890,11 @@ pub fn load_ssh_key_from_keyring(
     let keys = match keyring::list_keys_from_handle(handle) {
         Ok(k) => k,
         Err(e) => {
-            dure_debug!(project_id = project_id, "Failed to list keys from profile keyring: {}", e);
+            dure_debug!(
+                project_id = project_id,
+                "Failed to list keys from profile keyring: {}",
+                e
+            );
             return (None, None);
         }
     };
@@ -952,10 +981,8 @@ fn render_drawer_content(
         .with(row.last_refresh_time.unwrap_or(0));
 
     // Load active tab from persistent storage (default to Status)
-    let active_tab: DrawerTab = ui.data_mut(|d| {
-        d.get_persisted(drawer_id)
-            .unwrap_or(DrawerTab::Status)
-    });
+    let active_tab: DrawerTab =
+        ui.data_mut(|d| d.get_persisted(drawer_id).unwrap_or(DrawerTab::Status));
 
     // Create drawer state with persisted tab
     let mut drawer_state = DrawerState::new();
@@ -964,13 +991,18 @@ fn render_drawer_content(
         drawer_state.set_project(project_id);
 
         // Load logs from temp storage if available
-        if let Some(logs) = ui.ctx().data(|d| d.get_temp::<Vec<String>>(drawer_id.with("logs"))) {
+        if let Some(logs) = ui
+            .ctx()
+            .data(|d| d.get_temp::<Vec<String>>(drawer_id.with("logs")))
+        {
             drawer_state.set_logs(logs);
         }
 
         // Load operations from temp storage if available
         if let Some(operations) = ui.ctx().data(|d| {
-            d.get_temp::<Vec<crate::storage::models::opslog::OperationLog>>(drawer_id.with("operations"))
+            d.get_temp::<Vec<crate::storage::models::opslog::OperationLog>>(
+                drawer_id.with("operations"),
+            )
         }) {
             drawer_state.set_operations(operations);
         }
@@ -978,7 +1010,13 @@ fn render_drawer_content(
 
     let mut tab_switch: Option<DrawerTab> = None;
 
-    platform_drawer::render_drawer(ui, row, &drawer_state, &mut tab_switch, current_profile_kdbx);
+    platform_drawer::render_drawer(
+        ui,
+        row,
+        &drawer_state,
+        &mut tab_switch,
+        current_profile_kdbx,
+    );
 
     // Persist tab switch and trigger auto-load
     if let Some(new_tab) = tab_switch {
@@ -1018,7 +1056,10 @@ impl PlatformTab {
 
     /// Check if config file has changed since last load
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn should_reload_config(&self, profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+    pub fn should_reload_config(
+        &self,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+    ) -> bool {
         // If never loaded, should reload
         if self.config_last_modified.is_none() {
             return true;
@@ -1039,7 +1080,10 @@ impl PlatformTab {
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+    pub fn should_reload_config(
+        &self,
+        _profile: &Option<crate::calc::profile::ProfileContext>,
+    ) -> bool {
         // WASM doesn't have config files
         false
     }
@@ -1048,20 +1092,33 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn save_ssh_results_to_config(
         &self,
-        completed: &[(String, Result<crate::calc::ssh::SshConnectionResult, String>)],
+        completed: &[(
+            String,
+            Result<crate::calc::ssh::SshConnectionResult, String>,
+        )],
         profile: &crate::calc::profile::ProfileContext,
     ) {
         if let Ok((mut config, config_path)) = load_config(&Some(profile.clone())) {
             for (project_id, result) in completed {
-                if let Some(platform) = config.platforms.iter_mut()
+                if let Some(platform) = config
+                    .platforms
+                    .iter_mut()
                     .find(|p| p.gcp_selected_project_id.as_deref() == Some(project_id))
                 {
                     match result {
                         Ok(conn_result) => {
                             platform.cached_ssh_connection_success = Some(conn_result.success);
-                            platform.cached_ssh_connection_message = Some(conn_result.message.clone());
-                            dure_info!("Saved SSH test result for {}: {}", project_id,
-                                if conn_result.success { "success" } else { "failed" });
+                            platform.cached_ssh_connection_message =
+                                Some(conn_result.message.clone());
+                            dure_info!(
+                                "Saved SSH test result for {}: {}",
+                                project_id,
+                                if conn_result.success {
+                                    "success"
+                                } else {
+                                    "failed"
+                                }
+                            );
                         }
                         Err(err) => {
                             platform.cached_ssh_connection_success = Some(false);
@@ -1086,11 +1143,17 @@ impl PlatformTab {
         profile: &crate::calc::profile::ProfileContext,
     ) {
         if let Ok((mut config, config_path)) = load_config(&Some(profile.clone())) {
-            if let Some(platform) = config.platforms.iter_mut()
+            if let Some(platform) = config
+                .platforms
+                .iter_mut()
                 .find(|p| p.gcp_selected_project_id.as_deref() == Some(project_id))
             {
                 platform.cached_firewall_status = Some(firewall_status.to_string());
-                dure_info!("Saved firewall status for {}: {}", project_id, firewall_status);
+                dure_info!(
+                    "Saved firewall status for {}: {}",
+                    project_id,
+                    firewall_status
+                );
 
                 if let Err(e) = config.save(&config_path) {
                     dure_warn!("Failed to save firewall status to config: {}", e);
@@ -1121,8 +1184,8 @@ impl PlatformTab {
             // Process events first
             let events = vm.poll_events(ui.ctx());
             for event in events {
-                use crate::viewmodel::ViewModelEvent;
                 use crate::viewmodel::platform::PlatformEvent;
+                use crate::viewmodel::ViewModelEvent;
 
                 match event {
                     ViewModelEvent::Platform(PlatformEvent::BillingFetched { records, .. }) => {
@@ -1133,12 +1196,17 @@ impl PlatformTab {
                         platform_name,
                         whitelisted_ip,
                     }) => {
-                        dure_debug!("✅ Successfully added {} to firewall whitelist", whitelisted_ip);
+                        dure_debug!(
+                            "✅ Successfully added {} to firewall whitelist",
+                            whitelisted_ip
+                        );
 
                         let firewall_status = format!("✅ Whitelisted ({})", whitelisted_ip);
 
                         // Incremental update: Find and update specific row
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Completed {
                                 operation: "firewall".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
@@ -1149,7 +1217,11 @@ impl PlatformTab {
 
                         // Save firewall status to config (Task 6)
                         #[cfg(not(target_arch = "wasm32"))]
-                        self.save_firewall_status_to_config(&platform_name, &firewall_status, current_profile);
+                        self.save_firewall_status_to_config(
+                            &platform_name,
+                            &firewall_status,
+                            current_profile,
+                        );
 
                         // Note: NO self.loaded = false! Incremental update only
                     }
@@ -1158,12 +1230,19 @@ impl PlatformTab {
                         rules,
                         current_ip,
                     }) => {
-                        dure_info!("✅ [UI::PLATFO] Firewall rules fetched for {}: {} rules, IP: {}",
-                            platform_name, rules.len(), current_ip);
+                        dure_info!(
+                            "✅ [UI::PLATFO] Firewall rules fetched for {}: {} rules, IP: {}",
+                            platform_name,
+                            rules.len(),
+                            current_ip
+                        );
 
                         // Check if this is for the firewall dialog
                         if self.show_firewall_dialog && self.firewall_platform == platform_name {
-                            dure_info!("[UI::PLATFO] Updating UI with {} firewall rules", rules.len());
+                            dure_info!(
+                                "[UI::PLATFO] Updating UI with {} firewall rules",
+                                rules.len()
+                            );
                             self.current_ip = Some(current_ip);
                             // Use full data directly - no conversion needed!
                             self.firewall_rule_list = rules;
@@ -1179,19 +1258,34 @@ impl PlatformTab {
                     }) => {
                         dure_info!("✅ Firewall rule '{}' updated ({})", rule_name, operation);
 
+                        // Force immediate refresh for save operations, debounce for others
+                        let force_refresh = self.firewall_save_in_progress
+                            && (operation == "create" || operation == "delete");
+
                         // Refresh firewall data to show updated state
                         if self.show_firewall_dialog && self.firewall_platform == platform_name {
-                            dure_info!("[UI::PLATFO] Triggering firewall data refresh after {} operation", operation);
+                            dure_info!("[UI::PLATFO] Triggering firewall data refresh after {} operation (force={})",
+                                operation, force_refresh);
                             let profile_config_path = current_profile.config_file.clone();
-                            self.refresh_firewall_list_if_needed(profile_config_path, platform_name, Some(vm), false);
+                            self.refresh_firewall_list_if_needed(
+                                profile_config_path,
+                                platform_name,
+                                Some(vm),
+                                force_refresh,
+                            );
                         } else {
-                            dure_info!("[UI::PLATFO] Skipping refresh: dialog_open={}, platform_match={}",
-                                self.show_firewall_dialog, self.firewall_platform == platform_name);
+                            dure_info!(
+                                "[UI::PLATFO] Skipping refresh: dialog_open={}, platform_match={}",
+                                self.show_firewall_dialog,
+                                self.firewall_platform == platform_name
+                            );
                         }
 
                         // Close add/edit dialog if save was in progress
-                        if self.firewall_save_in_progress && (operation == "create" || operation == "delete") {
-                            dure_info!("Closing Add/Edit Firewall Rule dialog after successful {}", operation);
+                        if self.firewall_save_in_progress
+                            && (operation == "create" || operation == "delete")
+                        {
+                            dure_info!("Closing Add/Edit Firewall Rule dialog after successful {} and immediate list refresh", operation);
                             self.show_add_firewall_dialog = false;
                             self.firewall_save_in_progress = false;
                             self.firewall_save_error = None;
@@ -1200,23 +1294,40 @@ impl PlatformTab {
 
                             // Clear persisted string state
                             let state_id = egui::Id::new("firewall_form_strings");
-                            ui.ctx().data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
+                            ui.ctx().data_mut(|d| {
+                                d.remove::<(
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                    String,
+                                )>(state_id)
+                            });
                         }
 
                         // Close subdialogs
                         self.show_remove_ip_dialog = false;
                         self.show_flush_confirm = false;
                     }
-                    ViewModelEvent::Platform(PlatformEvent::VMRestarted { platform_name, vm_name }) => {
+                    ViewModelEvent::Platform(PlatformEvent::VMRestarted {
+                        platform_name,
+                        vm_name,
+                    }) => {
                         // Log with project_id context for filtering
                         crate::viewmodel::logs::append_log(
                             Some(platform_name.clone()),
                             crate::viewmodel::logs::LogLevel::Info,
-                            format!("✅ VM {} restarted successfully", vm_name)
+                            format!("✅ VM {} restarted successfully", vm_name),
                         );
 
                         // Incremental update
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Completed {
                                 operation: "restart".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
@@ -1238,10 +1349,16 @@ impl PlatformTab {
                         platform_name,
                         vm_count,
                     }) => {
-                        dure_info!("✅ Scanned and imported {} VMs for platform '{}'", vm_count, platform_name);
+                        dure_info!(
+                            "✅ Scanned and imported {} VMs for platform '{}'",
+                            vm_count,
+                            platform_name
+                        );
 
                         // Update operation state
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Completed {
                                 operation: "scan".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
@@ -1257,10 +1374,16 @@ impl PlatformTab {
                         vm_name,
                         external_ip,
                     }) => {
-                        dure_info!("✅ VM '{}' created successfully with IP {}", vm_name, external_ip);
+                        dure_info!(
+                            "✅ VM '{}' created successfully with IP {}",
+                            vm_name,
+                            external_ip
+                        );
 
                         // Incremental update
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Completed {
                                 operation: "vm".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
@@ -1280,7 +1403,9 @@ impl PlatformTab {
                         dure_info!("✅ VM {} deleted successfully", vm_name);
 
                         // Update operation state before reload
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Completed {
                                 operation: "delete_vm".to_string(),
                                 completed_at: chrono::Utc::now().timestamp(),
@@ -1288,16 +1413,18 @@ impl PlatformTab {
                         }
 
                         // Keep config update and reload logic
-                        if let Ok((mut app_config, config_path)) = load_config(&Some(current_profile.clone())) {
-                            if let Some(platform) = app_config
-                                .platforms
-                                .iter_mut()
-                                .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
-                            {
+                        if let Ok((mut app_config, config_path)) =
+                            load_config(&Some(current_profile.clone()))
+                        {
+                            if let Some(platform) = app_config.platforms.iter_mut().find(|p| {
+                                p.gcp_selected_project_id.as_ref() == Some(&platform_name)
+                            }) {
                                 platform.vms.retain(|vm| vm.name != vm_name);
 
                                 if let Err(e) = app_config.save(&config_path) {
-                                    self.load_error = Some(tr!("platform-error-save-config", {error: e.to_string()}));
+                                    self.load_error = Some(
+                                        tr!("platform-error-save-config", {error: e.to_string()}),
+                                    );
                                 } else {
                                     dure_info!("✅ Config updated, refreshing table");
                                     self.loaded = false;
@@ -1310,7 +1437,9 @@ impl PlatformTab {
                         platform_name,
                         projects,
                     }) => {
-                        dure_debug!("✅ Projects listed for {}: {} projects", platform_name,
+                        dure_debug!(
+                            "✅ Projects listed for {}: {} projects",
+                            platform_name,
                             projects.len()
                         );
                         self.select_project_list = projects;
@@ -1321,10 +1450,7 @@ impl PlatformTab {
                             self.show_select_project_dialog = true;
                         }
                     }
-                    ViewModelEvent::Platform(PlatformEvent::VMsListed {
-                        platform_name,
-                        vms,
-                    }) => {
+                    ViewModelEvent::Platform(PlatformEvent::VMsListed { platform_name, vms }) => {
                         dure_debug!("✅ VMs listed for {}: {} VMs", platform_name, vms.len());
 
                         // Check if this is for the bind VM dialog
@@ -1368,7 +1494,9 @@ impl PlatformTab {
                             self.billing_loading = false;
                         } else if operation == "update_firewall" {
                             self.load_error = Some(format!("Failed to update firewall: {}", error));
-                        } else if operation == "create_firewall_rule" || operation == "delete_firewall_rule" {
+                        } else if operation == "create_firewall_rule"
+                            || operation == "delete_firewall_rule"
+                        {
                             // Show error in dialog, keep it open
                             self.firewall_save_error = Some(error);
                             self.firewall_save_in_progress = false;
@@ -1394,11 +1522,19 @@ impl PlatformTab {
                         project_count,
                     }) => {
                         dure_info!("✅ Refresh completed for {}", platform_name);
-                        dure_info!("🔍 RefreshCompleted event: firewall_status.whitelisted = {}", firewall_status.whitelisted);
-                        dure_info!("🔍 RefreshCompleted event: firewall_status.current_ip = {:?}", firewall_status.current_ip);
+                        dure_info!(
+                            "🔍 RefreshCompleted event: firewall_status.whitelisted = {}",
+                            firewall_status.whitelisted
+                        );
+                        dure_info!(
+                            "🔍 RefreshCompleted event: firewall_status.current_ip = {:?}",
+                            firewall_status.current_ip
+                        );
 
                         // Find and update the row
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             // Update VM status
                             row.vm_created = vm_status.exists;
                             row.vm_name = vm_status.name;
@@ -1412,11 +1548,16 @@ impl PlatformTab {
                             row.firewall_updated = firewall_status.whitelisted;
                             if let Some(current_ip) = firewall_status.current_ip {
                                 if firewall_status.whitelisted {
-                                    dure_info!("🔍 Setting row.firewall_status = '✅ Whitelisted ({})'", current_ip);
-                                    row.firewall_status = format!("✅ Whitelisted ({})", current_ip);
+                                    dure_info!(
+                                        "🔍 Setting row.firewall_status = '✅ Whitelisted ({})'",
+                                        current_ip
+                                    );
+                                    row.firewall_status =
+                                        format!("✅ Whitelisted ({})", current_ip);
                                 } else {
                                     dure_info!("🔍 Setting row.firewall_status = '❌ Not whitelisted ({})'", current_ip);
-                                    row.firewall_status = format!("❌ Not whitelisted ({})", current_ip);
+                                    row.firewall_status =
+                                        format!("❌ Not whitelisted ({})", current_ip);
                                 }
                             } else {
                                 dure_info!("🔍 Setting row.firewall_status = '? Status unknown'");
@@ -1451,10 +1592,17 @@ impl PlatformTab {
                         operation,
                         error,
                     }) => {
-                        dure_error!("❌ Operation '{}' failed for {}: {}", operation, platform_name, error);
+                        dure_error!(
+                            "❌ Operation '{}' failed for {}: {}",
+                            operation,
+                            platform_name,
+                            error
+                        );
 
                         // Update row to show error state
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Failed {
                                 operation: operation.clone(),
                                 error: error.clone(),
@@ -1468,7 +1616,9 @@ impl PlatformTab {
                             DrawerEvent::LogsLoaded { project_id, lines } => {
                                 // Store logs in egui temp storage using drawer_id
                                 // Find row to get last_refresh_time for cache invalidation
-                                if let Some(row) = self.rows.iter().find(|r| r.project_id == project_id) {
+                                if let Some(row) =
+                                    self.rows.iter().find(|r| r.project_id == project_id)
+                                {
                                     let drawer_id = egui::Id::new("platform_drawer")
                                         .with(&project_id)
                                         .with(row.last_refresh_time.unwrap_or(0));
@@ -1480,7 +1630,9 @@ impl PlatformTab {
                             DrawerEvent::OperationsLoaded { project_id, logs } => {
                                 // Store operations in egui temp storage using drawer_id
                                 // Find row to get last_refresh_time for cache invalidation
-                                if let Some(row) = self.rows.iter().find(|r| r.project_id == project_id) {
+                                if let Some(row) =
+                                    self.rows.iter().find(|r| r.project_id == project_id)
+                                {
                                     let drawer_id = egui::Id::new("platform_drawer")
                                         .with(&project_id)
                                         .with(row.last_refresh_time.unwrap_or(0));
@@ -1517,9 +1669,13 @@ impl PlatformTab {
             {
                 use egui_material3::theme::get_global_color;
                 EmojiLabel::new(
-                    egui::RichText::new(format!("⚠️ Error in {}: {}", error.operation, error.error))
-                        .color(get_global_color("error"))
-                ).show(ui);
+                    egui::RichText::new(format!(
+                        "⚠️ Error in {}: {}",
+                        error.operation, error.error
+                    ))
+                    .color(get_global_color("error")),
+                )
+                .show(ui);
                 ui.add_space(4.0);
             }
         }
@@ -1539,7 +1695,8 @@ impl PlatformTab {
         }
 
         // Request repaint to update UI when states auto-clear
-        ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs(1));
 
         // Poll SSH test promises (TODO: Replace with ViewModel event processing)
         #[cfg(not(target_arch = "wasm32"))]
@@ -1602,7 +1759,11 @@ impl PlatformTab {
                 {
                     if let Some(ref vm) = vm {
                         let profile_config_path = current_profile.config_file.clone();
-                        if let Ok(_) = vm.refresh_platform(profile_config_path, row.project_id.clone(), current_profile_kdbx.clone()) {
+                        if let Ok(_) = vm.refresh_platform(
+                            profile_config_path,
+                            row.project_id.clone(),
+                            current_profile_kdbx.clone(),
+                        ) {
                             // Mark as auto-refreshed to prevent repeat triggers
                             self.auto_refreshed_platforms.insert(row.project_id.clone());
                         } else {
@@ -1626,7 +1787,10 @@ impl PlatformTab {
             ui.label(tr!("platform-main-desc"));
             ui.add_space(8.0);
 
-            if ui.add(MaterialButton::filled(tr!("platform-button-add"))).clicked() {
+            if ui
+                .add(MaterialButton::filled(tr!("platform-button-add")))
+                .clicked()
+            {
                 self.show_add_dialog = true;
                 self.add_platform_type = "gcp".to_string();
             }
@@ -1666,8 +1830,16 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .min_row_height(68.0)
                 .drawer_row_height(500.0)
-                .column(&tr!("platform-table-col-project"), 230.0 * width_ratio, false)
-                .column(&tr!("platform-table-col-operations"), 510.0 * width_ratio, false);
+                .column(
+                    &tr!("platform-table-col-project"),
+                    230.0 * width_ratio,
+                    false,
+                )
+                .column(
+                    &tr!("platform-table-col-operations"),
+                    510.0 * width_ratio,
+                    false,
+                );
 
             for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
@@ -1677,96 +1849,107 @@ impl PlatformTab {
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
-                            ui.vertical(|ui| {
-                                ui.add(
-                                    badge(&row_for_cells.platform_type)
-                                        .color(BadgeColor::Primary)
-                                        .size(BadgeSize::Small)
-                                );
-                                use egui_material3::theme::get_global_color;
-                                ui.label(egui::RichText::new(&row_for_cells.project_id)
+                        ui.vertical(|ui| {
+                            ui.add(
+                                badge(&row_for_cells.platform_type)
+                                    .color(BadgeColor::Primary)
+                                    .size(BadgeSize::Small),
+                            );
+                            use egui_material3::theme::get_global_color;
+                            ui.label(
+                                egui::RichText::new(&row_for_cells.project_id)
                                     .size(16.0)
                                     .strong()
-                                    .color(get_global_color("onSurface")));
+                                    .color(get_global_color("onSurface")),
+                            );
 
-                                // Display domain badge if bound
-                                if let Some(domain) = &row_for_cells.bound_domain {
-                                    ui.add_space(4.0);
-                                    ui.add(
-                                        badge(domain)
-                                            .color(BadgeColor::Success)
-                                            .size(BadgeSize::Small)
-                                    );
-                                }
-                            });
-                        })
-                        .cell_widget(move |ui| {
-                            // Calculate needed height for button wrapping
-                            let column_width = 260.0 * width_ratio;
-                            let button_width = 90.0; // Approximate width including spacing
-                            let button_height = 32.0; // Button height + vertical spacing
+                            // Display domain badge if bound
+                            if let Some(domain) = &row_for_cells.bound_domain {
+                                ui.add_space(4.0);
+                                ui.add(
+                                    badge(domain)
+                                        .color(BadgeColor::Success)
+                                        .size(BadgeSize::Small),
+                                );
+                            }
+                        });
+                    })
+                    .cell_widget(move |ui| {
+                        // Calculate needed height for button wrapping
+                        let column_width = 260.0 * width_ratio;
+                        let button_width = 90.0; // Approximate width including spacing
+                        let button_height = 32.0; // Button height + vertical spacing
 
-                            // Count buttons (platform-dependent)
-                            let button_count = if cfg!(any(target_os = "android", target_arch = "wasm32")) {
+                        // Count buttons (platform-dependent)
+                        let button_count =
+                            if cfg!(any(target_os = "android", target_arch = "wasm32")) {
                                 6 // Mobile/WASM: Refresh, Scan VMs, Firewall, Restart, Del VM, Delete
                             } else {
                                 8 // Desktop: + Add VM, Billing
                             };
 
-                            let buttons_per_row = (column_width / button_width).floor().max(1.0);
-                            let needed_rows = (button_count as f32 / buttons_per_row).ceil();
-                            let needed_height = needed_rows * button_height + 8.0; // Extra padding
+                        let buttons_per_row = (column_width / button_width).floor().max(1.0);
+                        let needed_rows = (button_count as f32 / buttons_per_row).ceil();
+                        let needed_height = needed_rows * button_height + 8.0; // Extra padding
 
-                            // Set minimum height before rendering
-                            ui.set_min_height(needed_height);
+                        // Set minimum height before rendering
+                        ui.set_min_height(needed_height);
 
-                            ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
-                                ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
-                                ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
+                        ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = BUTTON_VERTICAL_SPACING;
+                            ui.spacing_mut().item_spacing.x = BUTTON_HORIZONTAL_SPACING;
+                            ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
-                                // Check if any operation in progress
-                                let operation_in_progress = matches!(
-                                    row_for_actions.operation_state,
-                                    OperationState::InProgress { .. }
-                                );
+                            // Check if any operation in progress
+                            let operation_in_progress = matches!(
+                                row_for_actions.operation_state,
+                                OperationState::InProgress { .. }
+                            );
 
-                                // Store top position for foreground overlay
-                                let overlay_pos = ui.cursor().min;
+                            // Store top position for foreground overlay
+                            let overlay_pos = ui.cursor().min;
 
-                                // Row 1: Refresh, Re-authenticate (if needed), Billing, Delete
-                                ui.horizontal(|ui| {
-                                    // Refresh (always enabled)
+                            // Row 1: Refresh, Re-authenticate (if needed), Billing, Delete
+                            ui.horizontal(|ui| {
+                                // Refresh (always enabled)
+                                if ui
+                                    .add(
+                                        MaterialButton::outlined(tr!("platform-button-refresh"))
+                                            .small(),
+                                    )
+                                    .on_hover_text(tr!("platform-button-refresh-tooltip"))
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("platform_action_refresh"),
+                                            row_for_actions.project_id.clone(),
+                                        )
+                                    });
+                                }
+
+                                // Re-authenticate (shown when OAuth refresh fails)
+                                if row_for_actions.oauth_refresh_failed {
                                     if ui
-                                        .add(MaterialButton::outlined(tr!("platform-button-refresh")).small())
-                                        .on_hover_text(tr!("platform-button-refresh-tooltip"))
+                                        .add(
+                                            MaterialButton::filled(tr!("platform-button-reauth"))
+                                                .small(),
+                                        )
+                                        .on_hover_text(tr!("platform-button-reauth-tooltip"))
                                         .clicked()
                                     {
                                         ui.data_mut(|d| {
                                             d.insert_temp(
-                                                egui::Id::new("platform_action_refresh"),
+                                                egui::Id::new("platform_action_reauth"),
                                                 row_for_actions.project_id.clone(),
                                             )
                                         });
                                     }
+                                }
 
-                                    // Re-authenticate (shown when OAuth refresh fails)
-                                    if row_for_actions.oauth_refresh_failed {
-                                        if ui
-                                            .add(MaterialButton::filled(tr!("platform-button-reauth")).small())
-                                            .on_hover_text(tr!("platform-button-reauth-tooltip"))
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("platform_action_reauth"),
-                                                    row_for_actions.project_id.clone(),
-                                                )
-                                            });
-                                        }
-                                    }
-
-                                    ui.add_enabled_ui(!operation_in_progress && !row_for_actions.oauth_refresh_failed, |ui| {
+                                ui.add_enabled_ui(
+                                    !operation_in_progress && !row_for_actions.oauth_refresh_failed,
+                                    |ui| {
                                         // Billing
                                         #[cfg(not(any(
                                             target_os = "android",
@@ -1774,8 +1957,14 @@ impl PlatformTab {
                                         )))]
                                         if ui
                                             .add_enabled(
-                                                row_for_actions.project_selected && row_for_actions.selected_project_id.is_some(),
-                                                MaterialButton::outlined(tr!("platform-button-billing")).small(),
+                                                row_for_actions.project_selected
+                                                    && row_for_actions
+                                                        .selected_project_id
+                                                        .is_some(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-billing"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text(tr!("platform-button-billing-tooltip"))
                                             .clicked()
@@ -1785,9 +1974,13 @@ impl PlatformTab {
                                                     egui::Id::new("platform_action_billing_name"),
                                                     row_for_actions.project_id.clone(),
                                                 );
-                                                if let Some(project_id) = &row_for_actions.selected_project_id {
+                                                if let Some(project_id) =
+                                                    &row_for_actions.selected_project_id
+                                                {
                                                     d.insert_temp(
-                                                        egui::Id::new("platform_action_billing_project"),
+                                                        egui::Id::new(
+                                                            "platform_action_billing_project",
+                                                        ),
                                                         project_id.clone(),
                                                     );
                                                 }
@@ -1796,7 +1989,12 @@ impl PlatformTab {
 
                                         // Delete
                                         if ui
-                                            .add(MaterialButton::outlined(tr!("platform-button-delete")).small())
+                                            .add(
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-delete"
+                                                ))
+                                                .small(),
+                                            )
                                             .on_hover_text(tr!("platform-button-delete-tooltip"))
                                             .clicked()
                                         {
@@ -1809,12 +2007,15 @@ impl PlatformTab {
                                                 )
                                             });
                                         }
-                                    });
-                                });
+                                    },
+                                );
+                            });
 
-                                // Row 2: Add VM, Scan VMs, Firewall, Restart, DelVM (disabled when OAuth fails)
-                                ui.horizontal(|ui| {
-                                    ui.add_enabled_ui(!operation_in_progress && !row_for_actions.oauth_refresh_failed, |ui| {
+                            // Row 2: Add VM, Scan VMs, Firewall, Restart, DelVM (disabled when OAuth fails)
+                            ui.horizontal(|ui| {
+                                ui.add_enabled_ui(
+                                    !operation_in_progress && !row_for_actions.oauth_refresh_failed,
+                                    |ui| {
                                         // Add VM
                                         #[cfg(not(any(
                                             target_os = "android",
@@ -1824,7 +2025,10 @@ impl PlatformTab {
                                             .add_enabled(
                                                 !row_for_actions.has_vm
                                                     && row_for_actions.project_selected,
-                                                MaterialButton::outlined(tr!("platform-button-add-vm")).small(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-add-vm"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text(tr!("platform-button-add-vm-tooltip"))
                                             .clicked()
@@ -1841,7 +2045,10 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.project_selected,
-                                                MaterialButton::outlined(tr!("platform-button-bind-vm")).small(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-bind-vm"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text(tr!("platform-button-bind-vm-tooltip"))
                                             .clicked()
@@ -1859,7 +2066,10 @@ impl PlatformTab {
                                             .add_enabled(
                                                 row_for_actions.project_selected
                                                     && row_for_actions.gcp_connected,
-                                                MaterialButton::outlined(tr!("platform-button-firewall")).small(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-firewall"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text("Manage Firewall Rules")
                                             .clicked()
@@ -1878,7 +2088,10 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.has_vm,
-                                                MaterialButton::outlined(tr!("platform-button-restart")).small(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-restart"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text("Restart VM")
                                             .clicked()
@@ -1895,7 +2108,10 @@ impl PlatformTab {
                                         if ui
                                             .add_enabled(
                                                 row_for_actions.has_vm,
-                                                MaterialButton::outlined(tr!("platform-button-del-vm")).small(),
+                                                MaterialButton::outlined(tr!(
+                                                    "platform-button-del-vm"
+                                                ))
+                                                .small(),
                                             )
                                             .on_hover_text("Delete VM")
                                             .clicked()
@@ -1917,49 +2133,53 @@ impl PlatformTab {
                                                 )
                                             });
                                         }
+                                    },
+                                );
+                            });
+
+                            // Render progress indicator on foreground layer (overlay)
+                            if operation_in_progress {
+                                let current_area_id = ui.layer_id().id;
+                                let foreground_layer =
+                                    egui::LayerId::new(egui::Order::Foreground, current_area_id);
+
+                                ui.with_layer_id(foreground_layer, |ui| {
+                                    // Position at stored overlay position
+                                    let progress_rect = egui::Rect::from_min_size(
+                                        overlay_pos,
+                                        egui::vec2(column_width, 30.0),
+                                    );
+
+                                    // Semi-transparent background
+                                    use egui_material3::theme::get_global_color;
+                                    let overlay_color = get_global_color("surfaceContainer");
+                                    ui.painter().rect_filled(
+                                        progress_rect,
+                                        egui::Rounding::same(4),
+                                        overlay_color,
+                                    );
+
+                                    // Draw progress label and bar
+                                    ui.allocate_ui_at_rect(progress_rect, |ui| {
+                                        ui.add_space(2.0);
+
+                                        if let OperationState::InProgress { operation, .. } =
+                                            &row_for_actions.operation_state
+                                        {
+                                            ui.label(operation);
+                                        }
+
+                                        ui.add(
+                                            linear_progress()
+                                                .indeterminate(true)
+                                                .width(column_width - 20.0)
+                                                .height(4.0)
+                                                .four_color_enabled(true),
+                                        );
                                     });
                                 });
-
-                                // Render progress indicator on foreground layer (overlay)
-                                if operation_in_progress {
-                                    let current_area_id = ui.layer_id().id;
-                                    let foreground_layer = egui::LayerId::new(egui::Order::Foreground, current_area_id);
-
-                                    ui.with_layer_id(foreground_layer, |ui| {
-                                        // Position at stored overlay position
-                                        let progress_rect = egui::Rect::from_min_size(
-                                            overlay_pos,
-                                            egui::vec2(column_width, 30.0)
-                                        );
-
-                                        // Semi-transparent background
-                                        use egui_material3::theme::get_global_color;
-                                        let overlay_color = get_global_color("surfaceContainer");
-                                        ui.painter().rect_filled(
-                                            progress_rect,
-                                            egui::Rounding::same(4),
-                                            overlay_color
-                                        );
-
-                                        // Draw progress label and bar
-                                        ui.allocate_ui_at_rect(progress_rect, |ui| {
-                                            ui.add_space(2.0);
-
-                                            if let OperationState::InProgress { operation, .. } = &row_for_actions.operation_state {
-                                                ui.label(operation);
-                                            }
-
-                                            ui.add(
-                                                linear_progress()
-                                                    .indeterminate(true)
-                                                    .width(column_width - 20.0)
-                                                    .height(4.0)
-                                                    .four_color_enabled(true)
-                                            );
-                                        });
-                                    });
-                                }
-                            });
+                            }
+                        });
                     })
                     .drawer(move |ui| {
                         render_drawer_content(ui, &row_for_drawer, &kdbx_for_drawer);
@@ -1973,7 +2193,10 @@ impl PlatformTab {
                 ui.label(tr!("platform-main-desc"));
                 ui.add_space(8.0);
 
-                if ui.add(MaterialButton::filled(tr!("platform-button-add"))).clicked() {
+                if ui
+                    .add(MaterialButton::filled(tr!("platform-button-add")))
+                    .clicked()
+                {
                     self.show_add_dialog = true;
                     self.add_platform_type = "gcp".to_string();
                 }
@@ -1998,15 +2221,20 @@ impl PlatformTab {
                 // Refresh access token if expired (before making API calls)
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let Ok((mut app_config, config_path)) = load_config(&Some(current_profile.clone())) {
-                        if let Some((platform_idx, _)) = app_config
-                            .platforms
-                            .iter()
-                            .enumerate()
-                            .find(|(_, p)| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
+                    if let Ok((mut app_config, config_path)) =
+                        load_config(&Some(current_profile.clone()))
+                    {
+                        if let Some((platform_idx, _)) =
+                            app_config.platforms.iter().enumerate().find(|(_, p)| {
+                                p.gcp_selected_project_id.as_ref() == Some(&platform_name)
+                            })
                         {
                             // Check/refresh token (this will log "Access token refreshed" if needed)
-                            if let Err(e) = self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
+                            if let Err(e) = self.get_valid_access_token(
+                                &mut app_config,
+                                platform_idx,
+                                &config_path,
+                            ) {
                                 dure_warn!("Failed to refresh access token: {}", e);
                                 // Continue anyway - the API call might still work or will fail with proper error
                             }
@@ -2017,9 +2245,15 @@ impl PlatformTab {
                 // Send RefreshPlatform command to ViewModel
                 if let Some(ref vm) = vm {
                     let profile_config_path = current_profile.config_file.clone();
-                    if let Err(e) = vm.refresh_platform(profile_config_path, platform_name.clone(), current_profile_kdbx.clone()) {
+                    if let Err(e) = vm.refresh_platform(
+                        profile_config_path,
+                        platform_name.clone(),
+                        current_profile_kdbx.clone(),
+                    ) {
                         dure_error!("Failed to send refresh command: {}", e);
-                        if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
                             row.operation_state = OperationState::Failed {
                                 operation: "refresh".to_string(),
                                 error: format!("Failed to start refresh: {}", e),
@@ -2051,7 +2285,10 @@ impl PlatformTab {
                             self.add_platform_existing_project_id = platform_name.clone();
                             self.add_platform_type = "gcp".to_string();
                             self.show_add_dialog = true;
-                            dure_info!("Opening re-authentication dialog for project: {}", platform_name);
+                            dure_info!(
+                                "Opening re-authentication dialog for project: {}",
+                                platform_name
+                            );
                         }
                     }
                 }
@@ -2078,27 +2315,29 @@ impl PlatformTab {
                 }
 
                 // Bind VM action - open dialog to select VM
-                if let Some(platform_name) = ui.data(|d| {
-                    d.get_temp::<String>(egui::Id::new("platform_action_bind_vm"))
-                }) {
+                if let Some(platform_name) =
+                    ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_bind_vm")))
+                {
                     self.bind_vm_platform = platform_name.clone();
                     self.bind_vm_loading = true;
                     self.show_bind_vm_dialog = true;
 
                     // Fetch VM list from GCP
                     let profile_config_path = current_profile.config_file.clone();
-                    self.fetch_vm_list_for_binding(profile_config_path, platform_name, vm.as_deref_mut());
+                    self.fetch_vm_list_for_binding(
+                        profile_config_path,
+                        platform_name,
+                        vm.as_deref_mut(),
+                    );
 
-                    ui.data_mut(|d| {
-                        d.remove::<String>(egui::Id::new("platform_action_bind_vm"))
-                    });
+                    ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_bind_vm")));
                 }
             }
 
             // Drawer action: Refresh logs
-            if let Some(project_id) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs"))
-            }) {
+            if let Some(project_id) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs")))
+            {
                 if let Some(ref vm) = vm {
                     use crate::viewmodel::platform::DrawerCommand;
                     if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadLogs {
@@ -2108,15 +2347,13 @@ impl PlatformTab {
                         dure_error!("Failed to send LoadLogs command: {}", e);
                     }
                 }
-                ui.data_mut(|d| {
-                    d.remove::<String>(egui::Id::new("drawer_action_refresh_logs"))
-                });
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new("drawer_action_refresh_logs")));
             }
 
             // Drawer action: Refresh operations
-            if let Some(project_id) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations"))
-            }) {
+            if let Some(project_id) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations")))
+            {
                 if let Some(ref vm) = vm {
                     use crate::viewmodel::platform::DrawerCommand;
                     if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadOperations {
@@ -2132,9 +2369,9 @@ impl PlatformTab {
             }
 
             // Drawer action: Auto-load logs on tab switch
-            if let Some(project_id) = ui.data(|d| {
-                d.get_temp::<String>(egui::Id::new("drawer_action_load_logs_on_switch"))
-            }) {
+            if let Some(project_id) = ui
+                .data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_load_logs_on_switch")))
+            {
                 if let Some(ref vm) = vm {
                     use crate::viewmodel::platform::DrawerCommand;
                     if let Err(e) = vm.send_drawer_command(DrawerCommand::LoadLogs {
@@ -2175,14 +2412,20 @@ impl PlatformTab {
                     ))
                 }) {
                     // Optimistic update
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                    {
                         row.operation_state = OperationState::InProgress {
                             operation: format!("Deleting VM {}", vm_name),
                             started_at: chrono::Utc::now().timestamp(),
                         };
                     }
 
-                    self.show_delete_vm_confirmation(&Some(current_profile.clone()), platform_name, vm_name, vm_zone);
+                    self.show_delete_vm_confirmation(
+                        &Some(current_profile.clone()),
+                        platform_name,
+                        vm_name,
+                        vm_zone,
+                    );
                     ui.data_mut(|d| {
                         d.remove::<(String, String, String)>(egui::Id::new(
                             "platform_action_delete_vm",
@@ -2218,7 +2461,8 @@ impl PlatformTab {
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_restart_vm")))
                 {
                     // Optimistic update
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name) {
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                    {
                         row.operation_state = OperationState::InProgress {
                             operation: "Restarting VM".to_string(),
                             started_at: chrono::Utc::now().timestamp(),
@@ -2258,15 +2502,19 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_name")))
                 {
-                    if let Some(project_id) =
-                        ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_billing_project")))
-                    {
+                    if let Some(project_id) = ui.data(|d| {
+                        d.get_temp::<String>(egui::Id::new("platform_action_billing_project"))
+                    }) {
                         // Reset billing state to force auto-discovery for each project
                         self.billing_dataset.clear();
                         self.billing_table.clear();
                         self.billing_project_id = project_id.clone();
                         self.show_billing_dialog = true;
-                        self.fetch_billing_data(current_profile, vm.as_deref_mut(), Some(project_id));
+                        self.fetch_billing_data(
+                            current_profile,
+                            vm.as_deref_mut(),
+                            Some(project_id),
+                        );
                         ui.data_mut(|d| {
                             d.remove::<String>(egui::Id::new("platform_action_billing_name"));
                             d.remove::<String>(egui::Id::new("platform_action_billing_project"));
@@ -2334,6 +2582,15 @@ impl PlatformTab {
             self.render_add_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
+        // Delete Firewall Rule confirmation dialog
+        if self.show_delete_firewall_confirm {
+            self.render_delete_firewall_confirm_dialog(
+                current_profile,
+                ui.ctx(),
+                vm.as_deref_mut(),
+            );
+        }
+
         // Init progress display
         if self.init_in_progress {
             self.render_init_progress(ui);
@@ -2355,13 +2612,12 @@ impl PlatformTab {
                     // Create operation log when VM creation starts
                     if wizard.is_creating_vm() && wizard.get_operation_log_id().is_none() {
                         if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                            let log = NewOperationLog::new(
-                                wizard.get_project_id(),
-                                "create_vm",
-                                "gcp"
-                            );
+                            let log =
+                                NewOperationLog::new(wizard.get_project_id(), "create_vm", "gcp");
 
-                            if let Ok(log_id) = crate::storage::models::opslog::create_log(&mut conn, log) {
+                            if let Ok(log_id) =
+                                crate::storage::models::opslog::create_log(&mut conn, log)
+                            {
                                 wizard.set_operation_log_id(log_id);
                                 dure_info!("Created operation log for VM creation: {}", log_id);
                             }
@@ -2376,7 +2632,7 @@ impl PlatformTab {
                                     &mut conn,
                                     log_id,
                                     OperationStatus::Success,
-                                    None
+                                    None,
                                 );
                                 wizard.mark_operation_log_updated();
                                 dure_info!("Updated operation log {} to success", log_id);
@@ -2392,7 +2648,7 @@ impl PlatformTab {
                                     &mut conn,
                                     log_id,
                                     OperationStatus::Failed,
-                                    Some(error)
+                                    Some(error),
                                 );
                                 wizard.mark_operation_log_updated();
                                 dure_info!("Updated operation log {} to failed", log_id);
@@ -2432,7 +2688,11 @@ impl PlatformTab {
                     .text(&format!(
                         "Created {} new SSH entr{} from VM scan",
                         self.ssh_created_count,
-                        if self.ssh_created_count == 1 { "y" } else { "ies" }
+                        if self.ssh_created_count == 1 {
+                            "y"
+                        } else {
+                            "ies"
+                        }
                     ))
                     .icon("check")
                     .align(NotificationAlign::Center)
@@ -2474,8 +2734,14 @@ impl PlatformTab {
                             match self.get_valid_access_token(&mut app_config, idx, &config_path) {
                                 Ok(token) => (Some(token), false),
                                 Err(e) => {
-                                    let project_id = app_config.platforms[idx].gcp_selected_project_id.as_deref().unwrap_or("unknown");
-                                    dure_warn!("Failed to get valid access token for project '{}': {}", project_id, e
+                                    let project_id = app_config.platforms[idx]
+                                        .gcp_selected_project_id
+                                        .as_deref()
+                                        .unwrap_or("unknown");
+                                    dure_warn!(
+                                        "Failed to get valid access token for project '{}': {}",
+                                        project_id,
+                                        e
                                     );
                                     (None, true)
                                 }
@@ -2497,16 +2763,22 @@ impl PlatformTab {
                         let firewall_updated = firewall_status_str.starts_with("✅");
 
                         // Compute SSH status from cached results only (no blocking)
-                        let project_id_key = platform.gcp_selected_project_id.as_ref()
-                            .map(|s| s.as_str()).unwrap_or("unknown");
+                        let project_id_key = platform
+                            .gcp_selected_project_id
+                            .as_ref()
+                            .map(|s| s.as_str())
+                            .unwrap_or("unknown");
 
                         // Load cached SSH result from config if no live test result (Task 6)
-                        let ssh_test_result = self.ssh_test_results.get(project_id_key).cloned()
+                        let ssh_test_result = self
+                            .ssh_test_results
+                            .get(project_id_key)
+                            .cloned()
                             .or_else(|| {
                                 // Check config cache
                                 if let (Some(success), Some(message)) = (
                                     platform.cached_ssh_connection_success,
-                                    &platform.cached_ssh_connection_message
+                                    &platform.cached_ssh_connection_message,
                                 ) {
                                     Some(Ok(crate::calc::ssh::SshConnectionResult {
                                         success,
@@ -2517,25 +2789,28 @@ impl PlatformTab {
                                 }
                             });
 
-                        let ssh_status_str =
-                            compute_ssh_status(platform, ssh_test_result.as_ref());
+                        let ssh_status_str = compute_ssh_status(platform, ssh_test_result.as_ref());
 
                         // ssh_ready should match ssh_status: only true if actually connected
-                        let ssh_ready =
-                            if let Some(result) = &ssh_test_result {
-                                matches!(result, Ok(conn_result) if conn_result.success)
-                            } else {
-                                false
-                            };
+                        let ssh_ready = if let Some(result) = &ssh_test_result {
+                            matches!(result, Ok(conn_result) if conn_result.success)
+                        } else {
+                            false
+                        };
 
                         // Store keyring domain only (no blocking I/O during rendering)
-                        let ssh_keyring_domain = platform.vms.first().and_then(|vm| vm.ssh_key_name.clone());
+                        let ssh_keyring_domain =
+                            platform.vms.first().and_then(|vm| vm.ssh_key_name.clone());
 
                         let row = PlatformRow {
                             // NEW: Use project_id as identifier
-                            project_id: platform.gcp_selected_project_id.clone()
+                            project_id: platform
+                                .gcp_selected_project_id
+                                .clone()
                                 .unwrap_or_else(|| "unknown".to_string()),
-                            project_display_name: platform.gcp_selected_project_id.clone()
+                            project_display_name: platform
+                                .gcp_selected_project_id
+                                .clone()
                                 .unwrap_or_else(|| "unknown".to_string()),
                             platform_type: "GCP".to_string(),
 
@@ -2556,15 +2831,18 @@ impl PlatformTab {
                             vm_name: platform.vms.first().map(|vm| vm.name.clone()),
 
                             // Use cached external IP if available, fall back to VM data
-                            vm_external_ip: platform.cached_vm_external_ip.clone()
-                                .or_else(|| platform.vms.first().and_then(|vm| vm.external_ip.clone())),
+                            vm_external_ip: platform.cached_vm_external_ip.clone().or_else(|| {
+                                platform.vms.first().and_then(|vm| vm.external_ip.clone())
+                            }),
 
-                            ssh_private_key: None,  // Loaded on-demand in drawer
+                            ssh_private_key: None, // Loaded on-demand in drawer
                             ssh_public_key: None,
                             ssh_keyring_domain,
 
                             // Use cached firewall status
-                            firewall_status: platform.cached_firewall_status.clone()
+                            firewall_status: platform
+                                .cached_firewall_status
+                                .clone()
                                 .unwrap_or_else(|| firewall_status_str),
 
                             ssh_status: ssh_status_str,
@@ -2589,7 +2867,9 @@ impl PlatformTab {
                         // Trigger SSH connection test in background if VM has external IP
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            let project_id = platform.gcp_selected_project_id.clone()
+                            let project_id = platform
+                                .gcp_selected_project_id
+                                .clone()
                                 .unwrap_or_else(|| "unknown".to_string());
                             if platform
                                 .vms
@@ -2615,7 +2895,9 @@ impl PlatformTab {
                             continue;
                         }
 
-                        let platform_name = platform.gcp_selected_project_id.clone()
+                        let platform_name = platform
+                            .gcp_selected_project_id
+                            .clone()
                             .unwrap_or_else(|| "unknown".to_string());
 
                         for vm in &platform.vms {
@@ -2623,7 +2905,8 @@ impl PlatformTab {
                                 // Check if SSH host already exists with this IP
                                 let exists = app_config.ssh_hosts.iter().any(|ssh_host| {
                                     // Parse host to extract IP (format: "root@IP" or "user@IP" or just "IP")
-                                    let host_ip = ssh_host.host.split('@').last().unwrap_or(&ssh_host.host);
+                                    let host_ip =
+                                        ssh_host.host.split('@').last().unwrap_or(&ssh_host.host);
                                     host_ip == external_ip
                                 });
 
@@ -3061,7 +3344,11 @@ impl PlatformTab {
         self.add_platform_existing_project_id.clear();
     }
 
-    fn execute_add_platform(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_add_platform(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // Extract OAuth info if GCP
@@ -3121,12 +3408,14 @@ impl PlatformTab {
                                     dure_info!("Platform OAuth update command sent");
                                 }
                                 Err(e) => {
-                                    self.load_error = Some(format!("Failed to update platform OAuth: {}", e));
+                                    self.load_error =
+                                        Some(format!("Failed to update platform OAuth: {}", e));
                                 }
                             }
                         }
                         _ => {
-                            self.load_error = Some("Missing OAuth tokens for re-authentication".to_string());
+                            self.load_error =
+                                Some("Missing OAuth tokens for re-authentication".to_string());
                         }
                     }
                 } else {
@@ -3182,11 +3471,18 @@ impl PlatformTab {
         // Try to load config and find platform with OAuth + project
         let mut wizard = if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
             // Find platform by name
-            if let Some(platform) = app_config.platforms.iter()
+            if let Some(platform) = app_config
+                .platforms
+                .iter()
                 .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
             {
                 // Check if platform has OAuth tokens and project ID
-                if let (Some(access_token), Some(refresh_token), Some(token_expiry), Some(project_id)) = (
+                if let (
+                    Some(access_token),
+                    Some(refresh_token),
+                    Some(token_expiry),
+                    Some(project_id),
+                ) = (
                     &platform.gcp_oauth_access_token,
                     &platform.gcp_oauth_refresh_token,
                     platform.gcp_oauth_token_expiry,
@@ -3285,7 +3581,13 @@ impl PlatformTab {
             };
 
             let profile_config_path = profile.config_file.clone();
-            if let Err(e) = vm.regenerate_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, profile_kdbx) {
+            if let Err(e) = vm.regenerate_vm(
+                profile_config_path,
+                platform_name.clone(),
+                vm_name.clone(),
+                zone,
+                profile_kdbx,
+            ) {
                 self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
             }
             // Result will be delivered via VMRegenerated event
@@ -3311,7 +3613,7 @@ impl PlatformTab {
                 Ok(ip) => {
                     dure_info!(" Current IP detected: {}", ip);
                     ip
-                },
+                }
                 Err(e) => {
                     dure_error!("Failed to get current IP: {}", e);
                     self.load_error = Some(format!("Failed to get current IP: {}", e));
@@ -3389,7 +3691,8 @@ impl PlatformTab {
     ) {
         self.delete_vm_platform = platform_name.clone();
         self.delete_vm_list.clear();
-        self.delete_vm_list.push((vm_name.clone(), zone.clone(), "".to_string()));
+        self.delete_vm_list
+            .push((vm_name.clone(), zone.clone(), "".to_string()));
         self.delete_vm_selected = Some(0);
         self.delete_vm_confirming = true;
         self.show_delete_vm_dialog = true;
@@ -3406,22 +3709,25 @@ impl PlatformTab {
             dure_info!("=== Static IP Detection START for VM: {} ===", vm_name);
             if let Ok((app_config, _)) = load_config(profile) {
                 dure_info!("✓ Config loaded");
-                if let Some(platform) = app_config.platforms.iter()
+                if let Some(platform) = app_config
+                    .platforms
+                    .iter()
                     .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                 {
                     dure_info!("✓ Platform found: {}", platform_name);
                     if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
                         dure_info!("✓ OAuth token exists");
-                        if let Some(vm) = platform.vms.iter()
+                        if let Some(vm) = platform
+                            .vms
+                            .iter()
                             .find(|v| v.name == vm_name && v.zone == zone)
                         {
                             dure_info!("✓ VM found: {}", vm_name);
                             if let Some(external_ip) = &vm.external_ip {
                                 dure_info!("✓ VM has external_ip: {}", external_ip);
                                 // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
-                                let region = zone.rsplitn(2, '-').nth(1)
-                                    .unwrap_or(&zone)
-                                    .to_string();
+                                let region =
+                                    zone.rsplitn(2, '-').nth(1).unwrap_or(&zone).to_string();
                                 dure_info!("  Region extracted from zone {}: {}", zone, region);
 
                                 // Query addresses to check if IP is static
@@ -3430,16 +3736,28 @@ impl PlatformTab {
 
                                 match client.list_addresses(&platform_name, &region) {
                                     Ok(addresses) => {
-                                        dure_info!("✓ Addresses API returned {} addresses", addresses.len());
+                                        dure_info!(
+                                            "✓ Addresses API returned {} addresses",
+                                            addresses.len()
+                                        );
                                         for addr in &addresses {
-                                            dure_info!("  Address: {} = {} (status: {}, type: {})",
-                                                addr.name, addr.address, addr.status, addr.address_type);
+                                            dure_info!(
+                                                "  Address: {} = {} (status: {}, type: {})",
+                                                addr.name,
+                                                addr.address,
+                                                addr.status,
+                                                addr.address_type
+                                            );
                                         }
                                         // Find address matching this IP
-                                        if let Some(addr) = addresses.iter()
-                                            .find(|a| &a.address == external_ip)
+                                        if let Some(addr) =
+                                            addresses.iter().find(|a| &a.address == external_ip)
                                         {
-                                            dure_info!("✓ MATCH FOUND: {} is static IP (name: {})", external_ip, addr.name);
+                                            dure_info!(
+                                                "✓ MATCH FOUND: {} is static IP (name: {})",
+                                                external_ip,
+                                                addr.name
+                                            );
                                             self.delete_vm_has_static_ip = true;
                                             self.delete_vm_ip_address = Some(addr.address.clone());
                                             self.delete_vm_ip_name = Some(addr.name.clone());
@@ -3466,7 +3784,10 @@ impl PlatformTab {
             } else {
                 dure_info!("✗ Config load failed");
             }
-            dure_info!("=== Static IP Detection END (has_static_ip={}) ===", self.delete_vm_has_static_ip);
+            dure_info!(
+                "=== Static IP Detection END (has_static_ip={}) ===",
+                self.delete_vm_has_static_ip
+            );
         }
     }
 
@@ -3610,7 +3931,11 @@ impl PlatformTab {
 
         if !open || should_clear_progress {
             // Clear progress bar when dialog is closed or cancelled
-            if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == self.delete_vm_platform) {
+            if let Some(row) = self
+                .rows
+                .iter_mut()
+                .find(|r| r.project_id == self.delete_vm_platform)
+            {
                 row.operation_state = OperationState::Idle;
             }
 
@@ -3630,10 +3955,7 @@ impl PlatformTab {
                 .collapsible(false)
                 .show(ctx, |ui| {
                     ui.add_space(8.0);
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("error"),
-                        &error,
-                    );
+                    ui.colored_label(egui_material3::theme::get_global_color("error"), &error);
                     ui.add_space(12.0);
 
                     ui.horizontal(|ui| {
@@ -3672,11 +3994,7 @@ impl PlatformTab {
                 match (self.delete_vm_ip_name.clone(), self.delete_vm_list.get(0)) {
                     (Some(addr_name), Some((_, zone_s, _))) => {
                         // Region = zone with trailing "-<letter>" stripped (e.g. us-central1-a -> us-central1)
-                        let region = zone_s
-                            .rsplitn(2, '-')
-                            .nth(1)
-                            .unwrap_or(zone_s)
-                            .to_string();
+                        let region = zone_s.rsplitn(2, '-').nth(1).unwrap_or(zone_s).to_string();
                         Some((region, addr_name))
                     }
                     _ => None,
@@ -3840,7 +4158,8 @@ impl PlatformTab {
         };
 
         // Load SSH private key from profile keyring before spawning thread
-        let (private_key, _public_key) = load_ssh_key_from_keyring(&platform_name, &keyring_domain, kdbx_handle);
+        let (private_key, _public_key) =
+            load_ssh_key_from_keyring(&platform_name, &keyring_domain, kdbx_handle);
 
         let Some(private_key_pem) = private_key else {
             self.ssh_test_results.insert(
@@ -3871,16 +4190,23 @@ impl PlatformTab {
     }
 
     /// Get valid access token, refreshing if expired (standalone helper)
-    fn refresh_or_get_token(platform: &mut crate::config::CloudPlatformConfig) -> Result<String, String> {
+    fn refresh_or_get_token(
+        platform: &mut crate::config::CloudPlatformConfig,
+    ) -> Result<String, String> {
         use crate::api::gcp::oauth::refresh_access_token;
 
-        let token = platform.gcp_oauth_access_token.as_ref()
+        let token = platform
+            .gcp_oauth_access_token
+            .as_ref()
             .ok_or_else(|| "No OAuth access token".to_string())?;
 
-        let refresh_token = platform.gcp_oauth_refresh_token.as_ref()
+        let refresh_token = platform
+            .gcp_oauth_refresh_token
+            .as_ref()
             .ok_or_else(|| "No OAuth refresh token".to_string())?;
 
-        let expiry = platform.gcp_oauth_token_expiry
+        let expiry = platform
+            .gcp_oauth_token_expiry
             .ok_or_else(|| "No token expiry".to_string())?;
 
         // Check if expired (with 60 second buffer)
@@ -3892,7 +4218,8 @@ impl PlatformTab {
                 oauth_handler.client_id(),
                 oauth_handler.client_secret(),
                 refresh_token,
-            ).map_err(|e| format!("Failed to refresh token: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to refresh token: {}", e))?;
 
             // Update platform
             platform.gcp_oauth_access_token = Some(new_oauth.access_token.clone());
@@ -3906,8 +4233,12 @@ impl PlatformTab {
 
     /// Execute status refresh for a platform
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_refresh(&mut self, profile: &crate::calc::profile::ProfileContext, project_id: String) {
-        use crate::api::gcp::{GcpRestClient, get_current_ip};
+    fn execute_refresh(
+        &mut self,
+        profile: &crate::calc::profile::ProfileContext,
+        project_id: String,
+    ) {
+        use crate::api::gcp::{get_current_ip, GcpRestClient};
 
         let project_id_clone = project_id.clone();
         let profile_clone = profile.clone();
@@ -3917,7 +4248,9 @@ impl PlatformTab {
                 .map_err(|e| format!("Failed to load config: {}", e))?;
 
             // Find platform
-            let platform = config.platforms.iter_mut()
+            let platform = config
+                .platforms
+                .iter_mut()
                 .find(|p| p.gcp_selected_project_id.as_ref() == Some(&project_id_clone))
                 .ok_or_else(|| format!("Platform {} not found", project_id_clone))?;
 
@@ -3949,13 +4282,11 @@ impl PlatformTab {
                 Ok(current_ip) => {
                     match client.check_ip_whitelisted(&project_id_clone, &current_ip) {
                         Ok(whitelisted) => {
-                            platform.cached_firewall_status = Some(
-                                if whitelisted {
-                                    format!("✅ Whitelisted ({})", current_ip)
-                                } else {
-                                    "❌ Not whitelisted".to_string()
-                                }
-                            );
+                            platform.cached_firewall_status = Some(if whitelisted {
+                                format!("✅ Whitelisted ({})", current_ip)
+                            } else {
+                                "❌ Not whitelisted".to_string()
+                            });
                         }
                         Err(e) => {
                             dure_debug!("Failed to check firewall: {}", e);
@@ -3981,7 +4312,8 @@ impl PlatformTab {
             platform.last_status_refresh = Some(chrono::Utc::now().timestamp());
 
             // Save config
-            config.save(&config_path)
+            config
+                .save(&config_path)
                 .map_err(|e| format!("Failed to save config: {}", e))?;
 
             Ok(())
@@ -3995,7 +4327,11 @@ impl PlatformTab {
         // WASM not supported
     }
 
-    fn show_delete_platform_confirmation(&mut self, profile: &crate::calc::profile::ProfileContext, platform_name: String) {
+    fn show_delete_platform_confirmation(
+        &mut self,
+        profile: &crate::calc::profile::ProfileContext,
+        platform_name: String,
+    ) {
         self.delete_platform_name = platform_name.clone();
 
         // Count VMs for this platform
@@ -4031,9 +4367,7 @@ impl PlatformTab {
             .scroll([false, false])
             .min_width(450.0)
             .min_height(300.0)
-            .resize(|r| {
-                r.default_size([450.0, 300.0])
-            })
+            .resize(|r| r.default_size([450.0, 300.0]))
             .show(ctx, |ui| {
                 ui.heading(tr!("delete-platform-heading"));
                 ui.add_space(12.0);
@@ -4058,7 +4392,10 @@ impl PlatformTab {
                         "Note: VMs will be removed from config but NOT deleted from GCP.",
                     );
                 } else {
-                    ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), tr!("platform-drawer-no-vms"));
+                    ui.colored_label(
+                        egui_material3::theme::get_global_color("onSurfaceVariant"),
+                        tr!("platform-drawer-no-vms"),
+                    );
                 }
 
                 ui.add_space(8.0);
@@ -4122,7 +4459,10 @@ impl PlatformTab {
                 ui.add_space(8.0);
 
                 if self.select_project_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), tr!("platform-select-project-none")); // Warning amber
+                    ui.colored_label(
+                        egui::Color32::from_rgb(255, 193, 7),
+                        tr!("platform-select-project-none"),
+                    ); // Warning amber
                 } else {
                     ui.label(format!(
                         "Found {} projects:",
@@ -4158,7 +4498,8 @@ impl PlatformTab {
                     }
 
                     let select_enabled = self.select_project_selected.is_some();
-                    let select_button = MaterialButton::filled(tr!("platform-select-project-button"));
+                    let select_button =
+                        MaterialButton::filled(tr!("platform-select-project-button"));
                     let select_button = if select_enabled {
                         select_button
                     } else {
@@ -4178,7 +4519,11 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_select_project(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_select_project(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if let Some(selected_idx) = self.select_project_selected {
             if selected_idx < self.select_project_list.len() {
                 let (project_id, _) = &self.select_project_list[selected_idx];
@@ -4186,7 +4531,9 @@ impl PlatformTab {
 
                 if let Some(vm) = vm {
                     let config_path = current_profile.config_file.clone();
-                    if let Err(e) = vm.select_project(config_path, platform_name.clone(), project_id.clone()) {
+                    if let Err(e) =
+                        vm.select_project(config_path, platform_name.clone(), project_id.clone())
+                    {
                         self.load_error = Some(format!("Failed to select project: {}", e));
                     }
                     // Result will be delivered via ProjectSelected event
@@ -4198,14 +4545,22 @@ impl PlatformTab {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_platform(&mut self, current_profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_delete_platform(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         if let Some(vm) = vm {
             let config_path = current_profile.config_file.clone();
             let delete_options = crate::viewmodel::platform::DeleteOptions {
                 delete_vms: self.delete_platform_delete_vms,
                 delete_project: self.delete_platform_delete_project,
             };
-            match vm.delete_platform(config_path, self.delete_platform_name.clone(), delete_options) {
+            match vm.delete_platform(
+                config_path,
+                self.delete_platform_name.clone(),
+                delete_options,
+            ) {
                 Ok(_) => {
                     dure_info!(" Platform delete command sent");
                 }
@@ -4258,8 +4613,16 @@ impl PlatformTab {
         }
     }
 
-    fn fetch_billing_data(&mut self, profile: &crate::calc::profile::ProfileContext, vm: Option<&mut crate::viewmodel::ViewModel>, project_id_param: Option<String>) {
-        dure_debug!("[BILLING] fetch_billing_data called, project_id_param={:?}", project_id_param);
+    fn fetch_billing_data(
+        &mut self,
+        profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+        project_id_param: Option<String>,
+    ) {
+        dure_debug!(
+            "[BILLING] fetch_billing_data called, project_id_param={:?}",
+            project_id_param
+        );
 
         // ViewModel-based implementation
         if let Some(vm) = vm {
@@ -4274,7 +4637,7 @@ impl PlatformTab {
                 Ok(config) => {
                     dure_debug!("[BILLING] Config loaded successfully");
                     config
-                },
+                }
                 Err(e) => {
                     dure_error!("[BILLING] Failed to load config: {}", e);
                     self.billing_error = Some(format!("Failed to load config: {}", e));
@@ -4325,21 +4688,27 @@ impl PlatformTab {
             } else if !platform.vms.is_empty() {
                 platform.vms[0].gcp_project_id.clone()
             } else {
-                self.billing_error = Some(
-                    "No project ID available. Please select a project first.".to_string(),
-                );
+                self.billing_error =
+                    Some("No project ID available. Please select a project first.".to_string());
                 self.billing_loading = false;
                 return;
             };
 
             // Auto-discover billing table if not configured
             if self.billing_dataset.is_empty() || self.billing_table.is_empty() {
-                dure_info!("[BILLING] Auto-discovering billing table for project: {}", project_id);
+                dure_info!(
+                    "[BILLING] Auto-discovering billing table for project: {}",
+                    project_id
+                );
                 let client = crate::api::gcp::GcpRestClient::new(access_token.clone());
 
                 match client.discover_billing_table(&project_id) {
                     Ok((dataset, table)) => {
-                        dure_info!("[BILLING] Auto-discovery succeeded: dataset={}, table={}", dataset, table);
+                        dure_info!(
+                            "[BILLING] Auto-discovery succeeded: dataset={}, table={}",
+                            dataset,
+                            table
+                        );
                         self.billing_dataset = dataset;
                         self.billing_table = table;
                         self.billing_project_id = project_id.clone();
@@ -4355,13 +4724,19 @@ impl PlatformTab {
                             "Auto-discovery failed: {}\n\nUsing default names. Please configure below if different.",
                             e
                         ));
-                        dure_error!("[BILLING] Setting billing_loading = false (auto-discovery failed)");
+                        dure_error!(
+                            "[BILLING] Setting billing_loading = false (auto-discovery failed)"
+                        );
                         self.billing_loading = false;
                         return;
                     }
                 }
             } else {
-                dure_debug!("[BILLING] Using existing dataset={}, table={}", self.billing_dataset, self.billing_table);
+                dure_debug!(
+                    "[BILLING] Using existing dataset={}, table={}",
+                    self.billing_dataset,
+                    self.billing_table
+                );
             }
 
             if self.billing_project_id.is_empty() {
@@ -4369,11 +4744,15 @@ impl PlatformTab {
             }
 
             // Send command to ViewModel
-            dure_info!("[BILLING] Sending fetch_billing command: project={}, dataset={}, table={}",
-                project_id, self.billing_dataset, self.billing_table);
+            dure_info!(
+                "[BILLING] Sending fetch_billing command: project={}, dataset={}, table={}",
+                project_id,
+                self.billing_dataset,
+                self.billing_table
+            );
             if let Err(e) = vm.fetch_billing(
                 profile.config_file.clone(),
-                project_id.clone(),  // Use project_id as platform identifier
+                project_id.clone(), // Use project_id as platform identifier
                 project_id,
                 self.billing_dataset.clone(),
                 self.billing_table.clone(),
@@ -4408,187 +4787,189 @@ impl PlatformTab {
 
         let refresh_requested = Cell::new(false);
 
-        dialog("billing_dialog", &tr!("platform-billing-title"), &mut self.show_billing_dialog)
-            .max_width(600.0)
-            .max_height(600.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                ui.heading(tr!("platform-billing-heading"));
-                ui.add_space(8.0);
+        dialog(
+            "billing_dialog",
+            &tr!("platform-billing-title"),
+            &mut self.show_billing_dialog,
+        )
+        .max_width(600.0)
+        .max_height(600.0)
+        .scrollable(true)
+        .content(|ui, open| {
+            ui.heading(tr!("platform-billing-heading"));
+            ui.add_space(8.0);
 
-                // Project ID display with GCP console link
-                ui.horizontal(|ui| {
-                    ui.label(tr!("platform-billing-project-id"));
-                    ui.label(&billing_project_id);
-                    ui.add_space(8.0);
-                    ui.hyperlink_to(
-                        "GCP Console",
-                        format!("https://console.cloud.google.com/billing?project={}",
-                               billing_project_id)
+            // Project ID display with GCP console link
+            ui.horizontal(|ui| {
+                ui.label(tr!("platform-billing-project-id"));
+                ui.label(&billing_project_id);
+                ui.add_space(8.0);
+                ui.hyperlink_to(
+                    "GCP Console",
+                    format!(
+                        "https://console.cloud.google.com/billing?project={}",
+                        billing_project_id
+                    ),
+                );
+            });
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(8.0);
+
+            if billing_loading {
+                ui.spinner();
+                ui.label(tr!("platform-billing-loading"));
+            } else if let Some(error) = &billing_error {
+                // Check if this is a "table not found" error (billing export not configured)
+                let is_table_not_found =
+                    error.contains("was not found") || error.contains("Not found");
+
+                if is_table_not_found {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
+                        "⚠️ Billing Export Not Configured",
                     );
-                });
-                ui.add_space(8.0);
-                ui.separator();
-                ui.add_space(8.0);
+                    ui.add_space(4.0);
+                    ui.label(tr!("platform-billing-no-table"));
+                } else {
+                    ui.colored_label(
+                        egui_material3::theme::get_global_color("error"),
+                        tr!("platform-billing-error"),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(error);
+                }
+                ui.add_space(16.0);
 
-                if billing_loading {
-                    ui.spinner();
-                    ui.label(tr!("platform-billing-loading"));
-                } else if let Some(error) = &billing_error {
-                    // Check if this is a "table not found" error (billing export not configured)
-                    let is_table_not_found =
-                        error.contains("was not found") || error.contains("Not found");
+                ui.label(tr!("platform-billing-help"));
+                ui.label("1. Go to GCP Console → Billing → Billing export");
+                ui.label("2. Select 'Detailed cost data' tab");
+                ui.label("3. Select or create a BigQuery dataset");
+                ui.label("4. Wait a few hours for data to populate");
+            } else if let Some(records) = &billing_data {
+                if records.is_empty() {
+                    ui.label(tr!("platform-billing-no-data"));
+                    ui.add_space(8.0);
+                    ui.label("This could mean:");
+                    ui.label("• Billing export is not configured");
+                    ui.label("• No costs have been incurred yet this month");
+                    ui.label("• Data is still being processed (can take up to 5 days)");
+                } else {
+                    // Display monthly totals
+                    ui.label(tr!("platform-billing-monthly-total", {count: records.len()}));
+                    ui.add_space(8.0);
 
-                    if is_table_not_found {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                            "⚠️ Billing Export Not Configured",
-                        );
-                        ui.add_space(4.0);
-                        ui.label(tr!("platform-billing-no-table"));
-                    } else {
-                        ui.colored_label(egui_material3::theme::get_global_color("error"), tr!("platform-billing-error"));
-                        ui.add_space(4.0);
-                        ui.label(error);
-                    }
-                    ui.add_space(16.0);
+                    for record in records {
+                        ui.group(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("📅 {} ({})", record.month, record.currency));
 
-                    ui.label(tr!("platform-billing-help"));
-                    ui.label("1. Go to GCP Console → Billing → Billing export");
-                    ui.label("2. Select 'Detailed cost data' tab");
-                    ui.label("3. Select or create a BigQuery dataset");
-                    ui.label("4. Wait a few hours for data to populate");
-                } else if let Some(records) = &billing_data {
-                    if records.is_empty() {
-                        ui.label(tr!("platform-billing-no-data"));
-                        ui.add_space(8.0);
-                        ui.label("This could mean:");
-                        ui.label("• Billing export is not configured");
-                        ui.label("• No costs have been incurred yet this month");
-                        ui.label("• Data is still being processed (can take up to 5 days)");
-                    } else {
-                        // Display monthly totals
-                        ui.label(tr!("platform-billing-monthly-total", {count: records.len()}));
-                        ui.add_space(8.0);
-
-                        for record in records {
-                            ui.group(|ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(format!(
-                                        "📅 {} ({})",
-                                        record.month, record.currency
-                                    ));
-
-                                    // Helper to format currency with thousand separators
-                                    let format_currency =
-                                        |amount: f64, currency: &str| -> String {
-                                            // Determine if currency uses decimals
-                                            let uses_decimals = match currency {
-                                                "KRW" | "JPY" | "VND" | "IDR" => false,
-                                                _ => true,
-                                            };
-
-                                            // Get currency symbol
-                                            let symbol = match currency {
-                                                "USD" => "$",
-                                                "EUR" => "€",
-                                                "GBP" => "£",
-                                                "JPY" => "¥",
-                                                "KRW" => "₩",
-                                                "CNY" => "¥",
-                                                "INR" => "₹",
-                                                "AUD" => "A$",
-                                                "CAD" => "C$",
-                                                "SGD" => "S$",
-                                                "HKD" => "HK$",
-                                                "TWD" => "NT$",
-                                                "THB" => "฿",
-                                                "VND" => "₫",
-                                                "IDR" => "Rp",
-                                                "BRL" => "R$",
-                                                _ => currency, // Fallback to currency code
-                                            };
-
-                                            if uses_decimals {
-                                                format!("{}{:.2}", symbol, amount)
-                                            } else {
-                                                let int_amount = amount as i64;
-                                                let abs_amount = int_amount.abs();
-                                                let formatted = abs_amount
-                                                    .to_string()
-                                                    .as_bytes()
-                                                    .rchunks(3)
-                                                    .rev()
-                                                    .map(std::str::from_utf8)
-                                                    .collect::<Result<Vec<&str>, _>>()
-                                                    .unwrap()
-                                                    .join(",");
-                                                if int_amount < 0 {
-                                                    format!("-{}{}", symbol, formatted)
-                                                } else {
-                                                    format!("{}{}", symbol, formatted)
-                                                }
-                                            }
-                                        };
-
-                                    let (color, text) = if record.total_net_cost < 0.0 {
-                                        (
-                                            egui::Color32::from_rgb(76, 175, 80), // Success green
-                                            format!(
-                                                "{} (credit)",
-                                                format_currency(
-                                                    record.total_net_cost,
-                                                    &record.currency
-                                                )
-                                            ),
-                                        )
-                                    } else if record.total_net_cost == 0.0 {
-                                        (
-                                            egui_material3::theme::get_global_color("onSurfaceVariant"),
-                                            format!(
-                                                "{} (no charges)",
-                                                format_currency(0.0, &record.currency)
-                                            ),
-                                        )
-                                    } else {
-                                        (
-                                            egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                                            format_currency(
-                                                record.total_net_cost,
-                                                &record.currency,
-                                            ),
-                                        )
+                                // Helper to format currency with thousand separators
+                                let format_currency = |amount: f64, currency: &str| -> String {
+                                    // Determine if currency uses decimals
+                                    let uses_decimals = match currency {
+                                        "KRW" | "JPY" | "VND" | "IDR" => false,
+                                        _ => true,
                                     };
 
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            ui.colored_label(color, &text);
-                                        },
-                                    );
-                                });
+                                    // Get currency symbol
+                                    let symbol = match currency {
+                                        "USD" => "$",
+                                        "EUR" => "€",
+                                        "GBP" => "£",
+                                        "JPY" => "¥",
+                                        "KRW" => "₩",
+                                        "CNY" => "¥",
+                                        "INR" => "₹",
+                                        "AUD" => "A$",
+                                        "CAD" => "C$",
+                                        "SGD" => "S$",
+                                        "HKD" => "HK$",
+                                        "TWD" => "NT$",
+                                        "THB" => "฿",
+                                        "VND" => "₫",
+                                        "IDR" => "Rp",
+                                        "BRL" => "R$",
+                                        _ => currency, // Fallback to currency code
+                                    };
+
+                                    if uses_decimals {
+                                        format!("{}{:.2}", symbol, amount)
+                                    } else {
+                                        let int_amount = amount as i64;
+                                        let abs_amount = int_amount.abs();
+                                        let formatted = abs_amount
+                                            .to_string()
+                                            .as_bytes()
+                                            .rchunks(3)
+                                            .rev()
+                                            .map(std::str::from_utf8)
+                                            .collect::<Result<Vec<&str>, _>>()
+                                            .unwrap()
+                                            .join(",");
+                                        if int_amount < 0 {
+                                            format!("-{}{}", symbol, formatted)
+                                        } else {
+                                            format!("{}{}", symbol, formatted)
+                                        }
+                                    }
+                                };
+
+                                let (color, text) = if record.total_net_cost < 0.0 {
+                                    (
+                                        egui::Color32::from_rgb(76, 175, 80), // Success green
+                                        format!(
+                                            "{} (credit)",
+                                            format_currency(
+                                                record.total_net_cost,
+                                                &record.currency
+                                            )
+                                        ),
+                                    )
+                                } else if record.total_net_cost == 0.0 {
+                                    (
+                                        egui_material3::theme::get_global_color("onSurfaceVariant"),
+                                        format!(
+                                            "{} (no charges)",
+                                            format_currency(0.0, &record.currency)
+                                        ),
+                                    )
+                                } else {
+                                    (
+                                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
+                                        format_currency(record.total_net_cost, &record.currency),
+                                    )
+                                };
+
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.colored_label(color, &text);
+                                    },
+                                );
                             });
-                            ui.add_space(4.0);
-                        }
+                        });
+                        ui.add_space(4.0);
                     }
                 }
+            }
 
-                ui.add_space(16.0);
-                ui.separator();
-                ui.add_space(8.0);
+            ui.add_space(16.0);
+            ui.separator();
+            ui.add_space(8.0);
 
-                // Action buttons
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled(&tr!("close"))).clicked() {
-                        *open = false;
-                    }
+            // Action buttons
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.add(MaterialButton::filled(&tr!("close"))).clicked() {
+                    *open = false;
+                }
 
-                    if ui.add(MaterialButton::outlined(&tr!("refresh"))).clicked() {
-                        refresh_requested.set(true);
-                    }
-                });
-            })
-            .show(ctx);
+                if ui.add(MaterialButton::outlined(&tr!("refresh"))).clicked() {
+                    refresh_requested.set(true);
+                }
+            });
+        })
+        .show(ctx);
 
         if refresh_requested.get() {
             self.fetch_billing_data(profile, vm, None);
@@ -4630,86 +5011,99 @@ impl PlatformTab {
 
         let bind_requested = Cell::new(false);
 
-        dialog("bind_vm_dialog", &tr!("platform-dialog-bind-title"), &mut self.show_bind_vm_dialog)
-            .min_width(500.0)
-            .max_height(450.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                ui.heading(tr!("platform-dialog-bind-heading"));
-                ui.add_space(12.0);
+        dialog(
+            "bind_vm_dialog",
+            &tr!("platform-dialog-bind-title"),
+            &mut self.show_bind_vm_dialog,
+        )
+        .min_width(500.0)
+        .max_height(450.0)
+        .scrollable(true)
+        .content(|ui, open| {
+            ui.heading(tr!("platform-dialog-bind-heading"));
+            ui.add_space(12.0);
 
-                if bind_vm_loading {
-                    ui.spinner();
-                    ui.label(tr!("platform-dialog-bind-loading"));
-                } else if bind_vm_list.is_empty() {
-                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), tr!("platform-dialog-bind-no-vms")); // Warning amber
-                } else {
-                    ui.label(tr!("platform-dialog-bind-select", {count: bind_vm_list.len()}));
-                    ui.add_space(8.0);
+            if bind_vm_loading {
+                ui.spinner();
+                ui.label(tr!("platform-dialog-bind-loading"));
+            } else if bind_vm_list.is_empty() {
+                ui.colored_label(
+                    egui::Color32::from_rgb(255, 193, 7),
+                    tr!("platform-dialog-bind-no-vms"),
+                ); // Warning amber
+            } else {
+                ui.label(tr!("platform-dialog-bind-select", {count: bind_vm_list.len()}));
+                ui.add_space(8.0);
 
-                    use egui_material3::{MaterialList, ListItem};
-                    let mut vm_list = MaterialList::new().id("vm_binding_list");
+                use egui_material3::{ListItem, MaterialList};
+                let mut vm_list = MaterialList::new().id("vm_binding_list");
 
-                    for (idx, (vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
-                        let is_selected = bind_vm_selected == Some(idx);
-                        let secondary = if !external_ip.is_empty() {
-                            format!("{} • {}", zone, external_ip)
-                        } else {
-                            zone.clone()
-                        };
+                for (idx, (vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
+                    let is_selected = bind_vm_selected == Some(idx);
+                    let secondary = if !external_ip.is_empty() {
+                        format!("{} • {}", zone, external_ip)
+                    } else {
+                        zone.clone()
+                    };
 
-                        let item = ListItem::new(vm_name)
-                            .secondary_text(&secondary)
-                            .leading_icon("computer".to_string())
-                            .dense(true)
-                            .selected(is_selected)
-                            .on_click({
-                                let idx_copy = idx;
-                                move || {
-                                    // Selection handled via UI interaction below
-                                    dure_debug!("VM {} clicked", idx_copy);
-                                }
-                            });
-
-                        vm_list = vm_list.item(item);
-                    }
-
-                    let list_response = ui.add(vm_list);
-
-                    // Handle selection via clicking on list items
-                    for (idx, _) in bind_vm_list.iter().enumerate() {
-                        let item_id = egui::Id::new("vm_binding_list").with(idx);
-                        if ui.ctx().input(|i| i.pointer.button_clicked(egui::PointerButton::Primary)) {
-                            if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                                // Check if click was on this item (approximate bounds check)
-                                // This is simplified - the actual item interaction is handled by MaterialList
-                                bind_vm_selected = Some(idx);
-                                break;
+                    let item = ListItem::new(vm_name)
+                        .secondary_text(&secondary)
+                        .leading_icon("computer".to_string())
+                        .dense(true)
+                        .selected(is_selected)
+                        .on_click({
+                            let idx_copy = idx;
+                            move || {
+                                // Selection handled via UI interaction below
+                                dure_debug!("VM {} clicked", idx_copy);
                             }
+                        });
+
+                    vm_list = vm_list.item(item);
+                }
+
+                let list_response = ui.add(vm_list);
+
+                // Handle selection via clicking on list items
+                for (idx, _) in bind_vm_list.iter().enumerate() {
+                    let item_id = egui::Id::new("vm_binding_list").with(idx);
+                    if ui
+                        .ctx()
+                        .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
+                    {
+                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
+                            // Check if click was on this item (approximate bounds check)
+                            // This is simplified - the actual item interaction is handled by MaterialList
+                            bind_vm_selected = Some(idx);
+                            break;
                         }
                     }
                 }
+            }
 
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(8.0);
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(8.0);
 
-                // Action buttons
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let bind_enabled = !bind_vm_loading && bind_vm_selected.is_some();
-                    if ui
-                        .add_enabled(bind_enabled, MaterialButton::filled(tr!("button-bind")))
-                        .clicked()
-                    {
-                        bind_requested.set(true);
-                        *open = false;
-                    }
-                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
-                        *open = false;
-                    }
-                });
-            })
-            .show(ctx);
+            // Action buttons
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let bind_enabled = !bind_vm_loading && bind_vm_selected.is_some();
+                if ui
+                    .add_enabled(bind_enabled, MaterialButton::filled(tr!("button-bind")))
+                    .clicked()
+                {
+                    bind_requested.set(true);
+                    *open = false;
+                }
+                if ui
+                    .add(MaterialButton::outlined(tr!("button-cancel")))
+                    .clicked()
+                {
+                    *open = false;
+                }
+            });
+        })
+        .show(ctx);
 
         // Update selection state
         self.bind_vm_selected = bind_vm_selected;
@@ -4719,10 +5113,7 @@ impl PlatformTab {
             #[cfg(not(target_arch = "wasm32"))]
             if let Some(vm_ref) = _vm {
                 let profile_config_path = _current_profile.config_file.clone();
-                if let Err(e) = vm_ref.scan_existing_vms(
-                    profile_config_path,
-                    bind_vm_platform,
-                ) {
+                if let Err(e) = vm_ref.scan_existing_vms(profile_config_path, bind_vm_platform) {
                     dure_error!("Failed to bind VMs: {}", e);
                 }
             }
@@ -4741,7 +5132,10 @@ impl PlatformTab {
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        dure_info!("[UI::PLATFO] fetch_firewall_data called for platform: {}", platform_name);
+        dure_info!(
+            "[UI::PLATFO] fetch_firewall_data called for platform: {}",
+            platform_name
+        );
         if let Some(vm) = vm {
             if let Err(e) = vm.fetch_firewall_rules(profile_config_path, platform_name.clone()) {
                 dure_error!("[UI::PLATFO] Failed to fetch firewall rules: {}", e);
@@ -4764,7 +5158,7 @@ impl PlatformTab {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
-        force: bool,  // If true, skip debounce check
+        force: bool, // If true, skip debounce check
     ) {
         // Debounce: skip if refreshed within last 1 second (unless force=true)
         if !force {
@@ -4776,7 +5170,10 @@ impl PlatformTab {
             }
         }
 
-        dure_info!("[UI::PLATFO] Refreshing firewall rules for {}", platform_name);
+        dure_info!(
+            "[UI::PLATFO] Refreshing firewall rules for {}",
+            platform_name
+        );
         self.firewall_last_refresh_time = Some(std::time::Instant::now());
         self.fetch_firewall_data(profile_config_path, platform_name, vm);
     }
@@ -4815,343 +5212,361 @@ impl PlatformTab {
             .order(egui::Order::Background)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |_ui| {
-                dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                // Current IP display - only show loading when both IP and rules are empty
-                if let Some(ip) = &current_ip {
-                    ui.label(format!("Current IP: {}", ip));
-                } else if firewall_rule_list.is_empty() {
-                    ui.label("Fetching current IP...");
-                }
-                ui.add_space(8.0);
-
-                // Toolbar: Add/Reset buttons (Edit/Delete moved to per-row trailing actions)
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled(tr!("firewall-button-add-row"))).clicked() {
-                        add_requested.set(true);
+                dialog(
+                    "firewall_dialog",
+                    "Manage Firewall Rules",
+                    &mut self.show_firewall_dialog,
+                )
+                .min_width(350.0)
+                .max_width(window_width - 40.0)
+                .max_height(window_height - 40.0)
+                .scrollable(true)
+                .content(|ui, open| {
+                    // Current IP display - only show loading when both IP and rules are empty
+                    if let Some(ip) = &current_ip {
+                        ui.label(format!("Current IP: {}", ip));
+                    } else if firewall_rule_list.is_empty() {
+                        ui.label("Fetching current IP...");
                     }
-                    if ui.add(MaterialButton::text(tr!("firewall-button-reset"))).clicked() {
-                        reset_requested.set(true);
-                    }
-                });
-                ui.add_space(8.0);
+                    ui.add_space(8.0);
 
-                // Use full GCP firewall data directly (no conversion needed!)
-                let rules_for_table = &firewall_rule_list;
+                    // Toolbar: Add/Reset buttons (Edit/Delete moved to per-row trailing actions)
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(MaterialButton::filled(tr!("firewall-button-add-row")))
+                            .clicked()
+                        {
+                            add_requested.set(true);
+                        }
+                        if ui
+                            .add(MaterialButton::text(tr!("firewall-button-reset")))
+                            .clicked()
+                        {
+                            reset_requested.set(true);
+                        }
+                    });
+                    ui.add_space(8.0);
 
-                // Responsive view: datatable for wide screens, list for narrow screens
-                if window_width >= 1000.0 {
-                    // Wide screen: Compact datatable with 8 columns + drawer
-                    use egui_material3::data_table;
-                    let mut table = data_table()
-                        .id(egui::Id::new("firewall_rules_table"))
-                        .allow_drawer(true)
-                        .allow_selection(true)
-                        .default_row_height(30.0)
-                        .column("NAME", 150.0, false)
-                        .column("NETWORK", 80.0, false)
-                        .column("DIRECTION", 90.0, false)
-                        .column("PRIORITY", 80.0, true)
-                        .column("SRC_RANGES", 120.0, false)
-                        .column("DEST_RANGES", 120.0, false)
-                        .column("ALLOW", 120.0, false)
-                        .column("DENY", 100.0, false);
+                    // Use full GCP firewall data directly (no conversion needed!)
+                    let rules_for_table = &firewall_rule_list;
 
-                    for (idx, rule) in rules_for_table.iter().enumerate() {
-                        let rule_name = rule.name.clone();
-                        let rule_network = rule.network.clone();
-                        let rule_direction = rule.direction.clone();
-                        let rule_priority = rule.priority;
-                        let src_ranges_str = rule.source_ranges.join(", ");
-                        let dest_ranges_str = rule.dest_ranges.join(", ");
-                        let allowed_str = rule.allowed.join(", ");
-                        let denied_str = rule.denied.join(", ");
-                        let src_tags_str = rule.source_tags.join(", ");
-                        let src_svc_str = rule.source_service_accounts.join(", ");
-                        let target_tags_str = rule.target_tags.join(", ");
-                        let target_svc_str = rule.target_service_accounts.join(", ");
+                    // Responsive view: datatable for wide screens, list for narrow screens
+                    if window_width >= 1000.0 {
+                        // Wide screen: Compact datatable with 8 columns + drawer
+                        use egui_material3::data_table;
+                        let mut table = data_table()
+                            .id(egui::Id::new("firewall_rules_table"))
+                            .allow_drawer(true)
+                            .allow_selection(true)
+                            .default_row_height(30.0)
+                            .column("NAME", 150.0, false)
+                            .column("NETWORK", 80.0, false)
+                            .column("DIRECTION", 90.0, false)
+                            .column("PRIORITY", 80.0, true)
+                            .column("SRC_RANGES", 120.0, false)
+                            .column("DEST_RANGES", 120.0, false)
+                            .column("ALLOW", 120.0, false)
+                            .column("DENY", 100.0, false);
 
-                        let row_color = if rule.source_ranges.contains(&"0.0.0.0/0".to_string()) {
-                            egui::Color32::from_rgb(255, 240, 200)
-                        } else {
-                            egui::Color32::TRANSPARENT
-                        };
+                        for (idx, rule) in rules_for_table.iter().enumerate() {
+                            let rule_name = rule.name.clone();
+                            let rule_network = rule.network.clone();
+                            let rule_direction = rule.direction.clone();
+                            let rule_priority = rule.priority;
+                            let src_ranges_str = rule.source_ranges.join(", ");
+                            let dest_ranges_str = rule.dest_ranges.join(", ");
+                            let allowed_str = rule.allowed.join(", ");
+                            let denied_str = rule.denied.join(", ");
+                            let src_tags_str = rule.source_tags.join(", ");
+                            let src_svc_str = rule.source_service_accounts.join(", ");
+                            let target_tags_str = rule.target_tags.join(", ");
+                            let target_svc_str = rule.target_service_accounts.join(", ");
 
-                        table = table.row(|row| {
-                            row.cell(rule_name.clone())
-                               .cell(rule_network.clone())
-                               .cell(rule_direction.clone())
-                               .cell(rule_priority.to_string())
-                               .cell(src_ranges_str.clone())
-                               .cell(dest_ranges_str.clone())
-                               .cell(allowed_str.clone())
-                               .cell(denied_str.clone())
-                               .color(row_color)
-                               .id(format!("firewall_row_{}", idx))
-                               .drawer({
-                                   let name_clone = rule_name.clone();
-                                   let network_clone = rule_network.clone();
-                                   let direction_clone = rule_direction.clone();
-                                   let priority_clone = rule_priority;
-                                   let src_ranges_clone = src_ranges_str.clone();
-                                   let dest_ranges_clone = dest_ranges_str.clone();
-                                   let allowed_clone = allowed_str.clone();
-                                   let denied_clone = denied_str.clone();
-                                   let src_tags_clone = src_tags_str.clone();
-                                   let src_svc_clone = src_svc_str.clone();
-                                   let target_tags_clone = target_tags_str.clone();
-                                   let target_svc_clone = target_svc_str.clone();
+                            let row_color = if rule.source_ranges.contains(&"0.0.0.0/0".to_string())
+                            {
+                                egui::Color32::from_rgb(255, 240, 200)
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            };
 
-                                   move |ui| {
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Name:");
-                                           ui.label(&name_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Network:");
-                                           ui.label(&network_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Direction:");
-                                           ui.label(&direction_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Priority:");
-                                           ui.label(priority_clone.to_string());
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Source Ranges:");
-                                           ui.label(&src_ranges_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Dest Ranges:");
-                                           ui.label(&dest_ranges_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Allowed:");
-                                           ui.label(&allowed_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Denied:");
-                                           ui.label(&denied_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Source Tags:");
-                                           ui.label(&src_tags_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Source Service Accounts:");
-                                           ui.label(&src_svc_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Target Tags:");
-                                           ui.label(&target_tags_clone);
-                                       });
-                                       ui.horizontal(|ui| {
-                                           ui.strong("Target Service Accounts:");
-                                           ui.label(&target_svc_clone);
-                                       });
-                                   }
-                               })
-                        });
-                    }
+                            table = table.row(|row| {
+                                row.cell(rule_name.clone())
+                                    .cell(rule_network.clone())
+                                    .cell(rule_direction.clone())
+                                    .cell(rule_priority.to_string())
+                                    .cell(src_ranges_str.clone())
+                                    .cell(dest_ranges_str.clone())
+                                    .cell(allowed_str.clone())
+                                    .cell(denied_str.clone())
+                                    .color(row_color)
+                                    .id(format!("firewall_row_{}", idx))
+                                    .drawer({
+                                        let name_clone = rule_name.clone();
+                                        let network_clone = rule_network.clone();
+                                        let direction_clone = rule_direction.clone();
+                                        let priority_clone = rule_priority;
+                                        let src_ranges_clone = src_ranges_str.clone();
+                                        let dest_ranges_clone = dest_ranges_str.clone();
+                                        let allowed_clone = allowed_str.clone();
+                                        let denied_clone = denied_str.clone();
+                                        let src_tags_clone = src_tags_str.clone();
+                                        let src_svc_clone = src_svc_str.clone();
+                                        let target_tags_clone = target_tags_str.clone();
+                                        let target_svc_clone = target_svc_str.clone();
 
-                    let table_response = table.show(ui);
-                    table_selected_rows.set(table_response.selected_rows.clone());
-                } else {
-                    // Narrow screen: 5-line drawer list (overline + primary + 2-line secondary + trailing indicator)
-                    use egui_material3::{MaterialList, ListItem, VisualDensity};
-                    use std::rc::Rc;
-
-                    let list_id = egui::Id::new("firewall_rules_list");
-                    let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
-
-                    let mut list = MaterialList::new()
-                        .id(list_id)
-                        .allow_drawer(true);
-
-                    for (idx, rule) in firewall_rule_list.iter().enumerate() {
-                        let is_selected = firewall_selected == Some(idx);
-                        let has_full_access = rule.source_ranges.contains(&"0.0.0.0/0".to_string());
-
-                        // Overline: S:source_ranges D:dest_ranges
-                        let src_str = if rule.source_ranges.is_empty() {
-                            "none".to_string()
-                        } else if rule.source_ranges.len() <= 2 {
-                            rule.source_ranges.join(",")
-                        } else {
-                            format!("{},{} +{} more",
-                                rule.source_ranges[0],
-                                rule.source_ranges[1],
-                                rule.source_ranges.len() - 2)
-                        };
-                        let dest_str = if rule.dest_ranges.is_empty() {
-                            "0.0.0.0/0".to_string()
-                        } else if rule.dest_ranges.len() <= 2 {
-                            rule.dest_ranges.join(",")
-                        } else {
-                            format!("{},{} +{} more",
-                                rule.dest_ranges[0],
-                                rule.dest_ranges[1],
-                                rule.dest_ranges.len() - 2)
-                        };
-                        let overline_text = format!("S:{} D:{}", src_str, dest_str);
-
-                        // Secondary line 1: A:allowed
-                        // Secondary line 2: D:denied
-                        let allowed_str = if rule.allowed.is_empty() {
-                            "none".to_string()
-                        } else {
-                            rule.allowed.join(",")
-                        };
-                        let denied_str = if rule.denied.is_empty() {
-                            "none".to_string()
-                        } else {
-                            rule.denied.join(",")
-                        };
-                        let secondary_text = format!("A:{}\nD:{}", allowed_str, denied_str);
-
-                        // Leading icon label: Priority below icon
-                        let icon_label = format!("(P:{})", rule.priority);
-
-                        // Icon: ingress/egress direction or warning
-                        let icon_name = if has_full_access {
-                            "warning"
-                        } else if rule.direction == "INGRESS" {
-                            "call_received"
-                        } else {
-                            "call_made"
-                        };
-
-                        // Clone data for drawer closure
-                        let rule_name = rule.name.clone();
-                        let rule_network = rule.network.clone();
-                        let rule_direction = rule.direction.clone();
-                        let rule_priority = rule.priority;
-                        let src_ranges_str = rule.source_ranges.join(", ");
-                        let dest_ranges_str = rule.dest_ranges.join(", ");
-                        let allowed_full = rule.allowed.join(", ");
-                        let denied_full = rule.denied.join(", ");
-                        let src_tags_str = rule.source_tags.join(", ");
-                        let src_svc_str = rule.source_service_accounts.join(", ");
-                        let target_tags_str = rule.target_tags.join(", ");
-                        let target_svc_str = rule.target_service_accounts.join(", ");
-
-                        let item = ListItem::new(&rule.name)
-                            .overline(&overline_text)
-                            .secondary_text(&secondary_text)
-                            .leading_icon(icon_name.to_string())
-                            .leading_icon_label(&icon_label)
-                            .visual_density(VisualDensity::COMFORTABLE)
-                            .selected(is_selected)
-                            .on_click({
-                                let list_clicked_idx = Rc::clone(&list_clicked_idx);
-                                move || {
-                                    list_clicked_idx.set(Some(idx));
-                                }
-                            })
-                            .trailing_widget({
-                                let edit_row_idx = Arc::clone(&edit_row_idx);
-                                let delete_row_idx = Arc::clone(&delete_row_idx);
-                                move |ui| {
-                                    ui.horizontal(|ui| {
-                                        if ui.add(MaterialButton::outlined("Edit").small()).clicked() {
-                                            *edit_row_idx.lock().unwrap() = Some(idx);
+                                        move |ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Name:");
+                                                ui.label(&name_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Network:");
+                                                ui.label(&network_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Direction:");
+                                                ui.label(&direction_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Priority:");
+                                                ui.label(priority_clone.to_string());
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Source Ranges:");
+                                                ui.label(&src_ranges_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Dest Ranges:");
+                                                ui.label(&dest_ranges_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Allowed:");
+                                                ui.label(&allowed_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Denied:");
+                                                ui.label(&denied_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Source Tags:");
+                                                ui.label(&src_tags_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Source Service Accounts:");
+                                                ui.label(&src_svc_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Target Tags:");
+                                                ui.label(&target_tags_clone);
+                                            });
+                                            ui.horizontal(|ui| {
+                                                ui.strong("Target Service Accounts:");
+                                                ui.label(&target_svc_clone);
+                                            });
                                         }
-                                        if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
-                                            *delete_row_idx.lock().unwrap() = Some(idx);
-                                        }
-                                    });
-                                }
-                            })
-                            .drawer(move |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.strong("Name:");
-                                    ui.label(&rule_name);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Network:");
-                                    ui.label(&rule_network);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Direction:");
-                                    ui.label(&rule_direction);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Priority:");
-                                    ui.label(rule_priority.to_string());
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Source Ranges:");
-                                    ui.label(&src_ranges_str);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Dest Ranges:");
-                                    ui.label(&dest_ranges_str);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Allowed:");
-                                    ui.label(&allowed_full);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.strong("Denied:");
-                                    ui.label(&denied_full);
-                                });
-                                if !src_tags_str.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Source Tags:");
-                                        ui.label(&src_tags_str);
-                                    });
-                                }
-                                if !src_svc_str.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Source Service Accounts:");
-                                        ui.label(&src_svc_str);
-                                    });
-                                }
-                                if !target_tags_str.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Target Tags:");
-                                        ui.label(&target_tags_str);
-                                    });
-                                }
-                                if !target_svc_str.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Target Service Accounts:");
-                                        ui.label(&target_svc_str);
-                                    });
-                                }
+                                    })
                             });
+                        }
 
-                        list = list.item(item);
+                        let table_response = table.show(ui);
+                        table_selected_rows.set(table_response.selected_rows.clone());
+                    } else {
+                        // Narrow screen: 5-line drawer list (overline + primary + 2-line secondary + trailing indicator)
+                        use egui_material3::{ListItem, MaterialList, VisualDensity};
+                        use std::rc::Rc;
+
+                        let list_id = egui::Id::new("firewall_rules_list");
+                        let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
+
+                        let mut list = MaterialList::new().id(list_id).allow_drawer(true);
+
+                        for (idx, rule) in firewall_rule_list.iter().enumerate() {
+                            let is_selected = firewall_selected == Some(idx);
+                            let has_full_access =
+                                rule.source_ranges.contains(&"0.0.0.0/0".to_string());
+
+                            // Overline: S:source_ranges D:dest_ranges
+                            let src_str = if rule.source_ranges.is_empty() {
+                                "none".to_string()
+                            } else if rule.source_ranges.len() <= 2 {
+                                rule.source_ranges.join(",")
+                            } else {
+                                format!(
+                                    "{},{} +{} more",
+                                    rule.source_ranges[0],
+                                    rule.source_ranges[1],
+                                    rule.source_ranges.len() - 2
+                                )
+                            };
+                            let dest_str = if rule.dest_ranges.is_empty() {
+                                "0.0.0.0/0".to_string()
+                            } else if rule.dest_ranges.len() <= 2 {
+                                rule.dest_ranges.join(",")
+                            } else {
+                                format!(
+                                    "{},{} +{} more",
+                                    rule.dest_ranges[0],
+                                    rule.dest_ranges[1],
+                                    rule.dest_ranges.len() - 2
+                                )
+                            };
+                            let overline_text = format!("S:{} D:{}", src_str, dest_str);
+
+                            // Secondary line 1: A:allowed
+                            // Secondary line 2: D:denied
+                            let allowed_str = if rule.allowed.is_empty() {
+                                "none".to_string()
+                            } else {
+                                rule.allowed.join(",")
+                            };
+                            let denied_str = if rule.denied.is_empty() {
+                                "none".to_string()
+                            } else {
+                                rule.denied.join(",")
+                            };
+                            let secondary_text = format!("A:{}\nD:{}", allowed_str, denied_str);
+
+                            // Leading icon label: Priority below icon
+                            let icon_label = format!("(P:{})", rule.priority);
+
+                            // Icon: ingress/egress direction or warning
+                            let icon_name = if has_full_access {
+                                "warning"
+                            } else if rule.direction == "INGRESS" {
+                                "call_received"
+                            } else {
+                                "call_made"
+                            };
+
+                            // Clone data for drawer closure
+                            let rule_name = rule.name.clone();
+                            let rule_network = rule.network.clone();
+                            let rule_direction = rule.direction.clone();
+                            let rule_priority = rule.priority;
+                            let src_ranges_str = rule.source_ranges.join(", ");
+                            let dest_ranges_str = rule.dest_ranges.join(", ");
+                            let allowed_full = rule.allowed.join(", ");
+                            let denied_full = rule.denied.join(", ");
+                            let src_tags_str = rule.source_tags.join(", ");
+                            let src_svc_str = rule.source_service_accounts.join(", ");
+                            let target_tags_str = rule.target_tags.join(", ");
+                            let target_svc_str = rule.target_service_accounts.join(", ");
+
+                            let item = ListItem::new(&rule.name)
+                                .overline(&overline_text)
+                                .secondary_text(&secondary_text)
+                                .leading_icon(icon_name.to_string())
+                                .leading_icon_label(&icon_label)
+                                .visual_density(VisualDensity::COMFORTABLE)
+                                .selected(is_selected)
+                                .on_click({
+                                    let list_clicked_idx = Rc::clone(&list_clicked_idx);
+                                    move || {
+                                        list_clicked_idx.set(Some(idx));
+                                    }
+                                })
+                                .trailing_widget({
+                                    let edit_row_idx = Arc::clone(&edit_row_idx);
+                                    let delete_row_idx = Arc::clone(&delete_row_idx);
+                                    move |ui| {
+                                        ui.horizontal(|ui| {
+                                            if ui
+                                                .add(MaterialButton::outlined("Edit").small())
+                                                .clicked()
+                                            {
+                                                *edit_row_idx.lock().unwrap() = Some(idx);
+                                            }
+                                            if ui
+                                                .add(MaterialButton::outlined("Delete").small())
+                                                .clicked()
+                                            {
+                                                *delete_row_idx.lock().unwrap() = Some(idx);
+                                            }
+                                        });
+                                    }
+                                })
+                                .drawer(move |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Name:");
+                                        ui.label(&rule_name);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Network:");
+                                        ui.label(&rule_network);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Direction:");
+                                        ui.label(&rule_direction);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Priority:");
+                                        ui.label(rule_priority.to_string());
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Source Ranges:");
+                                        ui.label(&src_ranges_str);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Dest Ranges:");
+                                        ui.label(&dest_ranges_str);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Allowed:");
+                                        ui.label(&allowed_full);
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Denied:");
+                                        ui.label(&denied_full);
+                                    });
+                                    if !src_tags_str.is_empty() {
+                                        ui.horizontal(|ui| {
+                                            ui.strong("Source Tags:");
+                                            ui.label(&src_tags_str);
+                                        });
+                                    }
+                                    if !src_svc_str.is_empty() {
+                                        ui.horizontal(|ui| {
+                                            ui.strong("Source Service Accounts:");
+                                            ui.label(&src_svc_str);
+                                        });
+                                    }
+                                    if !target_tags_str.is_empty() {
+                                        ui.horizontal(|ui| {
+                                            ui.strong("Target Tags:");
+                                            ui.label(&target_tags_str);
+                                        });
+                                    }
+                                    if !target_svc_str.is_empty() {
+                                        ui.horizontal(|ui| {
+                                            ui.strong("Target Service Accounts:");
+                                            ui.label(&target_svc_str);
+                                        });
+                                    }
+                                });
+
+                            list = list.item(item);
+                        }
+
+                        ui.add(list);
+
+                        // Handle selection from list clicks
+                        if let Some(clicked_idx) = list_clicked_idx.get() {
+                            let mut selected = vec![false; firewall_rule_list.len()];
+                            selected[clicked_idx] = true;
+                            table_selected_rows.set(selected);
+                        }
                     }
 
-                    ui.add(list);
+                    ui.add_space(50.0);
 
-                    // Handle selection from list clicks
-                    if let Some(clicked_idx) = list_clicked_idx.get() {
-                        let mut selected = vec![false; firewall_rule_list.len()];
-                        selected[clicked_idx] = true;
-                        table_selected_rows.set(selected);
-                    }
-                }
-
-                ui.add_space(50.0);
-
-                
-
-                // Close button
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled("Close")).clicked() {
-                        *open = false;
-                    }
-                });
-            })
-            .show(ctx);
+                    // Close button
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.add(MaterialButton::filled("Close")).clicked() {
+                            *open = false;
+                        }
+                    });
+                })
+                .show(ctx);
             });
 
         // Update selection state from table response
@@ -5170,7 +5585,11 @@ impl PlatformTab {
         // Handle Edit action from Actions column
         if let Some(idx) = edit_row_idx.lock().unwrap().take() {
             if let Some(rule) = firewall_rule_list.get(idx) {
-                dure_info!("Edit button clicked for rule '{}' at index {}", rule.name, idx);
+                dure_info!(
+                    "Edit button clicked for rule '{}' at index {}",
+                    rule.name,
+                    idx
+                );
                 // Populate form with all fields from existing rule
                 self.firewall_form_data = FirewallRule {
                     name: rule.name.clone(),
@@ -5192,19 +5611,16 @@ impl PlatformTab {
             }
         }
 
-        // Handle Delete action from Actions column
+        // Handle Delete action from Actions column - show confirmation dialog
         if let Some(idx) = delete_row_idx.lock().unwrap().take() {
             if let Some(rule) = firewall_rule_list.get(idx) {
-                dure_info!("Delete firewall rule: {}", rule.name);
-                if let Some(vm_ref) = vm.as_ref() {
-                    if let Err(e) = vm_ref.delete_firewall_rule(
-                        current_profile.config_file.clone(),
-                        firewall_platform.clone(),
-                        rule.name.clone(),
-                    ) {
-                        dure_error!("Failed to delete firewall rule '{}': {}", rule.name, e);
-                    }
-                }
+                dure_info!(
+                    "Delete button clicked for rule '{}' - showing confirmation",
+                    rule.name
+                );
+                self.show_delete_firewall_confirm = true;
+                self.delete_firewall_rule_name = rule.name.clone();
+                self.delete_firewall_rule_idx = Some(idx);
             }
         }
 
@@ -5234,7 +5650,11 @@ impl PlatformTab {
                                 firewall_platform.clone(),
                                 rule.name.clone(),
                             ) {
-                                dure_error!("Failed to delete firewall rule '{}': {}", rule.name, e);
+                                dure_error!(
+                                    "Failed to delete firewall rule '{}': {}",
+                                    rule.name,
+                                    e
+                                );
                             }
                         }
                     }
@@ -5250,7 +5670,7 @@ impl PlatformTab {
                 current_profile.config_file.clone(),
                 firewall_platform.clone(),
                 vm.as_deref_mut(),
-                true,  // Force refresh, skip debounce
+                true, // Force refresh, skip debounce
             );
         }
 
@@ -5313,30 +5733,60 @@ impl PlatformTab {
 
             // Persist string state across frames using egui memory
             let state_id = egui::Id::new("firewall_form_strings");
-            let mut strings = ctx.data_mut(|d| {
-                d.get_persisted::<(String, String, String, String, String, String, String, String, String)>(state_id)
-            }).unwrap_or_else(|| {
-                // Initialize from form_data on first frame
-                (
-                    form_data.source_ranges.join(", "),
-                    form_data.dest_ranges.join(", "),
-                    form_data.allowed.join(", "),
-                    form_data.denied.join(", "),
-                    form_data.source_tags.join(", "),
-                    form_data.source_service_accounts.join(", "),
-                    form_data.target_tags.join(", "),
-                    form_data.target_service_accounts.join(", "),
-                    form_data.priority.to_string(),
-                )
-            });
+            let mut strings = ctx
+                .data_mut(|d| {
+                    d.get_persisted::<(
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                    )>(state_id)
+                })
+                .unwrap_or_else(|| {
+                    // Initialize from form_data on first frame
+                    (
+                        form_data.source_ranges.join(", "),
+                        form_data.dest_ranges.join(", "),
+                        form_data.allowed.join(", "),
+                        form_data.denied.join(", "),
+                        form_data.source_tags.join(", "),
+                        form_data.source_service_accounts.join(", "),
+                        form_data.target_tags.join(", "),
+                        form_data.target_service_accounts.join(", "),
+                        form_data.priority.to_string(),
+                    )
+                });
 
-            let (mut src_ranges_str, mut dest_ranges_str, mut allowed_str, mut denied_str,
-                 mut src_tags_str, mut src_svc_str, mut target_tags_str, mut target_svc_str, mut priority_str) = strings;
+            let (
+                mut src_ranges_str,
+                mut dest_ranges_str,
+                mut allowed_str,
+                mut denied_str,
+                mut src_tags_str,
+                mut src_svc_str,
+                mut target_tags_str,
+                mut target_svc_str,
+                mut priority_str,
+            ) = strings;
 
-            let title = if is_edit { "Edit Firewall Rule".to_string() } else { tr!("firewall-add-dialog-title") };
+            let title = if is_edit {
+                "Edit Firewall Rule".to_string()
+            } else {
+                tr!("firewall-add-dialog-title")
+            };
 
             let title_clone = title.clone();
-            let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
+            let window_width = ctx.input(|i| {
+                i.viewport()
+                    .inner_rect
+                    .unwrap_or_else(|| ctx.screen_rect())
+                    .width()
+            });
 
             dialog("add_firewall_dialog", title, &mut self.show_add_firewall_dialog)
                 .min_width(600.0)
@@ -5519,7 +5969,11 @@ impl PlatformTab {
                                 firewall_platform.clone(),
                                 old_rule_name.clone(),
                             ) {
-                                dure_error!("Failed to delete old firewall rule '{}': {}", old_rule_name, e);
+                                dure_error!(
+                                    "Failed to delete old firewall rule '{}': {}",
+                                    old_rule_name,
+                                    e
+                                );
                             } else {
                                 // Create new rule with updated data
                                 let rule_data = crate::viewmodel::platform::FirewallRuleData {
@@ -5532,9 +5986,13 @@ impl PlatformTab {
                                     allowed: form_data.allowed.clone(),
                                     denied: form_data.denied.clone(),
                                     source_tags: form_data.source_tags.clone(),
-                                    source_service_accounts: form_data.source_service_accounts.clone(),
+                                    source_service_accounts: form_data
+                                        .source_service_accounts
+                                        .clone(),
                                     target_tags: form_data.target_tags.clone(),
-                                    target_service_accounts: form_data.target_service_accounts.clone(),
+                                    target_service_accounts: form_data
+                                        .target_service_accounts
+                                        .clone(),
                                 };
                                 if let Err(e) = vm_ref.create_firewall_rule(
                                     current_profile.config_file.clone(),
@@ -5578,7 +6036,19 @@ impl PlatformTab {
 
             // Clear state when dialog closes
             if !self.show_add_firewall_dialog {
-                ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
+                ctx.data_mut(|d| {
+                    d.remove::<(
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                        String,
+                    )>(state_id)
+                });
             }
         } else if !self.show_add_firewall_dialog {
             // Dialog was closed without saving
@@ -5587,7 +6057,78 @@ impl PlatformTab {
             }
             // Clear persisted string state
             let state_id = egui::Id::new("firewall_form_strings");
-            ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
+            ctx.data_mut(|d| {
+                d.remove::<(
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                    String,
+                )>(state_id)
+            });
+        }
+    }
+
+    fn render_delete_firewall_confirm_dialog(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use egui_material3::{dialog, MaterialButton};
+        use std::cell::Cell;
+
+        let confirmed = Cell::new(false);
+        let rule_name = self.delete_firewall_rule_name.clone();
+        let firewall_platform = self.firewall_platform.clone();
+
+        dialog(
+            "delete_firewall_confirm",
+            "Confirm Delete",
+            &mut self.show_delete_firewall_confirm,
+        )
+        .min_width(400.0)
+        .content(|ui, open| {
+            ui.label(format!("Delete firewall rule '{}'?", rule_name));
+            ui.add_space(8.0);
+            ui.label("This action cannot be undone.");
+            ui.add_space(16.0);
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add(
+                        MaterialButton::filled("Delete")
+                            .text_color(egui::Color32::from_rgb(255, 82, 82)),
+                    )
+                    .clicked()
+                {
+                    confirmed.set(true);
+                }
+                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
+                    *open = false;
+                }
+            });
+        })
+        .show(ctx);
+
+        if confirmed.get() {
+            dure_info!("Delete confirmed for firewall rule: {}", rule_name);
+            if let Some(vm_ref) = vm.as_ref() {
+                if let Err(e) = vm_ref.delete_firewall_rule(
+                    current_profile.config_file.clone(),
+                    firewall_platform.clone(),
+                    rule_name.clone(),
+                ) {
+                    dure_error!("Failed to delete firewall rule '{}': {}", rule_name, e);
+                }
+            }
+            self.show_delete_firewall_confirm = false;
+            self.delete_firewall_rule_name.clear();
+            self.delete_firewall_rule_idx = None;
         }
     }
 }
@@ -5733,6 +6274,34 @@ mod tests {
         let last_refresh = tab.firewall_last_refresh_time.unwrap();
         let elapsed = last_refresh.elapsed();
         assert!(elapsed < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_delete_firewall_confirmation_state() {
+        let mut tab = PlatformTab::default();
+
+        // Initially no confirmation shown
+        assert!(!tab.show_delete_firewall_confirm);
+        assert_eq!(tab.delete_firewall_rule_name, "");
+        assert!(tab.delete_firewall_rule_idx.is_none());
+
+        // Trigger delete confirmation
+        tab.show_delete_firewall_confirm = true;
+        tab.delete_firewall_rule_name = "test-rule".to_string();
+        tab.delete_firewall_rule_idx = Some(5);
+
+        assert!(tab.show_delete_firewall_confirm);
+        assert_eq!(tab.delete_firewall_rule_name, "test-rule");
+        assert_eq!(tab.delete_firewall_rule_idx, Some(5));
+
+        // Cancel confirmation
+        tab.show_delete_firewall_confirm = false;
+        tab.delete_firewall_rule_name.clear();
+        tab.delete_firewall_rule_idx = None;
+
+        assert!(!tab.show_delete_firewall_confirm);
+        assert_eq!(tab.delete_firewall_rule_name, "");
+        assert!(tab.delete_firewall_rule_idx.is_none());
     }
 
     #[test]
