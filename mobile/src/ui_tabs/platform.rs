@@ -5143,8 +5143,15 @@ impl PlatformTab {
         if let Some(idx) = delete_row_idx.lock().unwrap().take() {
             if let Some(rule) = firewall_rule_list.get(idx) {
                 dure_info!("Delete firewall rule: {}", rule.name);
-                // TODO: Call GCP delete_firewall API
-                // self.firewall_rule_list.remove(idx);
+                if let Some(vm_ref) = vm.as_ref() {
+                    if let Err(e) = vm_ref.delete_firewall_rule(
+                        current_profile.config_file.clone(),
+                        firewall_platform.clone(),
+                        rule.name.clone(),
+                    ) {
+                        dure_error!("Failed to delete firewall rule '{}': {}", rule.name, e);
+                    }
+                }
             }
         }
 
@@ -5425,8 +5432,43 @@ impl PlatformTab {
             if confirmed.get() {
                 if let Some(idx) = self.firewall_form_edit_idx {
                     dure_info!("Update firewall rule at index {}: {}", idx, form_data.name);
-                    // TODO: Full firewall rule update not yet implemented
-                    // Current update_firewall_rule only adds IPs, not full rule update
+                    if let Some(vm_ref) = vm.as_ref() {
+                        // Get original rule name for deletion
+                        if let Some(old_rule) = self.firewall_rule_list.get(idx) {
+                            let old_rule_name = old_rule.name.clone();
+                            // Delete old rule first
+                            if let Err(e) = vm_ref.delete_firewall_rule(
+                                current_profile.config_file.clone(),
+                                firewall_platform.clone(),
+                                old_rule_name.clone(),
+                            ) {
+                                dure_error!("Failed to delete old firewall rule '{}': {}", old_rule_name, e);
+                            } else {
+                                // Create new rule with updated data
+                                let rule_data = crate::viewmodel::platform::FirewallRuleData {
+                                    name: form_data.name.clone(),
+                                    network: form_data.network.clone(),
+                                    direction: form_data.direction.clone(),
+                                    priority: form_data.priority,
+                                    source_ranges: form_data.source_ranges.clone(),
+                                    dest_ranges: form_data.dest_ranges.clone(),
+                                    allowed: form_data.allowed.clone(),
+                                    denied: form_data.denied.clone(),
+                                    source_tags: form_data.source_tags.clone(),
+                                    source_service_accounts: form_data.source_service_accounts.clone(),
+                                    target_tags: form_data.target_tags.clone(),
+                                    target_service_accounts: form_data.target_service_accounts.clone(),
+                                };
+                                if let Err(e) = vm_ref.create_firewall_rule(
+                                    current_profile.config_file.clone(),
+                                    firewall_platform.clone(),
+                                    rule_data,
+                                ) {
+                                    dure_error!("Failed to recreate firewall rule: {}", e);
+                                }
+                            }
+                        }
+                    }
                 } else {
                     dure_info!("Create new firewall rule: {}", form_data.name);
                     if let Some(vm_ref) = vm.as_ref() {
@@ -5532,5 +5574,45 @@ mod tests {
         // Attempting to insert again should not cause issues
         tab.auto_refreshed_platforms.insert(project_id.clone());
         assert_eq!(tab.auto_refreshed_platforms.len(), 1);
+    }
+
+    #[test]
+    fn test_firewall_rule_default() {
+        // Verify FirewallRule has sensible defaults
+        let rule = FirewallRule::default();
+        assert_eq!(rule.name, "");
+        assert_eq!(rule.network, "default");
+        assert_eq!(rule.direction, "INGRESS");
+        assert_eq!(rule.priority, 1000);
+        assert!(rule.source_ranges.is_empty());
+        assert!(rule.allowed.is_empty());
+    }
+
+    #[test]
+    fn test_firewall_validation_has_warnings() {
+        // Validation with no warnings
+        let validation = FirewallValidation {
+            current_ip_missing: false,
+            full_access_count: 1,
+            full_access_ips: vec![],
+            ssh_access_ips: vec![],
+            http_exposed: true,
+            https_exposed: true,
+        };
+        assert!(!validation.has_warnings());
+
+        // Validation with current IP missing
+        let validation = FirewallValidation {
+            current_ip_missing: true,
+            ..Default::default()
+        };
+        assert!(validation.has_warnings());
+
+        // Validation with multiple full access
+        let validation = FirewallValidation {
+            full_access_count: 2,
+            ..Default::default()
+        };
+        assert!(validation.has_warnings());
     }
 }
