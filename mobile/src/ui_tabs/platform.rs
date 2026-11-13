@@ -2294,13 +2294,17 @@ impl PlatformTab {
             self.render_bind_vm_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
-        // Firewall dialog
-        if self.show_firewall_dialog {
+        // Firewall dialog (skip if Add/Edit is open to maintain z-order)
+        if self.show_firewall_dialog && !self.show_add_firewall_dialog {
+            dure_info!("Rendering Manage Firewall Rules (Add/Edit not open)");
             self.render_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        } else if self.show_firewall_dialog && self.show_add_firewall_dialog {
+            dure_info!("Skipping Manage Firewall Rules render (Add/Edit is open - maintains z-order)");
         }
 
-        // Add/Edit Firewall Rule dialog (separate from main dialog to fix z-layering)
+        // Add/Edit Firewall Rule dialog (renders on top when open)
         if self.show_add_firewall_dialog {
+            dure_info!("Rendering Add/Edit dialog (will appear on top)");
             self.render_add_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
@@ -4735,6 +4739,7 @@ impl PlatformTab {
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         use std::cell::Cell;
+        use std::sync::{Arc, Mutex};
 
         let current_ip = self.current_ip.clone();
         let firewall_rule_list = self.firewall_rule_list.clone();
@@ -4748,15 +4753,22 @@ impl PlatformTab {
         let add_requested = Cell::new(false);
         let delete_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
-        let edit_row_idx = Cell::new(None::<usize>);
-        let delete_row_idx = Cell::new(None::<usize>);
+        let edit_row_idx = Arc::new(Mutex::new(None::<usize>));
+        let delete_row_idx = Arc::new(Mutex::new(None::<usize>));
         let table_selected_rows = Cell::new(Vec::<bool>::new());
 
         // let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
-        
-        dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
+
+        dure_info!("Showing Manage Firewall Rules dialog (Order::Background layer)");
+
+        // Wrap in Background order so Add/Edit dialog appears on top
+        egui::Area::new(egui::Id::new("firewall_dialog_background"))
+            .order(egui::Order::Background)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |_ui| {
+                dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
             .min_width(350.0)
             .max_width(window_width - 40.0)
             .max_height(window_height - 40.0)
@@ -4770,23 +4782,10 @@ impl PlatformTab {
                 }
                 ui.add_space(8.0);
 
-
-                // Toolbar: Add/Edit/Delete/Reset buttons
+                // Toolbar: Add/Reset buttons (Edit/Delete moved to per-row trailing actions)
                 ui.horizontal(|ui| {
                     if ui.add(MaterialButton::filled(tr!("firewall-button-add-row"))).clicked() {
                         add_requested.set(true);
-                    }
-
-                    // Edit Selected - find first selected row from table (will be set after table renders)
-                    let edit_enabled = firewall_selected.is_some();
-                    if ui.add_enabled(edit_enabled, MaterialButton::outlined("Edit Selected")).clicked() {
-                        if let Some(idx) = firewall_selected {
-                            edit_row_idx.set(Some(idx));
-                        }
-                    }
-
-                    if ui.add(MaterialButton::outlined(tr!("firewall-button-delete-selected"))).clicked() {
-                        delete_requested.set(true);
                     }
                     if ui.add(MaterialButton::text(tr!("firewall-button-reset"))).clicked() {
                         reset_requested.set(true);
@@ -4924,11 +4923,6 @@ impl PlatformTab {
                     let list_id = egui::Id::new("firewall_rules_list");
                     let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
 
-                    // Read drawer state to determine which items are expanded
-                    let drawer_state = ui.data_mut(|d| {
-                        d.get_persisted::<egui_material3::MaterialListState>(list_id)
-                    }).unwrap_or_default();
-
                     let mut list = MaterialList::new()
                         .id(list_id)
                         .allow_drawer(true);
@@ -4936,7 +4930,6 @@ impl PlatformTab {
                     for (idx, rule) in firewall_rule_list.iter().enumerate() {
                         let is_selected = firewall_selected == Some(idx);
                         let has_full_access = rule.source_ranges.contains(&"0.0.0.0/0".to_string());
-                        let is_drawer_open = drawer_state.drawer_open_items.contains(&idx);
 
                         // Overline: S:source_ranges D:dest_ranges
                         let src_str = if rule.source_ranges.is_empty() {
@@ -4978,13 +4971,6 @@ impl PlatformTab {
                         // Leading icon label: Priority below icon
                         let icon_label = format!("(P:{})", rule.priority);
 
-                        // Trailing indicator: "Expand ▶" or "Collapse ▼"
-                        let trailing_indicator = if is_drawer_open {
-                            "Collapse ▼"
-                        } else {
-                            "Expand ▶"
-                        };
-
                         // Icon: ingress/egress direction or warning
                         let icon_name = if has_full_access {
                             "warning"
@@ -5013,13 +4999,26 @@ impl PlatformTab {
                             .secondary_text(&secondary_text)
                             .leading_icon(icon_name.to_string())
                             .leading_icon_label(&icon_label)
-                            .trailing_text(trailing_indicator)
                             .visual_density(VisualDensity::COMFORTABLE)
                             .selected(is_selected)
                             .on_click({
                                 let list_clicked_idx = Rc::clone(&list_clicked_idx);
                                 move || {
                                     list_clicked_idx.set(Some(idx));
+                                }
+                            })
+                            .trailing_widget({
+                                let edit_row_idx = Arc::clone(&edit_row_idx);
+                                let delete_row_idx = Arc::clone(&delete_row_idx);
+                                move |ui| {
+                                    ui.horizontal(|ui| {
+                                        if ui.add(MaterialButton::outlined("Edit").small()).clicked() {
+                                            *edit_row_idx.lock().unwrap() = Some(idx);
+                                        }
+                                        if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+                                            *delete_row_idx.lock().unwrap() = Some(idx);
+                                        }
+                                    });
                                 }
                             })
                             .drawer(move |ui| {
@@ -5094,54 +5093,9 @@ impl PlatformTab {
                     }
                 }
 
-                ui.add_space(12.0);
+                ui.add_space(50.0);
 
-                // Validation warnings (moved below table)
-                if !firewall_rule_list.is_empty() {
-                    if let Some(ip) = &current_ip {
-                        ui.separator();
-                        ui.add_space(8.0);
-                        ui.colored_label(egui::Color32::from_rgb(255, 193, 7), "⚠️ Warnings & Validations");
-                        ui.add_space(4.0);
-
-                        // Convert FullFirewallRule to FirewallRule for validation
-                        let rules_for_validation: Vec<FirewallRule> = rules_for_table.iter().map(|r| FirewallRule {
-                            name: r.name.clone(),
-                            network: r.network.clone(),
-                            direction: r.direction.clone(),
-                            priority: r.priority,
-                            source_ranges: r.source_ranges.clone(),
-                            dest_ranges: r.dest_ranges.clone(),
-                            allowed: r.allowed.clone(),
-                            denied: r.denied.clone(),
-                            source_tags: r.source_tags.clone(),
-                            source_service_accounts: r.source_service_accounts.clone(),
-                            target_tags: r.target_tags.clone(),
-                            target_service_accounts: r.target_service_accounts.clone(),
-                        }).collect();
-                        let validation = validate_firewall_rules(&rules_for_validation, ip);
-
-                        if validation.current_ip_missing {
-                            ui.label("• current ip is not on the list");
-                        }
-                        if validation.full_access_count > 1 {
-                            ui.label(format!("• {} IPs have full access (0.0.0.0/0)", validation.full_access_count));
-                        }
-                        if !validation.ssh_access_ips.is_empty() {
-                            ui.label(format!("• {} IPs have SSH access", validation.ssh_access_ips.len()));
-                        }
-                        if !validation.http_exposed {
-                            ui.label("• HTTP port (80) not exposed");
-                        }
-                        if !validation.https_exposed {
-                            ui.label("• HTTPS port (443) not exposed");
-                        }
-                        ui.add_space(8.0);
-                    }
-                }
-
-                ui.separator();
-                ui.add_space(8.0);
+                
 
                 // Close button
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -5151,6 +5105,9 @@ impl PlatformTab {
                 });
             })
             .show(ctx);
+            });
+
+        dure_info!("Manage Firewall Rules dialog render complete");
 
         // Update selection state from table response
         let selected_rows = table_selected_rows.take();
@@ -5166,8 +5123,9 @@ impl PlatformTab {
         }
 
         // Handle Edit action from Actions column
-        if let Some(idx) = edit_row_idx.get() {
+        if let Some(idx) = edit_row_idx.lock().unwrap().take() {
             if let Some(rule) = firewall_rule_list.get(idx) {
+                dure_info!("Edit button clicked for rule '{}' at index {}", rule.name, idx);
                 // Populate form with all fields from existing rule
                 self.firewall_form_data = FirewallRule {
                     name: rule.name.clone(),
@@ -5190,7 +5148,7 @@ impl PlatformTab {
         }
 
         // Handle Delete action from Actions column
-        if let Some(idx) = delete_row_idx.get() {
+        if let Some(idx) = delete_row_idx.lock().unwrap().take() {
             if let Some(rule) = firewall_rule_list.get(idx) {
                 dure_info!("Delete firewall rule: {}", rule.name);
                 // TODO: Call GCP delete_firewall API
@@ -5200,7 +5158,7 @@ impl PlatformTab {
 
         // Handle add row action
         if add_requested.get() {
-            dure_info!("Add Row button clicked - opening add dialog");
+            dure_info!("Add Row button clicked - opening Add Firewall Rule dialog");
             self.firewall_form_data = FirewallRule::default();
             self.firewall_form_edit_idx = None;
             self.show_add_firewall_dialog = true;
@@ -5278,6 +5236,7 @@ impl PlatformTab {
 
         // Clear selection when dialog closes
         if !self.show_firewall_dialog {
+            dure_info!("Manage Firewall Rules dialog closed, clearing selection");
             self.firewall_selected = None;
         }
     }
@@ -5303,15 +5262,23 @@ impl PlatformTab {
             let direction_error = Cell::new(false);
             let allowed_denied_error = Cell::new(false);
 
+            // String buffers for UI editing (recreated each frame from form_data)
+            let mut src_ranges_str = form_data.source_ranges.join(", ");
+            let mut dest_ranges_str = form_data.dest_ranges.join(", ");
+            let mut allowed_str = form_data.allowed.join(", ");
+            let mut denied_str = form_data.denied.join(", ");
+            let mut src_tags_str = form_data.source_tags.join(", ");
+            let mut src_svc_str = form_data.source_service_accounts.join(", ");
+            let mut target_tags_str = form_data.target_tags.join(", ");
+            let mut target_svc_str = form_data.target_service_accounts.join(", ");
+            let mut priority_str = form_data.priority.to_string();
+
             let title = if is_edit { "Edit Firewall Rule".to_string() } else { tr!("firewall-add-dialog-title") };
 
             let title_clone = title.clone();
             let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
 
-            // Ensure add dialog appears on top of main firewall dialog
-            let dialog_id = egui::Id::new("add_firewall_dialog");
-            let layer_id = egui::LayerId::new(egui::Order::Middle, dialog_id);
-            ctx.move_to_top(layer_id);
+            dure_info!("Showing Add/Edit Firewall Rule dialog '{}' (Order::Middle default layer)", title);
 
             dialog("add_firewall_dialog", title, &mut self.show_add_firewall_dialog)
                 .min_width(600.0)
@@ -5320,17 +5287,6 @@ impl PlatformTab {
                 .content(|ui, open| {
                     ui.heading(&title_clone);
                     ui.add_space(12.0);
-
-                    // Convert Vec<String> to comma-separated for editing
-                    let mut src_ranges_str = form_data.source_ranges.join(", ");
-                    let mut dest_ranges_str = form_data.dest_ranges.join(", ");
-                    let mut allowed_str = form_data.allowed.join(", ");
-                    let mut denied_str = form_data.denied.join(", ");
-                    let mut src_tags_str = form_data.source_tags.join(", ");
-                    let mut src_svc_str = form_data.source_service_accounts.join(", ");
-                    let mut target_tags_str = form_data.target_tags.join(", ");
-                    let mut target_svc_str = form_data.target_service_accounts.join(", ");
-                    let mut priority_str = form_data.priority.to_string();
 
                     // All 12 fields with MaterialInput labels (examples in label text)
                     ui.add(MaterialInput::filled(&mut form_data.name)
@@ -5378,19 +5334,6 @@ impl PlatformTab {
                     ui.add(MaterialInput::filled(&mut target_svc_str)
                         .label("Target Service Account (e.g., vm@project.iam.gserviceaccount.com)"));
 
-                    // Parse back to vectors
-                    if let Ok(val) = priority_str.parse::<u32>() {
-                        form_data.priority = val;
-                    }
-                    form_data.source_ranges = src_ranges_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.dest_ranges = dest_ranges_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.allowed = allowed_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.denied = denied_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.source_tags = src_tags_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.source_service_accounts = src_svc_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.target_tags = target_tags_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                    form_data.target_service_accounts = target_svc_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-
                     ui.add_space(12.0);
                     ui.separator();
                     ui.add_space(8.0);
@@ -5398,7 +5341,46 @@ impl PlatformTab {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let button_text = if is_edit { "Save" } else { "Create" };
                         if ui.add(MaterialButton::filled(button_text)).clicked() {
-                            // Validate inputs
+                            dure_info!("Save/Create clicked - parsing input fields");
+
+                            // Parse string inputs to vectors (ONLY when saving, not every frame!)
+                            if let Ok(val) = priority_str.parse::<u32>() {
+                                form_data.priority = val;
+                            }
+                            form_data.source_ranges = src_ranges_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.dest_ranges = dest_ranges_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.allowed = allowed_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.denied = denied_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.source_tags = src_tags_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.source_service_accounts = src_svc_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.target_tags = target_tags_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.target_service_accounts = target_svc_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+
+                            // Validate inputs (using parsed data)
                             let name_valid = !form_data.name.trim().is_empty();
                             let network_valid = !form_data.network.trim().is_empty();
                             let direction_valid = form_data.direction == "INGRESS" || form_data.direction == "EGRESS";
@@ -5424,6 +5406,8 @@ impl PlatformTab {
                     });
                 })
                 .show(ctx);
+
+            dure_info!("Add/Edit Firewall Rule dialog render complete");
 
             if confirmed.get() {
                 if let Some(idx) = self.firewall_form_edit_idx {
@@ -5457,9 +5441,15 @@ impl PlatformTab {
                         }
                     }
                 }
+                dure_info!("Closing Add/Edit Firewall Rule dialog after save");
                 self.show_add_firewall_dialog = false;
                 self.firewall_form_edit_idx = None;
                 self.firewall_form_data = FirewallRule::default();
+            }
+        } else if !self.show_add_firewall_dialog {
+            // Dialog was closed without saving
+            if self.firewall_form_edit_idx.is_some() || !self.firewall_form_data.name.is_empty() {
+                dure_info!("Add/Edit Firewall Rule dialog closed without saving");
             }
         }
     }
