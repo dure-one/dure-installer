@@ -4917,59 +4917,167 @@ impl PlatformTab {
                     let table_response = table.show(ui);
                     table_selected_rows.set(table_response.selected_rows.clone());
                 } else {
-                    // Narrow screen: MaterialList (Inbox-style)
+                    // Narrow screen: 5-line drawer list (overline + primary + 2-line secondary + trailing indicator)
                     use egui_material3::{MaterialList, ListItem, VisualDensity};
                     use std::rc::Rc;
 
+                    let list_id = egui::Id::new("firewall_rules_list");
                     let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
-                    let mut list = MaterialList::new().id("firewall_rules_list");
+
+                    // Read drawer state to determine which items are expanded
+                    let drawer_state = ui.data_mut(|d| {
+                        d.get_persisted::<egui_material3::MaterialListState>(list_id)
+                    }).unwrap_or_default();
+
+                    let mut list = MaterialList::new()
+                        .id(list_id)
+                        .allow_drawer(true);
 
                     for (idx, rule) in firewall_rule_list.iter().enumerate() {
                         let is_selected = firewall_selected == Some(idx);
                         let has_full_access = rule.source_ranges.contains(&"0.0.0.0/0".to_string());
+                        let is_drawer_open = drawer_state.drawer_open_items.contains(&idx);
 
-                        // Primary: rule name
-                        // Overline: direction • priority
-                        // Secondary: allowed/denied protocols
-                        // Trailing: source ranges count or first IP
-                        let overline_text = format!("{} • Priority {}", rule.direction, rule.priority);
-                        let secondary_text = if !rule.allowed.is_empty() && !rule.denied.is_empty() {
-                            format!("Allow: {} | Deny: {}", rule.allowed.join(", "), rule.denied.join(", "))
-                        } else if !rule.allowed.is_empty() {
-                            format!("Allow: {}", rule.allowed.join(", "))
-                        } else if !rule.denied.is_empty() {
-                            format!("Deny: {}", rule.denied.join(", "))
+                        // Overline: S:source_ranges D:dest_ranges
+                        let src_str = if rule.source_ranges.is_empty() {
+                            "none".to_string()
+                        } else if rule.source_ranges.len() <= 2 {
+                            rule.source_ranges.join(",")
                         } else {
-                            "No rules".to_string()
+                            format!("{},{} +{} more",
+                                rule.source_ranges[0],
+                                rule.source_ranges[1],
+                                rule.source_ranges.len() - 2)
+                        };
+                        let dest_str = if rule.dest_ranges.is_empty() {
+                            "0.0.0.0/0".to_string()
+                        } else if rule.dest_ranges.len() <= 2 {
+                            rule.dest_ranges.join(",")
+                        } else {
+                            format!("{},{} +{} more",
+                                rule.dest_ranges[0],
+                                rule.dest_ranges[1],
+                                rule.dest_ranges.len() - 2)
+                        };
+                        let overline_text = format!("S:{} D:{}", src_str, dest_str);
+
+                        // Secondary line 1: A:allowed
+                        // Secondary line 2: D:denied
+                        let allowed_str = if rule.allowed.is_empty() {
+                            "none".to_string()
+                        } else {
+                            rule.allowed.join(",")
+                        };
+                        let denied_str = if rule.denied.is_empty() {
+                            "none".to_string()
+                        } else {
+                            rule.denied.join(",")
+                        };
+                        let secondary_text = format!("A:{}\nD:{}", allowed_str, denied_str);
+
+                        // Leading icon label: Priority below icon
+                        let icon_label = format!("(P:{})", rule.priority);
+
+                        // Trailing indicator: "Expand ▶" or "Collapse ▼"
+                        let trailing_indicator = if is_drawer_open {
+                            "Collapse ▼"
+                        } else {
+                            "Expand ▶"
                         };
 
-                        let trailing_text = if !rule.source_ranges.is_empty() {
-                            if rule.source_ranges.len() == 1 {
-                                rule.source_ranges[0].clone()
-                            } else {
-                                format!("{} IPs", rule.source_ranges.len())
-                            }
-                        } else {
-                            "No sources".to_string()
-                        };
-
+                        // Icon: ingress/egress direction or warning
                         let icon_name = if has_full_access {
                             "warning"
+                        } else if rule.direction == "INGRESS" {
+                            "call_received"
                         } else {
-                            "security"
+                            "call_made"
                         };
+
+                        // Clone data for drawer closure
+                        let rule_name = rule.name.clone();
+                        let rule_network = rule.network.clone();
+                        let rule_direction = rule.direction.clone();
+                        let rule_priority = rule.priority;
+                        let src_ranges_str = rule.source_ranges.join(", ");
+                        let dest_ranges_str = rule.dest_ranges.join(", ");
+                        let allowed_full = rule.allowed.join(", ");
+                        let denied_full = rule.denied.join(", ");
+                        let src_tags_str = rule.source_tags.join(", ");
+                        let src_svc_str = rule.source_service_accounts.join(", ");
+                        let target_tags_str = rule.target_tags.join(", ");
+                        let target_svc_str = rule.target_service_accounts.join(", ");
 
                         let item = ListItem::new(&rule.name)
                             .overline(&overline_text)
                             .secondary_text(&secondary_text)
                             .leading_icon(icon_name.to_string())
-                            .trailing_text(&trailing_text)
+                            .leading_icon_label(&icon_label)
+                            .trailing_text(trailing_indicator)
                             .visual_density(VisualDensity::COMFORTABLE)
                             .selected(is_selected)
                             .on_click({
                                 let list_clicked_idx = Rc::clone(&list_clicked_idx);
                                 move || {
                                     list_clicked_idx.set(Some(idx));
+                                }
+                            })
+                            .drawer(move |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.strong("Name:");
+                                    ui.label(&rule_name);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Network:");
+                                    ui.label(&rule_network);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Direction:");
+                                    ui.label(&rule_direction);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Priority:");
+                                    ui.label(rule_priority.to_string());
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Source Ranges:");
+                                    ui.label(&src_ranges_str);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Dest Ranges:");
+                                    ui.label(&dest_ranges_str);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Allowed:");
+                                    ui.label(&allowed_full);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.strong("Denied:");
+                                    ui.label(&denied_full);
+                                });
+                                if !src_tags_str.is_empty() {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Source Tags:");
+                                        ui.label(&src_tags_str);
+                                    });
+                                }
+                                if !src_svc_str.is_empty() {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Source Service Accounts:");
+                                        ui.label(&src_svc_str);
+                                    });
+                                }
+                                if !target_tags_str.is_empty() {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Target Tags:");
+                                        ui.label(&target_tags_str);
+                                    });
+                                }
+                                if !target_svc_str.is_empty() {
+                                    ui.horizontal(|ui| {
+                                        ui.strong("Target Service Accounts:");
+                                        ui.label(&target_svc_str);
+                                    });
                                 }
                             });
 
