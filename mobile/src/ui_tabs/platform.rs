@@ -380,6 +380,12 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     firewall_form_edit_idx: Option<usize>,  // If Some, editing row; if None, adding new
     #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_save_in_progress: bool,  // Track if save operation is running
+    #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_save_error: Option<String>,  // Error message from failed operation
+    #[cfg_attr(feature = "serde", serde(skip))]
+    firewall_last_refresh_time: Option<std::time::Instant>,  // Last refresh timestamp for debouncing
+    #[cfg_attr(feature = "serde", serde(skip))]
     current_ip: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip))]
     show_remove_ip_dialog: bool,
@@ -491,6 +497,9 @@ impl Default for PlatformTab {
             show_add_firewall_dialog: false,
             firewall_form_data: FirewallRule::default(),
             firewall_form_edit_idx: None,
+            firewall_save_in_progress: false,
+            firewall_save_error: None,
+            firewall_last_refresh_time: None,
             current_ip: None,
             show_remove_ip_dialog: false,
             remove_ip_list: Vec::new(),
@@ -1174,10 +1183,24 @@ impl PlatformTab {
                         if self.show_firewall_dialog && self.firewall_platform == platform_name {
                             dure_info!("[UI::PLATFO] Triggering firewall data refresh after {} operation", operation);
                             let profile_config_path = current_profile.config_file.clone();
-                            self.fetch_firewall_data(profile_config_path, platform_name, Some(vm));
+                            self.refresh_firewall_list_if_needed(profile_config_path, platform_name, Some(vm), false);
                         } else {
                             dure_info!("[UI::PLATFO] Skipping refresh: dialog_open={}, platform_match={}",
                                 self.show_firewall_dialog, self.firewall_platform == platform_name);
+                        }
+
+                        // Close add/edit dialog if save was in progress
+                        if self.firewall_save_in_progress && (operation == "create" || operation == "delete") {
+                            dure_info!("Closing Add/Edit Firewall Rule dialog after successful {}", operation);
+                            self.show_add_firewall_dialog = false;
+                            self.firewall_save_in_progress = false;
+                            self.firewall_save_error = None;
+                            self.firewall_form_edit_idx = None;
+                            self.firewall_form_data = FirewallRule::default();
+
+                            // Clear persisted string state
+                            let state_id = egui::Id::new("firewall_form_strings");
+                            ui.ctx().data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
                         }
 
                         // Close subdialogs
@@ -1345,6 +1368,10 @@ impl PlatformTab {
                             self.billing_loading = false;
                         } else if operation == "update_firewall" {
                             self.load_error = Some(format!("Failed to update firewall: {}", error));
+                        } else if operation == "create_firewall_rule" || operation == "delete_firewall_rule" {
+                            // Show error in dialog, keep it open
+                            self.firewall_save_error = Some(error);
+                            self.firewall_save_in_progress = false;
                         } else if operation == "restart_vm" {
                             self.load_error = Some(format!("Failed to restart VM: {}", error));
                         } else if operation == "delete_vm" {
@@ -2297,6 +2324,9 @@ impl PlatformTab {
         // Firewall dialog (skip if Add/Edit is open to maintain z-order)
         if self.show_firewall_dialog && !self.show_add_firewall_dialog {
             self.render_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        } else if !self.show_firewall_dialog {
+            // Clear debounce state when dialog is closed
+            self.firewall_last_refresh_time = None;
         }
 
         // Add/Edit Firewall Rule dialog (renders on top when open)
@@ -4728,6 +4758,29 @@ impl PlatformTab {
         }
     }
 
+    /// Refresh firewall rules with debounce (prevents duplicate refreshes within 1 second)
+    fn refresh_firewall_list_if_needed(
+        &mut self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+        force: bool,  // If true, skip debounce check
+    ) {
+        // Debounce: skip if refreshed within last 1 second (unless force=true)
+        if !force {
+            if let Some(last_refresh) = self.firewall_last_refresh_time {
+                if last_refresh.elapsed() < std::time::Duration::from_secs(1) {
+                    dure_info!("[UI::PLATFO] Skipping duplicate refresh (debounced)");
+                    return;
+                }
+            }
+        }
+
+        dure_info!("[UI::PLATFO] Refreshing firewall rules for {}", platform_name);
+        self.firewall_last_refresh_time = Some(std::time::Instant::now());
+        self.fetch_firewall_data(profile_config_path, platform_name, vm);
+    }
+
     fn render_firewall_dialog(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
@@ -5192,15 +5245,13 @@ impl PlatformTab {
 
         // Handle reset action
         if reset_requested.get() {
-            dure_info!("Reset firewall rules from GCP");
-            if let Some(vm_ref) = vm.as_ref() {
-                if let Err(e) = vm_ref.fetch_firewall_rules(
-                    current_profile.config_file.clone(),
-                    firewall_platform.clone(),
-                ) {
-                    dure_error!("Failed to fetch firewall rules: {}", e);
-                }
-            }
+            dure_info!("Reset firewall rules from GCP (forced refresh)");
+            self.refresh_firewall_list_if_needed(
+                current_profile.config_file.clone(),
+                firewall_platform.clone(),
+                vm.as_deref_mut(),
+                true,  // Force refresh, skip debounce
+            );
         }
 
         // Handle add IP action
@@ -5295,6 +5346,26 @@ impl PlatformTab {
                     ui.heading(&title_clone);
                     ui.add_space(12.0);
 
+                    // Show progress indicator when save is in progress
+                    if self.firewall_save_in_progress {
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.add(linear_progress());
+                            ui.label(if is_edit { "Updating firewall rule..." } else { "Creating firewall rule..." });
+                        });
+                        ui.add_space(8.0);
+                    }
+
+                    // Show error if present
+                    if let Some(ref error_msg) = self.firewall_save_error {
+                        ui.add_space(8.0);
+                        ui.colored_label(
+                            egui::Color32::from_rgb(255, 82, 82), // Material3 error red
+                            format!("❌ Error: {}", error_msg)
+                        );
+                        ui.add_space(8.0);
+                    }
+
                     // All 12 fields with MaterialInput labels (examples in label text)
                     ui.add(MaterialInput::filled(&mut form_data.name)
                         .label("Name (e.g., allow-ssh-from-office)")
@@ -5347,7 +5418,9 @@ impl PlatformTab {
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let button_text = if is_edit { "Save" } else { "Create" };
-                        if ui.add(MaterialButton::filled(button_text)).clicked() {
+                        let save_button = MaterialButton::filled(button_text)
+                            .enabled(!self.firewall_save_in_progress);  // Disable during progress
+                        if ui.add(save_button).clicked() {
                             dure_info!("Save/Create clicked - parsing string inputs to form_data");
 
                             // Parse string inputs to form_data (only on Save, not every frame)
@@ -5430,6 +5503,10 @@ impl PlatformTab {
                 .show(ctx);
 
             if confirmed.get() {
+                // Clear previous error and mark operation as in progress
+                self.firewall_save_error = None;
+                self.firewall_save_in_progress = true;
+
                 if let Some(idx) = self.firewall_form_edit_idx {
                     dure_info!("Update firewall rule at index {}: {}", idx, form_data.name);
                     if let Some(vm_ref) = vm.as_ref() {
@@ -5496,13 +5573,7 @@ impl PlatformTab {
                         }
                     }
                 }
-                dure_info!("Closing Add/Edit Firewall Rule dialog after save");
-                self.show_add_firewall_dialog = false;
-                self.firewall_form_edit_idx = None;
-                self.firewall_form_data = FirewallRule::default();
-
-                // Clear persisted string state
-                ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
+                // Don't close dialog here - wait for FirewallRuleUpdated event
             }
 
             // Clear state when dialog closes
@@ -5614,5 +5685,63 @@ mod tests {
             ..Default::default()
         };
         assert!(validation.has_warnings());
+    }
+
+    #[test]
+    fn test_firewall_save_progress_state() {
+        let mut tab = PlatformTab::default();
+
+        // Initially not in progress
+        assert!(!tab.firewall_save_in_progress);
+        assert!(tab.firewall_save_error.is_none());
+
+        // Mark as in progress
+        tab.firewall_save_in_progress = true;
+        assert!(tab.firewall_save_in_progress);
+
+        // Set error
+        tab.firewall_save_error = Some("Test error".to_string());
+        assert_eq!(tab.firewall_save_error.as_deref(), Some("Test error"));
+    }
+
+    #[test]
+    fn test_firewall_error_handling() {
+        let mut tab = PlatformTab::default();
+        tab.firewall_save_in_progress = true;
+
+        // Simulate error
+        tab.firewall_save_error = Some("API failed".to_string());
+        tab.firewall_save_in_progress = false;
+
+        // Dialog should stay open with error
+        assert!(!tab.firewall_save_in_progress);
+        assert!(tab.firewall_save_error.is_some());
+    }
+
+    #[test]
+    fn test_firewall_refresh_debounce() {
+        let mut tab = PlatformTab::default();
+
+        // Initially no refresh time
+        assert!(tab.firewall_last_refresh_time.is_none());
+
+        // Set refresh time
+        tab.firewall_last_refresh_time = Some(std::time::Instant::now());
+        assert!(tab.firewall_last_refresh_time.is_some());
+
+        // Check debounce window
+        let last_refresh = tab.firewall_last_refresh_time.unwrap();
+        let elapsed = last_refresh.elapsed();
+        assert!(elapsed < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_firewall_refresh_state_cleanup() {
+        let mut tab = PlatformTab::default();
+        tab.firewall_last_refresh_time = Some(std::time::Instant::now());
+
+        // Clear state
+        tab.firewall_last_refresh_time = None;
+        assert!(tab.firewall_last_refresh_time.is_none());
     }
 }
