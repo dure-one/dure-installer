@@ -4752,11 +4752,15 @@ impl PlatformTab {
         let delete_row_idx = Cell::new(None::<usize>);
         let table_selected_rows = Cell::new(Vec::<bool>::new());
 
-        let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
+        // let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+        
         dialog("firewall_dialog", "Manage Firewall Rules", &mut self.show_firewall_dialog)
             .min_width(350.0)
             .max_width(window_width - 40.0)
-            .max_height(700.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
             .content(|ui, open| {
                 // Current IP display - only show loading when both IP and rules are empty
                 if let Some(ip) = &current_ip {
@@ -4790,145 +4794,197 @@ impl PlatformTab {
                 });
                 ui.add_space(8.0);
 
-                // Compact datatable with 12 columns + Actions + drawer
-                use egui_material3::data_table;
-                let mut table = data_table()
-                    .id(egui::Id::new("firewall_rules_table"))
-                    .allow_drawer(true)
-                    .allow_selection(true)
-                    .default_row_height(40.0)
-                    .column("NAME", 150.0, false)
-                    .column("NETWORK", 80.0, false)
-                    .column("DIRECTION", 90.0, false)
-                    .column("PRIORITY", 80.0, true)
-                    .column("SRC_RANGES", 120.0, false)
-                    .column("DEST_RANGES", 120.0, false)
-                    .column("ALLOW", 120.0, false)
-                    .column("DENY", 100.0, false);
-                    // .column("SRC_TAGS", 100.0, false)
-                    // .column("SRC_SVC_ACCT", 120.0, false)
-                    // .column("TARGET_TAGS", 100.0, false)
-                    // .column("TARGET_SVC_ACCT", 120.0, false)
-
                 // Use full GCP firewall data directly (no conversion needed!)
                 let rules_for_table = &firewall_rule_list;
 
-                for (idx, rule) in rules_for_table.iter().enumerate() {
-                    // Clone all data to avoid lifetime issues
-                    let rule_name = rule.name.clone();
-                    let rule_network = rule.network.clone();
-                    let rule_direction = rule.direction.clone();
-                    let rule_priority = rule.priority;
-                    let src_ranges_str = rule.source_ranges.join(", ");
-                    let dest_ranges_str = rule.dest_ranges.join(", ");
-                    let allowed_str = rule.allowed.join(", ");
-                    let denied_str = rule.denied.join(", ");
-                    let src_tags_str = rule.source_tags.join(", ");
-                    let src_svc_str = rule.source_service_accounts.join(", ");
-                    let target_tags_str = rule.target_tags.join(", ");
-                    let target_svc_str = rule.target_service_accounts.join(", ");
+                // Responsive view: datatable for wide screens, list for narrow screens
+                if window_width >= 1000.0 {
+                    // Wide screen: Compact datatable with 8 columns + drawer
+                    use egui_material3::data_table;
+                    let mut table = data_table()
+                        .id(egui::Id::new("firewall_rules_table"))
+                        .allow_drawer(true)
+                        .allow_selection(true)
+                        .default_row_height(30.0)
+                        .column("NAME", 150.0, false)
+                        .column("NETWORK", 80.0, false)
+                        .column("DIRECTION", 90.0, false)
+                        .column("PRIORITY", 80.0, true)
+                        .column("SRC_RANGES", 120.0, false)
+                        .column("DEST_RANGES", 120.0, false)
+                        .column("ALLOW", 120.0, false)
+                        .column("DENY", 100.0, false);
 
-                    // Row color for warnings (simplified)
-                    let row_color = if rule.source_ranges.contains(&"0.0.0.0/0".to_string()) {
-                        egui::Color32::from_rgb(255, 240, 200) // Yellow - full access warning
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    };
+                    for (idx, rule) in rules_for_table.iter().enumerate() {
+                        let rule_name = rule.name.clone();
+                        let rule_network = rule.network.clone();
+                        let rule_direction = rule.direction.clone();
+                        let rule_priority = rule.priority;
+                        let src_ranges_str = rule.source_ranges.join(", ");
+                        let dest_ranges_str = rule.dest_ranges.join(", ");
+                        let allowed_str = rule.allowed.join(", ");
+                        let denied_str = rule.denied.join(", ");
+                        let src_tags_str = rule.source_tags.join(", ");
+                        let src_svc_str = rule.source_service_accounts.join(", ");
+                        let target_tags_str = rule.target_tags.join(", ");
+                        let target_svc_str = rule.target_service_accounts.join(", ");
 
-                    table = table.row(|row| {
-                        row.cell(rule_name.clone())
-                           .cell(rule_network.clone())
-                           .cell(rule_direction.clone())
-                           .cell(rule_priority.to_string())
-                           .cell(src_ranges_str.clone())
-                           .cell(dest_ranges_str.clone())
-                           .cell(allowed_str.clone())
-                           .cell(denied_str.clone())
-                           // .cell(src_tags_str.clone())
-                           // .cell(src_svc_str.clone())
-                           // .cell(target_tags_str.clone())
-                           // .cell(target_svc_str.clone())
-                           .color(row_color)
-                           .id(format!("firewall_row_{}", idx))
-                           .drawer({
-                               // Clone all data for drawer closure
-                               let name_clone = rule_name.clone();
-                               let network_clone = rule_network.clone();
-                               let direction_clone = rule_direction.clone();
-                               let priority_clone = rule_priority;
-                               let src_ranges_clone = src_ranges_str.clone();
-                               let dest_ranges_clone = dest_ranges_str.clone();
-                               let allowed_clone = allowed_str.clone();
-                               let denied_clone = denied_str.clone();
-                               let src_tags_clone = src_tags_str.clone();
-                               let src_svc_clone = src_svc_str.clone();
-                               let target_tags_clone = target_tags_str.clone();
-                               let target_svc_clone = target_svc_str.clone();
+                        let row_color = if rule.source_ranges.contains(&"0.0.0.0/0".to_string()) {
+                            egui::Color32::from_rgb(255, 240, 200)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
 
-                               move |ui| {
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Name:");
-                                       ui.label(&name_clone);
+                        table = table.row(|row| {
+                            row.cell(rule_name.clone())
+                               .cell(rule_network.clone())
+                               .cell(rule_direction.clone())
+                               .cell(rule_priority.to_string())
+                               .cell(src_ranges_str.clone())
+                               .cell(dest_ranges_str.clone())
+                               .cell(allowed_str.clone())
+                               .cell(denied_str.clone())
+                               .color(row_color)
+                               .id(format!("firewall_row_{}", idx))
+                               .drawer({
+                                   let name_clone = rule_name.clone();
+                                   let network_clone = rule_network.clone();
+                                   let direction_clone = rule_direction.clone();
+                                   let priority_clone = rule_priority;
+                                   let src_ranges_clone = src_ranges_str.clone();
+                                   let dest_ranges_clone = dest_ranges_str.clone();
+                                   let allowed_clone = allowed_str.clone();
+                                   let denied_clone = denied_str.clone();
+                                   let src_tags_clone = src_tags_str.clone();
+                                   let src_svc_clone = src_svc_str.clone();
+                                   let target_tags_clone = target_tags_str.clone();
+                                   let target_svc_clone = target_svc_str.clone();
+
+                                   move |ui| {
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Name:");
+                                           ui.label(&name_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Network:");
-                                       ui.label(&network_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Network:");
+                                           ui.label(&network_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Direction:");
-                                       ui.label(&direction_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Direction:");
+                                           ui.label(&direction_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Priority:");
-                                       ui.label(priority_clone.to_string());
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Priority:");
+                                           ui.label(priority_clone.to_string());
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Source Ranges:");
-                                       ui.label(&src_ranges_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Source Ranges:");
+                                           ui.label(&src_ranges_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Dest Ranges:");
-                                       ui.label(&dest_ranges_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Dest Ranges:");
+                                           ui.label(&dest_ranges_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Allowed:");
-                                       ui.label(&allowed_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Allowed:");
+                                           ui.label(&allowed_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Denied:");
-                                       ui.label(&denied_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Denied:");
+                                           ui.label(&denied_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Source Tags:");
-                                       ui.label(&src_tags_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Source Tags:");
+                                           ui.label(&src_tags_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Source Service Accounts:");
-                                       ui.label(&src_svc_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Source Service Accounts:");
+                                           ui.label(&src_svc_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Target Tags:");
-                                       ui.label(&target_tags_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Target Tags:");
+                                           ui.label(&target_tags_clone);
                                        });
-                                   ui.horizontal(|ui| {
-                                       ui.strong("Target Service Accounts:");
-                                       ui.label(&target_svc_clone);
+                                       ui.horizontal(|ui| {
+                                           ui.strong("Target Service Accounts:");
+                                           ui.label(&target_svc_clone);
                                        });
-                               }
-                           })
-                    });
+                                   }
+                               })
+                        });
+                    }
+
+                    let table_response = table.show(ui);
+                    table_selected_rows.set(table_response.selected_rows.clone());
+                } else {
+                    // Narrow screen: MaterialList (Inbox-style)
+                    use egui_material3::{MaterialList, ListItem, VisualDensity};
+                    use std::rc::Rc;
+
+                    let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
+                    let mut list = MaterialList::new().id("firewall_rules_list");
+
+                    for (idx, rule) in firewall_rule_list.iter().enumerate() {
+                        let is_selected = firewall_selected == Some(idx);
+                        let has_full_access = rule.source_ranges.contains(&"0.0.0.0/0".to_string());
+
+                        // Primary: rule name
+                        // Overline: direction • priority
+                        // Secondary: allowed/denied protocols
+                        // Trailing: source ranges count or first IP
+                        let overline_text = format!("{} • Priority {}", rule.direction, rule.priority);
+                        let secondary_text = if !rule.allowed.is_empty() && !rule.denied.is_empty() {
+                            format!("Allow: {} | Deny: {}", rule.allowed.join(", "), rule.denied.join(", "))
+                        } else if !rule.allowed.is_empty() {
+                            format!("Allow: {}", rule.allowed.join(", "))
+                        } else if !rule.denied.is_empty() {
+                            format!("Deny: {}", rule.denied.join(", "))
+                        } else {
+                            "No rules".to_string()
+                        };
+
+                        let trailing_text = if !rule.source_ranges.is_empty() {
+                            if rule.source_ranges.len() == 1 {
+                                rule.source_ranges[0].clone()
+                            } else {
+                                format!("{} IPs", rule.source_ranges.len())
+                            }
+                        } else {
+                            "No sources".to_string()
+                        };
+
+                        let icon_name = if has_full_access {
+                            "warning"
+                        } else {
+                            "security"
+                        };
+
+                        let item = ListItem::new(&rule.name)
+                            .overline(&overline_text)
+                            .secondary_text(&secondary_text)
+                            .leading_icon(icon_name.to_string())
+                            .trailing_text(&trailing_text)
+                            .visual_density(VisualDensity::COMFORTABLE)
+                            .selected(is_selected)
+                            .on_click({
+                                let list_clicked_idx = Rc::clone(&list_clicked_idx);
+                                move || {
+                                    list_clicked_idx.set(Some(idx));
+                                }
+                            });
+
+                        list = list.item(item);
+                    }
+
+                    ui.add(list);
+
+                    // Handle selection from list clicks
+                    if let Some(clicked_idx) = list_clicked_idx.get() {
+                        let mut selected = vec![false; firewall_rule_list.len()];
+                        selected[clicked_idx] = true;
+                        table_selected_rows.set(selected);
+                    }
                 }
-
-                // Scrollable datatable for small screens
-                // egui::ScrollArea::both()
-                //    .auto_shrink([false, false])
-                //    .show(ui, |ui| {
-                //        
-                //    });
-                let table_response = table.show(ui);
-
-                // Store selected rows in Cell for access outside closure
-                table_selected_rows.set(table_response.selected_rows.clone());
 
                 ui.add_space(12.0);
 
