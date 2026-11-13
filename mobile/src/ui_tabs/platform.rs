@@ -5262,16 +5262,27 @@ impl PlatformTab {
             let direction_error = Cell::new(false);
             let allowed_denied_error = Cell::new(false);
 
-            // String buffers for UI editing (recreated each frame from form_data)
-            let mut src_ranges_str = form_data.source_ranges.join(", ");
-            let mut dest_ranges_str = form_data.dest_ranges.join(", ");
-            let mut allowed_str = form_data.allowed.join(", ");
-            let mut denied_str = form_data.denied.join(", ");
-            let mut src_tags_str = form_data.source_tags.join(", ");
-            let mut src_svc_str = form_data.source_service_accounts.join(", ");
-            let mut target_tags_str = form_data.target_tags.join(", ");
-            let mut target_svc_str = form_data.target_service_accounts.join(", ");
-            let mut priority_str = form_data.priority.to_string();
+            // Persist string state across frames using egui memory
+            let state_id = egui::Id::new("firewall_form_strings");
+            let mut strings = ctx.data_mut(|d| {
+                d.get_persisted::<(String, String, String, String, String, String, String, String, String)>(state_id)
+            }).unwrap_or_else(|| {
+                // Initialize from form_data on first frame
+                (
+                    form_data.source_ranges.join(", "),
+                    form_data.dest_ranges.join(", "),
+                    form_data.allowed.join(", "),
+                    form_data.denied.join(", "),
+                    form_data.source_tags.join(", "),
+                    form_data.source_service_accounts.join(", "),
+                    form_data.target_tags.join(", "),
+                    form_data.target_service_accounts.join(", "),
+                    form_data.priority.to_string(),
+                )
+            });
+
+            let (mut src_ranges_str, mut dest_ranges_str, mut allowed_str, mut denied_str,
+                 mut src_tags_str, mut src_svc_str, mut target_tags_str, mut target_svc_str, mut priority_str) = strings;
 
             let title = if is_edit { "Edit Firewall Rule".to_string() } else { tr!("firewall-add-dialog-title") };
 
@@ -5341,9 +5352,46 @@ impl PlatformTab {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let button_text = if is_edit { "Save" } else { "Create" };
                         if ui.add(MaterialButton::filled(button_text)).clicked() {
-                            dure_info!("Save/Create clicked - validating (strings already parsed to form_data each frame)");
+                            dure_info!("Save/Create clicked - parsing string inputs to form_data");
 
-                            // Validate inputs (form_data already updated from string edits)
+                            // Parse string inputs to form_data (only on Save, not every frame)
+                            if let Ok(val) = priority_str.parse::<u32>() {
+                                form_data.priority = val;
+                            }
+                            form_data.source_ranges = src_ranges_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.dest_ranges = dest_ranges_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.allowed = allowed_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.denied = denied_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.source_tags = src_tags_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.source_service_accounts = src_svc_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.target_tags = target_tags_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            form_data.target_service_accounts = target_svc_str.split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+
+                            // Validate inputs
                             let name_valid = !form_data.name.trim().is_empty();
                             let network_valid = !form_data.network.trim().is_empty();
                             let direction_valid = form_data.direction == "INGRESS" || form_data.direction == "EGRESS";
@@ -5368,42 +5416,20 @@ impl PlatformTab {
                         }
                     });
 
-                    // Persist edited strings back to form_data every frame (so next frame sees changes)
-                    if let Ok(val) = priority_str.parse::<u32>() {
-                        form_data.priority = val;
-                    }
-                    form_data.source_ranges = src_ranges_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.dest_ranges = dest_ranges_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.allowed = allowed_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.denied = denied_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.source_tags = src_tags_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.source_service_accounts = src_svc_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.target_tags = target_tags_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    form_data.target_service_accounts = target_svc_str.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
+                    // Save string state to egui memory for next frame
+                    ctx.data_mut(|d| {
+                        d.insert_persisted(state_id, (
+                            src_ranges_str.clone(),
+                            dest_ranges_str.clone(),
+                            allowed_str.clone(),
+                            denied_str.clone(),
+                            src_tags_str.clone(),
+                            src_svc_str.clone(),
+                            target_tags_str.clone(),
+                            target_svc_str.clone(),
+                            priority_str.clone(),
+                        ));
+                    });
                 })
                 .show(ctx);
 
@@ -5445,12 +5471,23 @@ impl PlatformTab {
                 self.show_add_firewall_dialog = false;
                 self.firewall_form_edit_idx = None;
                 self.firewall_form_data = FirewallRule::default();
+
+                // Clear persisted string state
+                ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
+            }
+
+            // Clear state when dialog closes
+            if !self.show_add_firewall_dialog {
+                ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
             }
         } else if !self.show_add_firewall_dialog {
             // Dialog was closed without saving
             if self.firewall_form_edit_idx.is_some() || !self.firewall_form_data.name.is_empty() {
                 dure_info!("Add/Edit Firewall Rule dialog closed without saving");
             }
+            // Clear persisted string state
+            let state_id = egui::Id::new("firewall_form_strings");
+            ctx.data_mut(|d| d.remove::<(String, String, String, String, String, String, String, String, String)>(state_id));
         }
     }
 }
