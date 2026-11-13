@@ -2296,15 +2296,11 @@ impl PlatformTab {
 
         // Firewall dialog (skip if Add/Edit is open to maintain z-order)
         if self.show_firewall_dialog && !self.show_add_firewall_dialog {
-            dure_info!("Rendering Manage Firewall Rules (Add/Edit not open)");
             self.render_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
-        } else if self.show_firewall_dialog && self.show_add_firewall_dialog {
-            dure_info!("Skipping Manage Firewall Rules render (Add/Edit is open - maintains z-order)");
         }
 
         // Add/Edit Firewall Rule dialog (renders on top when open)
         if self.show_add_firewall_dialog {
-            dure_info!("Rendering Add/Edit dialog (will appear on top)");
             self.render_add_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
@@ -4761,8 +4757,6 @@ impl PlatformTab {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dure_info!("Showing Manage Firewall Rules dialog (Order::Background layer)");
-
         // Wrap in Background order so Add/Edit dialog appears on top
         egui::Area::new(egui::Id::new("firewall_dialog_background"))
             .order(egui::Order::Background)
@@ -5107,8 +5101,6 @@ impl PlatformTab {
             .show(ctx);
             });
 
-        dure_info!("Manage Firewall Rules dialog render complete");
-
         // Update selection state from table response
         let selected_rows = table_selected_rows.take();
         if !selected_rows.is_empty() {
@@ -5236,7 +5228,6 @@ impl PlatformTab {
 
         // Clear selection when dialog closes
         if !self.show_firewall_dialog {
-            dure_info!("Manage Firewall Rules dialog closed, clearing selection");
             self.firewall_selected = None;
         }
     }
@@ -5288,8 +5279,6 @@ impl PlatformTab {
 
             let title_clone = title.clone();
             let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
-
-            dure_info!("Showing Add/Edit Firewall Rule dialog '{}' (Order::Middle default layer)", title);
 
             dialog("add_firewall_dialog", title, &mut self.show_add_firewall_dialog)
                 .min_width(600.0)
@@ -5432,8 +5421,6 @@ impl PlatformTab {
                     });
                 })
                 .show(ctx);
-
-            dure_info!("Add/Edit Firewall Rule dialog render complete");
 
             if confirmed.get() {
                 if let Some(idx) = self.firewall_form_edit_idx {
