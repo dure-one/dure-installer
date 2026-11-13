@@ -5341,46 +5341,9 @@ impl PlatformTab {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let button_text = if is_edit { "Save" } else { "Create" };
                         if ui.add(MaterialButton::filled(button_text)).clicked() {
-                            dure_info!("Save/Create clicked - parsing input fields");
+                            dure_info!("Save/Create clicked - validating (strings already parsed to form_data each frame)");
 
-                            // Parse string inputs to vectors (ONLY when saving, not every frame!)
-                            if let Ok(val) = priority_str.parse::<u32>() {
-                                form_data.priority = val;
-                            }
-                            form_data.source_ranges = src_ranges_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.dest_ranges = dest_ranges_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.allowed = allowed_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.denied = denied_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.source_tags = src_tags_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.source_service_accounts = src_svc_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.target_tags = target_tags_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.target_service_accounts = target_svc_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-
-                            // Validate inputs (using parsed data)
+                            // Validate inputs (form_data already updated from string edits)
                             let name_valid = !form_data.name.trim().is_empty();
                             let network_valid = !form_data.network.trim().is_empty();
                             let direction_valid = form_data.direction == "INGRESS" || form_data.direction == "EGRESS";
@@ -5404,6 +5367,43 @@ impl PlatformTab {
                             *open = false;
                         }
                     });
+
+                    // Persist edited strings back to form_data every frame (so next frame sees changes)
+                    if let Ok(val) = priority_str.parse::<u32>() {
+                        form_data.priority = val;
+                    }
+                    form_data.source_ranges = src_ranges_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.dest_ranges = dest_ranges_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.allowed = allowed_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.denied = denied_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.source_tags = src_tags_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.source_service_accounts = src_svc_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.target_tags = target_tags_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    form_data.target_service_accounts = target_svc_str.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
                 })
                 .show(ctx);
 
