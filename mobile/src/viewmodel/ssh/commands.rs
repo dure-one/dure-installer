@@ -235,6 +235,7 @@ pub enum SshCommand {
     /// Remove Dure
     RemoveDure {
         host: String,
+        delete_data: bool,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 

@@ -3,6 +3,7 @@
 use crate::storage::models::opslog::OperationLog;
 use crate::ui_components::drawer::DrawerTabTrait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Active tab in the SSH drawer
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,8 +235,14 @@ pub struct DrawerState {
     pub docker_ps_raw: Option<String>,
     /// Docker compose status output (for Dure tab)
     pub dure_compose_status: Option<String>,
-    /// Docker compose logs (for Dure tab)
-    pub dure_compose_logs: Vec<String>,
+    /// Dure mycart containers from docker compose ps (for Dure tab)
+    pub dure_containers: Vec<crate::calc::dure_mycart::DureContainer>,
+    /// Per-container logs (container name -> log lines) (for Dure tab)
+    pub dure_container_logs: HashMap<String, Vec<String>>,
+    /// Active sub-tab in Dure tab (0=Status, 1+=container logs)
+    pub dure_active_subtab: usize,
+    /// Focus flag for Dure subtab (set on tab switch, cleared after focus applied)
+    pub dure_subtab_should_focus: bool,
 }
 
 impl DrawerState {
@@ -254,7 +261,10 @@ impl DrawerState {
             host_status_raw: None,
             docker_ps_raw: None,
             dure_compose_status: None,
-            dure_compose_logs: Vec::new(),
+            dure_containers: Vec::new(),
+            dure_container_logs: HashMap::new(),
+            dure_active_subtab: 0,
+            dure_subtab_should_focus: false,
         }
     }
 
@@ -271,7 +281,10 @@ impl DrawerState {
         self.host_status_raw = None;
         self.docker_ps_raw = None;
         self.dure_compose_status = None;
-        self.dure_compose_logs.clear();
+        self.dure_containers.clear();
+        self.dure_container_logs.clear();
+        self.dure_active_subtab = 0;
+        self.dure_subtab_should_focus = false;
     }
 
     pub fn switch_tab(&mut self, tab: DrawerTab) {

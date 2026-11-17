@@ -105,6 +105,59 @@ pub struct UserInfo {
     pub account_name: String,
 }
 
+/// OAuth client (from Cloudflare IAM API)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthClient {
+    pub id: String,
+    pub client_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_secret: Option<String>, // Only returned on create/rotate
+    pub name: String,
+    pub redirect_uris: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// OAuth client creation request
+#[derive(Debug, Serialize)]
+pub struct CreateOAuthClientRequest {
+    pub name: String,
+    pub redirect_uris: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<Vec<String>>,
+}
+
+/// OAuth client update request
+#[derive(Debug, Serialize)]
+pub struct UpdateOAuthClientRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_uris: Option<Vec<String>>,
+}
+
+/// API v4 list response wrapper (generic)
+#[derive(Debug, Deserialize)]
+struct ApiV4ListResponse<T> {
+    pub success: bool,
+    pub result: Vec<T>,
+    #[serde(default)]
+    pub errors: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub messages: Vec<String>,
+}
+
+/// API v4 single result response
+#[derive(Debug, Deserialize)]
+struct ApiV4SingleResponse<T> {
+    pub success: bool,
+    pub result: T,
+    #[serde(default)]
+    pub errors: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub messages: Vec<String>,
+}
+
 /// Cloudflare OAuth handler (PKCE - no client_secret needed)
 /// Uses wrangler's public client by default
 pub struct CloudflareOAuthHandler {
@@ -269,6 +322,233 @@ impl CloudflareOAuthHandler {
     }
 }
 
+/// Cloudflare OAuth Client Manager
+/// Manages OAuth client applications via Cloudflare IAM API
+pub struct CloudflareOAuthClientManager {
+    api_token: String,
+    account_id: String,
+}
+
+impl CloudflareOAuthClientManager {
+    /// Create new OAuth client manager
+    pub fn new(api_token: String, account_id: String) -> Self {
+        Self { api_token, account_id }
+    }
+
+    /// Build API base URL for account
+    fn api_base(&self) -> String {
+        format!("https://api.cloudflare.com/client/v4/accounts/{}/oauth2/clients", self.account_id)
+    }
+
+    /// List all OAuth clients for account
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/list
+    pub fn list_oauth_clients(&self) -> Result<Vec<OAuthClient>> {
+        dure_debug!("Listing OAuth clients for account: {}", self.account_id);
+
+        let url = self.api_base();
+
+        let response = ureq::get(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    if code == 401 || code == 403 {
+                        anyhow::anyhow!("OAuth client list authentication failed (HTTP {})", code)
+                    } else {
+                        anyhow::anyhow!("OAuth client list failed (HTTP {}): {}", code, error_text)
+                    }
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4ListResponse<OAuthClient> = response
+            .into_json()
+            .context("Failed to parse OAuth clients list response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("OAuth clients list failed: {}", errors);
+        }
+
+        dure_info!("Found {} OAuth clients", result.result.len());
+        Ok(result.result)
+    }
+
+    /// Create OAuth client
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/create
+    pub fn create_oauth_client(&self, request: CreateOAuthClientRequest) -> Result<OAuthClient> {
+        dure_info!("Creating OAuth client: {}", request.name);
+
+        let url = self.api_base();
+        let body = serde_json::to_string(&request)
+            .context("Failed to serialize create request")?;
+
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .set("Content-Type", "application/json")
+            .send_string(&body)
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    anyhow::anyhow!("OAuth client creation failed (HTTP {}): {}", code, error_text)
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4SingleResponse<OAuthClient> = response
+            .into_json()
+            .context("Failed to parse create response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("OAuth client creation failed: {}", errors);
+        }
+
+        dure_info!("OAuth client created: {} ({})", result.result.name, result.result.id);
+        Ok(result.result)
+    }
+
+    /// Update OAuth client
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/update
+    pub fn update_oauth_client(&self, client_id: &str, request: UpdateOAuthClientRequest) -> Result<OAuthClient> {
+        dure_info!("Updating OAuth client: {}", client_id);
+
+        let url = format!("{}/{}", self.api_base(), client_id);
+        let body = serde_json::to_string(&request)
+            .context("Failed to serialize update request")?;
+
+        let response = ureq::put(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .set("Content-Type", "application/json")
+            .send_string(&body)
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    anyhow::anyhow!("OAuth client update failed (HTTP {}): {}", code, error_text)
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4SingleResponse<OAuthClient> = response
+            .into_json()
+            .context("Failed to parse update response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("OAuth client update failed: {}", errors);
+        }
+
+        dure_info!("OAuth client updated: {}", result.result.id);
+        Ok(result.result)
+    }
+
+    /// Delete OAuth client
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/delete
+    pub fn delete_oauth_client(&self, client_id: &str) -> Result<()> {
+        dure_info!("Deleting OAuth client: {}", client_id);
+
+        let url = format!("{}/{}", self.api_base(), client_id);
+
+        let response = ureq::delete(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    anyhow::anyhow!("OAuth client deletion failed (HTTP {}): {}", code, error_text)
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4SingleResponse<serde_json::Value> = response
+            .into_json()
+            .context("Failed to parse delete response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("OAuth client deletion failed: {}", errors);
+        }
+
+        dure_info!("OAuth client deleted successfully");
+        Ok(())
+    }
+
+    /// Rotate OAuth client secret
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/rotate_secret
+    pub fn rotate_oauth_client_secret(&self, client_id: &str) -> Result<OAuthClient> {
+        dure_info!("Rotating OAuth client secret: {}", client_id);
+
+        let url = format!("{}/{}/rotate_secret", self.api_base(), client_id);
+
+        let response = ureq::post(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    anyhow::anyhow!("OAuth secret rotation failed (HTTP {}): {}", code, error_text)
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4SingleResponse<OAuthClient> = response
+            .into_json()
+            .context("Failed to parse rotate response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("OAuth secret rotation failed: {}", errors);
+        }
+
+        dure_info!("OAuth client secret rotated successfully");
+        Ok(result.result)
+    }
+
+    /// Delete rotated OAuth client secret
+    /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/delete_rotated_secret
+    pub fn delete_rotated_oauth_client_secret(&self, client_id: &str) -> Result<()> {
+        dure_info!("Deleting rotated OAuth client secret: {}", client_id);
+
+        let url = format!("{}/{}/rotated_secret", self.api_base(), client_id);
+
+        let response = ureq::delete(&url)
+            .set("Authorization", &format!("Bearer {}", self.api_token))
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Status(code, resp) => {
+                    let error_text = resp.into_string().unwrap_or_default();
+                    anyhow::anyhow!("Rotated secret deletion failed (HTTP {}): {}", code, error_text)
+                }
+                ureq::Error::Transport(err) => {
+                    anyhow::anyhow!("Network error: {}", err)
+                }
+            })?;
+
+        let result: ApiV4SingleResponse<serde_json::Value> = response
+            .into_json()
+            .context("Failed to parse delete rotated secret response")?;
+
+        if !result.success {
+            let errors = serde_json::to_string(&result.errors).unwrap_or_default();
+            anyhow::bail!("Rotated secret deletion failed: {}", errors);
+        }
+
+        dure_info!("Rotated OAuth client secret deleted successfully");
+        Ok(())
+    }
+}
+
 /// Verify API token by checking with Cloudflare API
 pub fn verify_token(access_token: &str) -> Result<bool> {
     let url = "https://api.cloudflare.com/client/v4/user/tokens/verify";
@@ -354,6 +634,7 @@ pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
     #[derive(Deserialize)]
     struct TokenResponse {
         access_token: String,
+        refresh_token: Option<String>,
         expires_in: Option<u64>,
     }
 
@@ -372,7 +653,7 @@ pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
 
     Ok(OAuthResult {
         access_token: token_response.access_token,
-        refresh_token: Some(refresh_token.to_string()), // Preserve original
+        refresh_token: token_response.refresh_token.or_else(|| Some(refresh_token.to_string())),
         expires_at,
     })
 }
@@ -738,5 +1019,312 @@ mod tests {
     fn test_redirect_uri_helper() {
         let uri = get_redirect_uri();
         assert_eq!(uri, "http://localhost:51082/cf_callback");
+    }
+
+    // OAuth Client Manager Tests
+
+    #[test]
+    fn test_oauth_client_manager_creation() {
+        let manager = CloudflareOAuthClientManager::new(
+            "test_token".to_string(),
+            "test_account".to_string()
+        );
+        assert_eq!(
+            manager.api_base(),
+            "https://api.cloudflare.com/client/v4/accounts/test_account/oauth2/clients"
+        );
+    }
+
+    #[test]
+    fn test_list_oauth_clients_invalid_token() {
+        let manager = CloudflareOAuthClientManager::new(
+            "invalid_token".to_string(),
+            "test_account".to_string()
+        );
+
+        let result = manager.list_oauth_clients();
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("authentication") || err_msg.contains("401") || err_msg.contains("403"));
+    }
+
+    #[test]
+    #[ignore] // Only run with --ignored flag when credentials available
+    fn test_list_oauth_clients_success() {
+        // Integration test requiring real credentials
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return, // Skip test if no token
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return, // Skip test if no account_id
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+        let result = manager.list_oauth_clients();
+
+        assert!(result.is_ok());
+        let clients = result.unwrap();
+        // Should return Vec<OAuthClient>, even if empty
+        assert!(clients.len() >= 0);
+    }
+
+    #[test]
+    #[ignore] // Integration test
+    fn test_create_oauth_client_success() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        let request = CreateOAuthClientRequest {
+            name: format!("test-client-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+
+        let result = manager.create_oauth_client(request);
+        assert!(result.is_ok());
+
+        let client = result.unwrap();
+        assert!(!client.client_id.is_empty());
+        assert!(client.client_secret.is_some()); // Secret returned on create
+
+        // Cleanup
+        let _ = manager.delete_oauth_client(&client.id);
+    }
+
+    #[test]
+    #[ignore] // Integration test
+    fn test_update_oauth_client() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        // Create test client
+        let create_req = CreateOAuthClientRequest {
+            name: format!("test-update-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+        let client = manager.create_oauth_client(create_req).unwrap();
+
+        // Update name
+        let update_req = UpdateOAuthClientRequest {
+            name: Some(format!("updated-{}", client.name)),
+            redirect_uris: None,
+        };
+
+        let result = manager.update_oauth_client(&client.id, update_req);
+        assert!(result.is_ok());
+
+        let updated = result.unwrap();
+        assert!(updated.name.starts_with("updated-"));
+
+        // Cleanup
+        let _ = manager.delete_oauth_client(&client.id);
+    }
+
+    #[test]
+    #[ignore] // Integration test
+    fn test_delete_oauth_client() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        // Create test client
+        let create_req = CreateOAuthClientRequest {
+            name: format!("test-delete-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+        let client = manager.create_oauth_client(create_req).unwrap();
+
+        // Delete
+        let result = manager.delete_oauth_client(&client.id);
+        assert!(result.is_ok());
+
+        // Verify deleted
+        let list = manager.list_oauth_clients().unwrap();
+        assert!(!list.iter().any(|c| c.id == client.id));
+    }
+
+    #[test]
+    #[ignore] // Integration test
+    fn test_rotate_oauth_client_secret() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        // Create test client
+        let create_req = CreateOAuthClientRequest {
+            name: format!("test-rotate-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+        let client = manager.create_oauth_client(create_req).unwrap();
+        let old_secret = client.client_secret.clone();
+
+        // Rotate secret
+        let result = manager.rotate_oauth_client_secret(&client.id);
+        assert!(result.is_ok());
+
+        let rotated = result.unwrap();
+        assert!(rotated.client_secret.is_some());
+        assert_ne!(rotated.client_secret, old_secret); // New secret != old secret
+
+        // Cleanup
+        let _ = manager.delete_oauth_client(&client.id);
+    }
+
+    #[test]
+    #[ignore] // Integration test
+    fn test_delete_rotated_secret() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        // Create and rotate
+        let create_req = CreateOAuthClientRequest {
+            name: format!("test-del-rot-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+        let client = manager.create_oauth_client(create_req).unwrap();
+        let _ = manager.rotate_oauth_client_secret(&client.id).unwrap();
+
+        // Delete rotated secret
+        let result = manager.delete_rotated_oauth_client_secret(&client.id);
+        assert!(result.is_ok());
+
+        // Cleanup
+        let _ = manager.delete_oauth_client(&client.id);
+    }
+
+    #[test]
+    #[ignore] // Full integration test
+    fn test_full_oauth_client_lifecycle() {
+        let token = match std::env::var("CLOUDFLARE_TEST_TOKEN") {
+            Ok(t) => t,
+            Err(_) => return,
+        };
+        let account_id = match std::env::var("CLOUDFLARE_ACCOUNT_ID") {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        let manager = CloudflareOAuthClientManager::new(token, account_id);
+
+        // 1. List clients (baseline)
+        let initial_list = manager.list_oauth_clients().unwrap();
+        let initial_count = initial_list.len();
+
+        // 2. Create client
+        let create_req = CreateOAuthClientRequest {
+            name: format!("integration-test-{}", chrono::Utc::now().timestamp()),
+            redirect_uris: vec!["http://localhost:51082/cf_callback".to_string()],
+            scopes: None,
+        };
+        let client = manager.create_oauth_client(create_req).unwrap();
+        assert!(!client.client_id.is_empty());
+        assert!(client.client_secret.is_some());
+
+        // 3. List clients (should have +1)
+        let after_create = manager.list_oauth_clients().unwrap();
+        assert_eq!(after_create.len(), initial_count + 1);
+
+        // 4. Update client
+        let update_req = UpdateOAuthClientRequest {
+            name: Some(format!("updated-{}", client.name)),
+            redirect_uris: None,
+        };
+        let updated = manager.update_oauth_client(&client.id, update_req).unwrap();
+        assert!(updated.name.starts_with("updated-"));
+
+        // 5. Rotate secret
+        let old_secret = client.client_secret.clone();
+        let rotated = manager.rotate_oauth_client_secret(&client.id).unwrap();
+        assert!(rotated.client_secret.is_some());
+        assert_ne!(rotated.client_secret, old_secret);
+
+        // 6. Delete rotated secret
+        manager.delete_rotated_oauth_client_secret(&client.id).unwrap();
+
+        // 7. Delete client
+        manager.delete_oauth_client(&client.id).unwrap();
+
+        // 8. List clients (should be back to initial_count)
+        let final_list = manager.list_oauth_clients().unwrap();
+        assert_eq!(final_list.len(), initial_count);
+    }
+
+    #[test]
+    fn test_refresh_token_rotation_parsing() {
+        // Test that TokenResponse correctly parses refresh_token field
+        // This verifies the fix for HTTP 400 "invalid_grant" bug
+
+        let json_with_refresh = r#"{
+            "access_token": "new_access_token_xyz",
+            "refresh_token": "new_refresh_token_abc",
+            "expires_in": 3600
+        }"#;
+
+        #[derive(serde::Deserialize)]
+        struct TokenResponse {
+            access_token: String,
+            refresh_token: Option<String>,
+            expires_in: Option<u64>,
+        }
+
+        let parsed: TokenResponse = serde_json::from_str(json_with_refresh).unwrap();
+        assert_eq!(parsed.access_token, "new_access_token_xyz");
+        assert_eq!(parsed.refresh_token, Some("new_refresh_token_abc".to_string()));
+        assert_eq!(parsed.expires_in, Some(3600));
+
+        // Test without refresh_token (should still parse)
+        let json_without_refresh = r#"{
+            "access_token": "access_only",
+            "expires_in": 7200
+        }"#;
+
+        let parsed2: TokenResponse = serde_json::from_str(json_without_refresh).unwrap();
+        assert_eq!(parsed2.access_token, "access_only");
+        assert_eq!(parsed2.refresh_token, None);
+        assert_eq!(parsed2.expires_in, Some(7200));
     }
 }

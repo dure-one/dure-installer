@@ -299,6 +299,7 @@ pub enum SshEvent {
         installed: bool,
         running: bool,
         services: Vec<String>,
+        containers: Vec<crate::calc::dure_mycart::DureContainer>,
     },
 
     /// Dure installation completed
@@ -338,6 +339,12 @@ pub enum SshEvent {
     DureComposeLogsRetrieved {
         host: String,
         logs: String,
+    },
+
+    /// Dure container logs retrieved (per-container)
+    DureContainerLogsRetrieved {
+        host: String,
+        container_logs: std::collections::HashMap<String, Vec<String>>,
     },
 
     /// Drawer event passthrough

@@ -193,6 +193,9 @@ mod desktop_impl {
             channel.exec(true, command.as_str()).await?;
 
             let mut output = String::new();
+            let mut stderr_output = String::new();
+            let mut exit_code = 0;
+
             loop {
                 let Some(msg) = channel.wait().await else {
                     break;
@@ -202,14 +205,29 @@ mod desktop_impl {
                     Data { ref data } => {
                         output.push_str(&String::from_utf8_lossy(data));
                     }
-                    ExitStatus { exit_status } => {
-                        if exit_status != 0 {
-                            anyhow::bail!("Command failed with exit status {}", exit_status);
+                    ExtendedData { ref data, ext } => {
+                        // ext == 1 is stderr
+                        if ext == 1 {
+                            stderr_output.push_str(&String::from_utf8_lossy(data));
                         }
+                    }
+                    ExitStatus { exit_status } => {
+                        exit_code = exit_status;
                         break;
                     }
                     _ => {}
                 }
+            }
+
+            if exit_code != 0 {
+                let error_msg = if !stderr_output.is_empty() {
+                    format!("Command failed with exit status {}:\nStderr: {}\nStdout: {}",
+                        exit_code, stderr_output.trim(), output.trim())
+                } else {
+                    format!("Command failed with exit status {}:\n{}",
+                        exit_code, output.trim())
+                };
+                anyhow::bail!(error_msg);
             }
 
             session

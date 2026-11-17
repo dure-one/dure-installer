@@ -2,7 +2,7 @@
 
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::tabs_primary;
+use egui_material3::{tabs_primary, tabs_secondary};
 
 use crate::storage::models::opslog::OperationLog;
 use crate::ui_components::drawer::{StatusLine, LogsRenderer, OperationsRenderer};
@@ -214,20 +214,120 @@ fn render_docker_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
     }
 }
 
-/// Render Dure tab
+/// Render Dure tab with per-container subtabs
 fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    if !drawer_state.dure_compose_logs.is_empty() {
-        egui::ScrollArea::vertical()
-            .max_height(480.0)
+    if drawer_state.dure_containers.is_empty() {
+        ui.label(tr!("ssh-dure-placeholder"));
+        return;
+    }
+
+    ui.vertical(|ui| {
+        // Sub-tab bar: Status + one tab per container
+        let mut active_subtab = drawer_state.dure_active_subtab;
+        let mut tab_builder = tabs_secondary(&mut active_subtab)
+            .id_salt("dure_subtabs")
+            .height(32.0)
+            .tab("Status");
+
+        for container in &drawer_state.dure_containers {
+            tab_builder = tab_builder.tab(&container.name);
+        }
+
+        ui.add(tab_builder);
+
+        // Store selected tab in temp data if changed
+        if active_subtab != drawer_state.dure_active_subtab {
+            if let Some(ref host) = drawer_state.ssh_host {
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new("dure_subtab_selection").with(host),
+                        (host.clone(), active_subtab),
+                    );
+                });
+            }
+        }
+
+        ui.separator();
+        ui.add_space(8.0);
+
+        // Content based on selected sub-tab
+        let focus_applied = if active_subtab == 0 {
+            // Tab 0: Container status table
+            render_dure_status_subtab(ui, drawer_state)
+        } else {
+            // Tab 1+: Per-container logs
+            let container_index = active_subtab - 1;
+            if let Some(container) = drawer_state.dure_containers.get(container_index) {
+                render_dure_container_logs_subtab(ui, drawer_state, &container.name)
+            } else {
+                ui.label("Container not found");
+                false
+            }
+        };
+
+        // Signal focus applied via temp data
+        if focus_applied {
+            if let Some(ref host) = drawer_state.ssh_host {
+                ui.data_mut(|d| {
+                    d.insert_temp(egui::Id::new("dure_subtab_focus_applied").with(host), host.clone());
+                });
+            }
+        }
+    });
+}
+
+/// Render Status sub-tab: container status table
+fn render_dure_status_subtab(ui: &mut egui::Ui, drawer_state: &DrawerState) -> bool {
+    ui.heading("Container Status");
+    ui.add_space(8.0);
+
+    let grid_response = egui::Grid::new("dure_containers_grid")
+        .striped(true)
+        .show(ui, |ui| {
+            ui.strong("Name");
+            ui.strong("Status");
+            ui.strong("Image");
+            ui.end_row();
+
+            for container in &drawer_state.dure_containers {
+                ui.label(&container.name);
+                ui.label(&container.status);
+                ui.label(&container.image);
+                ui.end_row();
+            }
+        })
+        .response;
+
+    if drawer_state.dure_subtab_should_focus {
+        grid_response.request_focus();
+        return true;
+    }
+    false
+}
+
+/// Render container logs sub-tab
+fn render_dure_container_logs_subtab(ui: &mut egui::Ui, drawer_state: &DrawerState, container_name: &str) -> bool {
+    ui.heading(format!("Logs: {}", container_name));
+    ui.add_space(8.0);
+
+    if let Some(logs) = drawer_state.dure_container_logs.get(container_name) {
+        let scroll_response = egui::ScrollArea::vertical()
+            .max_height(400.0)
             .stick_to_bottom(true)
             .show(ui, |ui| {
                 ui.style_mut().override_font_id = Some(egui::FontId::monospace(11.0));
-                for line in &drawer_state.dure_compose_logs {
+                for line in logs {
                     ui.label(line);
                 }
             });
+
+        if drawer_state.dure_subtab_should_focus {
+            ui.memory_mut(|mem| mem.request_focus(scroll_response.id));
+            return true;
+        }
     } else {
-        ui.label(tr!("ssh-dure-placeholder"));
+        ui.label("No logs available");
     }
+    false
 }
 

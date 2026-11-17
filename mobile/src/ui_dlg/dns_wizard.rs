@@ -432,8 +432,22 @@ impl DnsWizard {
                     "Warning: Account ID required to continue"
                 );
             }
+
+            // Restart verification button (shown if OAuth completed but token invalid)
+            if !self.api_connection_ok {
+                ui.add_space(4.0);
+                if ui.add(MaterialButton::outlined("Restart Verification")).clicked() {
+                    // Clear OAuth state and restart flow
+                    self.oauth_result = None;
+                    self.oauth_promise = None;
+                    self.api_connection_ok = false;
+                    self.cloudflare_account_id.clear();
+                    self.progress_log.push("Restarting OAuth verification...".to_string());
+                    dure_info!("Restarting OAuth verification flow");
+                }
+            }
         }
-        
+
         ui.add_space(4.0);
         
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {

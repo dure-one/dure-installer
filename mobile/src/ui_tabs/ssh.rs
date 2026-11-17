@@ -105,6 +105,8 @@ pub struct DureCheckResult {
     pub installed: bool,
     pub running: bool,
     pub services: Vec<String>,
+    #[serde(default)]
+    pub containers: Vec<crate::calc::dure_mycart::DureContainer>,
     pub checked_at: i64,
 }
 
@@ -380,6 +382,29 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     edit_use_private_key: bool,
+
+    // Install Dure dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_install_dure_dialog: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_host: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_domain: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_image_tag: String,
+
+    // Remove Dure dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_remove_dure_dialog: bool,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    remove_dure_host: String,
+
+    #[cfg_attr(feature = "serde", serde(skip))]
+    remove_dure_delete_data: bool,
 }
 
 impl Default for SshTab {
@@ -404,6 +429,13 @@ impl Default for SshTab {
             edit_port: "22".to_string(),
             edit_use_password: false,
             edit_use_private_key: false,
+            show_install_dure_dialog: false,
+            install_dure_host: String::new(),
+            install_dure_domain: String::new(),
+            install_dure_image_tag: "latest".to_string(),
+            show_remove_dure_dialog: false,
+            remove_dure_host: String::new(),
+            remove_dure_delete_data: false,
         }
     }
 }
@@ -694,6 +726,7 @@ impl SshTab {
                             installed: dure_installed,
                             running: dure_running.unwrap_or(false),
                             services: dure_services.clone().unwrap_or_default(),
+                            containers: Vec::new(),
                             checked_at: now,
                         });
 
@@ -948,7 +981,7 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services }) => {
+            ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services, containers }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
@@ -957,12 +990,14 @@ impl SshTab {
                             installed,
                             running,
                             services,
+                            containers: containers.clone(),
                             checked_at: chrono::Utc::now().timestamp(),
                         });
                         row.operation_state = OperationState::Completed {
                             operation: tr!("ssh-operation-dure-check"),
                             completed_at: chrono::Utc::now().timestamp(),
                         };
+                        row.drawer_state.dure_containers = containers.clone();
                         Some((
                             row.last_ssh_check.clone(),
                             row.last_base_check.clone(),
@@ -985,13 +1020,15 @@ impl SshTab {
                     row.last_dure_check = Some(DureCheckResult {
                         installed,
                         running,
-                        services,
+                        services: services.clone(),
+                        containers: containers.clone(),
                         checked_at: chrono::Utc::now().timestamp(),
                     });
                     row.operation_state = OperationState::Completed {
                         operation: tr!("ssh-operation-dure-check"),
                         completed_at: chrono::Utc::now().timestamp(),
                     };
+                    row.drawer_state.dure_containers = containers;
                 }
             }
 
@@ -1064,10 +1101,10 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureComposeLogsRetrieved { host, logs }) => {
+            ViewModelEvent::Ssh(SshEvent::DureContainerLogsRetrieved { host, container_logs }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
-                    row.drawer_state.dure_compose_logs = logs.lines().map(|s| s.to_string()).collect();
-                    dure_info!("Dure compose logs updated for {}", host);
+                    row.drawer_state.dure_container_logs = container_logs;
+                    dure_info!("Dure container logs updated for {} ({} containers)", host, row.drawer_state.dure_container_logs.len());
                 }
             }
 
@@ -1127,6 +1164,12 @@ impl SshTab {
 
         // Edit host dialog
         self.render_edit_dialog(ui, profile);
+
+        // Install Dure dialog
+        self.render_install_dure_dialog(ui, profile);
+
+        // Remove Dure dialog
+        self.render_remove_dure_dialog(ui, profile);
     }
 
     /// Render SSH hosts table with drawer
@@ -1303,39 +1346,59 @@ impl SshTab {
                     }
                 }
                 SshAction::InstallDure(host) => {
-                    // Set operation state to InProgress before starting
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
-                        row.operation_state = OperationState::start(tr!("ssh-operation-install-dure"));
-                    }
-                    if let Some(ref vm) = vm {
-                        // Find domain from platform config
-                        let domain = if let Some(ref profile) = profile {
-                            Self::find_domain_for_host(&host, &profile.config_file)
-                                .unwrap_or_else(|| {
-                                    dure_error!("No domain found for host {}, using host as fallback", host);
-                                    host.clone()
-                                })
-                        } else {
-                            dure_error!("No profile context, using host {} as domain fallback", host);
-                            host.clone()
-                        };
+                    // Open install dialog
+                    self.install_dure_host = host.clone();
 
-                        let mut env_config = std::collections::HashMap::new();
-                        env_config.insert("DOMAIN".to_string(), domain.clone());
-                        let _ = vm.install_dure(host.clone(), env_config, (*current_profile_kdbx).clone());
-                        dure_info!("Dure installation triggered for {} with domain {}", host, domain);
+                    // Find domain from platform config as default
+                    if let Some(ref profile) = profile {
+                        self.install_dure_domain = Self::find_domain_for_host(&host, &profile.config_file)
+                            .unwrap_or_else(|| {
+                                dure_debug!("No domain found for host {}, leaving empty", host);
+                                String::new()
+                            });
                     }
+
+                    self.show_install_dure_dialog = true;
+                    dure_info!("Opening install Dure dialog for {}", host);
                 }
                 SshAction::RemoveDure(host) => {
-                    // Set operation state to InProgress before starting
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
-                        row.operation_state = OperationState::start(tr!("ssh-operation-remove-dure"));
-                    }
-                    if let Some(ref vm) = vm {
-                        let _ = vm.remove_dure(host.clone(), (*current_profile_kdbx).clone());
-                        dure_info!("Dure removal triggered for {}", host);
-                    }
+                    // Open remove dialog
+                    self.remove_dure_host = host.clone();
+                    self.show_remove_dure_dialog = true;
+                    dure_info!("Opening remove Dure dialog for {}", host);
                 }
+            }
+        }
+
+        // Handle pending install Dure action
+        if let Some((host, env_config)) = ui.data(|d| {
+            d.get_temp::<(String, std::collections::HashMap<String, String>)>(
+                egui::Id::new("ssh_install_dure_pending")
+            )
+        }) {
+            ui.data_mut(|d| d.remove::<(String, std::collections::HashMap<String, String>)>(
+                egui::Id::new("ssh_install_dure_pending")
+            ));
+
+            if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                row.operation_state = OperationState::start("Install Dure");
+            }
+            if let Some(ref vm) = vm {
+                let _ = vm.install_dure(host, env_config, (*current_profile_kdbx).clone());
+            }
+        }
+
+        // Handle pending remove Dure action
+        if let Some((host, delete_data)) = ui.data(|d| {
+            d.get_temp::<(String, bool)>(egui::Id::new("ssh_remove_dure_pending"))
+        }) {
+            ui.data_mut(|d| d.remove::<(String, bool)>(egui::Id::new("ssh_remove_dure_pending")));
+
+            if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                row.operation_state = OperationState::start("Remove Dure");
+            }
+            if let Some(ref vm) = vm {
+                let _ = vm.remove_dure(host, delete_data, (*current_profile_kdbx).clone());
             }
         }
 
@@ -1374,6 +1437,35 @@ impl SshTab {
                     d.remove::<(String, DrawerTab)>(egui::Id::new("ssh_drawer_tab_switch").with(&host));
                 });
             }
+        }
+
+        // Handle dure subtab selection
+        if let Some((host, new_subtab)) = ui.data(|d| {
+            self.rows.iter().find_map(|r| {
+                d.get_temp::<(String, usize)>(egui::Id::new("dure_subtab_selection").with(&r.host))
+            })
+        }) {
+            if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                row.drawer_state.dure_active_subtab = new_subtab;
+                row.drawer_state.dure_subtab_should_focus = true;
+            }
+            ui.data_mut(|d| {
+                d.remove::<(String, usize)>(egui::Id::new("dure_subtab_selection").with(&host));
+            });
+        }
+
+        // Clear dure subtab focus flag after applied
+        if let Some(host) = ui.data(|d| {
+            self.rows.iter().find_map(|r| {
+                d.get_temp::<String>(egui::Id::new("dure_subtab_focus_applied").with(&r.host))
+            })
+        }) {
+            if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                row.drawer_state.dure_subtab_should_focus = false;
+            }
+            ui.data_mut(|d| {
+                d.remove::<String>(egui::Id::new("dure_subtab_focus_applied").with(&host));
+            });
         }
     }
 
@@ -1758,6 +1850,182 @@ impl SshTab {
             }
         }
     }
+
+    /// Render Remove Dure dialog
+    fn render_remove_dure_dialog(
+        &mut self,
+        ui: &mut egui::Ui,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+    ) {
+        if !self.show_remove_dure_dialog {
+            return;
+        }
+
+        use std::cell::Cell;
+
+        let mut delete_data = self.remove_dure_delete_data;
+        let remove_requested = Cell::new(false);
+        let cancel_requested = Cell::new(false);
+
+        dialog("remove_dure_dialog", "Remove Dure", &mut self.show_remove_dure_dialog)
+            .min_width(400.0)
+            .content(|ui, open| {
+                ui.label(format!("Remove Dure from host: {}", self.remove_dure_host));
+                ui.add_space(12.0);
+
+                ui.checkbox(&mut delete_data, "Delete data directories (/srv/dure-mycart and /srv/data)");
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new("Warning: Deleting data cannot be undone!")
+                    .color(egui::Color32::from_rgb(211, 47, 47)));
+                ui.add_space(12.0);
+
+                ui.separator();
+                ui.add_space(8.0);
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(MaterialButton::filled("Remove")).clicked() {
+                        remove_requested.set(true);
+                        *open = false;
+                    }
+                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+                        cancel_requested.set(true);
+                        *open = false;
+                    }
+                });
+            })
+            .show(ui.ctx());
+
+        self.remove_dure_delete_data = delete_data;
+
+        if remove_requested.get() {
+            // Note: Actual removal will be handled via UI action trigger
+            // since we need vm reference which is not available here
+            // Store state for the action handler to pick up
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("ssh_remove_dure_pending"),
+                    (self.remove_dure_host.clone(), self.remove_dure_delete_data),
+                );
+            });
+
+            self.reset_remove_dure_dialog();
+        }
+
+        if cancel_requested.get() {
+            self.reset_remove_dure_dialog();
+        }
+    }
+
+    /// Reset remove Dure dialog state
+    fn reset_remove_dure_dialog(&mut self) {
+        self.remove_dure_host = String::new();
+        self.remove_dure_delete_data = false;
+    }
+
+    /// Render Install Dure dialog
+    fn render_install_dure_dialog(
+        &mut self,
+        ui: &mut egui::Ui,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+    ) {
+        if !self.show_install_dure_dialog {
+            return;
+        }
+
+        use std::cell::Cell;
+
+        let mut domain = self.install_dure_domain.clone();
+        let mut image_tag = self.install_dure_image_tag.clone();
+        let install_requested = Cell::new(false);
+        let cancel_requested = Cell::new(false);
+
+        dialog("install_dure_dialog", "Install Dure", &mut self.show_install_dure_dialog)
+            .min_width(450.0)
+            .max_height(500.0)
+            .scrollable(true)
+            .content(|ui, open| {
+                ui.label(format!("Install Dure on host: {}", self.install_dure_host));
+                ui.add_space(12.0);
+
+                ui.label("Domain (required):");
+                ui.text_edit_singleline(&mut domain);
+                if domain.is_empty() {
+                    ui.colored_label(egui::Color32::from_rgb(211, 47, 47), "⚠ Domain is required");
+                }
+                ui.add_space(8.0);
+
+                ui.label("Image Tag:");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut image_tag, "latest".to_string(), "latest (production)");
+                    ui.radio_value(&mut image_tag, "test".to_string(), "test (development)");
+                });
+                ui.add_space(12.0);
+
+                ui.separator();
+                ui.add_space(8.0);
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add(MaterialButton::filled("Install")).clicked() {
+                        install_requested.set(true);
+                        *open = false;
+                    }
+                    if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+                        cancel_requested.set(true);
+                        *open = false;
+                    }
+                });
+            })
+            .show(ui.ctx());
+
+        self.install_dure_domain = domain;
+        self.install_dure_image_tag = image_tag;
+
+        if install_requested.get() {
+            if self.install_dure_domain.is_empty() {
+                self.load_error = Some("Domain is required".to_string());
+                return;
+            }
+
+            // Build env_config
+            use std::collections::HashMap;
+            let mut env_config = HashMap::new();
+            env_config.insert("DOMAIN".to_string(), self.install_dure_domain.clone());
+            env_config.insert("MYCART_IMAGE_TAG".to_string(), self.install_dure_image_tag.clone());
+
+            // Extract username and hostname from SSH host (format: user@host)
+            let (username, hostname) = if let Some(at_pos) = self.install_dure_host.rfind('@') {
+                (self.install_dure_host[..at_pos].to_string(),
+                 self.install_dure_host[at_pos + 1..].to_string())
+            } else {
+                ("root".to_string(), self.install_dure_host.clone())
+            };
+
+            env_config.insert("username".to_string(), username);
+            env_config.insert("host".to_string(), hostname);
+
+            // Note: Actual installation will be handled via UI action trigger
+            // Store state for the action handler to pick up
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("ssh_install_dure_pending"),
+                    (self.install_dure_host.clone(), env_config),
+                );
+            });
+
+            self.reset_install_dure_dialog();
+        }
+
+        if cancel_requested.get() {
+            self.reset_install_dure_dialog();
+        }
+    }
+
+    /// Reset install Dure dialog state
+    fn reset_install_dure_dialog(&mut self) {
+        self.install_dure_host = String::new();
+        self.install_dure_domain = String::new();
+        self.install_dure_image_tag = "latest".to_string();
+    }
 }
 
 #[cfg(test)]
@@ -1890,6 +2158,7 @@ mod operation_state_tests {
             installed: true,
             running: true,
             services: vec!["api".to_string(), "worker".to_string()],
+            containers: Vec::new(),
             checked_at: 1234567890,
         };
 
@@ -1905,6 +2174,7 @@ mod operation_state_tests {
             installed: true,
             running: false,
             services: vec![],
+            containers: Vec::new(),
             checked_at: 1234567890,
         };
 

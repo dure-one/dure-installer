@@ -600,8 +600,8 @@ impl SshActor {
             SshCommand::InstallDure { host, env_config, profile_kdbx } => {
                 self.handle_install_dure(host, env_config, profile_kdbx).await
             }
-            SshCommand::RemoveDure { host, profile_kdbx } => {
-                self.handle_remove_dure(host, profile_kdbx).await
+            SshCommand::RemoveDure { host, delete_data, profile_kdbx } => {
+                self.handle_remove_dure(host, delete_data, profile_kdbx).await
             }
             SshCommand::Drawer(_drawer_cmd) => {
                 Err(anyhow::anyhow!("Drawer command not yet implemented"))
@@ -2297,6 +2297,9 @@ impl SshActor {
             SshEvent::DureComposeLogsRetrieved { host, logs } => {
                 format!("DureComposeLogsRetrieved({}, {} bytes)", host, logs.len())
             }
+            SshEvent::DureContainerLogsRetrieved { host, container_logs } => {
+                format!("DureContainerLogsRetrieved({}, {} containers)", host, container_logs.len())
+            }
             SshEvent::Drawer(_) => {
                 format!("Drawer(...)")
             }
@@ -2702,7 +2705,7 @@ impl SshActor {
 
         let domain = env_config.get("DOMAIN").cloned().unwrap_or_else(|| "example.com".to_string());
 
-        match crate::calc::dure_mycart::install_dure_mycart(&host_config, &domain, profile_kdbx.as_ref()).await {
+        match crate::calc::dure_mycart::install_dure_mycart(&host_config, &domain, &env_config, profile_kdbx.as_ref()).await {
             Ok(_progress) => {
                 dure_info!(project_id = host.clone(), "Dure installed successfully");
 
@@ -2737,6 +2740,7 @@ impl SshActor {
     async fn handle_remove_dure(
         &mut self,
         host: String,
+        delete_data: bool,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         dure_info!(project_id = host.clone(), "Removing Dure from {}", host);
@@ -2761,7 +2765,7 @@ impl SshActor {
             }
         };
 
-        match crate::calc::dure_mycart::uninstall_dure_mycart(&host_config, profile_kdbx.as_ref()).await {
+        match crate::calc::dure_mycart::remove_dure_mycart(&host_config, delete_data, profile_kdbx.as_ref()).await {
             Ok(_progress) => {
                 dure_info!(project_id = host.clone(), "Dure removed successfully");
 
@@ -2803,13 +2807,16 @@ impl SshActor {
         let host_config = self.load_host_config(&host)?;
 
         // Step 1: Check Dure service status
-        let result = crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
+        let result = crate::calc::dure_mycart::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
 
-        match result {
-            Ok((installed, running, services)) => {
-                let status = if installed && running {
+        let (installed, running, containers) = match result {
+            Ok((inst, cont)) => {
+                let run = cont.iter().any(|c| c.status.contains("Up"));
+                let services: Vec<String> = cont.iter().map(|c| c.name.clone()).collect();
+
+                let status = if inst && run {
                     "✓ Installed and running"
-                } else if installed {
+                } else if inst {
                     "⚠ Installed but not running"
                 } else {
                     "✗ Not installed"
@@ -2818,10 +2825,13 @@ impl SshActor {
 
                 self.send_event(SshEvent::DureCheckCompleted {
                     host: host.clone(),
-                    installed,
-                    running,
+                    installed: inst,
+                    running: run,
                     services,
+                    containers: cont.clone(),
                 }).await;
+
+                (inst, run, cont)
             }
             Err(e) => {
                 dure_error!(project_id = host.clone(), "Dure check failed: {}", e);
@@ -2831,28 +2841,42 @@ impl SshActor {
                     installed: false,
                     running: false,
                     services: vec![],
+                    containers: vec![],
                 }).await;
                 return Err(e);
             }
+        };
+
+        // Step 2: Get per-container logs
+        if installed && running {
+            dure_info!(project_id = host.clone(), "Retrieving per-container logs for {} containers", containers.len());
+
+            let mut container_logs = std::collections::HashMap::new();
+            for container in &containers {
+                match crate::calc::dure_mycart::get_container_logs(
+                    &host_config,
+                    &container.name,
+                    100, // tail last 100 lines
+                    profile_kdbx.as_ref(),
+                ).await {
+                    Ok(logs) => {
+                        dure_debug!(project_id = host.clone(), "Retrieved {} log lines for container {}", logs.len(), container.name);
+                        container_logs.insert(container.name.clone(), logs);
+                    }
+                    Err(e) => {
+                        dure_warn!(project_id = host.clone(), "Failed to get logs for container {}: {}", container.name, e);
+                        container_logs.insert(container.name.clone(), vec![format!("Failed to get logs: {}", e)]);
+                    }
+                }
+            }
+
+            self.send_event(SshEvent::DureContainerLogsRetrieved {
+                host,
+                container_logs,
+            }).await;
         }
 
-        // Step 2: Get Dure compose logs
-        dure_info!(project_id = host.clone(), "Retrieving Dure compose logs for {}", host);
-        match crate::calc::ssh::get_dure_compose_logs(&host_config, profile_kdbx.as_ref()).await {
-            Ok(logs) => {
-                dure_info!(project_id = host.clone(), "Dure compose logs retrieved ({} bytes)", logs.len());
-
-                self.send_event(SshEvent::DureComposeLogsRetrieved {
-                    host,
-                    logs,
-                }).await;
-                Ok(())
-            }
-            Err(e) => {
-                dure_warn!(project_id = host.clone(), "Dure compose logs retrieval failed: {}", e);
-                Ok(())
-            }
-        }
+        Ok(())
     }
 
     async fn send_error(&self, operation: &str, error: anyhow::Error) {

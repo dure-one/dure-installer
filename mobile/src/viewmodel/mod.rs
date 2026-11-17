@@ -1093,10 +1093,11 @@ impl ViewModel {
     pub fn remove_dure(
         &self,
         host: String,
+        delete_data: bool,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::RemoveDure { host, profile_kdbx })
+            .send_blocking(ssh::SshCommand::RemoveDure { host, delete_data, profile_kdbx })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
