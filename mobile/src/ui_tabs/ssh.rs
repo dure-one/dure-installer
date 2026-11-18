@@ -1218,6 +1218,7 @@ impl SshTab {
                 host,
                 success,
                 error,
+                progress: _,
                 focus_tab,
             }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {

@@ -2508,8 +2508,12 @@ impl SshActor {
                     host, installed, running
                 )
             }
-            SshEvent::DureInstallCompleted { host, success, .. } => {
-                format!("DureInstallCompleted({}, success={})", host, success)
+            SshEvent::DureInstallCompleted { host, success, error, .. } => {
+                if let Some(err) = error {
+                    format!("DureInstallCompleted({}, success={}, error={})", host, success, err)
+                } else {
+                    format!("DureInstallCompleted({}, success={})", host, success)
+                }
             }
             SshEvent::DureRemoveCompleted { host, success, .. } => {
                 format!("DureRemoveCompleted({}, success={})", host, success)
@@ -3018,6 +3022,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    progress: Vec::new(),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 })
                 .await;
@@ -3036,8 +3041,8 @@ impl SshActor {
         {
             Ok(progress) => {
                 // Log progress messages to tab
-                for msg in progress {
-                    self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, &msg);
+                for msg in &progress {
+                    self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, msg);
                 }
 
                 let _ = self
@@ -3047,6 +3052,7 @@ impl SshActor {
                     host,
                     success: true,
                     error: None,
+                    progress,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 })
                 .await;
@@ -3059,6 +3065,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    progress: Vec::new(),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 })
                 .await;

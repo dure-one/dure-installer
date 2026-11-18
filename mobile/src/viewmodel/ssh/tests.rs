@@ -146,6 +146,8 @@ mod tests {
             host: "test-host".to_string(),
             success: false,
             error: None,
+            progress: Vec::new(),
+            focus_tab: None,
         };
         let _ev10 = super::super::SshEvent::DureRemoveCompleted {
             host: "test-host".to_string(),

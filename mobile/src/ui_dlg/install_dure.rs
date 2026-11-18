@@ -50,16 +50,22 @@ impl InstallDure {
         if matches!(self.state.step, InstallStep::Installing) {
             if let Some(ref mut vm_ref) = vm {
                 let events = vm_ref.poll_events(ctx);
+                dure_debug!("Polling events for install, got {} events", events.len());
                 for event in events {
                     if let crate::viewmodel::ViewModelEvent::Ssh(ssh_event) = event {
                         if let crate::viewmodel::ssh::SshEvent::DureInstallCompleted {
                             host,
                             success,
                             error,
+                            progress,
                             ..
                         } = ssh_event
                         {
+                            dure_debug!("Received DureInstallCompleted for {}: success={}, error={:?}, progress_lines={}", host, success, error, progress.len());
                             if host == self.state.host {
+                                // Update progress log with actual installation progress
+                                self.state.progress_log = progress;
+
                                 if success {
                                     self.state.step = InstallStep::Complete;
                                     self.state
@@ -70,6 +76,7 @@ impl InstallDure {
                                     let err_msg = error
                                         .unwrap_or_else(|| "Installation failed".to_string());
                                     self.state.step = InstallStep::Error(err_msg.clone());
+                                    self.state.progress_log.push(format!("✗ Error: {}", err_msg));
                                     dure_error!("Install Dure failed for {}: {}", host, err_msg);
                                 }
                             }

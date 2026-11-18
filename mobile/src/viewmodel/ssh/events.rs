@@ -316,6 +316,7 @@ pub enum SshEvent {
         host: String,
         success: bool,
         error: Option<String>,
+        progress: Vec<String>,
         focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
