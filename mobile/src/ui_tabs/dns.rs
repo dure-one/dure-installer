@@ -180,6 +180,7 @@ pub struct DnsDomainRow {
     pub oauth_access_token: Option<String>,
     pub oauth_refresh_token: Option<String>,
     pub oauth_token_expiry: Option<u64>,
+    pub oauth_refresh_failed: bool, // OAuth token expired and refresh failed
 
     // Check results
     pub last_ns_check: Option<NsCheckResult>,
@@ -230,6 +231,14 @@ pub struct NsCheckResult {
     pub error: Option<String>,
 }
 
+/// DNS record display format
+#[derive(Clone, Debug)]
+pub struct DnsRecordDisplay {
+    pub name: String,        // "dure.co" or "xmpp.dure.co"
+    pub record_type: String, // "A", "CNAME", "SRV"
+    pub value: String,       // "1.2.3.4" or "dure.co"
+}
+
 /// DNS settings check result
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct SettingsCheckResult {
@@ -237,6 +246,42 @@ pub struct SettingsCheckResult {
     pub records_valid: bool,
     pub missing_records: Vec<String>,
     pub error: Option<String>,
+    #[serde(default)]
+    pub fetched_records: Vec<DnsRecordDisplay>, // Actual records from Cloudflare
+}
+
+impl serde::Serialize for DnsRecordDisplay {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("DnsRecordDisplay", 3)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("record_type", &self.record_type)?;
+        state.serialize_field("value", &self.value)?;
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DnsRecordDisplay {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            name: String,
+            record_type: String,
+            value: String,
+        }
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(DnsRecordDisplay {
+            name: helper.name,
+            record_type: helper.record_type,
+            value: helper.value,
+        })
+    }
 }
 
 /// Drawer state for DNS domain
@@ -427,6 +472,8 @@ impl DnsTab {
             self.render_domain_table(ui, profile);
 
             // Check for button click events stored in ui.data (consume with remove_temp)
+            let reauth =
+                ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_action_reauth")));
             let refresh_all =
                 ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_refresh_all")));
             let check_ns = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_check_ns")));
@@ -437,6 +484,19 @@ impl DnsTab {
             let delete_domain =
                 ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("dns_delete_domain")));
 
+            if let Some(domain) = reauth {
+                // Open DNS wizard in re-auth mode
+                dure_info!("Opening DNS wizard in re-auth mode for domain: {}", domain);
+                let mut wizard =
+                    crate::ui_dlg::dns_wizard::DnsWizard::new_reauth(profile.name.clone(), domain);
+
+                // Load platforms from config
+                let platforms = Self::load_platforms_from_config(&profile.config_file);
+                wizard.load_available_platforms(platforms);
+
+                self.dns_wizard = Some(wizard);
+                self.show_add_dns_wizard = true;
+            }
             if let Some(domain) = refresh_all {
                 // Run all 3 checks in background (no dialogs)
                 self.check_ns_server_impl(&domain, false);
@@ -563,79 +623,117 @@ impl DnsTab {
                             let column_width = ui.available_width();
 
                             ui.horizontal_wrapped(|ui| {
-                                // Refresh button (first position)
-                                if ui
-                                    .add(
-                                        MaterialButton::outlined(tr!("dns-button-refresh")).small(),
-                                    )
-                                    .on_hover_text(tr!("dns-button-refresh-tooltip"))
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("dns_refresh_all"),
-                                            domain.clone(),
+                                // Re-Auth button (shown when OAuth refresh fails)
+                                if row_for_ops.oauth_refresh_failed {
+                                    if ui
+                                        .add(
+                                            MaterialButton::filled(tr!("platform-button-reauth"))
+                                                .small(),
                                         )
-                                    });
+                                        .on_hover_text(tr!("platform-button-reauth-tooltip"))
+                                        .clicked()
+                                    {
+                                        ui.data_mut(|d| {
+                                            d.insert_temp(
+                                                egui::Id::new("dns_action_reauth"),
+                                                domain.clone(),
+                                            )
+                                        });
+                                    }
                                 }
 
-                                if ui
-                                    .add(
-                                        MaterialButton::outlined(tr!("dns-button-check-ns"))
-                                            .small(),
-                                    )
-                                    .on_hover_text(tr!("dns-button-check-ns-tooltip"))
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(egui::Id::new("dns_check_ns"), domain.clone())
-                                    });
-                                }
+                                // Other operations (disabled when OAuth fails)
+                                ui.add_enabled_ui(
+                                    !operation_in_progress && !row_for_ops.oauth_refresh_failed,
+                                    |ui| {
+                                        // Refresh button (first position)
+                                        if ui
+                                            .add(
+                                                MaterialButton::outlined(tr!("dns-button-refresh"))
+                                                    .small(),
+                                            )
+                                            .on_hover_text(tr!("dns-button-refresh-tooltip"))
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("dns_refresh_all"),
+                                                    domain.clone(),
+                                                )
+                                            });
+                                        }
 
-                                if ui
-                                    .add(
-                                        MaterialButton::outlined(tr!("dns-button-check-settings"))
-                                            .small(),
-                                    )
-                                    .on_hover_text(tr!("dns-button-check-settings-tooltip"))
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("dns_check_settings"),
-                                            domain.clone(),
-                                        )
-                                    });
-                                }
+                                        if ui
+                                            .add(
+                                                MaterialButton::outlined(tr!(
+                                                    "dns-button-check-ns"
+                                                ))
+                                                .small(),
+                                            )
+                                            .on_hover_text(tr!("dns-button-check-ns-tooltip"))
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("dns_check_ns"),
+                                                    domain.clone(),
+                                                )
+                                            });
+                                        }
 
-                                if ui
-                                    .add(
-                                        MaterialButton::outlined(tr!("dns-button-https-check"))
-                                            .small(),
-                                    )
-                                    .on_hover_text(tr!("dns-button-https-check-tooltip"))
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("dns_check_https"),
-                                            domain.clone(),
-                                        )
-                                    });
-                                }
+                                        if ui
+                                            .add(
+                                                MaterialButton::outlined(tr!(
+                                                    "dns-button-check-settings"
+                                                ))
+                                                .small(),
+                                            )
+                                            .on_hover_text(tr!("dns-button-check-settings-tooltip"))
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("dns_check_settings"),
+                                                    domain.clone(),
+                                                )
+                                            });
+                                        }
 
-                                if ui
-                                    .add(MaterialButton::outlined(tr!("dns-button-delete")).small())
-                                    .on_hover_text(tr!("dns-button-delete-tooltip"))
-                                    .clicked()
-                                {
-                                    ui.data_mut(|d| {
-                                        d.insert_temp(
-                                            egui::Id::new("dns_delete_domain"),
-                                            domain.clone(),
-                                        )
-                                    });
-                                }
+                                        if ui
+                                            .add(
+                                                MaterialButton::outlined(tr!(
+                                                    "dns-button-https-check"
+                                                ))
+                                                .small(),
+                                            )
+                                            .on_hover_text(tr!("dns-button-https-check-tooltip"))
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("dns_check_https"),
+                                                    domain.clone(),
+                                                )
+                                            });
+                                        }
+
+                                        if ui
+                                            .add(
+                                                MaterialButton::outlined(tr!("dns-button-delete"))
+                                                    .small(),
+                                            )
+                                            .on_hover_text(tr!("dns-button-delete-tooltip"))
+                                            .clicked()
+                                        {
+                                            ui.data_mut(|d| {
+                                                d.insert_temp(
+                                                    egui::Id::new("dns_delete_domain"),
+                                                    domain.clone(),
+                                                )
+                                            });
+                                        }
+                                    },
+                                );
                             }); // Close ui.horizontal_wrapped
 
                             // Overlay progress on foreground layer
@@ -1003,6 +1101,7 @@ impl DnsTab {
                                         records_valid: false,
                                         missing_records: Vec::new(),
                                         error: Some(format!("Token refresh failed: {} - please re-authenticate via wizard", e)),
+                                        fetched_records: Vec::new(),
                                     },
                                     vec![format!("✗ OAuth token expired and refresh failed - please re-add domain via DNS wizard")]
                                 ));
@@ -1019,6 +1118,7 @@ impl DnsTab {
                                 records_valid: false,
                                 missing_records: Vec::new(),
                                 error: Some(format!("OAuth token expired {} seconds ago - no refresh token available", expired_ago)),
+                                fetched_records: Vec::new(),
                             },
                             vec![format!("✗ OAuth token expired - please re-add domain via DNS wizard to enable auto-refresh")]
                         ));
@@ -1039,6 +1139,7 @@ impl DnsTab {
                             error: Some(
                                 "No OAuth token - please re-add domain via wizard".to_string(),
                             ),
+                            fetched_records: Vec::new(),
                         },
                         vec!["✗ No OAuth token - re-add domain to refresh credentials".to_string()],
                     ));
@@ -1055,6 +1156,7 @@ impl DnsTab {
                             records_valid: false,
                             missing_records: Vec::new(),
                             error: Some("No zone ID - add domain via wizard first".to_string()),
+                            fetched_records: Vec::new(),
                         },
                         vec!["✗ No zone ID - please add domain via DNS wizard".to_string()],
                     ));
@@ -1071,6 +1173,7 @@ impl DnsTab {
                             records_valid: false,
                             missing_records: Vec::new(),
                             error: Some("No VM IP - bind domain to platform first".to_string()),
+                            fetched_records: Vec::new(),
                         },
                         vec!["✗ No VM IP - please bind domain to platform in wizard".to_string()],
                     ));
@@ -1079,14 +1182,36 @@ impl DnsTab {
 
             // Call Cloudflare API to verify DNS records (with retry on 401/403)
             use crate::api::cloudflare::dns::CloudflareClient;
-            let mut client = CloudflareClient::new(token);
+            let mut client = CloudflareClient::new(token.clone());
+
+            // Fetch actual DNS records for display
+            let fetched_records = match client.get_records(&zone_id) {
+                Ok(records) => records
+                    .iter()
+                    .filter(|r| {
+                        let rt = r.record_type.to_uppercase();
+                        rt == "A" || rt == "CNAME" || rt == "SRV"
+                    })
+                    .map(|r| DnsRecordDisplay {
+                        name: r.name.clone(),
+                        record_type: r.record_type.to_uppercase(),
+                        value: r.content.clone(),
+                    })
+                    .collect(),
+                Err(e) => {
+                    dure_warn!("Failed to fetch DNS records for display: {}", e);
+                    Vec::new()
+                }
+            };
 
             let result = client.verify_default_xmpp_records(&zone_id, &domain, &vm_ip);
 
             // Retry once if 401/403 authentication error (token may have expired during call)
             let result = if let Err(ref e) = result {
                 let err_msg = e.to_string();
-                if (err_msg.contains("401") || err_msg.contains("403") || err_msg.contains("authentication failed"))
+                if (err_msg.contains("401")
+                    || err_msg.contains("403")
+                    || err_msg.contains("authentication failed"))
                     && refresh_token.is_some()
                 {
                     dure_warn!("API returned 401/403 - attempting token refresh and retry");
@@ -1128,6 +1253,7 @@ impl DnsTab {
                                 records_valid: true,
                                 missing_records: Vec::new(),
                                 error: None,
+                                fetched_records,
                             },
                             vec![tr!("dns-settings-all-configured").to_string()],
                         ))
@@ -1140,6 +1266,7 @@ impl DnsTab {
                                     "Some records missing or incorrect".to_string()
                                 ],
                                 error: None,
+                                fetched_records: fetched_records.clone(),
                             },
                             vec![
                                 "⚠ DNS records missing or incorrect - click Setup DNS in wizard"
@@ -1150,7 +1277,10 @@ impl DnsTab {
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
-                    let user_msg = if err_msg.contains("401") || err_msg.contains("403") || err_msg.contains("authentication") {
+                    let user_msg = if err_msg.contains("401")
+                        || err_msg.contains("403")
+                        || err_msg.contains("authentication")
+                    {
                         "✗ Authentication failed - please re-add domain via DNS wizard".to_string()
                     } else {
                         format!("✗ Check failed: {}", err_msg)
@@ -1162,6 +1292,7 @@ impl DnsTab {
                             records_valid: false,
                             missing_records: Vec::new(),
                             error: Some(err_msg),
+                            fetched_records,
                         },
                         vec![user_msg],
                     ))
@@ -1301,8 +1432,31 @@ impl DnsTab {
                         let (platform_id, platform_name, vm_name, vm_external_ip) =
                             wizard.get_selected_platform_info();
 
-                        // Add to domain rows if not already present
-                        if !self.domain_rows.iter().any(|r| &r.domain == domain) {
+                        // Check if re-auth mode (domain already exists)
+                        if let Some(existing_row) =
+                            self.domain_rows.iter_mut().find(|r| &r.domain == domain)
+                        {
+                            // Re-auth mode: update tokens in existing row
+                            existing_row.oauth_access_token = access_token.clone();
+                            existing_row.oauth_refresh_token = refresh_token.clone();
+                            existing_row.oauth_token_expiry = *expires_at;
+                            existing_row.oauth_refresh_failed = false; // Clear failure flag
+                            dure_info!("Updated OAuth tokens for existing domain: {}", domain);
+
+                            // Save to config
+                            Self::save_domain_to_config(
+                                &profile.config_file,
+                                provider,
+                                domain,
+                                zone_id,
+                                account_id,
+                                &platform_id,
+                                access_token,
+                                refresh_token,
+                                expires_at,
+                            );
+                        } else {
+                            // New domain: add to domain rows
                             self.domain_rows.push(DnsDomainRow {
                                 provider: provider.clone(),
                                 domain: domain.clone(),
@@ -1316,6 +1470,7 @@ impl DnsTab {
                                 oauth_access_token: access_token.clone(),
                                 oauth_refresh_token: refresh_token.clone(),
                                 oauth_token_expiry: *expires_at,
+                                oauth_refresh_failed: false,
                                 last_ns_check: None,
                                 last_settings_check: None,
                                 last_https_check: None,
@@ -1464,6 +1619,7 @@ impl DnsTab {
                                 self.domain_rows.iter_mut().find(|r| &r.domain == domain)
                             {
                                 row.last_settings_check = Some(check_result.clone());
+                                row.oauth_refresh_failed = false; // Clear flag on success
                                 row.operation_state = row.operation_state.clone().complete();
                                 dure_info!("DNS settings check completed for domain: {}", domain);
                             }
@@ -1484,6 +1640,12 @@ impl DnsTab {
                                     .error
                                     .clone()
                                     .unwrap_or_else(|| "DNS check failed".to_string());
+
+                                // Set oauth_refresh_failed flag if token refresh failed
+                                row.oauth_refresh_failed = error_msg
+                                    .contains("Token refresh failed")
+                                    || error_msg.contains("OAuth token expired and refresh failed");
+
                                 row.operation_state =
                                     row.operation_state.clone().fail(error_msg.clone());
                                 dure_warn!(
@@ -1624,6 +1786,24 @@ impl DnsTab {
                                 ui.label(format!("  • {}", record));
                             }
                         });
+                    }
+
+                    // Show fetched DNS records
+                    if !check_result.fetched_records.is_empty() {
+                        ui.add_space(8.0);
+                        ui.label("Current DNS Records:");
+                        ui.add_space(4.0);
+
+                        egui::ScrollArea::vertical()
+                            .max_height(200.0)
+                            .show(ui, |ui| {
+                                for record in &check_result.fetched_records {
+                                    ui.monospace(format!(
+                                        "{:<30} {:<8} {}",
+                                        record.name, record.record_type, record.value
+                                    ));
+                                }
+                            });
                     }
 
                     // Show error if any
@@ -1914,11 +2094,7 @@ impl DnsTab {
                     let platform_name = format!("Platform {} ({})", idx, project_id);
 
                     // Extract zone name from URL if needed (e.g., "zones/us-west1-a" -> "us-west1-a")
-                    let zone = vm.zone
-                        .split('/')
-                        .last()
-                        .unwrap_or(&vm.zone)
-                        .to_string();
+                    let zone = vm.zone.split('/').last().unwrap_or(&vm.zone).to_string();
 
                     platforms.push(crate::ui_dlg::dns_wizard::PlatformVmInfo {
                         project_id,
@@ -2061,6 +2237,7 @@ impl DnsTab {
                 oauth_access_token: dns_config.oauth_access_token.clone(),
                 oauth_refresh_token: dns_config.oauth_refresh_token.clone(),
                 oauth_token_expiry: dns_config.oauth_token_expiry,
+                oauth_refresh_failed: false,
                 last_ns_check: dns_config.last_ns_check.clone(),
                 last_settings_check: dns_config.last_settings_check.clone(),
                 last_https_check: dns_config.last_https_check.clone(),
@@ -2070,6 +2247,42 @@ impl DnsTab {
         }
 
         dure_debug!("Loaded {} DNS domains from config", self.domain_rows.len());
+
+        // Check token expiry for each domain and set oauth_refresh_failed flag
+        let config_path = profile.config_file.clone();
+        for row in &mut self.domain_rows {
+            if let (Some(expiry), Some(refresh_token)) =
+                (row.oauth_token_expiry, row.oauth_refresh_token.as_ref())
+            {
+                let now = chrono::Utc::now().timestamp() as u64;
+                if now > expiry {
+                    dure_debug!(
+                        "Token expired for domain {} - attempting refresh on load",
+                        row.domain
+                    );
+
+                    // Attempt token refresh
+                    match refresh_oauth_token_standalone(&row.domain, refresh_token, &config_path) {
+                        Ok((new_access, new_expiry, new_refresh)) => {
+                            dure_info!("✓ Token auto-refreshed on load for domain: {}", row.domain);
+                            row.oauth_access_token = Some(new_access);
+                            row.oauth_token_expiry = Some(new_expiry);
+                            row.oauth_refresh_token = Some(new_refresh);
+                            row.oauth_refresh_failed = false;
+                        }
+                        Err(e) => {
+                            dure_warn!(
+                                "Token refresh failed on load for domain {}: {}",
+                                row.domain,
+                                e
+                            );
+                            row.oauth_refresh_failed = true; // Set flag immediately
+                        }
+                    }
+                }
+            }
+        }
+
         self.loaded = true;
     }
 
@@ -2131,7 +2344,8 @@ impl DnsTab {
             let token = match &row.oauth_access_token {
                 Some(t) => t.clone(),
                 None => {
-                    row.operation_state = row.operation_state.clone().fail("No OAuth token available");
+                    row.operation_state =
+                        row.operation_state.clone().fail("No OAuth token available");
                     dure_error!("Cannot rotate secret: No OAuth token for domain {}", domain);
                     return;
                 }
@@ -2203,7 +2417,7 @@ mod tests {
         let result = refresh_oauth_token_standalone(
             "test.domain",
             "", // Empty refresh token
-            &PathBuf::from("/tmp/test.yml")
+            &PathBuf::from("/tmp/test.yml"),
         );
 
         // Should fail with empty refresh token
@@ -2292,6 +2506,7 @@ mod tests {
             oauth_access_token: None,
             oauth_refresh_token: None,
             oauth_token_expiry: None,
+            oauth_refresh_failed: false,
             last_ns_check: None,
             last_settings_check: None,
             last_https_check: None,
@@ -2317,6 +2532,7 @@ mod tests {
             oauth_access_token: Some("token_abc123".to_string()),
             oauth_refresh_token: Some("refresh_xyz789".to_string()),
             oauth_token_expiry: Some(1234567890),
+            oauth_refresh_failed: false,
             last_ns_check: None,
             last_settings_check: None,
             last_https_check: None,
