@@ -341,6 +341,7 @@ impl NsActor {
                 self.send_event(NsEvent::DomainDeleted {
                     provider_name,
                     domain,
+                    focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
                 })
                 .await;
                 Ok(())

@@ -1195,11 +1195,17 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
                         platform_name,
                         whitelisted_ip,
+                        focus_tab,
                     }) => {
                         dure_debug!(
                             "✅ Successfully added {} to firewall whitelist",
                             whitelisted_ip
                         );
+
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
 
                         let firewall_status = format!("✅ Whitelisted ({})", whitelisted_ip);
 
@@ -1255,8 +1261,14 @@ impl PlatformTab {
                         platform_name,
                         rule_name,
                         operation,
+                        focus_tab,
                     }) => {
                         dure_info!("✅ Firewall rule '{}' updated ({})", rule_name, operation);
+
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
 
                         // Force immediate refresh for save operations, debounce for others
                         let force_refresh = self.firewall_save_in_progress
@@ -1316,7 +1328,13 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted {
                         platform_name,
                         vm_name,
+                        focus_tab,
                     }) => {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
+
                         // Log with project_id context for filtering
                         crate::viewmodel::logs::append_log(
                             Some(platform_name.clone()),
@@ -1373,7 +1391,13 @@ impl PlatformTab {
                         platform_name,
                         vm_name,
                         external_ip,
+                        focus_tab,
                     }) => {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
+
                         dure_info!(
                             "✅ VM '{}' created successfully with IP {}",
                             vm_name,
@@ -1399,7 +1423,13 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::VMDeleted {
                         platform_name,
                         vm_name,
+                        focus_tab,
                     }) => {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
+
                         dure_info!("✅ VM {} deleted successfully", vm_name);
 
                         // Update operation state before reload
@@ -1523,7 +1553,13 @@ impl PlatformTab {
                         firewall_status,
                         ssh_status,
                         project_count,
+                        focus_tab,
                     }) => {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            self.drawer_state.active_tab = tab;
+                        }
+
                         dure_info!("✅ Refresh completed for {}", platform_name);
                         dure_info!(
                             "🔍 RefreshCompleted event: firewall_status.whitelisted = {}",

@@ -109,14 +109,17 @@ pub enum PlatformEvent {
         platform_name: String,
         vm_name: String,
         external_ip: String,
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
     VMDeleted {
         platform_name: String,
         vm_name: String,
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
     VMRestarted {
         platform_name: String,
         vm_name: String,
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
     VMRegenerated {
         platform_name: String,
@@ -132,6 +135,7 @@ pub enum PlatformEvent {
     FirewallUpdated {
         platform_name: String,
         whitelisted_ip: String,
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
     FirewallRulesFetched {
         platform_name: String,
@@ -142,6 +146,7 @@ pub enum PlatformEvent {
         platform_name: String,
         rule_name: String,
         operation: String, // "add_ip", "remove_ip", "flush"
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
 
     // Billing Events
@@ -157,6 +162,7 @@ pub enum PlatformEvent {
         firewall_status: FirewallStatus,
         ssh_status: SshStatus,
         project_count: Option<usize>, // Total number of GCP projects accessible
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
 
     // Progress & Errors

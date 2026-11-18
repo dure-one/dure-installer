@@ -439,6 +439,11 @@ impl eframe::App for DureApp {
 
         // Profile dialogs coordination
         self.handle_profile_dialogs(ctx);
+
+        // Auto-refresh for SSH tab log updates (5-second window after operations)
+        if self.tab_ssh.needs_refresh() {
+            ctx.request_repaint();
+        }
     }
 }
 

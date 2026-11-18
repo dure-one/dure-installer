@@ -1095,6 +1095,7 @@ impl NsTab {
                     ViewModelEvent::Ns(NsEvent::DomainDeleted {
                         provider_name,
                         domain,
+                        ..
                     }) => {
                         self.add_progress(format!("✓ Deleted domain: {}", domain));
 

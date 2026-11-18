@@ -585,6 +585,7 @@ impl SshActor {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
                 }).await;
                 Ok(())
             }
@@ -593,6 +594,7 @@ impl SshActor {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
                 Ok(())
             }
@@ -676,7 +678,10 @@ impl SshActor {
         match result {
             Ok(_) => {
                 let _ = self.end_operation_success("add_host", &name, log_id).await;
-                self.send_event(SshEvent::HostAdded { name }).await;
+                self.send_event(SshEvent::HostAdded {
+                    name,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                }).await;
                 Ok(())
             }
             Err(e) => {
@@ -712,7 +717,10 @@ impl SshActor {
         match result {
             Ok(_) => {
                 let _ = self.end_operation_success("delete_host", &name, log_id).await;
-                self.send_event(SshEvent::HostDeleted { name }).await;
+                self.send_event(SshEvent::HostDeleted {
+                    name,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                }).await;
                 Ok(())
             }
             Err(e) => {
@@ -2142,8 +2150,8 @@ impl SshActor {
 
     fn get_event_description(event: &SshEvent) -> String {
         match event {
-            SshEvent::HostAdded { name } => format!("HostAdded({})", name),
-            SshEvent::HostDeleted { name } => format!("HostDeleted({})", name),
+            SshEvent::HostAdded { name, .. } => format!("HostAdded({})", name),
+            SshEvent::HostDeleted { name, .. } => format!("HostDeleted({})", name),
             SshEvent::HostsListed { hosts } => format!("HostsListed({} hosts)", hosts.len()),
             SshEvent::ConnectionTested { name, success, .. } => {
                 format!("ConnectionTested({}, success={})", name, success)
@@ -2396,6 +2404,7 @@ impl SshActor {
                     docker_version: None,
                     dure_running: None,
                     dure_services: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Status),
                 };
             }
         };
@@ -2452,6 +2461,7 @@ impl SshActor {
             docker_version,
             dure_running,
             dure_services,
+            focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Status),
         }
     }
 
@@ -2485,6 +2495,7 @@ impl SshActor {
                     host,
                     connected,
                     error,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
                 Ok(())
             }
@@ -2498,6 +2509,7 @@ impl SshActor {
                     host,
                     connected: false,
                     error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
                 Ok(())
             }
@@ -2545,6 +2557,7 @@ impl SshActor {
                     host: host.clone(),
                     installed,
                     missing_packages: missing,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Host),
                 }).await;
             }
             Err(e) => {
@@ -2553,6 +2566,7 @@ impl SshActor {
                     host: host.clone(),
                     installed: false,
                     missing_packages: vec![],
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Host),
                 }).await;
                 return Err(e);
             }
@@ -2608,6 +2622,7 @@ impl SshActor {
                     host: host.clone(),
                     installed,
                     version,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
                 }).await;
             }
             Err(e) => {
@@ -2616,6 +2631,7 @@ impl SshActor {
                     host: host.clone(),
                     installed: false,
                     version: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
                 }).await;
                 return Err(e);
             }
@@ -2656,6 +2672,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 }).await;
                 return Ok(());
             }
@@ -2670,6 +2687,7 @@ impl SshActor {
                     host,
                     success: true,
                     error: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 }).await;
             }
             Err(e) => {
@@ -2678,6 +2696,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 }).await;
             }
         }
@@ -2702,6 +2721,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
                 return Ok(());
             }
@@ -2714,6 +2734,7 @@ impl SshActor {
                     host,
                     success: true,
                     error: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
             }
             Err(e) => {
@@ -2722,6 +2743,7 @@ impl SshActor {
                     host,
                     success: false,
                     error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
                 }).await;
             }
         }
@@ -2767,6 +2789,7 @@ impl SshActor {
                     running: run,
                     services,
                     containers: cont.clone(),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 }).await;
 
                 (inst, run, cont)
@@ -2779,6 +2802,7 @@ impl SshActor {
                     running: false,
                     services: vec![],
                     containers: vec![],
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
                 }).await;
                 return Err(e);
             }
@@ -3060,8 +3084,9 @@ ARG PORT=8080
 
             // Verify event type
             match event {
-                SshEvent::RefreshCompleted { host, .. } => {
+                SshEvent::RefreshCompleted { host, focus_tab, .. } => {
                     assert_eq!(host, "test-host");
+                    assert_eq!(focus_tab, Some(crate::viewmodel::ssh::DrawerTab::Status));
                 }
                 _ => panic!("Expected RefreshCompleted event"),
             }
@@ -3084,11 +3109,13 @@ ARG PORT=8080
                     host_installed,
                     docker_installed,
                     dure_installed,
+                    focus_tab,
                     ..
                 } => {
                     assert_eq!(host, "localhost");
                     // Fields should be initialized (placeholder values)
                     let _ = (ssh_connected, host_installed, docker_installed, dure_installed);
+                    assert_eq!(focus_tab, Some(crate::viewmodel::ssh::DrawerTab::Status));
                 }
                 _ => panic!("Expected RefreshCompleted event"),
             }

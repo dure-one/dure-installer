@@ -521,6 +521,7 @@ impl PlatformActor {
                     platform_name,
                     vm_name,
                     external_ip,
+                    focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
                 })
                 .await;
                 Ok(())
@@ -600,6 +601,7 @@ impl PlatformActor {
                 self.send_event(PlatformEvent::VMDeleted {
                     platform_name,
                     vm_name,
+                    focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
                 })
                 .await;
 
@@ -665,6 +667,7 @@ impl PlatformActor {
                 self.send_event(PlatformEvent::VMRestarted {
                     platform_name,
                     vm_name,
+                    focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
                 })
                 .await;
 
@@ -782,6 +785,7 @@ impl PlatformActor {
                 self.send_event(PlatformEvent::FirewallUpdated {
                     platform_name,
                     whitelisted_ip: allow_ip,
+                    focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
                 })
                 .await;
             }
@@ -987,6 +991,7 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "add_ip".to_string(),
+            focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
         })
         .await;
 
@@ -1068,6 +1073,7 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "remove_ip".to_string(),
+            focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
         })
         .await;
 
@@ -1139,6 +1145,7 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "flush".to_string(),
+            focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
         })
         .await;
 
@@ -1219,6 +1226,7 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "create".to_string(),
+            focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
         })
         .await;
 
@@ -1267,6 +1275,7 @@ impl PlatformActor {
             platform_name,
             rule_name,
             operation: "delete".to_string(),
+            focus_tab: Some(crate::viewmodel::platform::DrawerTab::Logs),
         })
         .await;
 
@@ -1990,13 +1999,14 @@ impl PlatformActor {
             // End refresh operation
             self.end_operation_success("refresh", &platform_name, log_id).await?;
 
-            // Send RefreshCompleted event
+            // Send RefreshCompleted event - focus Status tab
             self.send_event(PlatformEvent::RefreshCompleted {
                 platform_name: platform_name.clone(),
                 vm_status,
                 firewall_status,
                 ssh_status,
                 project_count,
+                focus_tab: Some(crate::viewmodel::platform::DrawerTab::Status),
             })
             .await;
 

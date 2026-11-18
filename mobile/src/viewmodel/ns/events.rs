@@ -43,6 +43,7 @@ pub enum NsEvent {
     DomainDeleted {
         provider_name: String,
         domain: String,
+        focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
     DomainsListed {
         provider_name: String,

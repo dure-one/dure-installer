@@ -33,9 +33,11 @@ pub enum SshEvent {
     // Host Events
     HostAdded {
         name: String,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
     HostDeleted {
         name: String,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
     HostsListed {
         hosts: Vec<SshHostInfo>,
@@ -249,6 +251,7 @@ pub enum SshEvent {
         docker_version: Option<String>,
         dure_running: Option<bool>,
         dure_services: Option<Vec<String>>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// SSH connection check completed
@@ -256,6 +259,7 @@ pub enum SshEvent {
         host: String,
         connected: bool,
         error: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Host packages check completed
@@ -263,6 +267,7 @@ pub enum SshEvent {
         host: String,
         installed: bool,
         missing_packages: Vec<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Host packages installation completed
@@ -277,6 +282,7 @@ pub enum SshEvent {
         host: String,
         installed: bool,
         version: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Docker installation completed
@@ -284,6 +290,7 @@ pub enum SshEvent {
         host: String,
         success: bool,
         error: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Docker removal completed
@@ -291,6 +298,7 @@ pub enum SshEvent {
         host: String,
         success: bool,
         error: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Dure check completed
@@ -300,6 +308,7 @@ pub enum SshEvent {
         running: bool,
         services: Vec<String>,
         containers: Vec<crate::calc::dure_mycart::DureContainer>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Dure installation completed
@@ -307,6 +316,7 @@ pub enum SshEvent {
         host: String,
         success: bool,
         error: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Dure removal completed
@@ -314,6 +324,7 @@ pub enum SshEvent {
         host: String,
         success: bool,
         error: Option<String>,
+        focus_tab: Option<crate::viewmodel::ssh::drawer_types::DrawerTab>,
     },
 
     /// Operation failed with error details

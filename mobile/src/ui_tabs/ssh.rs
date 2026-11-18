@@ -5,6 +5,7 @@ use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{MaterialButton, dialog};
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 use crate::config::{AppConfig, SshHostConfig};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
@@ -405,6 +406,10 @@ pub struct SshTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     remove_dure_delete_data: bool,
+
+    /// Automatic refresh deadline for log updates after operations
+    #[cfg_attr(feature = "serde", serde(skip))]
+    refresh_until: Option<Instant>,
 }
 
 impl Default for SshTab {
@@ -436,6 +441,7 @@ impl Default for SshTab {
             show_remove_dure_dialog: false,
             remove_dure_host: String::new(),
             remove_dure_delete_data: false,
+            refresh_until: None,
         }
     }
 }
@@ -548,6 +554,20 @@ impl SshTab {
         false
     }
 
+    /// Returns true if automatic refresh window is active (for log updates)
+    pub fn needs_refresh(&mut self) -> bool {
+        if let Some(deadline) = self.refresh_until {
+            if Instant::now() < deadline {
+                true // Still within 5-second refresh window
+            } else {
+                self.refresh_until = None; // Clear expired deadline
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     /// Save SSH check cache results to config
     #[cfg(not(target_arch = "wasm32"))]
     fn save_ssh_cache(
@@ -653,13 +673,16 @@ impl SshTab {
         use crate::viewmodel::ViewModelEvent;
 
         match event {
-            ViewModelEvent::Ssh(SshEvent::HostAdded { name }) => {
+            ViewModelEvent::Ssh(SshEvent::HostAdded { name, focus_tab }) => {
                 dure_info!("SSH host {} added", name);
+                // Note: focus_tab will be used when drawer opens for new host
+                let _ = focus_tab; // Silence unused warning for now
                 self.loaded = false; // Trigger reload
             }
 
-            ViewModelEvent::Ssh(SshEvent::HostDeleted { name }) => {
+            ViewModelEvent::Ssh(SshEvent::HostDeleted { name, focus_tab }) => {
                 dure_info!("SSH host {} deleted", name);
+                let _ = focus_tab; // Not used - no drawer to focus after deletion
 
                 // Remove from config
                 #[cfg(not(target_arch = "wasm32"))]
@@ -688,11 +711,17 @@ impl SshTab {
                 docker_version,
                 dure_running,
                 dure_services,
+                focus_tab,
             }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                         let now = chrono::Utc::now().timestamp();
+
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            row.drawer_state.active_tab = tab;
+                        }
 
                         row.ssh_connected = ssh_connected;
                         row.host_installed = host_installed;
@@ -761,10 +790,15 @@ impl SshTab {
                 dure_info!("Refresh completed for host {}", host);
             }
 
-            ViewModelEvent::Ssh(SshEvent::SshCheckCompleted { host, connected, error }) => {
+            ViewModelEvent::Ssh(SshEvent::SshCheckCompleted { host, connected, error, focus_tab }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            row.drawer_state.active_tab = tab;
+                        }
+
                         row.ssh_connected = connected;
                         row.last_ssh_check = Some(SshCheckResult {
                             connected,
@@ -822,10 +856,18 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::HostCheckCompleted { host, installed, missing_packages }) => {
+            ViewModelEvent::Ssh(SshEvent::HostCheckCompleted { host, installed, missing_packages, focus_tab }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            row.drawer_state.active_tab = tab;
+                        }
+
+                        // Trigger 5-second refresh for log updates
+                        self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                         row.host_installed = installed;
                         row.last_host_check = Some(HostCheckResult {
                             installed,
@@ -890,10 +932,18 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DockerCheckCompleted { host, installed, version }) => {
+            ViewModelEvent::Ssh(SshEvent::DockerCheckCompleted { host, installed, version, focus_tab }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            row.drawer_state.active_tab = tab;
+                        }
+
+                        // Trigger 5-second refresh for log updates
+                        self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                         row.docker_installed = installed;
                         row.last_docker_check = Some(DockerCheckResult {
                             installed,
@@ -935,8 +985,16 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DockerInstallCompleted { host, success, error }) => {
+            ViewModelEvent::Ssh(SshEvent::DockerInstallCompleted { host, success, error, focus_tab }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    // Auto-focus drawer tab if specified
+                    if let Some(tab) = focus_tab {
+                        row.drawer_state.active_tab = tab;
+                    }
+
+                    // Trigger 5-second refresh for log updates
+                    self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                     row.docker_installed = success;
                     row.operation_state = if success {
                         OperationState::Completed {
@@ -958,8 +1016,13 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DockerRemoveCompleted { host, success, error }) => {
+            ViewModelEvent::Ssh(SshEvent::DockerRemoveCompleted { host, success, error, focus_tab }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    // Auto-focus drawer tab if specified
+                    if let Some(tab) = focus_tab {
+                        row.drawer_state.active_tab = tab;
+                    }
+
                     row.docker_installed = !success;
                     row.operation_state = if success {
                         OperationState::Completed {
@@ -981,10 +1044,18 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services, containers }) => {
+            ViewModelEvent::Ssh(SshEvent::DureCheckCompleted { host, installed, running, services, containers, focus_tab }) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let cache_data = {
                     if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                        // Auto-focus drawer tab if specified
+                        if let Some(tab) = focus_tab {
+                            row.drawer_state.active_tab = tab;
+                        }
+
+                        // Trigger 5-second refresh for log updates
+                        self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                         row.dure_installed = installed;
                         row.last_dure_check = Some(DureCheckResult {
                             installed,
@@ -1032,8 +1103,16 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureInstallCompleted { host, success, error }) => {
+            ViewModelEvent::Ssh(SshEvent::DureInstallCompleted { host, success, error, focus_tab }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    // Auto-focus drawer tab if specified
+                    if let Some(tab) = focus_tab {
+                        row.drawer_state.active_tab = tab;
+                    }
+
+                    // Trigger 5-second refresh for log updates
+                    self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                     row.dure_installed = success;
                     row.operation_state = if success {
                         OperationState::Completed {
@@ -1055,8 +1134,16 @@ impl SshTab {
                 }
             }
 
-            ViewModelEvent::Ssh(SshEvent::DureRemoveCompleted { host, success, error }) => {
+            ViewModelEvent::Ssh(SshEvent::DureRemoveCompleted { host, success, error, focus_tab }) => {
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    // Auto-focus drawer tab if specified
+                    if let Some(tab) = focus_tab {
+                        row.drawer_state.active_tab = tab;
+                    }
+
+                    // Trigger 5-second refresh for log updates
+                    self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+
                     row.dure_installed = !success;
                     row.operation_state = if success {
                         OperationState::Completed {
