@@ -229,7 +229,9 @@ pub enum SshCommand {
     /// Install Dure with environment configuration
     InstallDure {
         host: String,
+        version: String,
         env_config: HashMap<String, String>,
+        image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
     /// Remove Dure

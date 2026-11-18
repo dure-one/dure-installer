@@ -1111,13 +1111,17 @@ impl ViewModel {
     pub fn install_dure(
         &self,
         host: String,
+        version: String,
         env_config: std::collections::HashMap<String, String>,
+        image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::InstallDure {
                 host,
+                version,
                 env_config,
+                image_tag,
                 profile_kdbx,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))

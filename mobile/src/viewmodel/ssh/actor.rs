@@ -662,10 +662,12 @@ impl SshActor {
             }
             SshCommand::InstallDure {
                 host,
+                version,
                 env_config,
+                image_tag,
                 profile_kdbx,
             } => {
-                self.handle_install_dure(host, env_config, profile_kdbx)
+                self.handle_install_dure(host, version, env_config, image_tag, profile_kdbx)
                     .await
             }
             SshCommand::RemoveDure {
@@ -2991,7 +2993,9 @@ impl SshActor {
     async fn handle_install_dure(
         &mut self,
         host: String,
+        version: String,
         env_config: std::collections::HashMap<String, String>,
+        image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         let log_id = self
@@ -3001,7 +3005,7 @@ impl SshActor {
         self.log_to_tab(
             &host,
             crate::viewmodel::logs::LogLevel::Info,
-            "Installing Dure mycart...",
+            &format!("Installing Dure {} with {} image...", version, image_tag),
         );
 
         let host_config = match self.load_host_config(&host) {
@@ -3021,20 +3025,21 @@ impl SshActor {
             }
         };
 
-        let domain = env_config
-            .get("DOMAIN")
-            .cloned()
-            .unwrap_or_else(|| "example.com".to_string());
-
-        match crate::calc::dure_mycart::install_dure_mycart(
+        match crate::calc::dure_mycart::install_dure_with_config(
             &host_config,
-            &domain,
+            &version,
             &env_config,
+            &image_tag,
             profile_kdbx.as_ref(),
         )
         .await
         {
-            Ok(_progress) => {
+            Ok(progress) => {
+                // Log progress messages to tab
+                for msg in progress {
+                    self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, &msg);
+                }
+
                 let _ = self
                     .end_operation_success("install_dure", &host, log_id)
                     .await;

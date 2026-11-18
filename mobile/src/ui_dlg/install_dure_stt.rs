@@ -52,10 +52,7 @@ pub struct InstallDureState {
     #[serde(skip)]
     pub download_env_promise: Option<Promise<Result<String, String>>>,
 
-    // Step 3: Installation
-    #[serde(skip)]
-    pub install_promise: Option<Promise<Result<Vec<String>, String>>>,
-
+    // Step 3: Installation (via ViewModel, no promise needed)
     #[serde(skip)]
     pub progress_log: Vec<String>, // Installation progress messages
 
@@ -65,6 +62,9 @@ pub struct InstallDureState {
 
     // Dialog control
     pub should_close: bool,
+
+    // Pending action (deferred to avoid closure borrow issues)
+    pub pending_install: bool,
 }
 
 impl InstallDureState {
@@ -82,11 +82,11 @@ impl InstallDureState {
             active_tab: 0,
             image_tag: "latest".to_string(),
             download_env_promise: None,
-            install_promise: None,
             progress_log: Vec::new(),
             install_success: false,
             error_message: None,
             should_close: false,
+            pending_install: false,
         }
     }
 
@@ -183,67 +183,6 @@ impl InstallDureState {
     /// Sync form fields back to editor text (generate .env)
     pub fn sync_form_to_editor(&mut self) {
         self.env_editor_text = crate::calc::env_parser::generate_env_file(&self.env_fields);
-    }
-
-    /// Start installation process
-    pub fn start_install(
-        &mut self,
-        host_config: crate::config::SshHostConfig,
-        profile_keyring: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
-    ) {
-        if self.install_promise.is_some() {
-            return;
-        }
-
-        // Convert env_fields to HashMap
-        let env_config: std::collections::HashMap<String, String> = self
-            .env_fields
-            .iter()
-            .map(|f| (f.key.clone(), f.value.clone()))
-            .collect();
-
-        let version = self.available_versions[self.selected_version.unwrap()].clone();
-        let image_tag = self.image_tag.clone();
-
-        let promise = Promise::spawn_thread("install_dure", move || {
-            smol::block_on(async move {
-                match crate::calc::dure_mycart::install_dure_with_config(
-                    &host_config,
-                    &version,
-                    &env_config,
-                    &image_tag,
-                    profile_keyring.as_ref(),
-                )
-                .await
-                {
-                    Ok(logs) => Ok(logs),
-                    Err(e) => Err(format!("Installation failed: {}", e)),
-                }
-            })
-        });
-
-        self.step = InstallStep::Installing;
-        self.install_promise = Some(promise);
-    }
-
-    /// Poll install promise and update state
-    pub fn poll_install(&mut self) {
-        if let Some(promise) = &self.install_promise {
-            if let Some(result) = promise.ready() {
-                match result {
-                    Ok(logs) => {
-                        self.progress_log = logs.clone();
-                        self.install_success = true;
-                        self.step = InstallStep::Complete;
-                    }
-                    Err(e) => {
-                        self.error_message = Some(e.clone());
-                        self.step = InstallStep::Error(e.clone());
-                    }
-                }
-                self.install_promise = None;
-            }
-        }
     }
 
     /// Reset wizard to initial state

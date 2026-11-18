@@ -1388,7 +1388,7 @@ impl SshTab {
 
         // Install Dure wizard dialog
         if let Some(dialog) = &mut self.install_dure_dialog {
-            dialog.show(ui.ctx());
+            dialog.show(ui.ctx(), vm.as_deref_mut());
             if dialog.should_close() {
                 self.install_dure_dialog = None;
             }
@@ -1630,7 +1630,15 @@ impl SshTab {
                 row.operation_state = OperationState::start("Install Dure");
             }
             if let Some(ref vm) = vm {
-                let _ = vm.install_dure(host, env_config, (*current_profile_kdbx).clone());
+                // Legacy code path - use defaults for version and image_tag
+                // TODO: Remove this once old dialog is fully replaced by wizard
+                let _ = vm.install_dure(
+                    host,
+                    "main".to_string(),  // Default version
+                    env_config,
+                    "latest".to_string(),  // Default image tag
+                    (*current_profile_kdbx).clone(),
+                );
             }
         }
 

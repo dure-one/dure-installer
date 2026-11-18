@@ -3,7 +3,7 @@
 //! Multi-step wizard for installing dure-mycart to remote hosts
 
 use super::install_dure_stt::*;
-use crate::{dure_debug, dure_info};
+use crate::{dure_debug, dure_error, dure_info};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{dialog, select, MaterialButton, MaterialInput, SelectVariant};
@@ -37,11 +37,47 @@ impl InstallDure {
         self.state.should_close
     }
 
-    pub fn show(&mut self, ctx: &egui::Context) {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         // Poll promises
         self.state.poll_fetch_tags();
         self.state.poll_download_env();
-        self.state.poll_install();
+
+        // Listen for install completion event from ViewModel
+        if matches!(self.state.step, InstallStep::Installing) {
+            if let Some(ref mut vm_ref) = vm {
+                let events = vm_ref.poll_events(ctx);
+                for event in events {
+                    if let crate::viewmodel::ViewModelEvent::Ssh(ssh_event) = event {
+                        if let crate::viewmodel::ssh::SshEvent::DureInstallCompleted {
+                            host,
+                            success,
+                            error,
+                            ..
+                        } = ssh_event
+                        {
+                            if host == self.state.host {
+                                if success {
+                                    self.state.step = InstallStep::Complete;
+                                    self.state
+                                        .progress_log
+                                        .push("✓ Installation completed successfully".to_string());
+                                    dure_info!("Install Dure completed for {}", host);
+                                } else {
+                                    let err_msg = error
+                                        .unwrap_or_else(|| "Installation failed".to_string());
+                                    self.state.step = InstallStep::Error(err_msg.clone());
+                                    dure_error!("Install Dure failed for {}: {}", host, err_msg);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         let title = format!("Install Dure - {}", self.state.host);
         let mut open = !self.state.should_close;
@@ -68,6 +104,51 @@ impl InstallDure {
             .show(ctx);
 
         self.state.should_close = !open;
+
+        // Handle deferred install action (after dialog to avoid closure borrow issues)
+        if self.state.pending_install {
+            self.state.pending_install = false;
+
+            if let Some(ref mut vm_ref) = vm {
+                let env_config: std::collections::HashMap<String, String> = self
+                    .state
+                    .env_fields
+                    .iter()
+                    .map(|f| (f.key.clone(), f.value.clone()))
+                    .collect();
+
+                let version = self.state.available_versions[self.state.selected_version.unwrap()]
+                    .clone();
+                let image_tag = self.state.image_tag.clone();
+
+                match vm_ref.install_dure(
+                    self.state.host.clone(),
+                    version,
+                    env_config,
+                    image_tag,
+                    self.profile_keyring.clone(),
+                ) {
+                    Ok(_) => {
+                        self.state.step = InstallStep::Installing;
+                        self.state
+                            .progress_log
+                            .push("Installation started...".to_string());
+                        dure_info!("Install Dure command sent to ViewModel");
+                    }
+                    Err(e) => {
+                        self.state.step = InstallStep::Error(format!(
+                            "Failed to start installation: {}",
+                            e
+                        ));
+                        dure_error!("Failed to send install command: {}", e);
+                    }
+                }
+            } else {
+                self.state.step =
+                    InstallStep::Error("ViewModel not available - cannot install".to_string());
+                dure_error!("ViewModel not available for install");
+            }
+        }
     }
 
     fn render_header(&mut self, ui: &mut egui::Ui) {
@@ -273,27 +354,8 @@ impl InstallDure {
                             self.state.sync_form_to_editor();
                         }
 
-                        // Create host config from host string
-                        let host_config = crate::config::SshHostConfig {
-                            host: self.state.host.clone(),
-                            password: None,
-                            private_key_path: None,
-                            keyring_domain: None,
-                            port: 22,
-                            initialized: false,
-                            last_status: None,
-                            platform_name: None,
-                            docker_containers: Vec::new(),
-                            ansible_roles: Vec::new(),
-                            dure_wss_config: None,
-                            last_ssh_check: None,
-                            last_host_check: None,
-                            last_docker_check: None,
-                            last_dure_check: None,
-                        };
-
-                        self.state
-                            .start_install(host_config, self.profile_keyring.clone());
+                        // Set flag to trigger install after dialog (avoids closure borrow issues)
+                        self.state.pending_install = true;
                     }
                 }
             });
