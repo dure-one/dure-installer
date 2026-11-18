@@ -109,41 +109,90 @@ pub async fn install_dure_with_config(
 
         // Check/create /srv directory (root user, no sudo needed)
         let check_srv = "test -d /srv && echo exists || (mkdir -p /srv && echo created)";
-        let srv_result = ssh::execute_command(host_config, check_srv, profile_keyring)
-            .await
-            .context("Failed to check/create /srv directory")?;
-        progress.push(format!("Directory /srv: {}", srv_result.trim()));
+        dure_debug!("SSH command: {}", check_srv);
+
+        let srv_result = ssh::execute_command(host_config, check_srv, profile_keyring).await;
+        dure_debug!("SSH result: {:?}", srv_result);
+
+        match srv_result {
+            Ok(output) => {
+                progress.push(format!("✓ /srv directory: {}", output.trim()));
+                dure_info!("/srv check: {}", output.trim());
+            }
+            Err(e) => {
+                let err_msg = format!(
+                    "✗ Failed to check/create /srv: {}\nCommand: {}",
+                    e, check_srv
+                );
+                progress.push(err_msg.clone());
+                dure_error!("{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        }
 
         // Check git
         let check_git = "which git > /dev/null && git --version || echo 'Git not installed'";
-        let git_result = ssh::execute_command(host_config, check_git, profile_keyring)
-            .await
-            .context("Failed to check git")?;
+        dure_debug!("SSH command: {}", check_git);
 
-        if git_result.contains("not installed") {
-            return Err(anyhow::anyhow!(
-                "Git is not installed on remote host. Install with: apt install git"
-            ));
+        let git_result = ssh::execute_command(host_config, check_git, profile_keyring).await;
+        dure_debug!("SSH result: {:?}", git_result);
+
+        match git_result {
+            Ok(output) => {
+                if output.contains("not installed") {
+                    let err_msg =
+                        "✗ Git is not installed on remote host. Install with: apt install git"
+                            .to_string();
+                    progress.push(err_msg.clone());
+                    dure_error!("{}", err_msg);
+                    return Err(anyhow::anyhow!(err_msg));
+                }
+                progress.push(format!("✓ Git: {}", output.trim()));
+                dure_info!("Git check: {}", output.trim());
+            }
+            Err(e) => {
+                let err_msg = format!("✗ Failed to check git: {}\nCommand: {}", e, check_git);
+                progress.push(err_msg.clone());
+                dure_error!("{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
         }
-        progress.push(format!("Git: {}", git_result.trim()));
 
         // Test GitHub connectivity
         let test_github =
             "timeout 5 git ls-remote https://github.com/dure-one/dure-mycart.git HEAD 2>&1 || echo 'timeout'";
-        let github_result = ssh::execute_command(host_config, test_github, profile_keyring)
-            .await
-            .context("Failed to test GitHub connection")?;
+        dure_debug!("SSH command: {}", test_github);
 
-        if github_result.contains("timeout")
-            || github_result.contains("fatal")
-            || github_result.contains("Connection failed")
-        {
-            return Err(anyhow::anyhow!(
-                "Cannot reach GitHub from remote host: {}",
-                github_result.trim()
-            ));
+        let github_result = ssh::execute_command(host_config, test_github, profile_keyring).await;
+        dure_debug!("SSH result: {:?}", github_result);
+
+        match github_result {
+            Ok(output) => {
+                if output.contains("timeout")
+                    || output.contains("fatal")
+                    || output.contains("Connection failed")
+                {
+                    let err_msg = format!(
+                        "✗ Cannot reach GitHub from remote host: {}",
+                        output.trim()
+                    );
+                    progress.push(err_msg.clone());
+                    dure_error!("{}", err_msg);
+                    return Err(anyhow::anyhow!(err_msg));
+                }
+                progress.push("✓ GitHub connectivity verified".to_string());
+                dure_info!("GitHub connectivity: OK");
+            }
+            Err(e) => {
+                let err_msg = format!(
+                    "✗ Failed to test GitHub connection: {}\nCommand: {}",
+                    e, test_github
+                );
+                progress.push(err_msg.clone());
+                dure_error!("{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
         }
-        progress.push("GitHub connectivity verified".to_string());
 
         progress.push(format!("Cloning dure-mycart {}...", version));
 
@@ -159,20 +208,21 @@ pub async fn install_dure_with_config(
             )
         };
 
+        dure_debug!("SSH command: {}", clone_cmd);
         let clone_result = ssh::execute_command(host_config, &clone_cmd, profile_keyring).await;
+        dure_debug!("SSH result: {:?}", clone_result);
 
         match clone_result {
             Ok(output) => {
-                progress.push("Repository cloned successfully".to_string());
+                progress.push("✓ Repository cloned successfully".to_string());
+                dure_info!("Clone successful");
                 if !output.trim().is_empty() {
                     progress.push(output);
                 }
             }
             Err(e) => {
-                let error_msg = format!(
-                    "Failed to clone repository: {}. Command was: {}",
-                    e, clone_cmd
-                );
+                let error_msg = format!("✗ Failed to clone repository: {}\nCommand: {}", e, clone_cmd);
+                progress.push(error_msg.clone());
                 dure_error!("{}", error_msg);
                 return Err(anyhow::anyhow!(error_msg));
             }

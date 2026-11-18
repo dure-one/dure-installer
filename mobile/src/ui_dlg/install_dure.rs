@@ -172,7 +172,7 @@ impl InstallDure {
         ui.separator();
 
         egui::ScrollArea::vertical()
-            .max_height(ui.available_height() - 100.0)
+            .max_height(600.0)
             .show(ui, |ui| {
                 if self.state.active_tab == 0 {
                     self.render_form_tab(ui);
