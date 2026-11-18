@@ -71,19 +71,10 @@ impl InstallDure {
                         ..
                     } = ssh_event
                     {
-                        dure_debug!(
-                            "Received DureInstallCompleted for {}: success={}, error={:?}, progress_lines={}",
+                        dure_info!(
+                            "[UiDlg::Ins] Dialog received DureInstallCompleted: host={}, success={}, current_step={:?}",
                             host,
                             success,
-                            error,
-                            progress.len()
-                        );
-
-                        // Debug logging to diagnose state transition issues
-                        dure_debug!(
-                            "Event host='{}' vs state host='{}', current step={:?}",
-                            host,
-                            self.state.host,
                             self.state.step
                         );
 
@@ -91,14 +82,16 @@ impl InstallDure {
                         let host_matches = host == self.state.host;
                         let is_installing = matches!(self.state.step, InstallStep::Installing);
 
-                        dure_debug!(
-                            "Host matches: {}, Is installing: {}",
+                        dure_info!(
+                            "[UiDlg::Ins] Match check: host_matches={} ('{}' vs '{}'), is_installing={}",
                             host_matches,
+                            host,
+                            self.state.host,
                             is_installing
                         );
 
                         if host_matches && is_installing {
-                            dure_debug!("Processing DureInstallCompleted event - transitioning state");
+                            dure_info!("[UiDlg::Ins] Processing event - transitioning state");
 
                             // Update progress log with actual installation progress
                             self.state.progress_log = progress;
@@ -108,7 +101,7 @@ impl InstallDure {
                                 self.state
                                     .progress_log
                                     .push("✓ Installation completed successfully".to_string());
-                                dure_info!("Install Dure completed for {} - transitioned to Complete", host);
+                                dure_info!("[UiDlg::Ins] Transitioned to Complete state");
                                 ctx.request_repaint();
                             } else {
                                 let err_msg = error
@@ -117,12 +110,12 @@ impl InstallDure {
                                 self.state
                                     .progress_log
                                     .push(format!("✗ Error: {}", err_msg));
-                                dure_error!("Install Dure failed for {}: {}", host, err_msg);
+                                dure_error!("[UiDlg::Ins] Transitioned to Error state: {}", err_msg);
                                 ctx.request_repaint();
                             }
                         } else {
-                            dure_debug!(
-                                "Skipping event: host_matches={}, is_installing={}",
+                            dure_info!(
+                                "[UiDlg::Ins] Skipping event - host_matches={}, is_installing={}",
                                 host_matches,
                                 is_installing
                             );
@@ -136,23 +129,20 @@ impl InstallDure {
         let mut open = !self.state.should_close;
 
         dialog("install_dure_dialog", &title, &mut open)
+            .scrollable(true)
             .content(|ui, _| {
-                ui.set_width(ui.available_width().min(900.0));
-                ui.vertical(|ui| {
-                    self.render_header(ui);
-                    ui.add_space(16.0);
+                self.render_header(ui);
+                ui.add_space(16.0);
 
-                    match self.state.step.clone() {
-                        InstallStep::VersionSelect => self.render_version_select(ui),
-                        InstallStep::ConfigEdit => self.render_config_edit(ui),
-                        InstallStep::Installing => self.render_installing(ui),
-                        InstallStep::Complete => self.render_complete(ui),
-                        InstallStep::Error(e) => self.render_error(ui, &e),
-                    }
-
-                    ui.add_space(16.0);
-                    self.render_buttons(ui);
-                });
+                match self.state.step.clone() {
+                    InstallStep::VersionSelect => self.render_version_select(ui),
+                    InstallStep::ConfigEdit => self.render_config_edit(ui),
+                    InstallStep::Installing => self.render_installing(ui),
+                    InstallStep::Complete => self.render_complete(ui),
+                    InstallStep::Error(e) => self.render_error(ui, &e),
+                }
+                ui.add_space(16.0);
+                self.render_buttons(ui);
             })
             .show(ctx);
 
