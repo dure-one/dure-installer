@@ -91,20 +91,37 @@ pub async fn install_dure_with_config(
         .await
         .unwrap_or_else(|_| "missing".to_string());
 
+    let mut need_clone = false;
+
     if dir_result.trim() == "exists" {
         progress.push(format!("Updating existing installation to {}...", version));
 
-        // Checkout version
-        let git_checkout = format!(
-            "cd /srv/dure-mycart && git fetch && git checkout {}",
+        // Try git update with reset to handle dirty state
+        let update_cmd = format!(
+            "cd /srv/dure-mycart && git fetch && git checkout {} && git reset --hard",
             version
         );
-        ssh::execute_command(host_config, &git_checkout, profile_keyring)
-            .await
-            .context("Failed to checkout version")?;
 
-        progress.push(format!("Checked out version: {}", version));
-    } else {
+        match ssh::execute_command(host_config, &update_cmd, profile_keyring).await {
+            Ok(_) => {
+                progress.push(format!("✓ Updated to {}", version));
+                dure_info!("Git update successful");
+            }
+            Err(e) => {
+                progress.push(format!("Git update failed: {}, removing directory...", e));
+                dure_debug!("Git update failed, removing corrupt directory");
+
+                // Remove corrupt directory
+                ssh::execute_command(host_config, "rm -rf /srv/dure-mycart", profile_keyring)
+                    .await
+                    .context("Failed to remove corrupt directory")?;
+
+                need_clone = true;
+            }
+        }
+    }
+
+    if dir_result.trim() != "exists" || need_clone {
         progress.push("Checking prerequisites...".to_string());
 
         // Check/create /srv directory (root user, no sudo needed)
