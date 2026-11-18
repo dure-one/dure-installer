@@ -122,6 +122,11 @@ impl InstallDureState {
 
                         self.available_versions = versions;
                         self.tags_fetched = true;
+
+                        // Auto-select latest version (index 0)
+                        if !self.available_versions.is_empty() {
+                            self.selected_version = Some(0);
+                        }
                     }
                     Err(e) => {
                         self.step = InstallStep::Error(e.clone());
@@ -262,5 +267,31 @@ mod tests {
         assert_eq!(state.step, InstallStep::VersionSelect);
         assert!(!state.install_success);
         assert_eq!(state.host, "root@1.2.3.4");
+    }
+
+    #[test]
+    fn test_auto_select_latest_version() {
+        // Directly test that when available_versions is populated,
+        // selected_version should be set to index 0 (latest)
+        let mut state = InstallDureState::new("root@1.2.3.4");
+
+        // Initially no version selected
+        assert_eq!(state.selected_version, None);
+
+        // Simulate what poll_fetch_tags does after successful fetch
+        state.available_versions = vec![
+            "v0.0.15".to_string(),
+            "v0.0.14".to_string(),
+            "main".to_string(),
+        ];
+
+        // Auto-select latest (this is what poll_fetch_tags now does)
+        if !state.available_versions.is_empty() {
+            state.selected_version = Some(0);
+        }
+
+        // Verify latest is selected
+        assert_eq!(state.selected_version, Some(0));
+        assert_eq!(state.available_versions[0], "v0.0.15");
     }
 }

@@ -79,10 +79,27 @@ impl InstallDure {
                             progress.len()
                         );
 
+                        // Debug logging to diagnose state transition issues
+                        dure_debug!(
+                            "Event host='{}' vs state host='{}', current step={:?}",
+                            host,
+                            self.state.host,
+                            self.state.step
+                        );
+
                         // Only process if we're the target host and currently installing
-                        if host == self.state.host
-                            && matches!(self.state.step, InstallStep::Installing)
-                        {
+                        let host_matches = host == self.state.host;
+                        let is_installing = matches!(self.state.step, InstallStep::Installing);
+
+                        dure_debug!(
+                            "Host matches: {}, Is installing: {}",
+                            host_matches,
+                            is_installing
+                        );
+
+                        if host_matches && is_installing {
+                            dure_debug!("Processing DureInstallCompleted event - transitioning state");
+
                             // Update progress log with actual installation progress
                             self.state.progress_log = progress;
 
@@ -91,7 +108,7 @@ impl InstallDure {
                                 self.state
                                     .progress_log
                                     .push("✓ Installation completed successfully".to_string());
-                                dure_info!("Install Dure completed for {}", host);
+                                dure_info!("Install Dure completed for {} - transitioned to Complete", host);
                                 ctx.request_repaint();
                             } else {
                                 let err_msg = error
@@ -103,6 +120,12 @@ impl InstallDure {
                                 dure_error!("Install Dure failed for {}: {}", host, err_msg);
                                 ctx.request_repaint();
                             }
+                        } else {
+                            dure_debug!(
+                                "Skipping event: host_matches={}, is_installing={}",
+                                host_matches,
+                                is_installing
+                            );
                         }
                     }
                 }
@@ -363,6 +386,13 @@ impl InstallDure {
                 // Close button (always available)
                 if ui.add(MaterialButton::text(tr!("close"))).clicked() {
                     self.state.should_close = true;
+                }
+
+                // Done button (prominent in Complete state)
+                if matches!(self.state.step, InstallStep::Complete) {
+                    if ui.add(MaterialButton::filled(tr!("done"))).clicked() {
+                        self.state.should_close = true;
+                    }
                 }
 
                 // Reset button
