@@ -443,6 +443,10 @@ pub struct SshTab {
     /// Automatic refresh deadline for log updates after operations
     #[cfg_attr(feature = "serde", serde(skip))]
     refresh_until: Option<Instant>,
+
+    /// Install Dure wizard dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    install_dure_dialog: Option<crate::ui_dlg::install_dure::InstallDure>,
 }
 
 impl Default for SshTab {
@@ -475,6 +479,7 @@ impl Default for SshTab {
             remove_dure_host: String::new(),
             remove_dure_delete_data: false,
             refresh_until: None,
+            install_dure_dialog: None,
         }
     }
 }
@@ -1381,6 +1386,14 @@ impl SshTab {
         // Install Dure dialog
         self.render_install_dure_dialog(ui, profile);
 
+        // Install Dure wizard dialog
+        if let Some(dialog) = &mut self.install_dure_dialog {
+            dialog.show(ui.ctx());
+            if dialog.should_close() {
+                self.install_dure_dialog = None;
+            }
+        }
+
         // Remove Dure dialog
         self.render_remove_dure_dialog(ui, profile);
     }
@@ -1585,22 +1598,12 @@ impl SshTab {
                     }
                 }
                 SshAction::InstallDure(host) => {
-                    // Open install dialog
-                    self.install_dure_host = host.clone();
-
-                    // Find domain from platform config as default
-                    if let Some(ref profile) = profile {
-                        self.install_dure_domain =
-                            Self::find_domain_for_host(&host, &profile.config_file).unwrap_or_else(
-                                || {
-                                    dure_debug!("No domain found for host {}, leaving empty", host);
-                                    String::new()
-                                },
-                            );
-                    }
-
-                    self.show_install_dure_dialog = true;
-                    dure_info!("Opening install Dure dialog for {}", host);
+                    // Open new wizard dialog
+                    self.install_dure_dialog = Some(
+                        crate::ui_dlg::install_dure::InstallDure::new(host.clone())
+                            .with_keyring((*current_profile_kdbx).clone()),
+                    );
+                    dure_info!("Opening install Dure wizard for {}", host);
                 }
                 SshAction::RemoveDure(host) => {
                     // Open remove dialog

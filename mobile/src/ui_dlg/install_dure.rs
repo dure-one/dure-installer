@@ -53,12 +53,12 @@ impl InstallDure {
                     self.render_header(ui);
                     ui.add_space(16.0);
 
-                    match &self.state.step {
+                    match self.state.step.clone() {
                         InstallStep::VersionSelect => self.render_version_select(ui),
                         InstallStep::ConfigEdit => self.render_config_edit(ui),
                         InstallStep::Installing => self.render_installing(ui),
                         InstallStep::Complete => self.render_complete(ui),
-                        InstallStep::Error(e) => self.render_error(ui, e),
+                        InstallStep::Error(e) => self.render_error(ui, &e),
                     }
 
                     ui.add_space(16.0);
@@ -74,11 +74,12 @@ impl InstallDure {
         ui.horizontal(|ui| {
             ui.label("Version:");
 
-            let selected_text = if let Some(idx) = self.state.selected_version {
-                self.state.available_versions.get(idx).map(String::as_str)
-            } else {
-                None
-            };
+            let selected_text = self
+                .state
+                .selected_version
+                .and_then(|idx| self.state.available_versions.get(idx))
+                .map(|s| s.as_str())
+                .unwrap_or("Select version");
 
             let options: Vec<&str> = self
                 .state
@@ -88,14 +89,17 @@ impl InstallDure {
                 .collect();
 
             if !options.is_empty() {
-                select(
-                    ui,
-                    "##version_select",
-                    &mut self.state.selected_version,
-                    &options,
-                )
-                .variant(SelectVariant::Filled)
-                .width(150.0);
+                egui::ComboBox::from_id_source("version_select")
+                    .selected_text(selected_text)
+                    .show_ui(ui, |ui| {
+                        for (idx, option) in options.iter().enumerate() {
+                            ui.selectable_value(
+                                &mut self.state.selected_version,
+                                Some(idx),
+                                *option,
+                            );
+                        }
+                    });
 
                 if ui
                     .add(MaterialButton::filled(tr!("ssh-button-start")).small())
@@ -131,7 +135,7 @@ impl InstallDure {
         let tab_labels = ["Input Form", "Code Editor"];
 
         ui.horizontal(|ui| {
-            for (idx, label) in tab_labels.iter().enumerate() {
+            for (idx, &label) in tab_labels.iter().enumerate() {
                 let is_selected = self.state.active_tab == idx;
                 let button = if is_selected {
                     MaterialButton::filled(label)
@@ -158,13 +162,13 @@ impl InstallDure {
                     .position(|&s| s == self.state.image_tag.as_str())
                     .unwrap_or(0);
 
-                if select(ui, "##image_tag", &mut Some(selected_idx), &image_options)
-                    .variant(SelectVariant::Outlined)
-                    .width(100.0)
-                    .changed()
-                {
-                    self.state.image_tag = image_options[selected_idx].to_string();
-                }
+                egui::ComboBox::from_id_source("image_tag_select")
+                    .selected_text(self.state.image_tag.as_str())
+                    .show_ui(ui, |ui| {
+                        for &tag in &image_options {
+                            ui.selectable_value(&mut self.state.image_tag, tag.to_string(), tag);
+                        }
+                    });
             });
         });
 
@@ -190,10 +194,9 @@ impl InstallDure {
                 }
             });
 
-            ui.add(
-                MaterialInput::outlined(&mut field.value)
-                    .width(ui.available_width() - 20.0)
-                    .placeholder(&field.key),
+            ui.add_sized(
+                [ui.available_width() - 20.0, 40.0],
+                MaterialInput::outlined(&mut field.value).placeholder(&field.key),
             );
             ui.add_space(8.0);
         }
@@ -280,18 +283,26 @@ impl InstallDure {
                         }
 
                         // Create host config from host string
-                        if let Some((user, host_ip)) = self.state.host.split_once('@') {
-                            let host_config = crate::config::SshHostConfig {
-                                host: self.state.host.clone(),
-                                port: 22,
-                                username: user.to_string(),
-                                private_key: None,
-                                password: None,
-                            };
+                        let host_config = crate::config::SshHostConfig {
+                            host: self.state.host.clone(),
+                            password: None,
+                            private_key_path: None,
+                            keyring_domain: None,
+                            port: 22,
+                            initialized: false,
+                            last_status: None,
+                            platform_name: None,
+                            docker_containers: Vec::new(),
+                            ansible_roles: Vec::new(),
+                            dure_wss_config: None,
+                            last_ssh_check: None,
+                            last_host_check: None,
+                            last_docker_check: None,
+                            last_dure_check: None,
+                        };
 
-                            self.state
-                                .start_install(host_config, self.profile_keyring.clone());
-                        }
+                        self.state
+                            .start_install(host_config, self.profile_keyring.clone());
                     }
                 }
             });
