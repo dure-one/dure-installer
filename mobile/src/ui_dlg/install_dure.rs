@@ -42,43 +42,66 @@ impl InstallDure {
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
+        dure_debug!(
+            "show() called: step={:?}, vm={}",
+            self.state.step,
+            if vm.is_some() { "Some" } else { "None" }
+        );
+
         // Poll promises
         self.state.poll_fetch_tags();
         self.state.poll_download_env();
 
-        // Listen for install completion event from ViewModel
-        if matches!(self.state.step, InstallStep::Installing) {
-            if let Some(ref mut vm_ref) = vm {
-                let events = vm_ref.poll_events(ctx);
-                dure_debug!("Polling events for install, got {} events", events.len());
-                for event in events {
-                    if let crate::viewmodel::ViewModelEvent::Ssh(ssh_event) = event {
-                        if let crate::viewmodel::ssh::SshEvent::DureInstallCompleted {
+        // Always poll events (not just when Installing) to avoid missing completion event
+        if let Some(ref mut vm_ref) = vm {
+            let events = vm_ref.poll_events(ctx);
+            dure_debug!(
+                "Polling events: got {} events, current step={:?}",
+                events.len(),
+                self.state.step
+            );
+
+            for event in events {
+                if let crate::viewmodel::ViewModelEvent::Ssh(ssh_event) = event {
+                    if let crate::viewmodel::ssh::SshEvent::DureInstallCompleted {
+                        host,
+                        success,
+                        error,
+                        progress,
+                        ..
+                    } = ssh_event
+                    {
+                        dure_debug!(
+                            "Received DureInstallCompleted for {}: success={}, error={:?}, progress_lines={}",
                             host,
                             success,
                             error,
-                            progress,
-                            ..
-                        } = ssh_event
-                        {
-                            dure_debug!("Received DureInstallCompleted for {}: success={}, error={:?}, progress_lines={}", host, success, error, progress.len());
-                            if host == self.state.host {
-                                // Update progress log with actual installation progress
-                                self.state.progress_log = progress;
+                            progress.len()
+                        );
 
-                                if success {
-                                    self.state.step = InstallStep::Complete;
-                                    self.state
-                                        .progress_log
-                                        .push("✓ Installation completed successfully".to_string());
-                                    dure_info!("Install Dure completed for {}", host);
-                                } else {
-                                    let err_msg = error
-                                        .unwrap_or_else(|| "Installation failed".to_string());
-                                    self.state.step = InstallStep::Error(err_msg.clone());
-                                    self.state.progress_log.push(format!("✗ Error: {}", err_msg));
-                                    dure_error!("Install Dure failed for {}: {}", host, err_msg);
-                                }
+                        // Only process if we're the target host and currently installing
+                        if host == self.state.host
+                            && matches!(self.state.step, InstallStep::Installing)
+                        {
+                            // Update progress log with actual installation progress
+                            self.state.progress_log = progress;
+
+                            if success {
+                                self.state.step = InstallStep::Complete;
+                                self.state
+                                    .progress_log
+                                    .push("✓ Installation completed successfully".to_string());
+                                dure_info!("Install Dure completed for {}", host);
+                                ctx.request_repaint();
+                            } else {
+                                let err_msg = error
+                                    .unwrap_or_else(|| "Installation failed".to_string());
+                                self.state.step = InstallStep::Error(err_msg.clone());
+                                self.state
+                                    .progress_log
+                                    .push(format!("✗ Error: {}", err_msg));
+                                dure_error!("Install Dure failed for {}: {}", host, err_msg);
+                                ctx.request_repaint();
                             }
                         }
                     }
