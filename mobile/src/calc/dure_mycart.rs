@@ -105,6 +105,46 @@ pub async fn install_dure_with_config(
 
         progress.push(format!("Checked out version: {}", version));
     } else {
+        progress.push("Checking prerequisites...".to_string());
+
+        // Check/create /srv directory (root user, no sudo needed)
+        let check_srv = "test -d /srv && echo exists || (mkdir -p /srv && echo created)";
+        let srv_result = ssh::execute_command(host_config, check_srv, profile_keyring)
+            .await
+            .context("Failed to check/create /srv directory")?;
+        progress.push(format!("Directory /srv: {}", srv_result.trim()));
+
+        // Check git
+        let check_git = "which git > /dev/null && git --version || echo 'Git not installed'";
+        let git_result = ssh::execute_command(host_config, check_git, profile_keyring)
+            .await
+            .context("Failed to check git")?;
+
+        if git_result.contains("not installed") {
+            return Err(anyhow::anyhow!(
+                "Git is not installed on remote host. Install with: apt install git"
+            ));
+        }
+        progress.push(format!("Git: {}", git_result.trim()));
+
+        // Test GitHub connectivity
+        let test_github =
+            "timeout 5 git ls-remote https://github.com/dure-one/dure-mycart.git HEAD 2>&1 || echo 'timeout'";
+        let github_result = ssh::execute_command(host_config, test_github, profile_keyring)
+            .await
+            .context("Failed to test GitHub connection")?;
+
+        if github_result.contains("timeout")
+            || github_result.contains("fatal")
+            || github_result.contains("Connection failed")
+        {
+            return Err(anyhow::anyhow!(
+                "Cannot reach GitHub from remote host: {}",
+                github_result.trim()
+            ));
+        }
+        progress.push("GitHub connectivity verified".to_string());
+
         progress.push(format!("Cloning dure-mycart {}...", version));
 
         let clone_cmd = if version == "main" || version == "test" {
@@ -119,11 +159,24 @@ pub async fn install_dure_with_config(
             )
         };
 
-        ssh::execute_command(host_config, &clone_cmd, profile_keyring)
-            .await
-            .context("Failed to clone repository")?;
+        let clone_result = ssh::execute_command(host_config, &clone_cmd, profile_keyring).await;
 
-        progress.push("Repository cloned successfully".to_string());
+        match clone_result {
+            Ok(output) => {
+                progress.push("Repository cloned successfully".to_string());
+                if !output.trim().is_empty() {
+                    progress.push(output);
+                }
+            }
+            Err(e) => {
+                let error_msg = format!(
+                    "Failed to clone repository: {}. Command was: {}",
+                    e, clone_cmd
+                );
+                dure_error!("{}", error_msg);
+                return Err(anyhow::anyhow!(error_msg));
+            }
+        }
     }
 
     // Write .env file

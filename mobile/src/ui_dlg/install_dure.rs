@@ -48,7 +48,7 @@ impl InstallDure {
 
         dialog("install_dure_dialog", &title, &mut open)
             .content(|ui, _| {
-                ui.set_width(900.0);
+                ui.set_width(ui.available_width().min(900.0));
                 ui.vertical(|ui| {
                     self.render_header(ui);
                     ui.add_space(16.0);
@@ -101,10 +101,7 @@ impl InstallDure {
                         }
                     });
 
-                if ui
-                    .add(MaterialButton::filled(tr!("ssh-button-start")).small())
-                    .clicked()
-                {
+                if ui.add(MaterialButton::filled("Download").small()).clicked() {
                     if self.state.selected_version.is_some() {
                         self.state.start_download_env();
                     }
@@ -175,7 +172,7 @@ impl InstallDure {
         ui.separator();
 
         egui::ScrollArea::vertical()
-            .max_height(450.0)
+            .max_height(ui.available_height() - 100.0)
             .show(ui, |ui| {
                 if self.state.active_tab == 0 {
                     self.render_form_tab(ui);
@@ -187,17 +184,11 @@ impl InstallDure {
 
     fn render_form_tab(&mut self, ui: &mut egui::Ui) {
         for field in &mut self.state.env_fields {
-            ui.horizontal(|ui| {
-                ui.label(&field.key);
-                if let Some(comment) = &field.comment {
-                    ui.label(egui::RichText::new(comment).weak());
-                }
-            });
-
-            ui.add_sized(
-                [ui.available_width() - 20.0, 40.0],
-                MaterialInput::outlined(&mut field.value).placeholder(&field.key),
-            );
+            let mut input = MaterialInput::outlined(&mut field.value).label(&field.key);
+            if let Some(comment) = &field.comment {
+                input = input.helper_text(comment);
+            }
+            ui.add(input);
             ui.add_space(8.0);
         }
 
