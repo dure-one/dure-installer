@@ -1913,11 +1913,19 @@ impl DnsTab {
 
                     let platform_name = format!("Platform {} ({})", idx, project_id);
 
+                    // Extract zone name from URL if needed (e.g., "zones/us-west1-a" -> "us-west1-a")
+                    let zone = vm.zone
+                        .split('/')
+                        .last()
+                        .unwrap_or(&vm.zone)
+                        .to_string();
+
                     platforms.push(crate::ui_dlg::dns_wizard::PlatformVmInfo {
                         project_id,
                         platform_name,
                         vm_name: vm.name.clone(),
                         vm_external_ip: vm.external_ip.clone().unwrap_or_default(),
+                        zone,
                     });
                 }
             }

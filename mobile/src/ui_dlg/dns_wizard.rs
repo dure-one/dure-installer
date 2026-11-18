@@ -138,6 +138,7 @@ pub struct PlatformVmInfo {
     pub platform_name: String,
     pub vm_name: String,
     pub vm_external_ip: String,
+    pub zone: String,
 }
 
 impl DnsWizard {
@@ -749,6 +750,7 @@ impl DnsWizard {
                                     .rounding(4.0);
 
                                 let response = frame.show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
                                     ui.horizontal(|ui| {
                                         ui.add_space(4.0);
                                         ui.label("☁");
@@ -761,8 +763,9 @@ impl DnsWizard {
                                             );
                                             ui.label(
                                                 egui::RichText::new(format!(
-                                                    "VM: {} | IP: {}",
-                                                    platform.vm_name,
+                                                    "{}, {}, {}",
+                                                    platform.project_id,
+                                                    platform.zone,
                                                     platform.vm_external_ip
                                                 ))
                                                 .size(12.0)
@@ -1338,7 +1341,7 @@ mod tests {
 
     #[test]
     fn test_get_selected_platform_info_with_valid_selection() {
-        let mut wizard = DnsWizard::new();
+        let mut wizard = DnsWizard::new("test-profile".to_string());
 
         // Add test platforms
         wizard.available_platforms = vec![
@@ -1347,12 +1350,14 @@ mod tests {
                 platform_name: "Test Platform".to_string(),
                 vm_name: "test-vm".to_string(),
                 vm_external_ip: "1.2.3.4".to_string(),
+                zone: "us-west1-a".to_string(),
             },
             PlatformVmInfo {
                 project_id: "project-456".to_string(),
                 platform_name: "Other Platform".to_string(),
                 vm_name: "other-vm".to_string(),
                 vm_external_ip: "5.6.7.8".to_string(),
+                zone: "us-central1-b".to_string(),
             },
         ];
 
@@ -1369,7 +1374,7 @@ mod tests {
 
     #[test]
     fn test_get_selected_platform_info_no_selection() {
-        let wizard = DnsWizard::new();
+        let wizard = DnsWizard::new("test-profile".to_string());
 
         let (platform_id, platform_name, vm_name, vm_ip) = wizard.get_selected_platform_info();
 
@@ -1381,13 +1386,14 @@ mod tests {
 
     #[test]
     fn test_get_selected_platform_info_invalid_selection() {
-        let mut wizard = DnsWizard::new();
+        let mut wizard = DnsWizard::new("test-profile".to_string());
 
         wizard.available_platforms = vec![PlatformVmInfo {
             project_id: "project-123".to_string(),
             platform_name: "Test Platform".to_string(),
             vm_name: "test-vm".to_string(),
             vm_external_ip: "1.2.3.4".to_string(),
+            zone: "us-west1-a".to_string(),
         }];
 
         // Select a non-existent platform

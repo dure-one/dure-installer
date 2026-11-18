@@ -358,7 +358,7 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     bind_vm_platform: String,
     #[cfg_attr(feature = "serde", serde(skip))]
-    bind_vm_list: Vec<(String, String, String)>, // (vm_name, zone, external_ip)
+    bind_vm_list: Vec<(String, String, String, String)>, // (project_id, vm_name, zone, external_ip)
     #[cfg_attr(feature = "serde", serde(skip))]
     bind_vm_selected: Option<usize>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -1457,7 +1457,10 @@ impl PlatformTab {
                         if self.show_bind_vm_dialog && self.bind_vm_platform == platform_name {
                             self.bind_vm_list = vms
                                 .into_iter()
-                                .map(|vm| (vm.name, vm.zone, vm.external_ip.unwrap_or_default()))
+                                .map(|vm| {
+                                    let zone_name = crate::api::gcp::compute::extract_zone_name(&vm.zone);
+                                    (vm.project_id, vm.name, zone_name, vm.external_ip.unwrap_or_default())
+                                })
                                 .collect();
                             self.bind_vm_loading = false;
                         }
@@ -5036,14 +5039,14 @@ impl PlatformTab {
                 ui.add_space(8.0);
 
                 use egui_material3::{ListItem, MaterialList};
-                let mut vm_list = MaterialList::new().id("vm_binding_list");
+                let mut vm_list = MaterialList::new().id("vm_binding_list").fill_width(true);
 
-                for (idx, (vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
+                for (idx, (project_id, vm_name, zone, external_ip)) in bind_vm_list.iter().enumerate() {
                     let is_selected = bind_vm_selected == Some(idx);
                     let secondary = if !external_ip.is_empty() {
-                        format!("{} • {}", zone, external_ip)
+                        format!("{}, {}, {}", project_id, zone, external_ip)
                     } else {
-                        zone.clone()
+                        format!("{}, {}", project_id, zone)
                     };
 
                     let item = ListItem::new(vm_name)
@@ -5378,7 +5381,7 @@ impl PlatformTab {
                         let list_id = egui::Id::new("firewall_rules_list");
                         let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
 
-                        let mut list = MaterialList::new().id(list_id).allow_drawer(true);
+                        let mut list = MaterialList::new().id(list_id).allow_drawer(true).fill_width(true);
 
                         for (idx, rule) in firewall_rule_list.iter().enumerate() {
                             let is_selected = firewall_selected == Some(idx);

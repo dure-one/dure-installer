@@ -1051,6 +1051,29 @@ impl GcpRestClient {
     }
 }
 
+/// Extract zone name from GCP zone URL or return as-is if already short form
+///
+/// # Examples
+/// ```
+/// assert_eq!(
+///     extract_zone_name("https://www.googleapis.com/compute/v1/projects/dure-432719/zones/us-west1-a"),
+///     "us-west1-a"
+/// );
+/// assert_eq!(extract_zone_name("us-west1-a"), "us-west1-a");
+/// ```
+pub fn extract_zone_name(zone: &str) -> String {
+    if zone.contains("/zones/") {
+        // Extract zone name from GCP URL format
+        zone.split("/zones/")
+            .last()
+            .unwrap_or(zone)
+            .to_string()
+    } else {
+        // Already in short form, return as-is
+        zone.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1250,5 +1273,26 @@ mod tests {
         fn _check_signature(client: &GcpRestClient) {
             let _: Result<Vec<Image>> = client.list_debian_ubuntu_images();
         }
+    }
+
+    #[test]
+    fn test_extract_zone_name() {
+        // Test full GCP zone URL format
+        assert_eq!(
+            extract_zone_name("https://www.googleapis.com/compute/v1/projects/dure-432719/zones/us-west1-a"),
+            "us-west1-a"
+        );
+
+        // Test another zone
+        assert_eq!(
+            extract_zone_name("https://www.googleapis.com/compute/v1/projects/my-project/zones/europe-west1-b"),
+            "europe-west1-b"
+        );
+
+        // Test already short form (should return as-is)
+        assert_eq!(extract_zone_name("us-west1-a"), "us-west1-a");
+
+        // Test edge case: empty string
+        assert_eq!(extract_zone_name(""), "");
     }
 }

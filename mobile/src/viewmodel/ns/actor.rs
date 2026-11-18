@@ -324,29 +324,32 @@ impl NsActor {
     }
 
     async fn delete_domain(&mut self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.send_progress("delete_domain", 0.5, "Deleting domain...")
-            .await;
+        let log_id = self.start_operation("delete_domain", &domain, true).await.unwrap_or(None);
+        self.log_to_tab(&domain, crate::viewmodel::logs::LogLevel::Info, "Deleting domain...");
 
-        // Delete domain from config (config-only operation)
-        runtime::unblock({
+        let result = runtime::unblock({
             move || -> anyhow::Result<()> {
                 // Note: Config management handled by UI layer
-                // This confirms the operation for event-driven UI updates
                 Ok(())
             }
         })
-        .await?;
-
-        self.send_progress("delete_domain", 1.0, "Domain deleted")
-            .await;
-
-        self.send_event(NsEvent::DomainDeleted {
-            provider_name,
-            domain,
-        })
         .await;
 
-        Ok(())
+        match result {
+            Ok(_) => {
+                let _ = self.end_operation_success("delete_domain", &domain, log_id).await;
+                self.send_event(NsEvent::DomainDeleted {
+                    provider_name,
+                    domain,
+                })
+                .await;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.end_operation_failed("delete_domain", &domain, log_id, &e).await;
+                Err(e)
+            }
+        }
     }
 
     async fn list_domains(&mut self, _provider_name: String) -> anyhow::Result<()> {

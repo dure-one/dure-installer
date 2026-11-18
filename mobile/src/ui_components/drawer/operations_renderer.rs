@@ -1,7 +1,14 @@
 use crate::storage::models::opslog::{OperationLog, OperationStatus};
-use eframe::egui::{self, Color32, RichText, ScrollArea, Ui};
-use egui_extras::{Column, TableBuilder};
+use eframe::egui::{self, Color32, Id, Ui};
 use egui_i18n::tr;
+
+#[cfg(feature = "gui")]
+use egui_material3::{data_table, datatable::CompactMode, DataTableTheme};
+
+/// Check if error message contains multiple lines
+fn has_multiline_error(error: &Option<String>) -> bool {
+    error.as_ref().map(|e| e.contains('\n')).unwrap_or(false)
+}
 
 /// Renders operation history from the operation log database
 pub struct OperationsRenderer {
@@ -22,93 +29,81 @@ impl OperationsRenderer {
     }
 
     /// Display the operation history in a data table
+    #[cfg(feature = "gui")]
     pub fn show(&self, ui: &mut Ui, operations: &[OperationLog]) {
         if operations.is_empty() {
-            // ui.heading("Operation History");
-            // ui.separator();
             ui.label(tr!("ops-no-operations"));
             return;
         }
-
-        ScrollArea::vertical()
-            .max_height(self.max_height)
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 self.render_operations_table(ui, operations);
             });
     }
 
-    /// Render operations table with 6 columns
+    /// Headless fallback when GUI feature is disabled
+    #[cfg(not(feature = "gui"))]
+    pub fn show(&self, _ui: &mut Ui, _operations: &[OperationLog]) {
+        // No-op in headless mode
+    }
+
+    /// Render operations table filling available space
+    #[cfg(feature = "gui")]
     fn render_operations_table(&self, ui: &mut Ui, operations: &[OperationLog]) {
-        TableBuilder::new(ui)
-            .striped(true)
-            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(Column::auto().at_least(130.0)) // Date
-            .column(Column::auto().at_least(120.0)) // Operation
-            .column(Column::auto().at_least(80.0))  // System
-            .column(Column::auto().at_least(80.0))  // Status
-            .column(Column::auto().at_least(60.0))  // Duration
-            .column(Column::remainder())             // Error
-            .header(20.0, |mut header| {
-                header.col(|ui| { ui.heading(tr!("ops-col-date")); });
-                header.col(|ui| { ui.heading(tr!("ops-col-operation")); });
-                header.col(|ui| { ui.heading(tr!("ops-col-system")); });
-                header.col(|ui| { ui.heading(tr!("ops-col-status")); });
-                header.col(|ui| { ui.heading(tr!("ops-col-duration")); });
-                header.col(|ui| { ui.heading(tr!("ops-col-error")); });
-            })
-            .body(|mut body| {
-                for op in operations {
-                    body.row(30.0, |mut row| {
-                        // Date
-                        row.col(|ui| {
-                            let dt = chrono::DateTime::from_timestamp(op.started_at, 0)
-                                .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
-                                .unwrap_or_else(|| "???????? ??:??".to_string());
-                            ui.label(dt);
-                        });
+        let mut theme = DataTableTheme::default();
+        theme.header_font_size = Some(12.0);
+        theme.heading_row_height = Some(40.0);
 
-                        // Operation
-                        row.col(|ui| {
-                            ui.label(&op.operation_type);
-                        });
+        let w = ui.available_width() / 7.0; // ponytail: fixed ratios, scales with drawer width
 
-                        // System
-                        row.col(|ui| {
-                            ui.label(&op.external_system);
-                        });
+        let mut table = data_table()
+            .id(Id::new("operations_data_table"))
+            .theme(theme)
+            .compact_mode(CompactMode::ForceNarrow) // Force narrow despite wide width
+            .default_row_height(30.0)
+            .column(tr!("ops-col-date"), w * 1.3, false)
+            .column(tr!("ops-col-operation"), w * 1.2, false)
+            .column(tr!("ops-col-system"), w * 0.8, false)
+            .column(tr!("ops-col-status"), w, false)
+            .column(tr!("ops-col-duration"), w * 0.7, true)
+            .column(tr!("ops-col-error"), w * 2.0, false);
 
-                        // Status with color
-                        row.col(|ui| {
-                            let (text, color) = match op.status.as_str() {
-                                "running" => ("⏳ Running", Color32::from_rgb(100, 181, 246)), // Info blue
-                                "success" => ("✓ Success", Color32::from_rgb(76, 175, 80)), // Success green
-                                "failed" => ("✗ Failed", egui_material3::theme::get_global_color("error")),
-                                _ => (&op.status[..], egui_material3::theme::get_global_color("onSurfaceVariant")),
-                            };
-                            ui.colored_label(color, text);
-                        });
+        for op in operations {
+            let date = chrono::DateTime::from_timestamp(op.started_at, 0)
+                .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
+                .unwrap_or_else(|| "???????? ??:??".to_string());
 
-                        // Duration
-                        row.col(|ui| {
-                            if let Some(duration_ms) = op.duration_ms() {
-                                let duration_s = duration_ms as f64 / 1000.0;
-                                ui.label(format!("{:.2}s", duration_s));
-                            } else {
-                                ui.label("-");
-                            }
-                        });
+            let (status_text, status_color) = match op.status.as_str() {
+                "running" => (tr!("ops-status-running"), Color32::from_rgb(100, 181, 246)),
+                "success" => (tr!("ops-status-success"), Color32::from_rgb(76, 175, 80)),
+                "failed" => (tr!("ops-status-failed"), egui_material3::theme::get_global_color("error")),
+                _ => (op.status.clone(), egui_material3::theme::get_global_color("onSurfaceVariant")),
+            };
 
-                        // Error
-                        row.col(|ui| {
-                            if let Some(err) = &op.error_message {
-                                ui.label(err);
-                            } else {
-                                ui.label("");
-                            }
-                        });
-                    });
-                }
+            let duration = op.duration_ms()
+                .map(|ms| format!("{:.2}s", ms as f64 / 1000.0))
+                .unwrap_or_else(|| "-".to_string());
+
+            let error_display = op.error_message.clone().unwrap_or_default();
+
+            table = table.row(|row| {
+                row.cell(&date)
+                    .cell(&op.operation_type)
+                    .cell(&op.external_system)
+                    .cell(&status_text)
+                    .cell(&duration)
+                    .cell(&error_display)
             });
+        }
+
+        ui.add(table);
+    }
+
+    /// No-op for headless mode
+    #[cfg(not(feature = "gui"))]
+    fn render_operations_table(&self, _ui: &mut Ui, _operations: &[OperationLog]) {
+        // No-op in headless mode
     }
 }
 
@@ -316,5 +311,57 @@ mod tests {
         assert_eq!(op.completed_at, Some(1500));
         assert!(op.error_message.is_some());
         assert!(op.details.is_some());
+    }
+
+    #[test]
+    fn test_has_multiline_error_with_newline() {
+        use super::has_multiline_error;
+        let error = Some("Line 1\nLine 2\nLine 3".to_string());
+        assert!(has_multiline_error(&error));
+    }
+
+    #[test]
+    fn test_has_multiline_error_single_line() {
+        use super::has_multiline_error;
+        let error = Some("Single line error".to_string());
+        assert!(!has_multiline_error(&error));
+    }
+
+    #[test]
+    fn test_has_multiline_error_none() {
+        use super::has_multiline_error;
+        let error = None;
+        assert!(!has_multiline_error(&error));
+    }
+
+    #[test]
+    fn test_has_multiline_error_empty_string() {
+        use super::has_multiline_error;
+        let error = Some("".to_string());
+        assert!(!has_multiline_error(&error));
+    }
+
+    #[test]
+    fn test_status_text_no_emojis_running() {
+        let status_text = "Running";
+        assert!(!status_text.contains('⏳'));
+        assert!(!status_text.contains('✓'));
+        assert!(!status_text.contains('✗'));
+    }
+
+    #[test]
+    fn test_status_text_no_emojis_success() {
+        let status_text = "Success";
+        assert!(!status_text.contains('⏳'));
+        assert!(!status_text.contains('✓'));
+        assert!(!status_text.contains('✗'));
+    }
+
+    #[test]
+    fn test_status_text_no_emojis_failed() {
+        let status_text = "Failed";
+        assert!(!status_text.contains('⏳'));
+        assert!(!status_text.contains('✓'));
+        assert!(!status_text.contains('✗'));
     }
 }

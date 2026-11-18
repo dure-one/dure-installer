@@ -4,7 +4,7 @@ use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::tabs_primary;
 
-use crate::storage::models::opslog::OperationLog;
+use crate::ui_components::drawer::OperationsRenderer;
 use crate::ui_tabs::platform::PlatformRow;
 use crate::viewmodel::platform::{DrawerTab, DrawerState};
 
@@ -354,94 +354,10 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         return;
     }
 
-    if drawer_state.operations.is_empty() {
-        ui.label(tr!("platform-drawer-ops-empty"));
-        return;
-    }
+    let renderer = OperationsRenderer::new()
+        .max_height(500.0);
 
-    // Scrollable operations table - fixed 500px height (matches Logs tab)
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            render_operations_table(ui, &drawer_state.operations);
-        });
-}
-
-/// Render operations table with simple grid layout (30px rows)
-fn render_operations_table(ui: &mut egui::Ui, operations: &[OperationLog]) {
-    use egui_extras::{Column, TableBuilder};
-
-    TableBuilder::new(ui)
-        .striped(true)
-        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::auto().at_least(130.0)) // Date
-        .column(Column::auto().at_least(120.0)) // Operation
-        .column(Column::auto().at_least(80.0))  // System
-        .column(Column::auto().at_least(80.0))  // Status
-        .column(Column::auto().at_least(60.0))  // Duration
-        .column(Column::remainder())             // Error
-        .header(20.0, |mut header| {
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-date")); });
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-operation")); });
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-system")); });
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-status")); });
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-duration")); });
-            header.col(|ui| { ui.heading(tr!("platform-drawer-ops-col-error")); });
-        })
-        .body(|mut body| {
-            for op in operations {
-                body.row(30.0, |mut row| {
-                    // Date
-                    row.col(|ui| {
-                        let dt = chrono::DateTime::from_timestamp(op.started_at, 0)
-                            .map(|dt| dt.format("%Y%m%d %H:%M").to_string())
-                            .unwrap_or_else(|| "???????? ??:??".to_string());
-                        ui.label(dt);
-                    });
-
-                    // Operation
-                    row.col(|ui| {
-                        ui.label(&op.operation_type);
-                    });
-
-                    // System
-                    row.col(|ui| {
-                        ui.label(&op.external_system);
-                    });
-
-                    // Status with color
-                    row.col(|ui| {
-                        let (text, color) = match op.status.as_str() {
-                            "running" => (tr!("platform-drawer-ops-status-running"), egui::Color32::from_rgb(100, 181, 246)), // Info blue
-                            "success" => (tr!("platform-drawer-ops-status-success"), egui::Color32::from_rgb(76, 175, 80)), // Success green
-                            "failed" => (tr!("platform-drawer-ops-status-failed"), egui_material3::theme::get_global_color("error")),
-                            _ => (op.status.clone(), egui_material3::theme::get_global_color("onSurfaceVariant")),
-                        };
-                        ui.colored_label(color, text);
-                    });
-
-                    // Duration
-                    row.col(|ui| {
-                        if let Some(duration_ms) = op.duration_ms() {
-                            let duration_s = duration_ms as f64 / 1000.0;
-                            ui.label(format!("{:.2}s", duration_s));
-                        } else {
-                            ui.label("-");
-                        }
-                    });
-
-                    // Error
-                    row.col(|ui| {
-                        if let Some(err) = &op.error_message {
-                            ui.label(err);
-                        } else {
-                            ui.label("");
-                        }
-                    });
-                });
-            }
-        });
+    renderer.show(ui, &drawer_state.operations);
 }
 
 #[cfg(test)]
