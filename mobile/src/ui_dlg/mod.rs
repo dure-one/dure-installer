@@ -3,6 +3,8 @@ pub mod about_stt;
 pub mod clipboard_popup;
 pub mod db_debugger;
 pub mod db_debugger_stt;
+pub mod install_dure;
+pub mod install_dure_stt;
 pub mod profile_create;
 pub mod profile_create_stt;
 pub mod profile_delete;

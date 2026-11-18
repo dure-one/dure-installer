@@ -11,6 +11,7 @@ pub mod dns;
 pub mod docker;
 pub mod dure_mycart;
 pub mod dure_wss;
+pub mod env_parser;
 pub mod gcp;
 pub mod hosting_gcp;
 pub mod keyring;

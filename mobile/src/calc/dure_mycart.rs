@@ -75,7 +75,95 @@ pub async fn get_container_logs(
     Ok(logs.lines().map(|s| s.to_string()).collect())
 }
 
-/// Install dure-mycart via git clone and docker compose
+/// Install dure-mycart with specific version and image tag
+pub async fn install_dure_with_config(
+    host_config: &SshHostConfig,
+    version: &str,
+    env_config: &HashMap<String, String>,
+    image_tag: &str,
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+) -> Result<Vec<String>> {
+    let mut progress = Vec::new();
+
+    // Check if already exists
+    let check_dir = "test -d /srv/dure-mycart && echo exists || echo missing";
+    let dir_result = ssh::execute_command(host_config, check_dir, profile_keyring)
+        .await
+        .unwrap_or_else(|_| "missing".to_string());
+
+    if dir_result.trim() == "exists" {
+        progress.push(format!("Updating existing installation to {}...", version));
+
+        // Checkout version
+        let git_checkout = format!(
+            "cd /srv/dure-mycart && git fetch && git checkout {}",
+            version
+        );
+        ssh::execute_command(host_config, &git_checkout, profile_keyring)
+            .await
+            .context("Failed to checkout version")?;
+
+        progress.push(format!("Checked out version: {}", version));
+    } else {
+        progress.push(format!("Cloning dure-mycart {}...", version));
+
+        let clone_cmd = if version == "main" || version == "test" {
+            format!(
+                "cd /srv && git clone --branch {} https://github.com/dure-one/dure-mycart.git",
+                version
+            )
+        } else {
+            format!(
+                "cd /srv && git clone --branch {} --depth 1 https://github.com/dure-one/dure-mycart.git",
+                version
+            )
+        };
+
+        ssh::execute_command(host_config, &clone_cmd, profile_keyring)
+            .await
+            .context("Failed to clone repository")?;
+
+        progress.push("Repository cloned successfully".to_string());
+    }
+
+    // Write .env file
+    progress.push("Writing configuration...".to_string());
+    let env_content: Vec<String> = env_config
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect();
+    let env_text = env_content.join("\n");
+
+    let write_env = format!(
+        "cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n{}\nENVEOF",
+        env_text
+    );
+    ssh::execute_command(host_config, &write_env, profile_keyring)
+        .await
+        .context("Failed to write .env file")?;
+
+    progress.push(".env file created".to_string());
+
+    // Run docker compose with appropriate flags
+    progress.push(format!("Starting services with {} image...", image_tag));
+    let compose_cmd = match image_tag {
+        "latest" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose up -d",
+        "test" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose -f docker-compose.yml -f docker-compose.test.yml up -d",
+        "dev" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d",
+        _ => return Err(anyhow::anyhow!("Invalid image tag: {}", image_tag)),
+    };
+
+    let compose_output = ssh::execute_command(host_config, compose_cmd, profile_keyring)
+        .await
+        .context("Failed to start docker compose")?;
+
+    progress.push("Docker compose started".to_string());
+    progress.push(compose_output);
+
+    Ok(progress)
+}
+
+/// Install dure-mycart via git clone and docker compose (legacy wrapper)
 pub async fn install_dure_mycart(
     host_config: &SshHostConfig,
     domain: &str,
