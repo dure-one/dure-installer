@@ -15,6 +15,7 @@ pub struct SshActor {
     command_rx: Receiver<SshCommand>,
     event_tx: Sender<ViewModelEvent>,
     profile_config_path: Option<std::path::PathBuf>,
+    repository: crate::viewmodel::platform::DrawerRepository,
 }
 
 impl SshActor {
@@ -27,6 +28,7 @@ impl SshActor {
             command_rx,
             event_tx,
             profile_config_path,
+            repository: crate::viewmodel::platform::DrawerRepository::new(),
         }
     }
 
@@ -2954,6 +2956,75 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
     args.sort_by(|a, b| a.0.cmp(&b.0));
 
     (ports, args)
+}
+
+impl SshActor {
+    /// Write log to Logs tab (classified by hostname)
+    fn log_to_tab(&self, hostname: &str, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
+        crate::viewmodel::logs::append_log(Some(hostname.to_string()), level, message.into());
+    }
+
+    /// Start operation with optional history logging
+    /// Returns log_id for CUD operations, None for Read operations
+    async fn start_operation(
+        &mut self,
+        op_name: &str,
+        hostname: &str,
+        is_cud: bool,
+    ) -> anyhow::Result<Option<i64>> {
+        // Always log to Logs tab
+        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Info, format!("▶ Starting {}", op_name));
+
+        // Only log to Operations history if CUD operation
+        if is_cud {
+            let log_id = self.repository.log_operation(
+                hostname,
+                op_name,
+                "ssh",
+                None,
+            ).await?;
+            Ok(Some(log_id))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// End operation successfully
+    async fn end_operation_success(
+        &mut self,
+        op_name: &str,
+        hostname: &str,
+        log_id: Option<i64>,
+    ) -> anyhow::Result<()> {
+        // Always log to Logs tab
+        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Info, format!("✓ {} completed", op_name));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_success(id).await?;
+        }
+        Ok(())
+    }
+
+    /// End operation with error
+    async fn end_operation_failed(
+        &mut self,
+        op_name: &str,
+        hostname: &str,
+        log_id: Option<i64>,
+        error: &anyhow::Error,
+    ) -> anyhow::Result<()> {
+        let error_msg = format!("{:#}", error);
+
+        // Always log to Logs tab
+        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Error, format!("✗ {} failed: {}", op_name, error_msg));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_failed(id, &error_msg).await?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

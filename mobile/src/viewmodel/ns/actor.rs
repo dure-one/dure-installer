@@ -8,6 +8,7 @@ use smol::channel::{Receiver, Sender};
 pub struct NsActor {
     command_rx: Receiver<NsCommand>,
     event_tx: Sender<ViewModelEvent>,
+    repository: crate::viewmodel::platform::DrawerRepository,
 }
 
 impl NsActor {
@@ -15,6 +16,7 @@ impl NsActor {
         Self {
             command_rx,
             event_tx,
+            repository: crate::viewmodel::platform::DrawerRepository::new(),
         }
     }
 
@@ -578,6 +580,73 @@ impl NsActor {
                 error: format!("{:#}", error),
             }))
             .await;
+    }
+
+    /// Write log to Logs tab (classified by domain_name)
+    fn log_to_tab(&self, domain_name: &str, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
+        crate::viewmodel::logs::append_log(Some(domain_name.to_string()), level, message.into());
+    }
+
+    /// Start operation with optional history logging
+    /// Returns log_id for CUD operations, None for Read operations
+    async fn start_operation(
+        &mut self,
+        op_name: &str,
+        domain_name: &str,
+        is_cud: bool,
+    ) -> anyhow::Result<Option<i64>> {
+        // Always log to Logs tab
+        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Info, format!("▶ Starting {}", op_name));
+
+        // Only log to Operations history if CUD operation
+        if is_cud {
+            let log_id = self.repository.log_operation(
+                domain_name,
+                op_name,
+                "dns",
+                None,
+            ).await?;
+            Ok(Some(log_id))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// End operation successfully
+    async fn end_operation_success(
+        &mut self,
+        op_name: &str,
+        domain_name: &str,
+        log_id: Option<i64>,
+    ) -> anyhow::Result<()> {
+        // Always log to Logs tab
+        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Info, format!("✓ {} completed", op_name));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_success(id).await?;
+        }
+        Ok(())
+    }
+
+    /// End operation with error
+    async fn end_operation_failed(
+        &mut self,
+        op_name: &str,
+        domain_name: &str,
+        log_id: Option<i64>,
+        error: &anyhow::Error,
+    ) -> anyhow::Result<()> {
+        let error_msg = format!("{:#}", error);
+
+        // Always log to Logs tab
+        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Error, format!("✗ {} failed: {}", op_name, error_msg));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_failed(id, &error_msg).await?;
+        }
+        Ok(())
     }
 
     /// Helper to get config file path (Desktop)

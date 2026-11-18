@@ -311,6 +311,7 @@ impl PlatformActor {
                 let external_ip = vm.external_ip();
                 VmInfo {
                     name: vm.name,
+                    project_id: project_id.clone(),
                     zone: vm.zone,
                     external_ip,
                     status: vm.status,
@@ -328,6 +329,9 @@ impl PlatformActor {
     }
 
     async fn scan_existing_vms(&mut self, profile_config_path: PathBuf, platform_name: String) -> anyhow::Result<()> {
+        // Start scan_existing_vms operation (CUD operation - binds VMs to config)
+        let log_id = self.start_operation("bind_vm", &platform_name, true).await?;
+
         self.send_progress("scan_existing_vms", 0.1, "Checking authentication...")
             .await;
 
@@ -336,6 +340,7 @@ impl PlatformActor {
 
         self.send_progress("scan_existing_vms", 0.2, "Loading platform config...")
             .await;
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Loading platform configuration...");
 
         // Load platform config from profile-specific path
         let project_id = runtime::unblock({
@@ -359,6 +364,7 @@ impl PlatformActor {
 
         self.send_progress("scan_existing_vms", 0.5, "Scanning VMs from all zones...")
             .await;
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Scanning VMs from all zones...");
 
         // List instances from ALL zones in one API call (fast!)
         let all_instances = runtime::unblock({
@@ -373,6 +379,7 @@ impl PlatformActor {
 
         self.send_progress("scan_existing_vms", 0.7, "Converting VM data...")
             .await;
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Converting VM data...");
 
         // Convert to VmInstance and save to profile-specific config
         let vm_count = runtime::unblock({
@@ -435,6 +442,9 @@ impl PlatformActor {
         self.send_progress("scan_existing_vms", 1.0, &format!("Scanned {} VMs", vm_count))
             .await;
 
+        // End operation successfully
+        self.end_operation_success("bind_vm", &platform_name, log_id).await?;
+
         self.send_event(PlatformEvent::VMsScanned {
             platform_name,
             vm_count,
@@ -451,59 +461,75 @@ impl PlatformActor {
         zone: String,
         machine_type: String,
     ) -> anyhow::Result<()> {
+        // Start create_vm operation (CUD operation, with history)
+        let log_id = self.start_operation("create_vm", &platform_name, true).await?;
+
         self.send_progress("create_vm", 0.0, "Starting VM creation...")
             .await;
 
-        let platform = runtime::unblock({
-            let platform_name = platform_name.clone();
-            move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
-        })
-        .await?;
+        let result: anyhow::Result<String> = async {
+            let platform = runtime::unblock({
+                let platform_name = platform_name.clone();
+                move || Self::load_platform_config(&platform_name).map(|(p, _)| p)
+            })
+            .await?;
 
-        let project_id = platform
-            .gcp_selected_project_id
-            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
-        let access_token = platform
-            .gcp_oauth_access_token
-            .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
+            let project_id = platform
+                .gcp_selected_project_id
+                .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+            let access_token = platform
+                .gcp_oauth_access_token
+                .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        self.send_progress("create_vm", 0.3, "Creating VM instance...")
-            .await;
+            self.send_progress("create_vm", 0.3, "Creating VM instance...")
+                .await;
+            self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, format!("Creating VM '{}' in zone '{}'...", vm_name, zone));
 
-        let external_ip = runtime::unblock({
-            let vm_name_clone = vm_name.clone();
-            move || -> anyhow::Result<String> {
-                let client = GcpRestClient::new(access_token);
+            let external_ip = runtime::unblock({
+                let vm_name_clone = vm_name.clone();
+                move || -> anyhow::Result<String> {
+                    let client = GcpRestClient::new(access_token);
 
-                // Create instance request (debian-11 micro instance)
-                let instance_req = crate::api::gcp::compute::InstanceRequest::debian_micro(
-                    vm_name_clone.clone(),
-                    zone.clone(),
-                );
+                    // Create instance request (debian-11 micro instance)
+                    let instance_req = crate::api::gcp::compute::InstanceRequest::debian_micro(
+                        vm_name_clone.clone(),
+                        zone.clone(),
+                    );
 
-                let operation = client.create_instance(&project_id, &zone, &instance_req)?;
+                    let operation = client.create_instance(&project_id, &zone, &instance_req)?;
 
-                // Wait for operation to complete
-                let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
-                client.wait_for_operation(&project_id, &zone, op_name, 120)?;
+                    // Wait for operation to complete
+                    let op_name = operation.name.split('/').last().unwrap_or(&operation.name);
+                    client.wait_for_operation(&project_id, &zone, op_name, 120)?;
 
-                // Get instance details to fetch external IP
-                let instance = client.get_instance(&project_id, &zone, &vm_name_clone)?;
-                Ok(instance
-                    .external_ip()
-                    .unwrap_or_else(|| "pending".to_string()))
+                    // Get instance details to fetch external IP
+                    let instance = client.get_instance(&project_id, &zone, &vm_name_clone)?;
+                    Ok(instance
+                        .external_ip()
+                        .unwrap_or_else(|| "pending".to_string()))
+                }
+            })
+            .await?;
+
+            Ok(external_ip)
+        }.await;
+
+        match result {
+            Ok(external_ip) => {
+                self.end_operation_success("create_vm", &platform_name, log_id).await?;
+                self.send_event(PlatformEvent::VMCreated {
+                    platform_name,
+                    vm_name,
+                    external_ip,
+                })
+                .await;
+                Ok(())
             }
-        })
-        .await?;
-
-        self.send_event(PlatformEvent::VMCreated {
-            platform_name,
-            vm_name,
-            external_ip,
-        })
-        .await;
-
-        Ok(())
+            Err(e) => {
+                let _ = self.end_operation_failed("create_vm", &platform_name, log_id, &e).await;
+                Err(e)
+            }
+        }
     }
 
     async fn delete_vm(
@@ -515,6 +541,9 @@ impl PlatformActor {
         force: bool,
         release_ip: Option<(String, String)>,
     ) -> anyhow::Result<()> {
+        // Start delete_vm operation (CUD operation, with history)
+        let log_id = self.start_operation("delete_vm", &platform_name, true).await?;
+
         self.send_progress("delete_vm", 0.5, "Deleting VM...").await;
 
         let config = AppConfig::load_or_default(&profile_config_path);
@@ -532,14 +561,7 @@ impl PlatformActor {
             .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        // Log operation start
-        let _delete_type = if force { "force delete" } else { "delete" };
-        let log_id = self.repository.log_operation(
-            &platform_name,
-            "delete_vm",
-            "gcp",
-            Some(format!("Deleting VM '{}' in zone '{}' (force={})", vm_name, zone, force)),
-        ).await?;
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, format!("Deleting VM '{}' in zone '{}' (force={})...", vm_name, zone, force));
 
         let result = runtime::unblock({
             let vm_name_clone = vm_name.clone();
@@ -572,8 +594,8 @@ impl PlatformActor {
 
         match result {
             Ok(_) => {
-                // Mark operation as success
-                self.repository.mark_success(log_id).await?;
+                // End operation successfully
+                self.end_operation_success("delete_vm", &platform_name, log_id).await?;
 
                 self.send_event(PlatformEvent::VMDeleted {
                     platform_name,
@@ -584,8 +606,8 @@ impl PlatformActor {
                 Ok(())
             }
             Err(e) => {
-                // Mark operation as failed
-                let _ = self.repository.mark_failed(log_id, e.to_string()).await;
+                // End operation with error
+                let _ = self.end_operation_failed("delete_vm", &platform_name, log_id, &e).await;
                 Err(e)
             }
         }
@@ -598,6 +620,9 @@ impl PlatformActor {
         vm_name: String,
         zone: String,
     ) -> anyhow::Result<()> {
+        // Start restart_vm operation (CUD operation, with history)
+        let log_id = self.start_operation("restart_vm", &platform_name, true).await?;
+
         self.send_progress("restart_vm", 0.5, "Restarting VM...")
             .await;
 
@@ -616,13 +641,7 @@ impl PlatformActor {
             .gcp_oauth_access_token
             .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
 
-        // Log operation start
-        let log_id = self.repository.log_operation(
-            &platform_name,
-            "restart_vm",
-            "gcp",
-            Some(format!("Restarting VM '{}' in zone '{}'", vm_name, zone)),
-        ).await?;
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, format!("Restarting VM '{}' in zone '{}'...", vm_name, zone));
 
         let result = runtime::unblock({
             let vm_name_clone = vm_name.clone();
@@ -640,8 +659,8 @@ impl PlatformActor {
 
         match result {
             Ok(_) => {
-                // Mark operation as success
-                self.repository.mark_success(log_id).await?;
+                // End operation successfully
+                self.end_operation_success("restart_vm", &platform_name, log_id).await?;
 
                 self.send_event(PlatformEvent::VMRestarted {
                     platform_name,
@@ -652,8 +671,8 @@ impl PlatformActor {
                 Ok(())
             }
             Err(e) => {
-                // Mark operation as failed
-                let _ = self.repository.mark_failed(log_id, e.to_string()).await;
+                // End operation with error
+                let _ = self.end_operation_failed("restart_vm", &platform_name, log_id, &e).await;
                 Err(e)
             }
         }
@@ -717,6 +736,9 @@ impl PlatformActor {
         platform_name: String,
         allow_ip: String,
     ) -> anyhow::Result<()> {
+        // Start update_firewall operation (CUD operation, with history)
+        let log_id = self.start_operation("update_firewall", &platform_name, true).await?;
+
         self.send_progress("update_firewall", 0.3, "Checking authentication...")
             .await;
 
@@ -737,14 +759,7 @@ impl PlatformActor {
             .gcp_selected_project_id
             .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
 
-        // Log operation start
-        let log_id = self.repository.log_operation(
-            project_id.clone(),
-            "update_firewall",
-            "gcp",
-            Some(format!("Adding IP {} to firewall whitelist", allow_ip)),
-        ).await?;
-
+        self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, format!("Adding IP {} to firewall whitelist...", allow_ip));
         dure_info!(project_id = &project_id, "🔥 Starting firewall update for project '{}', IP: {}", project_id, allow_ip);
 
         // Execute firewall update
@@ -762,7 +777,7 @@ impl PlatformActor {
         // Log operation result
         match &result {
             Ok(_) => {
-                self.repository.mark_success(log_id).await?;
+                self.end_operation_success("update_firewall", &platform_name, log_id).await?;
                 dure_info!(project_id = &project_id, "✅ Firewall updated successfully for project '{}'", project_id);
                 self.send_event(PlatformEvent::FirewallUpdated {
                     platform_name,
@@ -771,9 +786,8 @@ impl PlatformActor {
                 .await;
             }
             Err(e) => {
-                let error_msg = format!("{:#}", e);
-                self.repository.mark_failed(log_id, &error_msg).await?;
-                dure_error!("❌ Firewall update failed for project '{}': {}", project_id, error_msg);
+                let _ = self.end_operation_failed("update_firewall", &platform_name, log_id, e).await;
+                dure_error!("❌ Firewall update failed for project '{}': {}", project_id, format!("{:#}", e));
             }
         }
 
@@ -1945,6 +1959,9 @@ impl PlatformActor {
 
         #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
         {
+            // Start refresh operation (Read operation, no history)
+            let log_id = self.start_operation("refresh", &platform_name, false).await?;
+
             // Load platform config from profile-specific path
             let config = AppConfig::load_or_default(&profile_config_path);
             let platform = config
@@ -1955,16 +1972,23 @@ impl PlatformActor {
                 .clone();
 
             // Step 1: Check VM status
+            self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Checking VM status...");
             let vm_status = self.check_vm_status(&platform).await;
 
             // Step 2: Check firewall status
+            self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Checking firewall status...");
             let firewall_status = self.check_firewall_status(&platform).await;
 
             // Step 3: Test SSH connection
+            self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Testing SSH connection...");
             let ssh_status = self.test_ssh_connection(&platform, &profile_config_path, profile_kdbx.as_ref()).await;
 
             // Step 4: Fetch project count and cache to profile-specific config
+            self.log_to_tab(&platform_name, crate::viewmodel::logs::LogLevel::Info, "Fetching project count...");
             let project_count = self.fetch_and_cache_project_count(&profile_config_path, &platform_name, &platform).await;
+
+            // End refresh operation
+            self.end_operation_success("refresh", &platform_name, log_id).await?;
 
             // Send RefreshCompleted event
             self.send_event(PlatformEvent::RefreshCompleted {
@@ -2317,5 +2341,72 @@ impl PlatformActor {
                 error: format!("{:#}", error),
             }))
             .await;
+    }
+
+    /// Write log to Logs tab (classified by platform_name)
+    fn log_to_tab(&self, platform_name: &str, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
+        crate::viewmodel::logs::append_log(Some(platform_name.to_string()), level, message.into());
+    }
+
+    /// Start operation with optional history logging
+    /// Returns log_id for CUD operations, None for Read operations
+    async fn start_operation(
+        &mut self,
+        op_name: &str,
+        platform_name: &str,
+        is_cud: bool,
+    ) -> anyhow::Result<Option<i64>> {
+        // Always log to Logs tab
+        self.log_to_tab(platform_name, crate::viewmodel::logs::LogLevel::Info, format!("▶ Starting {}", op_name));
+
+        // Only log to Operations history if CUD operation
+        if is_cud {
+            let log_id = self.repository.log_operation(
+                platform_name,
+                op_name,
+                "gcp",
+                None,
+            ).await?;
+            Ok(Some(log_id))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// End operation successfully
+    async fn end_operation_success(
+        &mut self,
+        op_name: &str,
+        platform_name: &str,
+        log_id: Option<i64>,
+    ) -> anyhow::Result<()> {
+        // Always log to Logs tab
+        self.log_to_tab(platform_name, crate::viewmodel::logs::LogLevel::Info, format!("✓ {} completed", op_name));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_success(id).await?;
+        }
+        Ok(())
+    }
+
+    /// End operation with error
+    async fn end_operation_failed(
+        &mut self,
+        op_name: &str,
+        platform_name: &str,
+        log_id: Option<i64>,
+        error: &anyhow::Error,
+    ) -> anyhow::Result<()> {
+        let error_msg = format!("{:#}", error);
+
+        // Always log to Logs tab
+        self.log_to_tab(platform_name, crate::viewmodel::logs::LogLevel::Error, format!("✗ {} failed: {}", op_name, error_msg));
+
+        // Mark history if CUD operation
+        if let Some(id) = log_id {
+            self.repository.mark_failed(id, &error_msg).await?;
+        }
+        Ok(())
     }
 }
