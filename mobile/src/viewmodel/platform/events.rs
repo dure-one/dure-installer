@@ -6,6 +6,7 @@ use crate::api::gcp::bigquery::BillingRecord;
 #[derive(Debug, Clone)]
 pub struct VmInfo {
     pub name: String,
+    pub project_id: String,
     pub zone: String,
     pub external_ip: Option<String>,
     pub status: String,
