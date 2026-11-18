@@ -240,12 +240,12 @@ pub enum SshEvent {
     RefreshCompleted {
         host: String,
         ssh_connected: bool,
-        base_installed: bool,
+        host_installed: bool,
         docker_installed: bool,
         dure_installed: bool,
         // Cache results
         ssh_error: Option<String>,
-        base_missing_packages: Option<Vec<String>>,
+        host_missing_packages: Option<Vec<String>>,
         docker_version: Option<String>,
         dure_running: Option<bool>,
         dure_services: Option<Vec<String>>,
@@ -258,15 +258,15 @@ pub enum SshEvent {
         error: Option<String>,
     },
 
-    /// Base packages check completed
-    BaseCheckCompleted {
+    /// Host packages check completed
+    HostCheckCompleted {
         host: String,
         installed: bool,
         missing_packages: Vec<String>,
     },
 
-    /// Base packages installation completed
-    BaseInstallCompleted {
+    /// Host packages installation completed
+    HostInstallCompleted {
         host: String,
         success: bool,
         error: Option<String>,

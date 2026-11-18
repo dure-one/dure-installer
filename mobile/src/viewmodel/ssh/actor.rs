@@ -246,8 +246,8 @@ impl SshActor {
             SshCommand::InspectDockerImage { host_name, .. } => Some(host_name.clone()),
             SshCommand::Refresh { host, .. } => Some(host.clone()),
             SshCommand::SshCheck { host, .. } => Some(host.clone()),
-            SshCommand::CheckBase { host, .. } => Some(host.clone()),
-            SshCommand::InstallBase { host, .. } => Some(host.clone()),
+            SshCommand::CheckHost { host, .. } => Some(host.clone()),
+            SshCommand::InstallHost { host, .. } => Some(host.clone()),
             SshCommand::CheckDocker { host, .. } => Some(host.clone()),
             SshCommand::InstallDockerDaemon { host, .. } => Some(host.clone()),
             SshCommand::RemoveDocker { host, .. } => Some(host.clone()),
@@ -564,11 +564,11 @@ impl SshActor {
             SshCommand::SshCheck { host, profile_kdbx } => {
                 self.handle_ssh_check(host, profile_kdbx).await
             }
-            SshCommand::CheckBase { host, profile_kdbx } => {
-                self.handle_check_base(host, profile_kdbx).await
+            SshCommand::CheckHost { host, profile_kdbx } => {
+                self.handle_check_host(host, profile_kdbx).await
             }
-            SshCommand::InstallBase { host, profile_kdbx: _ } => {
-                self.send_event(SshEvent::BaseInstallCompleted {
+            SshCommand::InstallHost { host, profile_kdbx: _ } => {
+                self.send_event(SshEvent::HostInstallCompleted {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
@@ -660,7 +660,7 @@ impl SshActor {
                     ansible_roles: Vec::new(),
                     dure_wss_config: None,
                     last_ssh_check: None,
-                    last_base_check: None,
+                    last_host_check: None,
                     last_docker_check: None,
                     last_dure_check: None,
                 };
@@ -2261,11 +2261,11 @@ impl SshActor {
             SshEvent::SshCheckCompleted { host, connected, .. } => {
                 format!("SshCheckCompleted({}, connected={})", host, connected)
             }
-            SshEvent::BaseCheckCompleted { host, installed, .. } => {
-                format!("BaseCheckCompleted({}, installed={})", host, installed)
+            SshEvent::HostCheckCompleted { host, installed, .. } => {
+                format!("HostCheckCompleted({}, installed={})", host, installed)
             }
-            SshEvent::BaseInstallCompleted { host, success, .. } => {
-                format!("BaseInstallCompleted({}, success={})", host, success)
+            SshEvent::HostInstallCompleted { host, success, .. } => {
+                format!("HostInstallCompleted({}, success={})", host, success)
             }
             SshEvent::DockerCheckCompleted { host, installed, .. } => {
                 format!("DockerCheckCompleted({}, installed={})", host, installed)
@@ -2369,11 +2369,11 @@ impl SshActor {
                 return SshEvent::RefreshCompleted {
                     host,
                     ssh_connected: false,
-                    base_installed: false,
+                    host_installed: false,
                     docker_installed: false,
                     dure_installed: false,
                     ssh_error: Some("Host config not found".to_string()),
-                    base_missing_packages: None,
+                    host_missing_packages: None,
                     docker_version: None,
                     dure_running: None,
                     dure_services: None,
@@ -2390,12 +2390,12 @@ impl SshActor {
             None
         };
 
-        let base_missing_packages = if ssh_connected {
-            crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await.ok()
+        let host_missing_packages = if ssh_connected {
+            crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref()).await.ok()
         } else {
             None
         };
-        let base_installed = base_missing_packages.as_ref().map(|p| p.is_empty()).unwrap_or(false);
+        let host_installed = host_missing_packages.as_ref().map(|p| p.is_empty()).unwrap_or(false);
 
         let docker_version = if ssh_connected {
             crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await.ok().flatten()
@@ -2423,11 +2423,11 @@ impl SshActor {
         SshEvent::RefreshCompleted {
             host,
             ssh_connected,
-            base_installed,
+            host_installed,
             docker_installed,
             dure_installed,
             ssh_error,
-            base_missing_packages,
+            host_missing_packages,
             docker_version,
             dure_running,
             dure_services,
@@ -2507,15 +2507,15 @@ impl SshActor {
         }
     }
 
-    async fn handle_check_base(
+    async fn handle_check_host(
         &mut self,
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        dure_info!(project_id = host.clone(), "Checking base packages on {}", host);
+        dure_info!(project_id = host.clone(), "Checking host packages on {}", host);
 
         // Start operation logging
-        let op_id = match self.start_operation_log(&host, "base_check").await {
+        let op_id = match self.start_operation_log(&host, "host_check").await {
             Ok(id) => id,
             Err(e) => {
                 dure_warn!(project_id = host.clone(), "Failed to start operation log: {}", e);
@@ -2525,8 +2525,8 @@ impl SshActor {
 
         let host_config = self.load_host_config(&host)?;
 
-        // Step 1: Check base packages
-        let result = crate::calc::ssh::check_base_packages(&host_config, profile_kdbx.as_ref()).await;
+        // Step 1: Check host packages
+        let result = crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok(missing) => {
@@ -2536,23 +2536,23 @@ impl SshActor {
                 } else {
                     format!("✗ Missing: {:?}", missing)
                 };
-                dure_info!(project_id = host.clone(), "Base packages check: {}", status);
+                dure_info!(project_id = host.clone(), "Host packages check: {}", status);
 
-                self.send_event(SshEvent::BaseCheckCompleted {
+                self.send_event(SshEvent::HostCheckCompleted {
                     host: host.clone(),
                     installed,
                     missing_packages: missing,
                 }).await;
             }
             Err(e) => {
-                dure_error!(project_id = host.clone(), "Base check failed: {}", e);
+                dure_error!(project_id = host.clone(), "Host check failed: {}", e);
 
                 // Complete operation log with failure
                 if op_id >= 0 {
                     let _ = self.complete_operation_log(op_id, false, Some(e.to_string())).await;
                 }
 
-                self.send_event(SshEvent::BaseCheckCompleted {
+                self.send_event(SshEvent::HostCheckCompleted {
                     host: host.clone(),
                     installed: false,
                     missing_packages: vec![],
@@ -3076,14 +3076,14 @@ ARG PORT=8080
                 SshEvent::RefreshCompleted {
                     host,
                     ssh_connected,
-                    base_installed,
+                    host_installed,
                     docker_installed,
                     dure_installed,
                     ..
                 } => {
                     assert_eq!(host, "localhost");
                     // Fields should be initialized (placeholder values)
-                    let _ = (ssh_connected, base_installed, docker_installed, dure_installed);
+                    let _ = (ssh_connected, host_installed, docker_installed, dure_installed);
                 }
                 _ => panic!("Expected RefreshCompleted event"),
             }

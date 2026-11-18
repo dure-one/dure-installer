@@ -252,9 +252,9 @@ pub struct SshHostConfig {
     /// Last SSH connection check result
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_ssh_check: Option<crate::ui_tabs::ssh::SshCheckResult>,
-    /// Last base packages check result
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_base_check: Option<crate::ui_tabs::ssh::BaseCheckResult>,
+    /// Last host packages check result
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "last_base_check")]
+    pub last_host_check: Option<crate::ui_tabs::ssh::HostCheckResult>,
     /// Last Docker check result
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_docker_check: Option<crate::ui_tabs::ssh::DockerCheckResult>,
@@ -282,7 +282,7 @@ impl Default for SshHostConfig {
             ansible_roles: Vec::new(),
             dure_wss_config: None,
             last_ssh_check: None,
-            last_base_check: None,
+            last_host_check: None,
             last_docker_check: None,
             last_dure_check: None,
         }

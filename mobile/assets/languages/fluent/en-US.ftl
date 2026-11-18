@@ -456,11 +456,11 @@ ssh-button-edit-tooltip = Edit SSH host configuration
 ssh-button-delete = Delete
 ssh-button-delete-tooltip = Delete SSH host
 
-# SSH Operation Buttons - Row 2 (Base & Docker)
-ssh-button-check-base = Check Base
-ssh-button-check-base-tooltip = Check base system packages
-ssh-button-install-base = Install Base
-ssh-button-install-base-tooltip = Install required base packages
+# SSH Operation Buttons - Row 2 (Host & Docker)
+ssh-button-check-host = Check Host
+ssh-button-check-host-tooltip = Check host system packages
+ssh-button-install-host = Install Host
+ssh-button-install-host-tooltip = Install required host packages
 ssh-button-check-docker = Check Docker
 ssh-button-check-docker-tooltip = Check Docker installation
 ssh-button-install-docker = Install Docker
@@ -684,8 +684,8 @@ platform-drawer-logs-level-error = ERROR
 ## SSH Tab & Drawer
 ssh-operation-refresh = Refresh
 ssh-operation-ssh-check = SSH Check
-ssh-operation-base-check = Base Check
-ssh-operation-install-base = Install Base
+ssh-operation-host-check = Host Check
+ssh-operation-install-host = Install Host
 ssh-operation-docker-check = Docker Check
 ssh-operation-install-docker = Install Docker
 ssh-operation-remove-docker = Remove Docker
@@ -831,6 +831,9 @@ ops-col-status = Status
 ops-col-duration = Duration
 ops-col-error = Error
 ops-no-operations = No operations yet
+ops-status-running = Running
+ops-status-success = Success
+ops-status-failed = Failed
 
 ## DNS Status Tab Attributes
 dns-status-domain = Domain

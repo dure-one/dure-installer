@@ -196,13 +196,13 @@ pub enum SshCommand {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
-    /// Check if base packages are installed
-    CheckBase {
+    /// Check if host packages are installed
+    CheckHost {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
-    /// Install base packages
-    InstallBase {
+    /// Install host packages
+    InstallHost {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },

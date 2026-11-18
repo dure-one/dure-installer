@@ -710,8 +710,8 @@ table inet filter {
         anyhow::bail!("Port close not yet implemented")
     }
 
-    /// Check which base packages are missing
-    pub async fn check_base_packages(host_config: &SshHostConfig) -> Result<Vec<String>> {
+    /// Check which host packages are missing
+    pub async fn check_host_packages(host_config: &SshHostConfig) -> Result<Vec<String>> {
         let required_packages = [
             "extrepo",
             "git",
@@ -925,9 +925,9 @@ pub fn port_close(_host_config: &SshHostConfig, _port: u16, _protocol: &str) -> 
     anyhow::bail!("Port management not supported on this platform")
 }
 
-/// Check if base packages are installed
+/// Check if host packages are installed
 #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
-pub async fn check_base_packages(
+pub async fn check_host_packages(
     host_config: &SshHostConfig,
     profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<Vec<String>> {
@@ -1185,7 +1185,7 @@ pub async fn get_dure_compose_logs(
 }
 
 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-pub async fn check_base_packages(
+pub async fn check_host_packages(
     _host_config: &SshHostConfig,
     _profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<Vec<String>> {

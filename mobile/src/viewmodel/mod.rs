@@ -1012,24 +1012,24 @@ impl ViewModel {
     }
 
     /// Check if base packages are installed
-    pub fn check_base(
+    pub fn check_host(
         &self,
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::CheckBase { host, profile_kdbx })
+            .send_blocking(ssh::SshCommand::CheckHost { host, profile_kdbx })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    /// Install base packages
-    pub fn install_base(
+    /// Install host packages
+    pub fn install_host(
         &self,
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::InstallBase { host, profile_kdbx })
+            .send_blocking(ssh::SshCommand::InstallHost { host, profile_kdbx })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

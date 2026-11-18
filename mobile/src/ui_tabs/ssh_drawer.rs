@@ -77,15 +77,15 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     }
 
     // Base Packages Status
-    let base_status = if row.base_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
-    let mut base_line = StatusLine::new(&tr!("ssh-drawer-status-base"), base_status);
-    if !row.base_installed {
+    let host_status = if row.host_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
+    let mut base_line = StatusLine::new(&tr!("ssh-drawer-status-base"), host_status);
+    if !row.host_installed {
         base_line = base_line.warning();
     }
     base_line.show(ui);
 
     // Show missing packages
-    if let Some(check_result) = &row.last_base_check {
+    if let Some(check_result) = &row.last_host_check {
         if !check_result.missing_packages.is_empty() {
             ui.label(format!("  Missing: {}", check_result.missing_packages.join(", ")));
         }

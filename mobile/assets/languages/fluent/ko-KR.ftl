@@ -456,11 +456,11 @@ ssh-button-edit-tooltip = SSH 호스트 구성 편집
 ssh-button-delete = 삭제
 ssh-button-delete-tooltip = SSH 호스트 삭제
 
-# SSH Operation Buttons - Row 2 (Base & Docker)
-ssh-button-check-base = 기본 확인
-ssh-button-check-base-tooltip = 기본 시스템 패키지 확인
-ssh-button-install-base = 기본 설치
-ssh-button-install-base-tooltip = 필요한 기본 패키지 설치
+# SSH Operation Buttons - Row 2 (Host & Docker)
+ssh-button-check-host = 호스트 확인
+ssh-button-check-host-tooltip = 호스트 시스템 패키지 확인
+ssh-button-install-host = 호스트 설치
+ssh-button-install-host-tooltip = 필요한 호스트 패키지 설치
 ssh-button-check-docker = Docker 확인
 ssh-button-check-docker-tooltip = Docker 설치 확인
 ssh-button-install-docker = Docker 설치
@@ -684,8 +684,8 @@ platform-drawer-logs-level-error = ERROR
 ## SSH Tab & Drawer
 ssh-operation-refresh = 새로고침
 ssh-operation-ssh-check = SSH 확인
-ssh-operation-base-check = 기본 확인
-ssh-operation-install-base = 기본 설치
+ssh-operation-host-check = 호스트 확인
+ssh-operation-install-host = 호스트 설치
 ssh-operation-docker-check = Docker 확인
 ssh-operation-install-docker = Docker 설치
 ssh-operation-remove-docker = Docker 제거
@@ -827,6 +827,9 @@ ops-col-status = 상태
 ops-col-duration = 기간
 ops-col-error = 오류
 ops-no-operations = 아직 작업이 없습니다
+ops-status-running = 실행 중
+ops-status-success = 성공
+ops-status-failed = 실패
 
 ## DNS Status Tab Attributes
 dns-status-domain = 도메인

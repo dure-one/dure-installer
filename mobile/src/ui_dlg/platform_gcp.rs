@@ -1467,7 +1467,7 @@ impl GcpWizard {
                                 ansible_roles: Vec::new(),
                                 dure_wss_config: None,
                                 last_ssh_check: None,
-                                last_base_check: None,
+                                last_host_check: None,
                                 last_docker_check: None,
                                 last_dure_check: None,
                             };
