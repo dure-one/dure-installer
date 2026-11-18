@@ -273,14 +273,20 @@ pub async fn install_dure_with_config(
         _ => return Err(anyhow::anyhow!("Invalid image tag: {}", image_tag)),
     };
 
-    let compose_output = ssh::execute_command(host_config, compose_cmd, profile_keyring)
-        .await
-        .context("Failed to start docker compose")?;
-
-    progress.push("Docker compose started".to_string());
-    progress.push(compose_output);
-
-    Ok(progress)
+    match ssh::execute_command(host_config, compose_cmd, profile_keyring).await {
+        Ok(output) => {
+            progress.push("✓ Docker compose started".to_string());
+            if !output.trim().is_empty() {
+                progress.push(output);
+            }
+            Ok(progress)
+        }
+        Err(e) => {
+            let err_msg = format!("Failed to start docker compose: {}", e);
+            progress.push(format!("✗ {}", err_msg));
+            Err(anyhow::anyhow!(err_msg))
+        }
+    }
 }
 
 /// Install dure-mycart via git clone and docker compose (legacy wrapper)
