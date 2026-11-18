@@ -1221,6 +1221,9 @@ impl SshTab {
                 progress: _,
                 focus_tab,
             }) => {
+                // Clone error early for dialog update
+                let error_msg = error.unwrap_or_else(|| tr!("ssh-error-unknown"));
+
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     // Auto-focus drawer tab if specified
                     if let Some(tab) = focus_tab {
@@ -1239,11 +1242,26 @@ impl SshTab {
                     } else {
                         OperationState::Failed {
                             operation: tr!("ssh-operation-install-dure"),
-                            error: error.unwrap_or_else(|| tr!("ssh-error-unknown")),
+                            error: error_msg.clone(),
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
                 }
+
+                // Update install wizard dialog if open for this host
+                if let Some(dialog) = &mut self.install_dure_dialog {
+                    if dialog.state.host == host {
+                        use crate::ui_dlg::install_dure_stt::InstallStep;
+                        if success {
+                            dialog.state.step = InstallStep::Complete;
+                            dure_info!("[UI::SSH] Updated dialog to Complete state");
+                        } else {
+                            dialog.state.step = InstallStep::Error(error_msg.clone());
+                            dure_info!("[UI::SSH] Updated dialog to Error state");
+                        }
+                    }
+                }
+
                 if success {
                     dure_info!("Dure installed successfully on {}", host);
                 } else {
