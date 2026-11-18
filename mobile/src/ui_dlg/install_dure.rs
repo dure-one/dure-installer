@@ -373,15 +373,17 @@ impl InstallDure {
     fn render_buttons(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Close button (always available)
+                // Close button (always available, always works)
                 if ui.add(MaterialButton::text(tr!("close"))).clicked() {
                     self.state.should_close = true;
+                    ui.ctx().request_repaint();
                 }
 
                 // Done button (prominent in Complete state)
                 if matches!(self.state.step, InstallStep::Complete) {
-                    if ui.add(MaterialButton::filled(tr!("done"))).clicked() {
+                    if ui.add(MaterialButton::filled("Done")).clicked() {
                         self.state.should_close = true;
+                        ui.ctx().request_repaint();
                     }
                 }
 
@@ -390,9 +392,10 @@ impl InstallDure {
                     self.state.step,
                     InstallStep::Complete | InstallStep::Error(_)
                 ) {
-                    if ui.add(MaterialButton::outlined(tr!("reset"))).clicked() {
+                    if ui.add(MaterialButton::outlined("Reset")).clicked() {
                         self.state.reset();
                         self.state.start_fetch_tags();
+                        ui.ctx().request_repaint();
                     }
                 }
 
