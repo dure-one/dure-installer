@@ -248,7 +248,17 @@ pub async fn install_dure_with_config(
 
     // Write .env file
     progress.push("Writing configuration...".to_string());
-    let env_content: Vec<String> = env_config
+
+    // Auto-fill PROSODY_EXTERNAL_IP if empty
+    let mut config = env_config.clone();
+    if config.get("PROSODY_EXTERNAL_IP").map_or(true, |v| v.is_empty()) {
+        // Extract IP from host (format: user@IP or IP)
+        let ip = host_config.host.split('@').last().unwrap_or(&host_config.host);
+        config.insert("PROSODY_EXTERNAL_IP".to_string(), ip.to_string());
+        progress.push(format!("Auto-filled PROSODY_EXTERNAL_IP={}", ip));
+    }
+
+    let env_content: Vec<String> = config
         .iter()
         .map(|(k, v)| format!("{}={}", k, v))
         .collect();
