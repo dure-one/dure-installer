@@ -2,11 +2,11 @@
 //!
 //! Provides git-based installation and lifecycle management for dure-mycart
 
-use crate::{dure_debug, dure_error, dure_info};
-use anyhow::{Context, Result};
 use crate::calc::keyring::DatabaseHandle;
 use crate::calc::ssh;
 use crate::config::SshHostConfig;
+use crate::{dure_debug, dure_error, dure_info};
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -67,10 +67,7 @@ pub async fn get_container_logs(
     tail_lines: usize,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
 ) -> Result<Vec<String>> {
-    let logs_cmd = format!(
-        "docker logs {} --tail {} 2>&1",
-        container_name, tail_lines
-    );
+    let logs_cmd = format!("docker logs {} --tail {} 2>&1", container_name, tail_lines);
     let logs = ssh::execute_command(host_config, &logs_cmd, profile_keyring)
         .await
         .unwrap_or_else(|e| format!("Failed to get logs: {}", e));
@@ -147,7 +144,8 @@ pub async fn install_dure_mycart(
 
     // Step 3: Copy .env.example to .env (only if .env doesn't exist)
     progress.push("Configuring environment...".to_string());
-    let check_env = "test -f /srv/dure-mycart/prosody-mycart-stack/.env && echo exists || echo missing";
+    let check_env =
+        "test -f /srv/dure-mycart/prosody-mycart-stack/.env && echo exists || echo missing";
     let env_exists = ssh::execute_command(host_config, check_env, profile_keyring)
         .await
         .unwrap_or_else(|_| "missing".to_string());
@@ -163,7 +161,10 @@ pub async fn install_dure_mycart(
     }
 
     // Step 4: Apply environment configuration (append all, docker uses last value)
-    dure_debug!("Applying {} environment variables to .env", env_config.len());
+    dure_debug!(
+        "Applying {} environment variables to .env",
+        env_config.len()
+    );
     for (key, value) in env_config {
         dure_debug!("Setting {}={}", key, value);
         let append_cmd = format!(
@@ -280,13 +281,17 @@ pub async fn remove_dure_mycart(
     progress.push("Stopping dure-mycart services...".to_string());
 
     // Stop docker compose (ignore errors if already stopped)
-    let compose_down = "cd /srv/dure-mycart/prosody-mycart-stack && docker compose down 2>/dev/null || true";
+    let compose_down =
+        "cd /srv/dure-mycart/prosody-mycart-stack && docker compose down 2>/dev/null || true";
     match ssh::execute_command(host_config, compose_down, profile_keyring).await {
         Ok(_) => {
             progress.push("Services stopped".to_string());
         }
         Err(e) => {
-            dure_debug!("Compose down returned error (might be already stopped): {}", e);
+            dure_debug!(
+                "Compose down returned error (might be already stopped): {}",
+                e
+            );
             progress.push("Services stopped (or were not running)".to_string());
         }
     }
@@ -350,12 +355,18 @@ mod tests {
 
     #[test]
     fn test_escape_sed_replacement_with_slash() {
-        assert_eq!(escape_sed_replacement("sub.domain.com/path"), "sub.domain.com\\/path");
+        assert_eq!(
+            escape_sed_replacement("sub.domain.com/path"),
+            "sub.domain.com\\/path"
+        );
     }
 
     #[test]
     fn test_escape_sed_replacement_with_ampersand() {
-        assert_eq!(escape_sed_replacement("user&domain.com"), "user\\&domain.com");
+        assert_eq!(
+            escape_sed_replacement("user&domain.com"),
+            "user\\&domain.com"
+        );
     }
 
     #[test]

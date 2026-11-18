@@ -74,9 +74,7 @@ impl DlgProfileLogin {
             .scroll([false, false])
             .min_width(400.0)
             .min_height(250.0)
-            .resize(|r| {
-                r.default_size([400.0, 250.0])
-            })
+            .resize(|r| r.default_size([400.0, 250.0]))
             .show(ctx, |ui| {
                 ui.heading(tr!("profile-login-heading"));
                 ui.add_space(12.0);
@@ -109,7 +107,11 @@ impl DlgProfileLogin {
                     }
                 }
 
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password);
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                    ui,
+                    &response,
+                    &mut self.password,
+                );
 
                 ui.add_space(12.0);
 

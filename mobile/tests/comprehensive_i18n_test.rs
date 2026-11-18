@@ -42,8 +42,7 @@ fn test_platform_drawer_no_hardcoded_strings() {
 
 #[test]
 fn test_ssh_no_hardcoded_strings() {
-    let source = fs::read_to_string("src/ui_tabs/ssh.rs")
-        .expect("Failed to read ssh.rs");
+    let source = fs::read_to_string("src/ui_tabs/ssh.rs").expect("Failed to read ssh.rs");
 
     let forbidden = vec![
         r#"operation: "Refresh""#,
@@ -73,8 +72,8 @@ fn test_ssh_no_hardcoded_strings() {
 
 #[test]
 fn test_ssh_drawer_no_hardcoded_strings() {
-    let source = fs::read_to_string("src/ui_tabs/ssh_drawer.rs")
-        .expect("Failed to read ssh_drawer.rs");
+    let source =
+        fs::read_to_string("src/ui_tabs/ssh_drawer.rs").expect("Failed to read ssh_drawer.rs");
 
     let forbidden = vec![
         r#"LogsRenderer::new("SSH Host Logs")"#,
@@ -105,8 +104,7 @@ fn test_ssh_drawer_no_hardcoded_strings() {
 
 #[test]
 fn test_dns_no_hardcoded_strings() {
-    let source = fs::read_to_string("src/ui_tabs/dns.rs")
-        .expect("Failed to read dns.rs");
+    let source = fs::read_to_string("src/ui_tabs/dns.rs").expect("Failed to read dns.rs");
 
     let forbidden = vec![
         r#"=> "Status""#,
@@ -135,8 +133,8 @@ fn test_dns_no_hardcoded_strings() {
 
 #[test]
 fn test_dns_wizard_no_hardcoded_strings() {
-    let source = fs::read_to_string("src/ui_dlg/dns_wizard.rs")
-        .expect("Failed to read dns_wizard.rs");
+    let source =
+        fs::read_to_string("src/ui_dlg/dns_wizard.rs").expect("Failed to read dns_wizard.rs");
 
     let forbidden = vec![
         r#"MaterialButton::outlined("Open OAuth Screen")"#,
@@ -171,10 +169,10 @@ fn test_dns_wizard_no_hardcoded_strings() {
 
 #[test]
 fn test_fluent_keys_exist() {
-    let en_ftl = fs::read_to_string("assets/languages/fluent/en-US.ftl")
-        .expect("Failed to read en-US.ftl");
-    let ko_ftl = fs::read_to_string("assets/languages/fluent/ko-KR.ftl")
-        .expect("Failed to read ko-KR.ftl");
+    let en_ftl =
+        fs::read_to_string("assets/languages/fluent/en-US.ftl").expect("Failed to read en-US.ftl");
+    let ko_ftl =
+        fs::read_to_string("assets/languages/fluent/ko-KR.ftl").expect("Failed to read ko-KR.ftl");
 
     let required_keys = vec![
         // Platform drawer
@@ -186,7 +184,6 @@ fn test_fluent_keys_exist() {
         "platform-drawer-menu-copy-ssh",
         "platform-drawer-menu-copy-key",
         "platform-drawer-menu-copy-ip",
-
         // SSH
         "ssh-operation-refresh",
         "ssh-operation-ssh-check",
@@ -197,7 +194,6 @@ fn test_fluent_keys_exist() {
         "ssh-host-info-title",
         "ssh-logs-title",
         "ssh-button-refresh",
-
         // DNS
         "dns-drawer-tab-status",
         "dns-drawer-tab-logs",

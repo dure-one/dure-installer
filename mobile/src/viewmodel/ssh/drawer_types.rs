@@ -187,10 +187,7 @@ pub enum DrawerEvent {
         lines: Vec<String>,
     },
     /// Host information loaded
-    HostInfoLoaded {
-        ssh_host: String,
-        info: HostInfo,
-    },
+    HostInfoLoaded { ssh_host: String, info: HostInfo },
     /// Docker information loaded
     DockerInfoLoaded {
         ssh_host: String,
@@ -432,10 +429,7 @@ mod tests {
             "Docker status should be cleared"
         );
         assert!(state.containers.is_empty(), "Containers should be cleared");
-        assert!(
-            state.dure_status.is_none(),
-            "Dure status should be cleared"
-        );
+        assert!(state.dure_status.is_none(), "Dure status should be cleared");
     }
 
     #[test]
@@ -480,10 +474,7 @@ mod tests {
 
         state.set_loading(true);
         state.set_docker_info(DockerStatus::default(), vec![]);
-        assert!(
-            !state.loading,
-            "set_docker_info should clear loading flag"
-        );
+        assert!(!state.loading, "set_docker_info should clear loading flag");
 
         state.set_loading(true);
         state.set_dure_info(DureStatus::default());

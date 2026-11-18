@@ -1,7 +1,7 @@
 //! Common types shared across ViewModel and actors
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::viewmodel::{logs, ns, platform, ssh, wss};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 /// Unified event type from all actors
 #[derive(Clone, Debug)]

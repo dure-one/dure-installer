@@ -8,7 +8,10 @@ fn main() {
     // Test 1: Client creation
     println!("Test 1: Creating Registrar client...");
     let client = CloudflareRegistrarClient::new("test_api_token_123".to_string());
-    println!("  ✓ Client created with token: {}...", &client.api_token()[..15]);
+    println!(
+        "  ✓ Client created with token: {}...",
+        &client.api_token()[..15]
+    );
     assert_eq!(client.api_token(), "test_api_token_123");
 
     // Test 2: Domain structure
@@ -45,10 +48,7 @@ fn main() {
         id: "domain_xyz789".to_string(),
         name: "test.com".to_string(),
         status: "active".to_string(),
-        nameservers: vec![
-            "ns1.example.com".to_string(),
-            "ns2.example.com".to_string(),
-        ],
+        nameservers: vec!["ns1.example.com".to_string(), "ns2.example.com".to_string()],
         created_at: None,
         expires_at: None,
     };

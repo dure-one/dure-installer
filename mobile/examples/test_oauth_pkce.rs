@@ -1,6 +1,6 @@
 //! Simple example to test OAuth PKCE generation
 
-use dure::api::cloudflare::oauth::{CloudflareOAuthHandler, generate_pkce_pair};
+use dure::api::cloudflare::oauth::{generate_pkce_pair, CloudflareOAuthHandler};
 
 fn main() {
     println!("Testing Cloudflare OAuth PKCE implementation\n");
@@ -17,10 +17,8 @@ fn main() {
 
     // Test 2: OAuth handler creation
     println!("\nTest 2: Creating OAuth handler...");
-    let handler = CloudflareOAuthHandler::new(
-        "test_client_id".to_string(),
-        "test_secret".to_string(),
-    );
+    let handler =
+        CloudflareOAuthHandler::new("test_client_id".to_string(), "test_secret".to_string());
     println!("  ✓ client_id: {}", handler.client_id());
     assert_eq!(handler.client_id(), "test_client_id");
 

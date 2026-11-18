@@ -4,7 +4,7 @@
 #![allow(unsafe_code)]
 
 #[cfg(target_os = "android")]
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use jni::objects::{JObject, JValue};
 
 #[cfg(target_os = "android")]
@@ -24,31 +24,24 @@ pub fn show_soft_input() -> std::io::Result<()> {
 
     let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to attach current thread",
-        )
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread")
     })?;
 
     // Verify the context is an Activity (not Application)
     // ndk_context might give us Application context instead of Activity
-    let activity_class = env
-        .find_class("android/app/Activity")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Activity class: {}", e),
-            )
-        })?;
+    let activity_class = env.find_class("android/app/Activity").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Activity class: {}", e),
+        )
+    })?;
 
-    let is_activity = env
-        .is_instance_of(&context, &activity_class)
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to check if context is Activity: {}", e),
-            )
-        })?;
+    let is_activity = env.is_instance_of(&context, &activity_class).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to check if context is Activity: {}", e),
+        )
+    })?;
 
     if !is_activity {
         return Err(std::io::Error::new(
@@ -61,21 +54,15 @@ pub fn show_soft_input() -> std::io::Result<()> {
 
     // Get InputMethodManager via getSystemService
     // First, get the INPUT_METHOD_SERVICE constant
-    let context_class = env
-        .find_class("android/content/Context")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Context class: {}", e),
-            )
-        })?;
+    let context_class = env.find_class("android/content/Context").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Context class: {}", e),
+        )
+    })?;
 
     let input_method_service = env
-        .get_static_field(
-            &context_class,
-            "INPUT_METHOD_SERVICE",
-            "Ljava/lang/String;",
-        )
+        .get_static_field(&context_class, "INPUT_METHOD_SERVICE", "Ljava/lang/String;")
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -202,30 +189,23 @@ pub fn hide_soft_input() -> std::io::Result<()> {
 
     let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to attach current thread",
-        )
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread")
     })?;
 
     // Verify the context is an Activity (not Application)
-    let activity_class = env
-        .find_class("android/app/Activity")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Activity class: {}", e),
-            )
-        })?;
+    let activity_class = env.find_class("android/app/Activity").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Activity class: {}", e),
+        )
+    })?;
 
-    let is_activity = env
-        .is_instance_of(&context, &activity_class)
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to check if context is Activity: {}", e),
-            )
-        })?;
+    let is_activity = env.is_instance_of(&context, &activity_class).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to check if context is Activity: {}", e),
+        )
+    })?;
 
     if !is_activity {
         return Err(std::io::Error::new(
@@ -237,21 +217,15 @@ pub fn hide_soft_input() -> std::io::Result<()> {
     let activity = context;
 
     // Get InputMethodManager
-    let context_class = env
-        .find_class("android/content/Context")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Context class: {}", e),
-            )
-        })?;
+    let context_class = env.find_class("android/content/Context").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Context class: {}", e),
+        )
+    })?;
 
     let input_method_service = env
-        .get_static_field(
-            &context_class,
-            "INPUT_METHOD_SERVICE",
-            "Ljava/lang/String;",
-        )
+        .get_static_field(&context_class, "INPUT_METHOD_SERVICE", "Ljava/lang/String;")
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -397,30 +371,23 @@ pub fn toggle_soft_input() -> std::io::Result<()> {
 
     let context = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to attach current thread",
-        )
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread")
     })?;
 
     // Verify the context is an Activity (not Application)
-    let activity_class = env
-        .find_class("android/app/Activity")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Activity class: {}", e),
-            )
-        })?;
+    let activity_class = env.find_class("android/app/Activity").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Activity class: {}", e),
+        )
+    })?;
 
-    let is_activity = env
-        .is_instance_of(&context, &activity_class)
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to check if context is Activity: {}", e),
-            )
-        })?;
+    let is_activity = env.is_instance_of(&context, &activity_class).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to check if context is Activity: {}", e),
+        )
+    })?;
 
     if !is_activity {
         return Err(std::io::Error::new(
@@ -431,21 +398,15 @@ pub fn toggle_soft_input() -> std::io::Result<()> {
 
     let activity = context;
 
-    let context_class = env
-        .find_class("android/content/Context")
-        .map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to find Context class: {}", e),
-            )
-        })?;
+    let context_class = env.find_class("android/content/Context").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Context class: {}", e),
+        )
+    })?;
 
     let input_method_service = env
-        .get_static_field(
-            &context_class,
-            "INPUT_METHOD_SERVICE",
-            "Ljava/lang/String;",
-        )
+        .get_static_field(&context_class, "INPUT_METHOD_SERVICE", "Ljava/lang/String;")
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,

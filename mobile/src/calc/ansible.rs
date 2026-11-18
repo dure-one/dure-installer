@@ -2,11 +2,11 @@
 //!
 //! Provides Ansible Galaxy API integration and role lifecycle management
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::calc::ssh;
+use crate::config::{AnsibleRoleConfig, SshHostConfig};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use crate::config::{SshHostConfig, AnsibleRoleConfig};
-use crate::calc::ssh;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnsibleRoleMetadata {
@@ -69,10 +69,7 @@ pub async fn fetch_ansible_role_metadata(role: &str) -> Result<AnsibleRoleMetada
     let role_data = &results[0];
 
     // Parse description
-    let description = role_data["description"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let description = role_data["description"].as_str().unwrap_or("").to_string();
 
     // Parse dependencies (if available)
     let dependencies = role_data["summary_fields"]["dependencies"]
@@ -106,10 +103,20 @@ pub async fn install_ansible(host_config: &SshHostConfig) -> Result<Vec<String>>
     ssh::execute_command(host_config, "sudo apt-get update", None).await?;
 
     progress.push("Installing prerequisites...".to_string());
-    ssh::execute_command(host_config, "sudo apt-get install -y software-properties-common", None).await?;
+    ssh::execute_command(
+        host_config,
+        "sudo apt-get install -y software-properties-common",
+        None,
+    )
+    .await?;
 
     progress.push("Adding Ansible PPA...".to_string());
-    ssh::execute_command(host_config, "sudo add-apt-repository --yes --update ppa:ansible/ansible", None).await?;
+    ssh::execute_command(
+        host_config,
+        "sudo add-apt-repository --yes --update ppa:ansible/ansible",
+        None,
+    )
+    .await?;
 
     progress.push("Installing Ansible...".to_string());
     ssh::execute_command(host_config, "sudo apt-get install -y ansible", None).await?;
@@ -141,7 +148,10 @@ pub async fn install_ansible_role(
     let playbook_path = format!("/tmp/{}.yml", config.name);
 
     // Write playbook to remote host
-    let write_cmd = format!("cat > {} <<'PLAYBOOK_EOF'\n{}\nPLAYBOOK_EOF", playbook_path, playbook);
+    let write_cmd = format!(
+        "cat > {} <<'PLAYBOOK_EOF'\n{}\nPLAYBOOK_EOF",
+        playbook_path, playbook
+    );
     ssh::execute_command(host_config, &write_cmd, None).await?;
 
     // Run playbook
@@ -150,18 +160,13 @@ pub async fn install_ansible_role(
 }
 
 /// Remove Ansible role
-pub async fn remove_ansible_role(
-    host_config: &SshHostConfig,
-    galaxy_name: &str,
-) -> Result<String> {
+pub async fn remove_ansible_role(host_config: &SshHostConfig, galaxy_name: &str) -> Result<String> {
     let remove_cmd = format!("ansible-galaxy remove {}", galaxy_name);
     ssh::execute_command(host_config, &remove_cmd, None).await
 }
 
 /// List installed roles
-pub async fn list_ansible_roles(
-    host_config: &SshHostConfig,
-) -> Result<Vec<String>> {
+pub async fn list_ansible_roles(host_config: &SshHostConfig) -> Result<Vec<String>> {
     let output = ssh::execute_command(host_config, "ansible-galaxy list", None).await?;
 
     let roles: Vec<String> = output

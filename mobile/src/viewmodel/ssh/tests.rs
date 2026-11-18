@@ -14,7 +14,10 @@ mod tests {
             let actor = super::super::SshActor::new(cmd_rx, event_tx, None);
             smol::spawn(actor.run()).detach();
 
-            cmd_tx.send(super::super::SshCommand::ListHosts).await.unwrap();
+            cmd_tx
+                .send(super::super::SshCommand::ListHosts)
+                .await
+                .unwrap();
 
             let timeout = smol::Timer::after(std::time::Duration::from_secs(5));
             smol::pin!(timeout);

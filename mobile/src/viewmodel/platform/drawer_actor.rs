@@ -191,12 +191,8 @@ impl DrawerActor {
                     // Status tab doesn't need refresh (static content)
                     Ok(())
                 }
-                super::DrawerTab::Logs => {
-                    self.load_logs(project_id, 100).await
-                }
-                super::DrawerTab::Operations => {
-                    self.load_operations(project_id, 100).await
-                }
+                super::DrawerTab::Logs => self.load_logs(project_id, 100).await,
+                super::DrawerTab::Operations => self.load_operations(project_id, 100).await,
             }
         } else {
             dure_debug!("DrawerActor: no project selected, skipping refresh");

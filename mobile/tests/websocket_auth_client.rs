@@ -13,7 +13,7 @@
 //! cargo run --example websocket_auth_client
 //! ```
 
-use async_tungstenite::tungstenite::{Message, connect};
+use async_tungstenite::tungstenite::{connect, Message};
 use serde_json::json;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

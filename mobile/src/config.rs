@@ -253,7 +253,11 @@ pub struct SshHostConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_ssh_check: Option<crate::ui_tabs::ssh::SshCheckResult>,
     /// Last host packages check result
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "last_base_check")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "last_base_check"
+    )]
     pub last_host_check: Option<crate::ui_tabs::ssh::HostCheckResult>,
     /// Last Docker check result
     #[serde(default, skip_serializing_if = "Option::is_none")]

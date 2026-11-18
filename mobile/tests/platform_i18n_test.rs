@@ -7,8 +7,8 @@ use std::fs;
 #[test]
 fn test_platform_no_hardcoded_strings() {
     // Read platform.rs source
-    let platform_source = fs::read_to_string("src/ui_tabs/platform.rs")
-        .expect("Failed to read platform.rs");
+    let platform_source =
+        fs::read_to_string("src/ui_tabs/platform.rs").expect("Failed to read platform.rs");
 
     // Critical hardcoded strings that must not appear without tr!()
     let forbidden_strings = vec![
@@ -45,8 +45,8 @@ fn test_platform_no_hardcoded_strings() {
 
 #[test]
 fn test_en_us_has_required_keys() {
-    let en_ftl = fs::read_to_string("assets/languages/fluent/en-US.ftl")
-        .expect("Failed to read en-US.ftl");
+    let en_ftl =
+        fs::read_to_string("assets/languages/fluent/en-US.ftl").expect("Failed to read en-US.ftl");
 
     let required_keys = vec![
         "platform-main-heading",
@@ -106,8 +106,8 @@ fn test_en_us_has_required_keys() {
 
 #[test]
 fn test_ko_kr_has_required_keys() {
-    let ko_ftl = fs::read_to_string("assets/languages/fluent/ko-KR.ftl")
-        .expect("Failed to read ko-KR.ftl");
+    let ko_ftl =
+        fs::read_to_string("assets/languages/fluent/ko-KR.ftl").expect("Failed to read ko-KR.ftl");
 
     let required_keys = vec![
         "platform-main-heading",
@@ -167,8 +167,8 @@ fn test_ko_kr_has_required_keys() {
 
 #[test]
 fn test_platform_uses_tr_macro() {
-    let platform_source = fs::read_to_string("src/ui_tabs/platform.rs")
-        .expect("Failed to read platform.rs");
+    let platform_source =
+        fs::read_to_string("src/ui_tabs/platform.rs").expect("Failed to read platform.rs");
 
     // Verify tr! macro is imported and used
     assert!(

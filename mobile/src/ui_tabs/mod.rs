@@ -1,9 +1,9 @@
 //! Tab modules for the main application UI
 
 // Infrastructure management tabs (active on all platforms)
-pub mod ns; // Keep existing NS tab code, but hidden from main tabs
 pub mod dns; // New DNS tab with Cloudflare OAuth
 pub mod dns_drawer; // DNS drawer with tabs
+pub mod ns; // Keep existing NS tab code, but hidden from main tabs
 pub mod platform;
 pub mod platform_drawer;
 pub mod site;
@@ -44,11 +44,6 @@ impl Tab {
 
     /// Get all tabs in order (NS tab excluded - kept in code for reference)
     pub fn all() -> Vec<Tab> {
-        vec![
-            Tab::Platform,
-            Tab::Ssh,
-            Tab::Dns,
-            Tab::Site,
-        ]
+        vec![Tab::Platform, Tab::Ssh, Tab::Dns, Tab::Site]
     }
 }

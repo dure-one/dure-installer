@@ -2,11 +2,11 @@
 //!
 //! Handles GCP project operations.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::{GCP_RESOURCE_MANAGER_API_BASE, GcpRestClient};
+use super::{GcpRestClient, GCP_RESOURCE_MANAGER_API_BASE};
 use crate::api::gcp::compute::Operation;
 
 // ============================================================================

@@ -3,7 +3,7 @@
 //! Provides DNS-over-HTTPS (DOH) resolution for A, AAAA, and TXT records
 //! with SQLite-based caching.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

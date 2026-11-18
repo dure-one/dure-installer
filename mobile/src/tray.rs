@@ -6,7 +6,7 @@
 //! When "Show App" is clicked, it sends TrayExitAction::OpenGui via channel.
 //!
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
 use std::sync::{Arc, OnceLock};
@@ -21,8 +21,8 @@ use tao::{
 use tao::platform::unix::EventLoopBuilderExtUnix;
 
 use tray_icon::{
-    Icon, TrayIcon, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuId, MenuItem},
+    Icon, TrayIcon, TrayIconBuilder, TrayIconEvent,
 };
 
 /// Global queue for tray icon events (set up once at startup)
@@ -245,7 +245,7 @@ fn tray_thread_main(action_sender: std::sync::mpsc::Sender<TrayExitAction>) {
                     // Quit application - exit the event loop
                     dure_info!("Quitting application");
                     tray_icon.take(); // Drop tray icon
-                    // Send Quit action before exiting
+                                      // Send Quit action before exiting
                     if let Err(e) = action_sender.send(TrayExitAction::Quit) {
                         dure_error!("Failed to send Quit action: {}", e);
                     }

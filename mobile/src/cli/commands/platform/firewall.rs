@@ -4,7 +4,7 @@ use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -44,7 +44,9 @@ pub async fn execute_firewall_inner(
 ) -> Result<()> {
     let allow_ip = get_current_ip(ip).await?;
 
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .ok_or_else(|| anyhow!("No GCP project selected"))?;
     let event = runner
         .execute_command(PlatformCommand::UpdateFirewall {
@@ -81,7 +83,9 @@ pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> 
 
         println!("✓ Detected current IP: {}", allow_ip);
 
-        let project_id = platform.gcp_selected_project_id.as_ref()
+        let project_id = platform
+            .gcp_selected_project_id
+            .as_ref()
             .ok_or_else(|| anyhow!("No GCP project selected"))?;
         let event = runner
             .execute_command(PlatformCommand::UpdateFirewall {

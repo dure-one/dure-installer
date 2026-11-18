@@ -23,9 +23,7 @@ impl OperationsRenderer {
 
     /// Set the maximum height of the scrollable area
     pub fn max_height(self, height: f32) -> Self {
-        Self {
-            max_height: height,
-        }
+        Self { max_height: height }
     }
 
     /// Display the operation history in a data table
@@ -77,11 +75,18 @@ impl OperationsRenderer {
             let (status_text, status_color) = match op.status.as_str() {
                 "running" => (tr!("ops-status-running"), Color32::from_rgb(100, 181, 246)),
                 "success" => (tr!("ops-status-success"), Color32::from_rgb(76, 175, 80)),
-                "failed" => (tr!("ops-status-failed"), egui_material3::theme::get_global_color("error")),
-                _ => (op.status.clone(), egui_material3::theme::get_global_color("onSurfaceVariant")),
+                "failed" => (
+                    tr!("ops-status-failed"),
+                    egui_material3::theme::get_global_color("error"),
+                ),
+                _ => (
+                    op.status.clone(),
+                    egui_material3::theme::get_global_color("onSurfaceVariant"),
+                ),
             };
 
-            let duration = op.duration_ms()
+            let duration = op
+                .duration_ms()
                 .map(|ms| format!("{:.2}s", ms as f64 / 1000.0))
                 .unwrap_or_else(|| "-".to_string());
 
@@ -225,10 +230,7 @@ mod tests {
         let mut op = create_test_op(1, "create_vm", OperationStatus::Success, "gcp");
         op.details = Some("VM created with ID: i-12345678".to_string());
         assert!(op.details.is_some());
-        assert_eq!(
-            op.details.unwrap(),
-            "VM created with ID: i-12345678"
-        );
+        assert_eq!(op.details.unwrap(), "VM created with ID: i-12345678");
     }
 
     #[test]

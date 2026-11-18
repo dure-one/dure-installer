@@ -6,8 +6,8 @@ mod events;
 pub use commands::WssCommand;
 pub use events::WssEvent;
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::viewmodel::ViewModelEvent;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
 
 pub struct WssActor {

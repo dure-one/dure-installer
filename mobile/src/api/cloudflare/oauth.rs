@@ -33,8 +33,8 @@ use std::net::{TcpListener, TcpStream};
 
 /// Get OAuth client ID from compile-time env var
 fn get_oauth_client_id() -> &'static str {
-    option_env!("CLOUDFLARE_OAUTH_CLIENT_ID")
-        .unwrap_or("47d31be581def48e92dbce05745335c3") // Custom OAuth app
+    option_env!("CLOUDFLARE_OAUTH_CLIENT_ID").unwrap_or("47d31be581def48e92dbce05745335c3")
+    // Custom OAuth app
 }
 
 // Redirect URI is now built dynamically using random port (like GCP OAuth)
@@ -45,30 +45,23 @@ fn get_oauth_client_id() -> &'static str {
 const CLOUDFLARE_SCOPES: &[&str] = &[
     // Offline access - enables refresh tokens for automatic token renewal
     "offline_access",
-
     // User details - for token verification and user info
     "user-details.read",
-
     // Account DNS Settings
     "account-dns-settings.read",
     "account-dns-settings.write",
-
     // DNS Management
     "dns.read",
     "dns.write",
-
     // Registrar Domains
     "registrar-domains.admin",
     "registrar-domains.read",
-
     // Zone DNS Settings
     "zone-dns-settings.read",
     "zone-dns-settings.write",
-
     // Zone Management
     "zone.read",
     "zone.write",
-
     // Zone Settings
     "zone-settings.read",
     "zone-settings.write",
@@ -185,7 +178,12 @@ impl CloudflareOAuthHandler {
     /// Note: redirect_uri is now dynamic (built at runtime), so this method
     /// is mainly for testing. Production code uses run_oauth_flow() which
     /// builds the URL with the actual bound port.
-    pub fn build_auth_url(&self, redirect_uri: &str, state: &str, code_challenge: &str) -> Result<String> {
+    pub fn build_auth_url(
+        &self,
+        redirect_uri: &str,
+        state: &str,
+        code_challenge: &str,
+    ) -> Result<String> {
         let scope = CLOUDFLARE_SCOPES.join(" ");
 
         let url = format!(
@@ -218,8 +216,10 @@ impl CloudflareOAuthHandler {
         const OAUTH_PORT: u16 = 51082;
 
         // Bind to the port configured in OAuth app
-        let listener = TcpListener::bind(("127.0.0.1", OAUTH_PORT))
-            .context(format!("Failed to bind to port {} - ensure it's not in use", OAUTH_PORT))?;
+        let listener = TcpListener::bind(("127.0.0.1", OAUTH_PORT)).context(format!(
+            "Failed to bind to port {} - ensure it's not in use",
+            OAUTH_PORT
+        ))?;
 
         // Build redirect URI matching OAuth app configuration
         let redirect_uri = get_redirect_uri();
@@ -259,7 +259,8 @@ impl CloudflareOAuthHandler {
         let authorization_code = handle_oauth_request(stream, state)?;
 
         // Exchange code for tokens
-        let oauth_result = self.exchange_code_for_token(&authorization_code, &redirect_uri, &code_verifier)?;
+        let oauth_result =
+            self.exchange_code_for_token(&authorization_code, &redirect_uri, &code_verifier)?;
 
         Ok(oauth_result)
     }
@@ -332,12 +333,18 @@ pub struct CloudflareOAuthClientManager {
 impl CloudflareOAuthClientManager {
     /// Create new OAuth client manager
     pub fn new(api_token: String, account_id: String) -> Self {
-        Self { api_token, account_id }
+        Self {
+            api_token,
+            account_id,
+        }
     }
 
     /// Build API base URL for account
     fn api_base(&self) -> String {
-        format!("https://api.cloudflare.com/client/v4/accounts/{}/oauth2/clients", self.account_id)
+        format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/oauth2/clients",
+            self.account_id
+        )
     }
 
     /// List all OAuth clients for account
@@ -383,8 +390,7 @@ impl CloudflareOAuthClientManager {
         dure_info!("Creating OAuth client: {}", request.name);
 
         let url = self.api_base();
-        let body = serde_json::to_string(&request)
-            .context("Failed to serialize create request")?;
+        let body = serde_json::to_string(&request).context("Failed to serialize create request")?;
 
         let response = ureq::post(&url)
             .set("Authorization", &format!("Bearer {}", self.api_token))
@@ -393,7 +399,11 @@ impl CloudflareOAuthClientManager {
             .map_err(|e| match e {
                 ureq::Error::Status(code, resp) => {
                     let error_text = resp.into_string().unwrap_or_default();
-                    anyhow::anyhow!("OAuth client creation failed (HTTP {}): {}", code, error_text)
+                    anyhow::anyhow!(
+                        "OAuth client creation failed (HTTP {}): {}",
+                        code,
+                        error_text
+                    )
                 }
                 ureq::Error::Transport(err) => {
                     anyhow::anyhow!("Network error: {}", err)
@@ -409,18 +419,25 @@ impl CloudflareOAuthClientManager {
             anyhow::bail!("OAuth client creation failed: {}", errors);
         }
 
-        dure_info!("OAuth client created: {} ({})", result.result.name, result.result.id);
+        dure_info!(
+            "OAuth client created: {} ({})",
+            result.result.name,
+            result.result.id
+        );
         Ok(result.result)
     }
 
     /// Update OAuth client
     /// https://developers.cloudflare.com/api/resources/iam/subresources/oauth_clients/methods/update
-    pub fn update_oauth_client(&self, client_id: &str, request: UpdateOAuthClientRequest) -> Result<OAuthClient> {
+    pub fn update_oauth_client(
+        &self,
+        client_id: &str,
+        request: UpdateOAuthClientRequest,
+    ) -> Result<OAuthClient> {
         dure_info!("Updating OAuth client: {}", client_id);
 
         let url = format!("{}/{}", self.api_base(), client_id);
-        let body = serde_json::to_string(&request)
-            .context("Failed to serialize update request")?;
+        let body = serde_json::to_string(&request).context("Failed to serialize update request")?;
 
         let response = ureq::put(&url)
             .set("Authorization", &format!("Bearer {}", self.api_token))
@@ -462,7 +479,11 @@ impl CloudflareOAuthClientManager {
             .map_err(|e| match e {
                 ureq::Error::Status(code, resp) => {
                     let error_text = resp.into_string().unwrap_or_default();
-                    anyhow::anyhow!("OAuth client deletion failed (HTTP {}): {}", code, error_text)
+                    anyhow::anyhow!(
+                        "OAuth client deletion failed (HTTP {}): {}",
+                        code,
+                        error_text
+                    )
                 }
                 ureq::Error::Transport(err) => {
                     anyhow::anyhow!("Network error: {}", err)
@@ -495,7 +516,11 @@ impl CloudflareOAuthClientManager {
             .map_err(|e| match e {
                 ureq::Error::Status(code, resp) => {
                     let error_text = resp.into_string().unwrap_or_default();
-                    anyhow::anyhow!("OAuth secret rotation failed (HTTP {}): {}", code, error_text)
+                    anyhow::anyhow!(
+                        "OAuth secret rotation failed (HTTP {}): {}",
+                        code,
+                        error_text
+                    )
                 }
                 ureq::Error::Transport(err) => {
                     anyhow::anyhow!("Network error: {}", err)
@@ -528,7 +553,11 @@ impl CloudflareOAuthClientManager {
             .map_err(|e| match e {
                 ureq::Error::Status(code, resp) => {
                     let error_text = resp.into_string().unwrap_or_default();
-                    anyhow::anyhow!("Rotated secret deletion failed (HTTP {}): {}", code, error_text)
+                    anyhow::anyhow!(
+                        "Rotated secret deletion failed (HTTP {}): {}",
+                        code,
+                        error_text
+                    )
                 }
                 ureq::Error::Transport(err) => {
                     anyhow::anyhow!("Network error: {}", err)
@@ -565,7 +594,10 @@ pub fn verify_token(access_token: &str) -> Result<bool> {
             return Ok(false);
         }
         Err(ureq::Error::Transport(err)) => {
-            return Err(anyhow::anyhow!("Network error during token verification: {}", err));
+            return Err(anyhow::anyhow!(
+                "Network error during token verification: {}",
+                err
+            ));
         }
     };
 
@@ -653,7 +685,9 @@ pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
 
     Ok(OAuthResult {
         access_token: token_response.access_token,
-        refresh_token: token_response.refresh_token.or_else(|| Some(refresh_token.to_string())),
+        refresh_token: token_response
+            .refresh_token
+            .or_else(|| Some(refresh_token.to_string())),
         expires_at,
     })
 }
@@ -680,11 +714,10 @@ pub fn get_user_info(access_token: &str) -> Result<UserInfo> {
         }
     };
 
-    let body = response.into_string()
-        .context("Failed to read response")?;
+    let body = response.into_string().context("Failed to read response")?;
 
-    let api_response: ApiV4Response<Vec<CloudflareAccount>> = serde_json::from_str(&body)
-        .context(format!("Failed to parse accounts JSON: {}", body))?;
+    let api_response: ApiV4Response<Vec<CloudflareAccount>> =
+        serde_json::from_str(&body).context(format!("Failed to parse accounts JSON: {}", body))?;
 
     if !api_response.success || api_response.result.is_empty() {
         dure_warn!("No accounts from /accounts, trying zones fallback");
@@ -718,24 +751,36 @@ fn get_account_from_zones(access_token: &str) -> Result<UserInfo> {
         Ok(resp) => resp,
         Err(ureq::Error::Status(code, resp)) => {
             let error_text = resp.into_string().unwrap_or_default();
-            dure_error!("Zones API request failed with status {}: {}", code, error_text);
-            return Err(anyhow::anyhow!("Failed to fetch zones (HTTP {}): {}", code, error_text));
+            dure_error!(
+                "Zones API request failed with status {}: {}",
+                code,
+                error_text
+            );
+            return Err(anyhow::anyhow!(
+                "Failed to fetch zones (HTTP {}): {}",
+                code,
+                error_text
+            ));
         }
         Err(ureq::Error::Transport(err)) => {
             return Err(anyhow::anyhow!("Network error during zones fetch: {}", err));
         }
     };
 
-    let body = response.into_string()
+    let body = response
+        .into_string()
         .context("Failed to read zones response")?;
 
     // Parse API v4 response
-    let api_response: ApiV4Response<Vec<Zone>> = serde_json::from_str(&body)
-        .context(format!("Failed to parse zones JSON: {}", body))?;
+    let api_response: ApiV4Response<Vec<Zone>> =
+        serde_json::from_str(&body).context(format!("Failed to parse zones JSON: {}", body))?;
 
     if !api_response.success {
         let errors = serde_json::to_string(&api_response.errors).unwrap_or_default();
-        return Err(anyhow::anyhow!("Zones API returned success=false: {}", errors));
+        return Err(anyhow::anyhow!(
+            "Zones API returned success=false: {}",
+            errors
+        ));
     }
 
     if api_response.result.is_empty() {
@@ -746,7 +791,11 @@ fn get_account_from_zones(access_token: &str) -> Result<UserInfo> {
     let account_id = zone.account.id.clone();
     let account_name = zone.account.name.clone();
 
-    dure_info!("✓ Account info retrieved from zones: {} (ID: {})", account_name, account_id);
+    dure_info!(
+        "✓ Account info retrieved from zones: {} (ID: {})",
+        account_name,
+        account_id
+    );
 
     Ok(UserInfo {
         account_id,
@@ -804,9 +853,7 @@ fn handle_oauth_request(mut stream: TcpStream, expected_state: String) -> Result
     }
 
     let path = parts[1];
-    let query_start = path
-        .find('?')
-        .context("No query parameters in callback")?;
+    let query_start = path.find('?').context("No query parameters in callback")?;
     let query = &path[query_start + 1..];
 
     // Parse query parameters
@@ -899,11 +946,15 @@ mod tests {
 
         // code_verifier: 43-128 chars, base64url(random(32 bytes))
         assert!(verifier.len() >= 43 && verifier.len() <= 128);
-        assert!(verifier.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+        assert!(verifier
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 
         // code_challenge: base64url(sha256(code_verifier)) = 43 chars
         assert_eq!(challenge.len(), 43);
-        assert!(challenge.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+        assert!(challenge
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]
@@ -920,10 +971,15 @@ mod tests {
         let handler = CloudflareOAuthHandler::new();
         let (_, code_challenge) = generate_pkce_pair();
         let redirect_uri = "http://localhost:8976/oauth/callback";
-        let url = handler.build_auth_url(redirect_uri, "state123", &code_challenge).unwrap();
+        let url = handler
+            .build_auth_url(redirect_uri, "state123", &code_challenge)
+            .unwrap();
 
         assert!(url.contains(&format!("client_id={}", get_oauth_client_id())));
-        assert!(url.contains(&format!("redirect_uri={}", urlencoding::encode(redirect_uri))));
+        assert!(url.contains(&format!(
+            "redirect_uri={}",
+            urlencoding::encode(redirect_uri)
+        )));
         assert!(url.contains("state=state123"));
         assert!(url.contains("response_type=code"));
         assert!(url.contains("code_challenge="));
@@ -993,7 +1049,10 @@ mod tests {
             .collect();
 
         assert_eq!(params.get("error"), Some(&"access_denied".to_string()));
-        assert_eq!(params.get("error_description"), Some(&"User denied access".to_string()));
+        assert_eq!(
+            params.get("error_description"),
+            Some(&"User denied access".to_string())
+        );
     }
 
     #[test]
@@ -1012,7 +1071,10 @@ mod tests {
             .collect();
 
         assert_eq!(params.get("error"), Some(&"invalid_request".to_string()));
-        assert_eq!(params.get("error_description"), Some(&"Invalid scope".to_string()));
+        assert_eq!(
+            params.get("error_description"),
+            Some(&"Invalid scope".to_string())
+        );
     }
 
     #[test]
@@ -1025,10 +1087,8 @@ mod tests {
 
     #[test]
     fn test_oauth_client_manager_creation() {
-        let manager = CloudflareOAuthClientManager::new(
-            "test_token".to_string(),
-            "test_account".to_string()
-        );
+        let manager =
+            CloudflareOAuthClientManager::new("test_token".to_string(), "test_account".to_string());
         assert_eq!(
             manager.api_base(),
             "https://api.cloudflare.com/client/v4/accounts/test_account/oauth2/clients"
@@ -1039,13 +1099,17 @@ mod tests {
     fn test_list_oauth_clients_invalid_token() {
         let manager = CloudflareOAuthClientManager::new(
             "invalid_token".to_string(),
-            "test_account".to_string()
+            "test_account".to_string(),
         );
 
         let result = manager.list_oauth_clients();
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("authentication") || err_msg.contains("401") || err_msg.contains("403"));
+        assert!(
+            err_msg.contains("authentication")
+                || err_msg.contains("401")
+                || err_msg.contains("403")
+        );
     }
 
     #[test]
@@ -1283,7 +1347,9 @@ mod tests {
         assert_ne!(rotated.client_secret, old_secret);
 
         // 6. Delete rotated secret
-        manager.delete_rotated_oauth_client_secret(&client.id).unwrap();
+        manager
+            .delete_rotated_oauth_client_secret(&client.id)
+            .unwrap();
 
         // 7. Delete client
         manager.delete_oauth_client(&client.id).unwrap();
@@ -1313,7 +1379,10 @@ mod tests {
 
         let parsed: TokenResponse = serde_json::from_str(json_with_refresh).unwrap();
         assert_eq!(parsed.access_token, "new_access_token_xyz");
-        assert_eq!(parsed.refresh_token, Some("new_refresh_token_abc".to_string()));
+        assert_eq!(
+            parsed.refresh_token,
+            Some("new_refresh_token_abc".to_string())
+        );
         assert_eq!(parsed.expires_in, Some(3600));
 
         // Test without refresh_token (should still parse)

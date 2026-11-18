@@ -25,7 +25,10 @@ fn test_dns_wizard_state_enum() {
     let _error = DnsWizardState::Error("test error".to_string());
 
     // Test state equality
-    assert_eq!(DnsWizardState::CloudflareAuth, DnsWizardState::CloudflareAuth);
+    assert_eq!(
+        DnsWizardState::CloudflareAuth,
+        DnsWizardState::CloudflareAuth
+    );
     assert_ne!(DnsWizardState::CloudflareAuth, DnsWizardState::Complete);
 }
 
@@ -142,8 +145,16 @@ fn test_dns_wizard_vm_info_loading() {
 
     // Test load_available_vms method
     let vms = vec![
-        ("vm-1".to_string(), "1.2.3.4".to_string(), "us-west1-a".to_string()),
-        ("vm-2".to_string(), "5.6.7.8".to_string(), "us-east1-b".to_string()),
+        (
+            "vm-1".to_string(),
+            "1.2.3.4".to_string(),
+            "us-west1-a".to_string(),
+        ),
+        (
+            "vm-2".to_string(),
+            "5.6.7.8".to_string(),
+            "us-east1-b".to_string(),
+        ),
     ];
 
     wizard.load_available_vms(vms);

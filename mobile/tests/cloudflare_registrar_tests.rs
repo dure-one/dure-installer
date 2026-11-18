@@ -50,10 +50,7 @@ fn test_domain_without_cloudflare_nameservers() {
         id: "domain123".to_string(),
         name: "example.com".to_string(),
         status: "active".to_string(),
-        nameservers: vec![
-            "ns1.example.com".to_string(),
-            "ns2.example.com".to_string(),
-        ],
+        nameservers: vec!["ns1.example.com".to_string(), "ns2.example.com".to_string()],
         created_at: None,
         expires_at: None,
     };

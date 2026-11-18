@@ -182,14 +182,23 @@ mod tests {
         let bar = EmojiProgressBar::new();
         // ✅ used directly instead of SvgEmoji::Checkmark for consistency
         assert_eq!(bar.emoji_for_state(ProgressState::Completed), "✅");
-        assert_eq!(bar.emoji_for_state(ProgressState::InProgress), SvgEmoji::Progress.to_unicode());
-        assert_eq!(bar.emoji_for_state(ProgressState::Pending), SvgEmoji::Circle.to_unicode());
-        assert_eq!(bar.emoji_for_state(ProgressState::Failed), SvgEmoji::Cross.to_unicode());
+        assert_eq!(
+            bar.emoji_for_state(ProgressState::InProgress),
+            SvgEmoji::Progress.to_unicode()
+        );
+        assert_eq!(
+            bar.emoji_for_state(ProgressState::Pending),
+            SvgEmoji::Circle.to_unicode()
+        );
+        assert_eq!(
+            bar.emoji_for_state(ProgressState::Failed),
+            SvgEmoji::Cross.to_unicode()
+        );
     }
 
     #[test]
     fn test_from_platform_row_all_completed() {
-        use crate::ui_tabs::platform::{PlatformRow, OperationState};
+        use crate::ui_tabs::platform::{OperationState, PlatformRow};
 
         let row = PlatformRow {
             project_id: "test".to_string(),
@@ -227,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_from_platform_row_with_operation() {
-        use crate::ui_tabs::platform::{PlatformRow, OperationState};
+        use crate::ui_tabs::platform::{OperationState, PlatformRow};
 
         let row = PlatformRow {
             project_id: "test".to_string(),

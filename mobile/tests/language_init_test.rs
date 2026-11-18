@@ -2,7 +2,7 @@
 //!
 //! Tests that language settings persist across profile loads
 
-use dure::{Settings, i18n};
+use dure::{i18n, Settings};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -25,7 +25,10 @@ fn test_language_setting_persists_after_save_and_reload() {
     let loaded_settings = Settings::load(&settings_path).unwrap();
 
     // Assert
-    assert_eq!(loaded_settings.language, "ko-KR", "Language setting should persist");
+    assert_eq!(
+        loaded_settings.language, "ko-KR",
+        "Language setting should persist"
+    );
 }
 
 #[cfg(feature = "gui")]

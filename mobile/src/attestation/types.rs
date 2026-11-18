@@ -1,6 +1,6 @@
 //! Types for GitHub Artifact Attestations
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

@@ -10,7 +10,7 @@
 //! - key.kdbx - KeePass database (password protected)
 //! - dure.db - SQLite database
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
@@ -20,14 +20,14 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub struct ProfileContext {
     pub name: String,
-    pub config_dir: PathBuf,       // ~/.config/dure_installer/{name}/
-    pub data_dir: PathBuf,         // ~/.local/share/dure_installer/{name}/ (XDG data dir)
-    pub config_file: PathBuf,      // {config_dir}/config.yml
-    pub settings_file: PathBuf,    // {config_dir}/settings.yml
-    pub db_path: PathBuf,          // {data_dir}/dure.db (moved from config to data dir)
-    pub kdbx_path: PathBuf,        // {config_dir}/key.kdbx
-    pub kpkey_path: PathBuf,       // {config_dir}/id_ed25519
-    pub kppubkey_path: PathBuf,    // {config_dir}/id_ed25519.pub
+    pub config_dir: PathBuf,    // ~/.config/dure_installer/{name}/
+    pub data_dir: PathBuf,      // ~/.local/share/dure_installer/{name}/ (XDG data dir)
+    pub config_file: PathBuf,   // {config_dir}/config.yml
+    pub settings_file: PathBuf, // {config_dir}/settings.yml
+    pub db_path: PathBuf,       // {data_dir}/dure.db (moved from config to data dir)
+    pub kdbx_path: PathBuf,     // {config_dir}/key.kdbx
+    pub kpkey_path: PathBuf,    // {config_dir}/id_ed25519
+    pub kppubkey_path: PathBuf, // {config_dir}/id_ed25519.pub
 }
 
 impl ProfileContext {
@@ -108,7 +108,9 @@ impl ProfileManager {
     pub fn validate_name(name: &str) -> Result<(), ProfileError> {
         // Check empty
         if name.is_empty() {
-            return Err(ProfileError::InvalidName("name cannot be empty".to_string()));
+            return Err(ProfileError::InvalidName(
+                "name cannot be empty".to_string(),
+            ));
         }
 
         // Check length
@@ -171,18 +173,17 @@ impl ProfileManager {
         use std::fs::File;
         use std::io::Cursor;
 
-        let mut file = File::open(&ctx.kdbx_path)
-            .context("failed to open kdbx file")?;
+        let mut file = File::open(&ctx.kdbx_path).context("failed to open kdbx file")?;
 
         // Build key with password + keyfile
         let mut key = DatabaseKey::new().with_password(password);
 
         // Add keyfile if it exists
         if ctx.kpkey_path.exists() {
-            let kpkey_data = fs::read(&ctx.kpkey_path)
-                .context("failed to read keyfile")?;
+            let kpkey_data = fs::read(&ctx.kpkey_path).context("failed to read keyfile")?;
             let mut kpkey_cursor = Cursor::new(kpkey_data);
-            key = key.with_keyfile(&mut kpkey_cursor)
+            key = key
+                .with_keyfile(&mut kpkey_cursor)
                 .context("failed to add keyfile to database key")?;
         }
 
@@ -279,10 +280,10 @@ impl ProfileManager {
         let mut key = DatabaseKey::new().with_password(password);
 
         // Add keyfile
-        let kpkey_data = fs::read(kpkey_path)
-            .context("failed to read keyfile")?;
+        let kpkey_data = fs::read(kpkey_path).context("failed to read keyfile")?;
         let mut kpkey_cursor = Cursor::new(kpkey_data);
-        key = key.with_keyfile(&mut kpkey_cursor)
+        key = key
+            .with_keyfile(&mut kpkey_cursor)
             .context("failed to add keyfile to database key")?;
 
         // Save database
@@ -361,8 +362,14 @@ mod tests {
         let profile = ProfileContext::new("test-profile").unwrap();
 
         assert_eq!(profile.name, "test-profile");
-        assert!(profile.config_dir.to_string_lossy().contains("test-profile"));
-        assert!(profile.config_file.to_string_lossy().ends_with("config.yml"));
+        assert!(profile
+            .config_dir
+            .to_string_lossy()
+            .contains("test-profile"));
+        assert!(profile
+            .config_file
+            .to_string_lossy()
+            .ends_with("config.yml"));
         assert!(profile.db_path.to_string_lossy().ends_with("dure.db"));
         assert!(profile.kdbx_path.to_string_lossy().ends_with("key.kdbx"));
 
@@ -531,7 +538,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let test_dir = std::env::temp_dir().join(format!("dure_test_verify_incorrect_{}", timestamp));
+        let test_dir =
+            std::env::temp_dir().join(format!("dure_test_verify_incorrect_{}", timestamp));
         std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
 
         // Create base directory and profile
@@ -604,7 +612,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let test_dir = std::env::temp_dir().join(format!("dure_test_delete_not_found_{}", timestamp));
+        let test_dir =
+            std::env::temp_dir().join(format!("dure_test_delete_not_found_{}", timestamp));
         std::env::set_var("DURE_TEST_PROFILES_DIR", &test_dir);
 
         // Create base directory
@@ -651,9 +660,19 @@ mod tests {
         assert!(!ctx.db_path.starts_with(&ctx.config_dir));
 
         // Verify paths contain correct XDG directories
-        assert!(ctx.config_dir.to_string_lossy().contains(".config/dure_installer"));
-        assert!(ctx.data_dir.to_string_lossy().contains(".local/share/dure_installer")
-            || ctx.data_dir.to_string_lossy().contains(r".local\share\dure_installer"));
+        assert!(ctx
+            .config_dir
+            .to_string_lossy()
+            .contains(".config/dure_installer"));
+        assert!(
+            ctx.data_dir
+                .to_string_lossy()
+                .contains(".local/share/dure_installer")
+                || ctx
+                    .data_dir
+                    .to_string_lossy()
+                    .contains(r".local\share\dure_installer")
+        );
 
         dure_info!("✓ Config dir: {}", ctx.config_dir.display());
         dure_info!("✓ Data dir: {}", ctx.data_dir.display());

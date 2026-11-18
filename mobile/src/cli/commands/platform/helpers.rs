@@ -1,7 +1,7 @@
 //! Helper functions for formatting and validation
 
 use crate::config::CloudPlatformConfig;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
 /// Format connection progress steps with status indicators
 pub fn format_steps(platform: &CloudPlatformConfig) -> String {
@@ -82,7 +82,10 @@ pub fn validate_platform_ready(platform: &CloudPlatformConfig, operation: &str) 
         return Ok(());
     }
 
-    let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("unknown");
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_deref()
+        .unwrap_or("unknown");
 
     // Check OAuth
     if platform.gcp_oauth_access_token.is_none() {

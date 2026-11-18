@@ -4,7 +4,7 @@ use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 /// Get config file path

@@ -25,9 +25,9 @@ pub mod storage;
 pub mod android;
 
 #[cfg(feature = "gui")]
-pub mod ui_dlg;
-#[cfg(feature = "gui")]
 pub mod ui_components;
+#[cfg(feature = "gui")]
+pub mod ui_dlg;
 
 // Desktop-only modules (minimal implementations for CLI)
 pub mod config;
@@ -153,7 +153,9 @@ pub fn get_profiles_base_dir() -> Result<PathBuf> {
 pub fn get_profile_config_path(profile: Option<&calc::profile::ProfileContext>) -> Result<PathBuf> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
-        None => anyhow::bail!("No active profile - config operations require a profile to be selected"),
+        None => {
+            anyhow::bail!("No active profile - config operations require a profile to be selected")
+        }
     }
 }
 
@@ -188,7 +190,10 @@ pub fn get_app_data_dir() -> Result<PathBuf> {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .context("Failed to get home directory")?;
-        let data_dir = PathBuf::from(home).join(".local").join("share").join("dure_installer");
+        let data_dir = PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("dure_installer");
         Ok(data_dir)
     }
 
@@ -563,14 +568,23 @@ autoupdate: false
         #[cfg(not(target_os = "android"))]
         {
             let data_dir = get_app_data_dir().expect("Failed to get data directory");
-            assert!(data_dir.to_string_lossy().contains(".local/share/dure_installer")
-                || data_dir.to_string_lossy().contains(r".local\share\dure_installer"));
+            assert!(
+                data_dir
+                    .to_string_lossy()
+                    .contains(".local/share/dure_installer")
+                    || data_dir
+                        .to_string_lossy()
+                        .contains(r".local\share\dure_installer")
+            );
         }
 
         #[cfg(target_os = "android")]
         {
             // Android test requires ANDROID_INTERNAL_DATA_PATH to be set
-            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            std::env::set_var(
+                "ANDROID_INTERNAL_DATA_PATH",
+                "/data/data/app.dure.installer",
+            );
             let data_dir = get_app_data_dir().expect("Failed to get data directory");
             assert!(data_dir.to_string_lossy().contains("/data"));
         }
@@ -582,13 +596,22 @@ autoupdate: false
         #[cfg(not(target_os = "android"))]
         {
             let cache_dir = get_app_cache_dir().expect("Failed to get cache directory");
-            assert!(cache_dir.to_string_lossy().contains(".cache/dure-installer")
-                || cache_dir.to_string_lossy().contains(r".cache\dure-installer"));
+            assert!(
+                cache_dir
+                    .to_string_lossy()
+                    .contains(".cache/dure-installer")
+                    || cache_dir
+                        .to_string_lossy()
+                        .contains(r".cache\dure-installer")
+            );
         }
 
         #[cfg(target_os = "android")]
         {
-            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            std::env::set_var(
+                "ANDROID_INTERNAL_DATA_PATH",
+                "/data/data/app.dure.installer",
+            );
             let cache_dir = get_app_cache_dir().expect("Failed to get cache directory");
             assert!(cache_dir.to_string_lossy().contains("/cache"));
         }
@@ -600,13 +623,22 @@ autoupdate: false
         #[cfg(not(target_os = "android"))]
         {
             let config_dir = get_app_config_dir().expect("Failed to get config directory");
-            assert!(config_dir.to_string_lossy().contains(".config/dure_installer")
-                || config_dir.to_string_lossy().contains(r".config\dure_installer"));
+            assert!(
+                config_dir
+                    .to_string_lossy()
+                    .contains(".config/dure_installer")
+                    || config_dir
+                        .to_string_lossy()
+                        .contains(r".config\dure_installer")
+            );
         }
 
         #[cfg(target_os = "android")]
         {
-            std::env::set_var("ANDROID_INTERNAL_DATA_PATH", "/data/data/app.dure.installer");
+            std::env::set_var(
+                "ANDROID_INTERNAL_DATA_PATH",
+                "/data/data/app.dure.installer",
+            );
             let config_dir = get_app_config_dir().expect("Failed to get config directory");
             assert!(config_dir.to_string_lossy().contains("/files"));
         }

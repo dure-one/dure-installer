@@ -436,10 +436,7 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
 
             // Define command categories
             let categories = vec![
-                (
-                    "Hosting Control Commands",
-                    vec!["ns", "platform"],
-                ),
+                ("Hosting Control Commands", vec!["ns", "platform"]),
                 ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
                 (
                     "Common/Utility Commands",

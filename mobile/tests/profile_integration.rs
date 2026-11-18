@@ -7,7 +7,7 @@
 //! 4. Delete → verify cleanup
 
 use anyhow::Result;
-use dure::calc::profile::{ProfileManager, ProfileContext, ProfileError};
+use dure::calc::profile::{ProfileContext, ProfileError, ProfileManager};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -46,7 +46,10 @@ fn create_test_profile_context(base_dir: &PathBuf, name: &str) -> Result<Profile
 fn verify_profile_structure(ctx: &ProfileContext) -> Result<()> {
     // Directory exists
     assert!(ctx.config_dir.exists(), "Profile directory should exist");
-    assert!(ctx.config_dir.is_dir(), "Profile directory should be a directory");
+    assert!(
+        ctx.config_dir.is_dir(),
+        "Profile directory should be a directory"
+    );
 
     // Required files exist
     assert!(ctx.config_file.exists(), "config.yml should exist");
@@ -57,7 +60,10 @@ fn verify_profile_structure(ctx: &ProfileContext) -> Result<()> {
     // Verify file types
     assert!(ctx.config_file.is_file(), "config.yml should be a file");
     assert!(ctx.kpkey_path.is_file(), "id_ed25519 should be a file");
-    assert!(ctx.kppubkey_path.is_file(), "id_ed25519.pub should be a file");
+    assert!(
+        ctx.kppubkey_path.is_file(),
+        "id_ed25519.pub should be a file"
+    );
     assert!(ctx.kdbx_path.is_file(), "key.kdbx should be a file");
 
     Ok(())
@@ -84,15 +90,21 @@ fn test_complete_workflow_create_verify_delete() -> Result<()> {
     let verify_result = ProfileManager::verify_password(profile_name, password);
 
     // Assert 2: Password verification should succeed
-    assert!(verify_result.is_ok(), "Password verification should succeed");
+    assert!(
+        verify_result.is_ok(),
+        "Password verification should succeed"
+    );
 
     // Act 3: Verify wrong password (should fail)
     let wrong_password_result = ProfileManager::verify_password(profile_name, "WrongPassword");
 
     // Assert 3: Wrong password should fail
     assert!(wrong_password_result.is_err(), "Wrong password should fail");
-    match wrong_password_result.unwrap_err().downcast::<ProfileError>() {
-        Ok(ProfileError::IncorrectPassword) => {}, // Expected
+    match wrong_password_result
+        .unwrap_err()
+        .downcast::<ProfileError>()
+    {
+        Ok(ProfileError::IncorrectPassword) => {} // Expected
         _ => panic!("Expected IncorrectPassword error"),
     }
 
@@ -100,7 +112,10 @@ fn test_complete_workflow_create_verify_delete() -> Result<()> {
     ProfileManager::delete_profile(profile_name)?;
 
     // Assert 4: Profile directory should be gone
-    assert!(!ctx.config_dir.exists(), "Profile directory should be deleted");
+    assert!(
+        !ctx.config_dir.exists(),
+        "Profile directory should be deleted"
+    );
 
     Ok(())
 }
@@ -120,20 +135,32 @@ fn test_multi_profile_isolation() -> Result<()> {
     // Assert 1: Both profiles exist with separate directories
     assert!(ctx1.config_dir.exists());
     assert!(ctx2.config_dir.exists());
-    assert_ne!(ctx1.config_dir, ctx2.config_dir, "Profiles should have separate directories");
+    assert_ne!(
+        ctx1.config_dir, ctx2.config_dir,
+        "Profiles should have separate directories"
+    );
 
     // Assert 2: Verify directory structure for both
     verify_profile_structure(&ctx1)?;
     verify_profile_structure(&ctx2)?;
 
     // Assert 3: Database files are separate
-    assert_ne!(ctx1.db_path, ctx2.db_path, "Database paths should be different");
+    assert_ne!(
+        ctx1.db_path, ctx2.db_path,
+        "Database paths should be different"
+    );
 
     // Assert 4: KeePass databases are separate
-    assert_ne!(ctx1.kdbx_path, ctx2.kdbx_path, "KeePass paths should be different");
+    assert_ne!(
+        ctx1.kdbx_path, ctx2.kdbx_path,
+        "KeePass paths should be different"
+    );
 
     // Assert 5: SSH keys are separate
-    assert_ne!(ctx1.kpkey_path, ctx2.kpkey_path, "SSH key paths should be different");
+    assert_ne!(
+        ctx1.kpkey_path, ctx2.kpkey_path,
+        "SSH key paths should be different"
+    );
 
     // Assert 6: Each profile only accepts its own password
     assert!(ProfileManager::verify_password(profile1_name, password1).is_ok());
@@ -301,14 +328,14 @@ fn test_validate_name_valid_names() {
 fn test_validate_name_invalid_names() {
     // Invalid names (using &str slices)
     let invalid_names: Vec<&str> = vec![
-        "",                    // Empty
-        "user profile",        // Space
-        "user@profile",        // Special char
-        "user.profile",        // Dot
-        "user/profile",        // Slash
-        "user\\profile",       // Backslash
-        "user!profile",        // Exclamation
-        "用户",                // Non-ASCII
+        "",              // Empty
+        "user profile",  // Space
+        "user@profile",  // Special char
+        "user.profile",  // Dot
+        "user/profile",  // Slash
+        "user\\profile", // Backslash
+        "user!profile",  // Exclamation
+        "用户",          // Non-ASCII
     ];
 
     for name in invalid_names {

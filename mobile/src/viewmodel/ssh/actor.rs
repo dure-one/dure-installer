@@ -1,14 +1,14 @@
 //! SSH actor implementation
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
-use crate::viewmodel::{ViewModelEvent, runtime};
 use crate::calc::dure_wss;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use crate::calc::{docker, ansible};
-use crate::config::{DureWssConfig, SshHostConfig};
+use crate::calc::{ansible, docker};
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
+use crate::config::{AnsibleRoleConfig, DockerContainerConfig};
+use crate::config::{DureWssConfig, SshHostConfig};
+use crate::viewmodel::{runtime, ViewModelEvent};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
 
 pub struct SshActor {
@@ -32,8 +32,11 @@ impl SshActor {
         }
     }
 
-    fn get_config_and_path(&self) -> anyhow::Result<(crate::config::AppConfig, std::path::PathBuf)> {
-        let config_path = self.profile_config_path
+    fn get_config_and_path(
+        &self,
+    ) -> anyhow::Result<(crate::config::AppConfig, std::path::PathBuf)> {
+        let config_path = self
+            .profile_config_path
             .clone()
             .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
@@ -41,7 +44,8 @@ impl SshActor {
     }
 
     fn load_host_config(&self, host_name: &str) -> anyhow::Result<SshHostConfig> {
-        let config_path = self.profile_config_path
+        let config_path = self
+            .profile_config_path
             .clone()
             .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
@@ -113,11 +117,7 @@ impl SshActor {
     }
 
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    fn save_ansible_role(
-        &self,
-        host_name: &str,
-        role: AnsibleRoleConfig,
-    ) -> anyhow::Result<()> {
+    fn save_ansible_role(&self, host_name: &str, role: AnsibleRoleConfig) -> anyhow::Result<()> {
         let config_path = Self::get_config_path()?;
         let mut config = crate::config::AppConfig::load_or_default(&config_path);
 
@@ -154,13 +154,14 @@ impl SshActor {
             Ok(config) => config,
             Err(e) => {
                 dure_debug!("Failed to load host config for {}: {}", name, e);
-                let _ = self.event_tx.send(ViewModelEvent::Ssh(
-                    SshEvent::HostHealthChecked {
+                let _ = self
+                    .event_tx
+                    .send(ViewModelEvent::Ssh(SshEvent::HostHealthChecked {
                         name,
                         is_alive: false,
                         latency_ms: None,
-                    }
-                )).await;
+                    }))
+                    .await;
                 return;
             }
         };
@@ -178,17 +179,16 @@ impl SshActor {
         // TCP connection attempt with timeout
         let timeout = std::time::Duration::from_secs(timeout_secs as u64);
         let result = smol::future::or(
-            async {
-                smol::net::TcpStream::connect(&address).await
-            },
+            async { smol::net::TcpStream::connect(&address).await },
             async {
                 smol::Timer::after(timeout).await;
                 Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    "Health check timeout"
+                    "Health check timeout",
                 ))
-            }
-        ).await;
+            },
+        )
+        .await;
 
         let elapsed = start.elapsed();
         let (is_alive, latency_ms) = match result {
@@ -202,13 +202,14 @@ impl SshActor {
             }
         };
 
-        let _ = self.event_tx.send(ViewModelEvent::Ssh(
-            SshEvent::HostHealthChecked {
+        let _ = self
+            .event_tx
+            .send(ViewModelEvent::Ssh(SshEvent::HostHealthChecked {
                 name,
                 is_alive,
                 latency_ms,
-            }
-        )).await;
+            }))
+            .await;
     }
 
     pub async fn run(mut self) {
@@ -355,14 +356,18 @@ impl SshActor {
                 ports,
                 env,
             } => {
-                return self.handle_install_docker_image(host_name, container_name, image, tag, ports, env).await;
+                return self
+                    .handle_install_docker_image(host_name, container_name, image, tag, ports, env)
+                    .await;
             }
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveDockerContainer {
                 host_name,
                 container_name,
             } => {
-                return self.handle_remove_docker_container(host_name, container_name).await;
+                return self
+                    .handle_remove_docker_container(host_name, container_name)
+                    .await;
             }
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::InstallDocker { name } => self.install_docker(name).await,
@@ -384,8 +389,17 @@ impl SshActor {
             SshCommand::ListDockerContainers { host_name } => {
                 return self.handle_list_docker_containers(host_name).await;
             }
-            SshCommand::InspectDockerImage { host_name, image, tag } => {
-                dure_debug!(" SSH Actor: inspect_docker_image called for '{}' with {}:{}", host_name, image, tag);
+            SshCommand::InspectDockerImage {
+                host_name,
+                image,
+                tag,
+            } => {
+                dure_debug!(
+                    " SSH Actor: inspect_docker_image called for '{}' with {}:{}",
+                    host_name,
+                    image,
+                    tag
+                );
 
                 // Load host config
                 let host_config = match self.load_host_config(&host_name) {
@@ -394,7 +408,8 @@ impl SshActor {
                         self.send_event(SshEvent::Error {
                             operation: "InspectDockerImage".to_string(),
                             error: format!("Host not found: {}", e),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 };
@@ -414,27 +429,38 @@ impl SshActor {
                         self.send_event(SshEvent::Error {
                             operation: format!("inspect_docker_image({})", full_image),
                             error: format!("Failed to pull image: {}", e),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 }
 
                 // Step 2: Get image history
-                let history_cmd = format!("docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"", full_image);
+                let history_cmd = format!(
+                    "docker history {} --no-trunc --format \"{{{{.CreatedBy}}}}\"",
+                    full_image
+                );
                 dure_debug!(" SSH Actor: Running command: {}", history_cmd);
-                let history_output = match crate::calc::ssh::execute_command(&host_config, &history_cmd, None).await {
-                    Ok(output) => output,
-                    Err(e) => {
-                        dure_error!(" SSH Actor: Failed to get image history: {}", e);
-                        self.send_event(SshEvent::Error {
-                            operation: format!("inspect_docker_image({})", full_image),
-                            error: format!("Failed to inspect image history: {}", e),
-                        }).await;
-                        return Ok(());
-                    }
-                };
+                let history_output =
+                    match crate::calc::ssh::execute_command(&host_config, &history_cmd, None).await
+                    {
+                        Ok(output) => output,
+                        Err(e) => {
+                            dure_error!(" SSH Actor: Failed to get image history: {}", e);
+                            self.send_event(SshEvent::Error {
+                                operation: format!("inspect_docker_image({})", full_image),
+                                error: format!("Failed to inspect image history: {}", e),
+                            })
+                            .await;
+                            return Ok(());
+                        }
+                    };
 
-                dure_debug!(" History output ({} bytes, {} lines):", history_output.len(), history_output.lines().count());
+                dure_debug!(
+                    " History output ({} bytes, {} lines):",
+                    history_output.len(),
+                    history_output.lines().count()
+                );
                 for (i, line) in history_output.lines().take(10).enumerate() {
                     dure_debug!("  Line {}: {}", i + 1, line);
                 }
@@ -455,14 +481,21 @@ impl SshActor {
                     tag: tag.clone(),
                     exposed_ports,
                     env_vars,
-                }).await;
+                })
+                .await;
                 dure_info!(" SSH Actor: DockerImageInspected event sent");
 
                 return Ok(());
             }
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-            SshCommand::RemoveDockerContainers { host_name, container_names } => {
-                dure_debug!(" SSH Actor: remove_docker_containers called for '{}'", host_name);
+            SshCommand::RemoveDockerContainers {
+                host_name,
+                container_names,
+            } => {
+                dure_debug!(
+                    " SSH Actor: remove_docker_containers called for '{}'",
+                    host_name
+                );
                 dure_debug!("  Containers to remove: {:?}", container_names);
 
                 // Load host config
@@ -472,7 +505,8 @@ impl SshActor {
                         self.send_event(SshEvent::Error {
                             operation: "RemoveDockerContainers".to_string(),
                             error: format!("Host not found: {}", e),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 };
@@ -501,7 +535,8 @@ impl SshActor {
                     host_name: host_name.clone(),
                     removed,
                     failed,
-                }).await;
+                })
+                .await;
                 dure_info!(" SSH Actor: DockerContainersRemoved event sent");
 
                 return Ok(());
@@ -520,14 +555,24 @@ impl SshActor {
                 variables,
                 ports,
             } => {
-                return self.handle_install_ansible_role(host_name, instance_name, galaxy_name, variables, ports).await;
+                return self
+                    .handle_install_ansible_role(
+                        host_name,
+                        instance_name,
+                        galaxy_name,
+                        variables,
+                        ports,
+                    )
+                    .await;
             }
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::RemoveAnsibleRole {
                 host_name,
                 instance_name,
             } => {
-                return self.handle_remove_ansible_role(host_name, instance_name).await;
+                return self
+                    .handle_remove_ansible_role(host_name, instance_name)
+                    .await;
             }
             #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
             SshCommand::ListAnsibleRoles { host_name } => {
@@ -542,7 +587,9 @@ impl SshActor {
                 channel,
                 variant,
             } => {
-                return self.handle_install_dure_wss_service(host_name, domain, email, channel, variant).await;
+                return self
+                    .handle_install_dure_wss_service(host_name, domain, email, channel, variant)
+                    .await;
             }
             SshCommand::StartDureWss { host_name } => {
                 return self.handle_start_dure_wss(host_name).await;
@@ -569,43 +616,65 @@ impl SshActor {
             SshCommand::CheckHost { host, profile_kdbx } => {
                 self.handle_check_host(host, profile_kdbx).await
             }
-            SshCommand::InstallHost { host, profile_kdbx: _ } => {
+            SshCommand::InstallHost {
+                host,
+                profile_kdbx: _,
+            } => {
                 self.send_event(SshEvent::HostInstallCompleted {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
             SshCommand::CheckDocker { host, profile_kdbx } => {
                 self.handle_check_docker(host, profile_kdbx).await
             }
-            SshCommand::InstallDockerDaemon { host, profile_kdbx: _ } => {
+            SshCommand::InstallDockerDaemon {
+                host,
+                profile_kdbx: _,
+            } => {
                 self.send_event(SshEvent::DockerInstallCompleted {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
-            SshCommand::RemoveDocker { host, profile_kdbx: _ } => {
+            SshCommand::RemoveDocker {
+                host,
+                profile_kdbx: _,
+            } => {
                 self.send_event(SshEvent::DockerRemoveCompleted {
                     host: host.clone(),
                     success: false,
                     error: Some("Not implemented".to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
             SshCommand::CheckDure { host, profile_kdbx } => {
                 self.handle_check_dure(host, profile_kdbx).await
             }
-            SshCommand::InstallDure { host, env_config, profile_kdbx } => {
-                self.handle_install_dure(host, env_config, profile_kdbx).await
+            SshCommand::InstallDure {
+                host,
+                env_config,
+                profile_kdbx,
+            } => {
+                self.handle_install_dure(host, env_config, profile_kdbx)
+                    .await
             }
-            SshCommand::RemoveDure { host, delete_data, profile_kdbx } => {
-                self.handle_remove_dure(host, delete_data, profile_kdbx).await
+            SshCommand::RemoveDure {
+                host,
+                delete_data,
+                profile_kdbx,
+            } => {
+                self.handle_remove_dure(host, delete_data, profile_kdbx)
+                    .await
             }
             SshCommand::Drawer(_drawer_cmd) => {
                 Err(anyhow::anyhow!("Drawer command not yet implemented"))
@@ -613,9 +682,7 @@ impl SshActor {
 
             // Catch-all for cfg-gated commands on Android/WASM
             #[cfg(any(target_os = "android", target_arch = "wasm32"))]
-            _ => {
-                Err(anyhow::anyhow!("Command not available on this platform"))
-            }
+            _ => Err(anyhow::anyhow!("Command not available on this platform")),
         };
 
         if let Err(e) = result {
@@ -633,8 +700,15 @@ impl SshActor {
         _user: String,
         ssh_key_path: String,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("add_host", &name, true).await.unwrap_or(None);
-        self.log_to_tab(&name, crate::viewmodel::logs::LogLevel::Info, "Adding SSH host...");
+        let log_id = self
+            .start_operation("add_host", &name, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &name,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Adding SSH host...",
+        );
 
         let result = runtime::unblock({
             let host_clone = host.clone();
@@ -681,19 +755,29 @@ impl SshActor {
                 self.send_event(SshEvent::HostAdded {
                     name,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
             Err(e) => {
-                let _ = self.end_operation_failed("add_host", &name, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("add_host", &name, log_id, &e)
+                    .await;
                 Err(e)
             }
         }
     }
 
     async fn delete_host(&mut self, name: String) -> anyhow::Result<()> {
-        let log_id = self.start_operation("delete_host", &name, true).await.unwrap_or(None);
-        self.log_to_tab(&name, crate::viewmodel::logs::LogLevel::Info, "Deleting SSH host...");
+        let log_id = self
+            .start_operation("delete_host", &name, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &name,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Deleting SSH host...",
+        );
 
         let result = runtime::unblock({
             let name_clone = name.clone();
@@ -716,15 +800,20 @@ impl SshActor {
 
         match result {
             Ok(_) => {
-                let _ = self.end_operation_success("delete_host", &name, log_id).await;
+                let _ = self
+                    .end_operation_success("delete_host", &name, log_id)
+                    .await;
                 self.send_event(SshEvent::HostDeleted {
                     name,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
             Err(e) => {
-                let _ = self.end_operation_failed("delete_host", &name, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("delete_host", &name, log_id, &e)
+                    .await;
                 Err(e)
             }
         }
@@ -767,7 +856,9 @@ impl SshActor {
     /// Helper to get config file path (Android)
     #[cfg(target_os = "android")]
     fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
-        Ok(std::path::PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
+        Ok(std::path::PathBuf::from(
+            "/data/data/app.dure.installer/files/config.yml",
+        ))
     }
 
     /// Helper to get config file path (WASM)
@@ -804,19 +895,25 @@ impl SshActor {
         .await?;
 
         // Test connection (async operation - russh uses tokio internally)
-        dure_debug!("🔍 SSH Actor: Starting SSH connection test to {}:{}...", host_config.host, host_config.port
+        dure_debug!(
+            "🔍 SSH Actor: Starting SSH connection test to {}:{}...",
+            host_config.host,
+            host_config.port
         );
         // TODO: Pass profile keyring handle when SSH Actor has profile context
-        let result =
-            crate::calc::ssh::test_connection(&host_config, None).await;
+        let result = crate::calc::ssh::test_connection(&host_config, None).await;
 
         let latency_ms = start.elapsed().as_millis() as u64;
-        dure_debug!("🔍 SSH Actor: Connection test completed in {}ms", latency_ms
+        dure_debug!(
+            "🔍 SSH Actor: Connection test completed in {}ms",
+            latency_ms
         );
 
         match result {
             Ok(conn_result) => {
-                dure_debug!("✓ SSH Actor: Connection test succeeded: {}", conn_result.success
+                dure_debug!(
+                    "✓ SSH Actor: Connection test succeeded: {}",
+                    conn_result.success
                 );
                 self.send_event(SshEvent::ConnectionTested {
                     name,
@@ -866,8 +963,7 @@ impl SshActor {
             .await;
 
         // Initialize host (async operation - russh uses tokio internally)
-        let result =
-            crate::calc::ssh::initialize_host(&host_config).await;
+        let result = crate::calc::ssh::initialize_host(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1156,8 +1252,7 @@ impl SshActor {
             .await;
 
         // Get status (async operation - russh uses tokio internally)
-        let result =
-            crate::calc::ssh::get_linux_status(&host_config).await;
+        let result = crate::calc::ssh::get_linux_status(&host_config).await;
 
         match result {
             Ok(status) => {
@@ -1216,8 +1311,7 @@ impl SshActor {
             .await;
 
         // Install Docker (async operation)
-        let result =
-            crate::calc::ssh::install_docker(&host_config).await;
+        let result = crate::calc::ssh::install_docker(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1267,9 +1361,7 @@ impl SshActor {
             .await;
 
         // Check Docker status (async operations)
-        let installed =
-            crate::calc::ssh::check_docker_installed(&host_config)
-                .await?;
+        let installed = crate::calc::ssh::check_docker_installed(&host_config).await?;
 
         let running = if installed {
             crate::calc::ssh::check_docker_running(&host_config).await?
@@ -1315,8 +1407,7 @@ impl SshActor {
             .await;
 
         // Uninstall Docker (async operation)
-        let result =
-            crate::calc::ssh::uninstall_docker(&host_config).await;
+        let result = crate::calc::ssh::uninstall_docker(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1367,8 +1458,7 @@ impl SshActor {
             .await;
 
         // Install Ansible (async operation)
-        let result =
-            crate::calc::ssh::install_ansible(&host_config).await;
+        let result = crate::calc::ssh::install_ansible(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1419,9 +1509,7 @@ impl SshActor {
             .await;
 
         // Check Ansible status (async operation)
-        let installed =
-            crate::calc::ssh::check_ansible_installed(&host_config)
-                .await?;
+        let installed = crate::calc::ssh::check_ansible_installed(&host_config).await?;
 
         self.send_progress("get_ansible_status", 1.0, "Status retrieved")
             .await;
@@ -1458,8 +1546,7 @@ impl SshActor {
             .await;
 
         // Uninstall Ansible (async operation)
-        let result =
-            crate::calc::ssh::uninstall_ansible(&host_config).await;
+        let result = crate::calc::ssh::uninstall_ansible(&host_config).await;
 
         match result {
             Ok(_) => {
@@ -1481,7 +1568,6 @@ impl SshActor {
             }
         }
     }
-
 
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
         let _ = self
@@ -1512,7 +1598,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "InstallDockerImage".to_string(),
                     error: format!("Host not found: {}", e),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
@@ -1521,38 +1608,41 @@ impl SshActor {
             self.send_event(SshEvent::Error {
                 operation: "InstallDockerImage".to_string(),
                 error: conflict,
-            }).await;
+            })
+            .await;
             return Ok(());
         }
 
-        match docker::is_docker_installed(&host_config).await
-        {
+        match docker::is_docker_installed(&host_config).await {
             Ok(true) => {
                 // Docker installed, proceed
             }
             Ok(false) => {
                 self.send_event(SshEvent::DockerDaemonInstallRequired {
                     host_name: host_name.clone(),
-                }).await;
+                })
+                .await;
 
                 self.send_event(SshEvent::Progress {
                     operation: "InstallDocker".to_string(),
                     progress: 0.2,
                     status: "Installing Docker daemon...".to_string(),
-                }).await;
+                })
+                .await;
 
-                match docker::install_docker_daemon(&host_config).await
-                {
+                match docker::install_docker_daemon(&host_config).await {
                     Ok(_) => {
                         self.send_event(SshEvent::DockerDaemonInstalled {
                             host_name: host_name.clone(),
-                        }).await;
+                        })
+                        .await;
                     }
                     Err(e) => {
                         self.send_event(SshEvent::Error {
                             operation: "InstallDocker".to_string(),
                             error: e.to_string(),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 }
@@ -1561,7 +1651,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "CheckDocker".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         }
@@ -1570,7 +1661,8 @@ impl SshActor {
             operation: "InstallDockerImage".to_string(),
             progress: 0.5,
             status: format!("Pulling image {}:{}", image, tag),
-        }).await;
+        })
+        .await;
 
         let container_config = DockerContainerConfig {
             name: container_name.clone(),
@@ -1581,30 +1673,28 @@ impl SshActor {
             status: "running".to_string(),
         };
 
-        match docker::run_docker_container(
-            &host_config,
-            &container_config,
-        )
-        .await
-        {
+        match docker::run_docker_container(&host_config, &container_config).await {
             Ok(_) => {
                 if let Err(e) = self.save_docker_container(&host_name, container_config) {
                     self.send_event(SshEvent::Error {
                         operation: "SaveConfig".to_string(),
                         error: e.to_string(),
-                    }).await;
+                    })
+                    .await;
                 }
 
                 self.send_event(SshEvent::DockerImageInstalled {
                     host_name,
                     container_name,
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "InstallDockerImage".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1622,17 +1712,13 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "RemoveDockerContainer".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match docker::remove_docker_container(
-            &host_config,
-            &container_name,
-        )
-        .await
-        {
+        match docker::remove_docker_container(&host_config, &container_name).await {
             Ok(_) => {
                 let (mut config, config_path) = match self.get_config_and_path() {
                     Ok(c) => c,
@@ -1640,7 +1726,8 @@ impl SshActor {
                         self.send_event(SshEvent::Error {
                             operation: "LoadConfig".to_string(),
                             error: e.to_string(),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 };
@@ -1653,13 +1740,15 @@ impl SshActor {
                 self.send_event(SshEvent::DockerContainerRemoved {
                     host_name,
                     container_name,
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "RemoveDockerContainer".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1673,27 +1762,28 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "ListDockerContainers".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(docker::list_docker_containers(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(docker::list_docker_containers(&host_config)))
+            .await
         {
             Ok(containers) => {
                 self.send_event(SshEvent::DockerContainersListedNew {
                     host_name,
                     containers,
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "ListDockerContainers".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1707,7 +1797,8 @@ impl SshActor {
             operation: "ValidateAnsibleRole".to_string(),
             progress: 0.5,
             status: format!("Fetching metadata for {}", role),
-        }).await;
+        })
+        .await;
 
         let role_clone = role.clone();
         match runtime::unblock(move || {
@@ -1716,16 +1807,15 @@ impl SshActor {
         .await
         {
             Ok(metadata) => {
-                self.send_event(SshEvent::AnsibleRoleValidated {
-                    role,
-                    metadata,
-                }).await;
+                self.send_event(SshEvent::AnsibleRoleValidated { role, metadata })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "ValidateAnsibleRole".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1746,7 +1836,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "InstallAnsibleRole".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
@@ -1756,7 +1847,8 @@ impl SshActor {
             self.send_event(SshEvent::Error {
                 operation: "InstallAnsibleRole".to_string(),
                 error: conflict,
-            }).await;
+            })
+            .await;
             return Ok(());
         }
 
@@ -1772,7 +1864,8 @@ impl SshActor {
             Ok(false) => {
                 self.send_event(SshEvent::AnsibleDaemonInstallRequired {
                     host_name: host_name.clone(),
-                }).await;
+                })
+                .await;
 
                 let host_config_clone2 = host_config.clone();
                 match runtime::unblock(move || {
@@ -1783,13 +1876,15 @@ impl SshActor {
                     Ok(_) => {
                         self.send_event(SshEvent::AnsibleDaemonInstalled {
                             host_name: host_name.clone(),
-                        }).await;
+                        })
+                        .await;
                     }
                     Err(e) => {
                         self.send_event(SshEvent::Error {
                             operation: "InstallAnsible".to_string(),
                             error: e.to_string(),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 }
@@ -1798,7 +1893,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "CheckAnsible".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         }
@@ -1826,19 +1922,22 @@ impl SshActor {
                     self.send_event(SshEvent::Error {
                         operation: "SaveConfig".to_string(),
                         error: e.to_string(),
-                    }).await;
+                    })
+                    .await;
                 }
 
                 self.send_event(SshEvent::AnsibleRoleInstalled {
                     host_name,
                     instance_name,
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "InstallAnsibleRole".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1856,7 +1955,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "RemoveAnsibleRole".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
@@ -1867,7 +1967,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "RemoveAnsibleRole".to_string(),
                     error: format!("Host '{}' not found", host_name),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
@@ -1891,7 +1992,8 @@ impl SshActor {
                             self.send_event(SshEvent::Error {
                                 operation: "LoadConfig".to_string(),
                                 error: e.to_string(),
-                            }).await;
+                            })
+                            .await;
                             return Ok(());
                         }
                     };
@@ -1904,13 +2006,15 @@ impl SshActor {
                     self.send_event(SshEvent::AnsibleRoleRemoved {
                         host_name,
                         instance_name,
-                    }).await;
+                    })
+                    .await;
                 }
                 Err(e) => {
                     self.send_event(SshEvent::Error {
                         operation: "RemoveAnsibleRole".to_string(),
                         error: e.to_string(),
-                    }).await;
+                    })
+                    .await;
                 }
             }
         }
@@ -1925,27 +2029,25 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "ListAnsibleRoles".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(ansible::list_ansible_roles(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(ansible::list_ansible_roles(&host_config)))
+            .await
         {
             Ok(roles) => {
-                self.send_event(SshEvent::AnsibleRolesListed {
-                    host_name,
-                    roles,
-                }).await;
+                self.send_event(SshEvent::AnsibleRolesListed { host_name, roles })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "ListAnsibleRoles".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -1967,7 +2069,8 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "InstallDureWssService".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
@@ -1991,19 +2094,19 @@ impl SshActor {
                     self.send_event(SshEvent::Error {
                         operation: "SaveConfig".to_string(),
                         error: e.to_string(),
-                    }).await;
+                    })
+                    .await;
                 }
 
-                self.send_event(SshEvent::DureWssServiceInstalled {
-                    host_name,
-                    domain,
-                }).await;
+                self.send_event(SshEvent::DureWssServiceInstalled { host_name, domain })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "InstallDureWssService".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -2016,24 +2119,24 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "StartDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(dure_wss::start_dure_wss(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(dure_wss::start_dure_wss(&host_config))).await
         {
             Ok(_) => {
-                self.send_event(SshEvent::DureWssStarted { host_name }).await;
+                self.send_event(SshEvent::DureWssStarted { host_name })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "StartDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -2046,24 +2149,24 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "StopDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(dure_wss::stop_dure_wss(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(dure_wss::stop_dure_wss(&host_config))).await
         {
             Ok(_) => {
-                self.send_event(SshEvent::DureWssStopped { host_name }).await;
+                self.send_event(SshEvent::DureWssStopped { host_name })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "StopDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -2076,27 +2179,29 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "RestartDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(dure_wss::restart_dure_wss(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(dure_wss::restart_dure_wss(&host_config)))
+            .await
         {
             Ok(_) => {
                 self.send_event(SshEvent::DureWssStopped {
                     host_name: host_name.clone(),
-                }).await;
-                self.send_event(SshEvent::DureWssStarted { host_name }).await;
+                })
+                .await;
+                self.send_event(SshEvent::DureWssStarted { host_name })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "RestartDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -2109,15 +2214,14 @@ impl SshActor {
                 self.send_event(SshEvent::Error {
                     operation: "UninstallDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match runtime::unblock(move || {
-            smol::block_on(dure_wss::uninstall_dure_wss(&host_config))
-        })
-        .await
+        match runtime::unblock(move || smol::block_on(dure_wss::uninstall_dure_wss(&host_config)))
+            .await
         {
             Ok(_) => {
                 let (mut config, config_path) = match self.get_config_and_path() {
@@ -2126,7 +2230,8 @@ impl SshActor {
                         self.send_event(SshEvent::Error {
                             operation: "LoadConfig".to_string(),
                             error: e.to_string(),
-                        }).await;
+                        })
+                        .await;
                         return Ok(());
                     }
                 };
@@ -2136,13 +2241,15 @@ impl SshActor {
                     let _ = config.save(&config_path);
                 }
 
-                self.send_event(SshEvent::DureWssUninstalled { host_name }).await;
+                self.send_event(SshEvent::DureWssUninstalled { host_name })
+                    .await;
             }
             Err(e) => {
                 self.send_event(SshEvent::Error {
                     operation: "UninstallDureWss".to_string(),
                     error: e.to_string(),
-                }).await;
+                })
+                .await;
             }
         }
         Ok(())
@@ -2162,22 +2269,46 @@ impl SshActor {
             SshEvent::DockerImagePulled { host_name, image } => {
                 format!("DockerImagePulled({}, {})", host_name, image)
             }
-            SshEvent::DockerContainerStarted { host_name, container_name } => {
+            SshEvent::DockerContainerStarted {
+                host_name,
+                container_name,
+            } => {
                 format!("DockerContainerStarted({}, {})", host_name, container_name)
             }
-            SshEvent::DockerContainerStopped { host_name, container_name } => {
+            SshEvent::DockerContainerStopped {
+                host_name,
+                container_name,
+            } => {
                 format!("DockerContainerStopped({}, {})", host_name, container_name)
             }
-            SshEvent::DockerContainersListed { host_name, containers } => {
-                format!("DockerContainersListed({}, {} containers)", host_name, containers.len())
+            SshEvent::DockerContainersListed {
+                host_name,
+                containers,
+            } => {
+                format!(
+                    "DockerContainersListed({}, {} containers)",
+                    host_name,
+                    containers.len()
+                )
             }
-            SshEvent::PortOpened { host_name, port, protocol } => {
+            SshEvent::PortOpened {
+                host_name,
+                port,
+                protocol,
+            } => {
                 format!("PortOpened({}, {}:{})", host_name, port, protocol)
             }
-            SshEvent::PortClosed { host_name, port, protocol } => {
+            SshEvent::PortClosed {
+                host_name,
+                port,
+                protocol,
+            } => {
                 format!("PortClosed({}, {}:{})", host_name, port, protocol)
             }
-            SshEvent::PortsListed { host_name, open_ports } => {
+            SshEvent::PortsListed {
+                host_name,
+                open_ports,
+            } => {
                 format!("PortsListed({}, {} ports)", host_name, open_ports.len())
             }
             SshEvent::DockerDaemonInstallRequired { host_name } => {
@@ -2186,15 +2317,28 @@ impl SshActor {
             SshEvent::DockerDaemonInstalled { host_name } => {
                 format!("DockerDaemonInstalled({})", host_name)
             }
-            SshEvent::DockerImageInstalled { host_name, container_name } => {
+            SshEvent::DockerImageInstalled {
+                host_name,
+                container_name,
+            } => {
                 format!("DockerImageInstalled({}, {})", host_name, container_name)
             }
-            SshEvent::DockerContainerRemoved { host_name, container_name } => {
+            SshEvent::DockerContainerRemoved {
+                host_name,
+                container_name,
+            } => {
                 format!("DockerContainerRemoved({}, {})", host_name, container_name)
             }
             #[cfg(not(target_arch = "wasm32"))]
-            SshEvent::DockerContainersListedNew { host_name, containers } => {
-                format!("DockerContainersListedNew({}, {} containers)", host_name, containers.len())
+            SshEvent::DockerContainersListedNew {
+                host_name,
+                containers,
+            } => {
+                format!(
+                    "DockerContainersListedNew({}, {} containers)",
+                    host_name,
+                    containers.len()
+                )
             }
             #[cfg(not(target_arch = "wasm32"))]
             SshEvent::AnsibleRoleValidated { role, .. } => {
@@ -2206,10 +2350,16 @@ impl SshActor {
             SshEvent::AnsibleDaemonInstalled { host_name } => {
                 format!("AnsibleDaemonInstalled({})", host_name)
             }
-            SshEvent::AnsibleRoleInstalled { host_name, instance_name } => {
+            SshEvent::AnsibleRoleInstalled {
+                host_name,
+                instance_name,
+            } => {
                 format!("AnsibleRoleInstalled({}, {})", host_name, instance_name)
             }
-            SshEvent::AnsibleRoleRemoved { host_name, instance_name } => {
+            SshEvent::AnsibleRoleRemoved {
+                host_name,
+                instance_name,
+            } => {
                 format!("AnsibleRoleRemoved({}, {})", host_name, instance_name)
             }
             SshEvent::AnsibleRolesListed { host_name, roles } => {
@@ -2227,7 +2377,9 @@ impl SshActor {
             SshEvent::DureWssUninstalled { host_name } => {
                 format!("DureWssUninstalled({})", host_name)
             }
-            SshEvent::DureWssDeployed { host_name, domain, .. } => {
+            SshEvent::DureWssDeployed {
+                host_name, domain, ..
+            } => {
                 format!("DureWssDeployed({}, {})", host_name, domain)
             }
             SshEvent::LinuxStatusRetrieved { name, .. } => {
@@ -2236,8 +2388,15 @@ impl SshActor {
             SshEvent::DockerInstalled { name } => {
                 format!("DockerInstalled({})", name)
             }
-            SshEvent::DockerStatusRetrieved { name, installed, running } => {
-                format!("DockerStatusRetrieved({}, installed={}, running={})", name, installed, running)
+            SshEvent::DockerStatusRetrieved {
+                name,
+                installed,
+                running,
+            } => {
+                format!(
+                    "DockerStatusRetrieved({}, installed={}, running={})",
+                    name, installed, running
+                )
             }
             SshEvent::DockerUninstalled { name } => {
                 format!("DockerUninstalled({})", name)
@@ -2257,9 +2416,16 @@ impl SshActor {
             SshEvent::DureWssStatusRetrieved { name, installed } => {
                 format!("DureWssStatusRetrieved({}, installed={})", name, installed)
             }
-            SshEvent::HostHealthChecked { name, is_alive, latency_ms } => {
+            SshEvent::HostHealthChecked {
+                name,
+                is_alive,
+                latency_ms,
+            } => {
                 if let Some(ms) = latency_ms {
-                    format!("HostHealthChecked({}, alive={}, latency={}ms)", name, is_alive, ms)
+                    format!(
+                        "HostHealthChecked({}, alive={}, latency={}ms)",
+                        name, is_alive, ms
+                    )
                 } else {
                     format!("HostHealthChecked({}, alive={})", name, is_alive)
                 }
@@ -2267,14 +2433,34 @@ impl SshActor {
             SshEvent::DockerImageInspected { image, tag, .. } => {
                 format!("DockerImageInspected({}:{})", image, tag)
             }
-            SshEvent::DockerContainersRemoved { host_name, removed, failed } => {
-                format!("DockerContainersRemoved({}, removed={}, failed={})",
-                    host_name, removed.len(), failed.len())
+            SshEvent::DockerContainersRemoved {
+                host_name,
+                removed,
+                failed,
+            } => {
+                format!(
+                    "DockerContainersRemoved({}, removed={}, failed={})",
+                    host_name,
+                    removed.len(),
+                    failed.len()
+                )
             }
-            SshEvent::ServiceError { name, service, operation, .. } => {
-                format!("ServiceError({}, service={}, op={})", name, service, operation)
+            SshEvent::ServiceError {
+                name,
+                service,
+                operation,
+                ..
+            } => {
+                format!(
+                    "ServiceError({}, service={}, op={})",
+                    name, service, operation
+                )
             }
-            SshEvent::Progress { operation, progress, .. } => {
+            SshEvent::Progress {
+                operation,
+                progress,
+                ..
+            } => {
                 format!("Progress({}, {:.0}%)", operation, progress * 100.0)
             }
             SshEvent::Error { operation, .. } => {
@@ -2285,16 +2471,22 @@ impl SshActor {
             SshEvent::RefreshCompleted { host, .. } => {
                 format!("RefreshCompleted({})", host)
             }
-            SshEvent::SshCheckCompleted { host, connected, .. } => {
+            SshEvent::SshCheckCompleted {
+                host, connected, ..
+            } => {
                 format!("SshCheckCompleted({}, connected={})", host, connected)
             }
-            SshEvent::HostCheckCompleted { host, installed, .. } => {
+            SshEvent::HostCheckCompleted {
+                host, installed, ..
+            } => {
                 format!("HostCheckCompleted({}, installed={})", host, installed)
             }
             SshEvent::HostInstallCompleted { host, success, .. } => {
                 format!("HostInstallCompleted({}, success={})", host, success)
             }
-            SshEvent::DockerCheckCompleted { host, installed, .. } => {
+            SshEvent::DockerCheckCompleted {
+                host, installed, ..
+            } => {
                 format!("DockerCheckCompleted({}, installed={})", host, installed)
             }
             SshEvent::DockerInstallCompleted { host, success, .. } => {
@@ -2303,8 +2495,16 @@ impl SshActor {
             SshEvent::DockerRemoveCompleted { host, success, .. } => {
                 format!("DockerRemoveCompleted({}, success={})", host, success)
             }
-            SshEvent::DureCheckCompleted { host, installed, running, .. } => {
-                format!("DureCheckCompleted({}, installed={}, running={})", host, installed, running)
+            SshEvent::DureCheckCompleted {
+                host,
+                installed,
+                running,
+                ..
+            } => {
+                format!(
+                    "DureCheckCompleted({}, installed={}, running={})",
+                    host, installed, running
+                )
             }
             SshEvent::DureInstallCompleted { host, success, .. } => {
                 format!("DureInstallCompleted({}, success={})", host, success)
@@ -2312,20 +2512,33 @@ impl SshActor {
             SshEvent::DureRemoveCompleted { host, success, .. } => {
                 format!("DureRemoveCompleted({}, success={})", host, success)
             }
-            SshEvent::OperationFailed { host, operation, .. } => {
+            SshEvent::OperationFailed {
+                host, operation, ..
+            } => {
                 format!("OperationFailed({}, {})", host, operation)
             }
             SshEvent::HostStatusRetrieved { host, raw_output } => {
                 format!("HostStatusRetrieved({}, {} bytes)", host, raw_output.len())
             }
             SshEvent::DockerStatusRawRetrieved { host, raw_output } => {
-                format!("DockerStatusRawRetrieved({}, {} bytes)", host, raw_output.len())
+                format!(
+                    "DockerStatusRawRetrieved({}, {} bytes)",
+                    host,
+                    raw_output.len()
+                )
             }
             SshEvent::DureComposeLogsRetrieved { host, logs } => {
                 format!("DureComposeLogsRetrieved({}, {} bytes)", host, logs.len())
             }
-            SshEvent::DureContainerLogsRetrieved { host, container_logs } => {
-                format!("DureContainerLogsRetrieved({}, {} containers)", host, container_logs.len())
+            SshEvent::DureContainerLogsRetrieved {
+                host,
+                container_logs,
+            } => {
+                format!(
+                    "DureContainerLogsRetrieved({}, {} containers)",
+                    host,
+                    container_logs.len()
+                )
             }
             SshEvent::Drawer(_) => {
                 format!("Drawer(...)")
@@ -2334,8 +2547,8 @@ impl SshActor {
     }
 
     async fn start_operation_log(&self, host: &str, operation: &str) -> Result<i64, String> {
-        use crate::storage::models::opslog::NewOperationLog;
         use crate::calc::db;
+        use crate::storage::models::opslog::NewOperationLog;
 
         let log = NewOperationLog::ssh(host, operation);
 
@@ -2392,7 +2605,11 @@ impl SshActor {
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(_) => {
-                self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, "Host config not found");
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Error,
+                    "Host config not found",
+                );
                 return SshEvent::RefreshCompleted {
                     host,
                     ssh_connected: false,
@@ -2410,38 +2627,73 @@ impl SshActor {
         };
 
         // Run 4 checks with progress logging
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Testing SSH connection...");
-        let ssh_result = crate::calc::ssh::test_connection(&host_config, profile_kdbx.as_ref()).await;
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Testing SSH connection...",
+        );
+        let ssh_result =
+            crate::calc::ssh::test_connection(&host_config, profile_kdbx.as_ref()).await;
         let ssh_connected = ssh_result.as_ref().map(|r| r.success).unwrap_or(false);
         let ssh_error = if !ssh_connected {
-            Some(ssh_result.as_ref().map(|r| r.message.clone()).unwrap_or_else(|_| "Connection failed".to_string()))
+            Some(
+                ssh_result
+                    .as_ref()
+                    .map(|r| r.message.clone())
+                    .unwrap_or_else(|_| "Connection failed".to_string()),
+            )
         } else {
             None
         };
 
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking host packages...");
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking host packages...",
+        );
         let host_missing_packages = if ssh_connected {
-            crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref()).await.ok()
+            crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref())
+                .await
+                .ok()
         } else {
             None
         };
-        let host_installed = host_missing_packages.as_ref().map(|p| p.is_empty()).unwrap_or(false);
+        let host_installed = host_missing_packages
+            .as_ref()
+            .map(|p| p.is_empty())
+            .unwrap_or(false);
 
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking Docker version...");
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking Docker version...",
+        );
         let docker_version = if ssh_connected {
-            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await.ok().flatten()
+            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref())
+                .await
+                .ok()
+                .flatten()
         } else {
             None
         };
         let docker_installed = docker_version.is_some();
 
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking Dure status...");
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking Dure status...",
+        );
         let dure_check = if ssh_connected {
-            crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await.ok()
+            crate::calc::ssh::check_dure_mycart(&host_config, profile_kdbx.as_ref())
+                .await
+                .ok()
         } else {
             None
         };
-        let dure_installed = dure_check.as_ref().map(|(installed, _, _)| *installed).unwrap_or(false);
+        let dure_installed = dure_check
+            .as_ref()
+            .map(|(installed, _, _)| *installed)
+            .unwrap_or(false);
         let dure_running = dure_check.as_ref().map(|(_, running, _)| *running);
         let dure_services = dure_check.map(|(_, _, services)| services);
 
@@ -2471,10 +2723,21 @@ impl SshActor {
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         // Start ssh_check operation (Read operation, no history)
-        let log_id = self.start_operation("ssh_check", &host, false).await.unwrap_or(None);
+        let log_id = self
+            .start_operation("ssh_check", &host, false)
+            .await
+            .unwrap_or(None);
 
-        dure_info!(project_id = host.clone(), "Checking SSH connection to {}", host);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking SSH connection...");
+        dure_info!(
+            project_id = host.clone(),
+            "Checking SSH connection to {}",
+            host
+        );
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking SSH connection...",
+        );
 
         // Check SSH connection
         let host_config = self.load_host_config(&host)?;
@@ -2484,9 +2747,21 @@ impl SshActor {
         match result {
             Ok(conn_result) => {
                 let connected = conn_result.success;
-                let error = if !connected { Some(conn_result.message.clone()) } else { None };
+                let error = if !connected {
+                    Some(conn_result.message.clone())
+                } else {
+                    None
+                };
 
-                dure_info!(project_id = host.clone(), "SSH connection check: {}", if connected { "✓ Connected" } else { "✗ Failed" });
+                dure_info!(
+                    project_id = host.clone(),
+                    "SSH connection check: {}",
+                    if connected {
+                        "✓ Connected"
+                    } else {
+                        "✗ Failed"
+                    }
+                );
 
                 // End operation
                 let _ = self.end_operation_success("ssh_check", &host, log_id).await;
@@ -2496,21 +2771,29 @@ impl SshActor {
                     connected,
                     error,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
             Err(e) => {
-                dure_error!(project_id = host.clone(), "SSH connection check failed: {}", e);
+                dure_error!(
+                    project_id = host.clone(),
+                    "SSH connection check failed: {}",
+                    e
+                );
 
                 // End operation with error
-                let _ = self.end_operation_failed("ssh_check", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("ssh_check", &host, log_id, &e)
+                    .await;
 
                 self.send_event(SshEvent::SshCheckCompleted {
                     host,
                     connected: false,
                     error: Some(e.to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 Ok(())
             }
         }
@@ -2530,18 +2813,28 @@ impl SshActor {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("check_host", &host, false).await.unwrap_or(None);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking host packages...");
+        let log_id = self
+            .start_operation("check_host", &host, false)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking host packages...",
+        );
 
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(e) => {
-                let _ = self.end_operation_failed("check_host", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_host", &host, log_id, &e)
+                    .await;
                 return Err(e);
             }
         };
 
-        let result = crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref()).await;
+        let result =
+            crate::calc::ssh::check_host_packages(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok(missing) => {
@@ -2558,33 +2851,49 @@ impl SshActor {
                     installed,
                     missing_packages: missing,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Host),
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
-                let _ = self.end_operation_failed("check_host", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_host", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::HostCheckCompleted {
                     host: host.clone(),
                     installed: false,
                     missing_packages: vec![],
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Host),
-                }).await;
+                })
+                .await;
                 return Err(e);
             }
         }
 
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Retrieving system status...");
-        match crate::calc::ssh::get_comprehensive_system_status(&host_config, profile_kdbx.as_ref()).await {
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Retrieving system status...",
+        );
+        match crate::calc::ssh::get_comprehensive_system_status(&host_config, profile_kdbx.as_ref())
+            .await
+        {
             Ok(raw_output) => {
-                let _ = self.end_operation_success("check_host", &host, log_id).await;
-                self.send_event(SshEvent::HostStatusRetrieved {
-                    host,
-                    raw_output,
-                }).await;
+                let _ = self
+                    .end_operation_success("check_host", &host, log_id)
+                    .await;
+                self.send_event(SshEvent::HostStatusRetrieved { host, raw_output })
+                    .await;
                 Ok(())
             }
             Err(e) => {
-                self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, format!("System status failed: {}", e));
-                let _ = self.end_operation_success("check_host", &host, log_id).await;
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Error,
+                    format!("System status failed: {}", e),
+                );
+                let _ = self
+                    .end_operation_success("check_host", &host, log_id)
+                    .await;
                 Ok(())
             }
         }
@@ -2595,18 +2904,28 @@ impl SshActor {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("check_docker", &host, false).await.unwrap_or(None);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking Docker version...");
+        let log_id = self
+            .start_operation("check_docker", &host, false)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking Docker version...",
+        );
 
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(e) => {
-                let _ = self.end_operation_failed("check_docker", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_docker", &host, log_id, &e)
+                    .await;
                 return Err(e);
             }
         };
 
-        let result = crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await;
+        let result =
+            crate::calc::ssh::check_docker_version(&host_config, profile_kdbx.as_ref()).await;
 
         match result {
             Ok(version) => {
@@ -2623,33 +2942,47 @@ impl SshActor {
                     installed,
                     version,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
-                let _ = self.end_operation_failed("check_docker", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_docker", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DockerCheckCompleted {
                     host: host.clone(),
                     installed: false,
                     version: None,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
-                }).await;
+                })
+                .await;
                 return Err(e);
             }
         }
 
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Retrieving Docker status...");
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Retrieving Docker status...",
+        );
         match crate::calc::ssh::get_docker_status(&host_config, profile_kdbx.as_ref()).await {
             Ok(raw_output) => {
-                let _ = self.end_operation_success("check_docker", &host, log_id).await;
-                self.send_event(SshEvent::DockerStatusRawRetrieved {
-                    host,
-                    raw_output,
-                }).await;
+                let _ = self
+                    .end_operation_success("check_docker", &host, log_id)
+                    .await;
+                self.send_event(SshEvent::DockerStatusRawRetrieved { host, raw_output })
+                    .await;
                 Ok(())
             }
             Err(e) => {
-                self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, format!("Docker status failed: {}", e));
-                let _ = self.end_operation_success("check_docker", &host, log_id).await;
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Error,
+                    format!("Docker status failed: {}", e),
+                );
+                let _ = self
+                    .end_operation_success("check_docker", &host, log_id)
+                    .await;
                 Ok(())
             }
         }
@@ -2661,43 +2994,69 @@ impl SshActor {
         env_config: std::collections::HashMap<String, String>,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("install_dure", &host, true).await.unwrap_or(None);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Installing Dure mycart...");
+        let log_id = self
+            .start_operation("install_dure", &host, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Installing Dure mycart...",
+        );
 
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(e) => {
-                let _ = self.end_operation_failed("install_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("install_dure", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DureInstallCompleted {
                     host,
                     success: false,
                     error: Some(e.to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        let domain = env_config.get("DOMAIN").cloned().unwrap_or_else(|| "example.com".to_string());
+        let domain = env_config
+            .get("DOMAIN")
+            .cloned()
+            .unwrap_or_else(|| "example.com".to_string());
 
-        match crate::calc::dure_mycart::install_dure_mycart(&host_config, &domain, &env_config, profile_kdbx.as_ref()).await {
+        match crate::calc::dure_mycart::install_dure_mycart(
+            &host_config,
+            &domain,
+            &env_config,
+            profile_kdbx.as_ref(),
+        )
+        .await
+        {
             Ok(_progress) => {
-                let _ = self.end_operation_success("install_dure", &host, log_id).await;
+                let _ = self
+                    .end_operation_success("install_dure", &host, log_id)
+                    .await;
                 self.send_event(SshEvent::DureInstallCompleted {
                     host,
                     success: true,
                     error: None,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
-                let _ = self.end_operation_failed("install_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("install_dure", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DureInstallCompleted {
                     host,
                     success: false,
                     error: Some(e.to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
-                }).await;
+                })
+                .await;
             }
         }
 
@@ -2710,41 +3069,63 @@ impl SshActor {
         delete_data: bool,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("remove_dure", &host, true).await.unwrap_or(None);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Removing Dure mycart...");
+        let log_id = self
+            .start_operation("remove_dure", &host, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Removing Dure mycart...",
+        );
 
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(e) => {
-                let _ = self.end_operation_failed("remove_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("remove_dure", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DureRemoveCompleted {
                     host,
                     success: false,
                     error: Some(e.to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
                 return Ok(());
             }
         };
 
-        match crate::calc::dure_mycart::remove_dure_mycart(&host_config, delete_data, profile_kdbx.as_ref()).await {
+        match crate::calc::dure_mycart::remove_dure_mycart(
+            &host_config,
+            delete_data,
+            profile_kdbx.as_ref(),
+        )
+        .await
+        {
             Ok(_progress) => {
-                let _ = self.end_operation_success("remove_dure", &host, log_id).await;
+                let _ = self
+                    .end_operation_success("remove_dure", &host, log_id)
+                    .await;
                 self.send_event(SshEvent::DureRemoveCompleted {
                     host,
                     success: true,
                     error: None,
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
             }
             Err(e) => {
-                let _ = self.end_operation_failed("remove_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("remove_dure", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DureRemoveCompleted {
                     host,
                     success: false,
                     error: Some(e.to_string()),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                }).await;
+                })
+                .await;
             }
         }
 
@@ -2756,18 +3137,28 @@ impl SshActor {
         host: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        let log_id = self.start_operation("check_dure", &host, false).await.unwrap_or(None);
-        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, "Checking Dure status...");
+        let log_id = self
+            .start_operation("check_dure", &host, false)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Checking Dure status...",
+        );
 
         let host_config = match self.load_host_config(&host) {
             Ok(cfg) => cfg,
             Err(e) => {
-                let _ = self.end_operation_failed("check_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_dure", &host, log_id, &e)
+                    .await;
                 return Err(e);
             }
         };
 
-        let result = crate::calc::dure_mycart::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
+        let result =
+            crate::calc::dure_mycart::check_dure_mycart(&host_config, profile_kdbx.as_ref()).await;
 
         let (installed, running, containers) = match result {
             Ok((inst, cont)) => {
@@ -2790,12 +3181,15 @@ impl SshActor {
                     services,
                     containers: cont.clone(),
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
-                }).await;
+                })
+                .await;
 
                 (inst, run, cont)
             }
             Err(e) => {
-                let _ = self.end_operation_failed("check_dure", &host, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("check_dure", &host, log_id, &e)
+                    .await;
                 self.send_event(SshEvent::DureCheckCompleted {
                     host: host.clone(),
                     installed: false,
@@ -2803,13 +3197,18 @@ impl SshActor {
                     services: vec![],
                     containers: vec![],
                     focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Dure),
-                }).await;
+                })
+                .await;
                 return Err(e);
             }
         };
 
         if installed && running {
-            self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, format!("Retrieving logs for {} containers...", containers.len()));
+            self.log_to_tab(
+                &host,
+                crate::viewmodel::logs::LogLevel::Info,
+                format!("Retrieving logs for {} containers...", containers.len()),
+            );
 
             let mut container_logs = std::collections::HashMap::new();
             for container in &containers {
@@ -2818,13 +3217,22 @@ impl SshActor {
                     &container.name,
                     100,
                     profile_kdbx.as_ref(),
-                ).await {
+                )
+                .await
+                {
                     Ok(logs) => {
                         container_logs.insert(container.name.clone(), logs);
                     }
                     Err(e) => {
-                        self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, format!("Failed to get logs for {}: {}", container.name, e));
-                        container_logs.insert(container.name.clone(), vec![format!("Failed to get logs: {}", e)]);
+                        self.log_to_tab(
+                            &host,
+                            crate::viewmodel::logs::LogLevel::Error,
+                            format!("Failed to get logs for {}: {}", container.name, e),
+                        );
+                        container_logs.insert(
+                            container.name.clone(),
+                            vec![format!("Failed to get logs: {}", e)],
+                        );
                     }
                 }
             }
@@ -2832,10 +3240,13 @@ impl SshActor {
             self.send_event(SshEvent::DureContainerLogsRetrieved {
                 host: host.clone(),
                 container_logs,
-            }).await;
+            })
+            .await;
         }
 
-        let _ = self.end_operation_success("check_dure", &host, log_id).await;
+        let _ = self
+            .end_operation_success("check_dure", &host, log_id)
+            .await;
         Ok(())
     }
 
@@ -2898,7 +3309,11 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
         }
     }
 
-    dure_debug!(" Parsed {} ports and {} args from docker history", ports.len(), args.len());
+    dure_debug!(
+        " Parsed {} ports and {} args from docker history",
+        ports.len(),
+        args.len()
+    );
 
     // Remove duplicate ports
     ports.sort_unstable();
@@ -2918,7 +3333,12 @@ fn parse_docker_history(output: &str) -> (Vec<u16>, Vec<(String, String)>) {
 
 impl SshActor {
     /// Write log to Logs tab (classified by hostname)
-    fn log_to_tab(&self, hostname: &str, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
+    fn log_to_tab(
+        &self,
+        hostname: &str,
+        level: crate::viewmodel::logs::LogLevel,
+        message: impl Into<String>,
+    ) {
         crate::viewmodel::logs::append_log(Some(hostname.to_string()), level, message.into());
     }
 
@@ -2931,16 +3351,18 @@ impl SshActor {
         is_cud: bool,
     ) -> anyhow::Result<Option<i64>> {
         // Always log to Logs tab
-        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Info, format!("▶ Starting {}", op_name));
+        self.log_to_tab(
+            hostname,
+            crate::viewmodel::logs::LogLevel::Info,
+            format!("▶ Starting {}", op_name),
+        );
 
         // Only log to Operations history if CUD operation
         if is_cud {
-            let log_id = self.repository.log_operation(
-                hostname,
-                op_name,
-                "ssh",
-                None,
-            ).await?;
+            let log_id = self
+                .repository
+                .log_operation(hostname, op_name, "ssh", None)
+                .await?;
             Ok(Some(log_id))
         } else {
             Ok(None)
@@ -2955,7 +3377,11 @@ impl SshActor {
         log_id: Option<i64>,
     ) -> anyhow::Result<()> {
         // Always log to Logs tab
-        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Info, format!("✓ {} completed", op_name));
+        self.log_to_tab(
+            hostname,
+            crate::viewmodel::logs::LogLevel::Info,
+            format!("✓ {} completed", op_name),
+        );
 
         // Mark history if CUD operation
         if let Some(id) = log_id {
@@ -2975,7 +3401,11 @@ impl SshActor {
         let error_msg = format!("{:#}", error);
 
         // Always log to Logs tab
-        self.log_to_tab(hostname, crate::viewmodel::logs::LogLevel::Error, format!("✗ {} failed: {}", op_name, error_msg));
+        self.log_to_tab(
+            hostname,
+            crate::viewmodel::logs::LogLevel::Error,
+            format!("✗ {} failed: {}", op_name, error_msg),
+        );
 
         // Mark history if CUD operation
         if let Some(id) = log_id {
@@ -3053,8 +3483,12 @@ ENTRYPOINT ["/init"]"#;
         let (ports, args) = parse_docker_history(output);
         assert_eq!(ports, vec![51820]);
         assert_eq!(args.len(), 2);
-        assert!(args.iter().any(|(k, v)| k == "WIREGUARD_RELEASE" && v == "1.0.20250521-r1"));
-        assert!(args.iter().any(|(k, v)| k == "BUILD_DATE" && v == "2026-07-02"));
+        assert!(args
+            .iter()
+            .any(|(k, v)| k == "WIREGUARD_RELEASE" && v == "1.0.20250521-r1"));
+        assert!(args
+            .iter()
+            .any(|(k, v)| k == "BUILD_DATE" && v == "2026-07-02"));
     }
 
     #[test]
@@ -3084,7 +3518,9 @@ ARG PORT=8080
 
             // Verify event type
             match event {
-                SshEvent::RefreshCompleted { host, focus_tab, .. } => {
+                SshEvent::RefreshCompleted {
+                    host, focus_tab, ..
+                } => {
                     assert_eq!(host, "test-host");
                     assert_eq!(focus_tab, Some(crate::viewmodel::ssh::DrawerTab::Status));
                 }
@@ -3114,7 +3550,12 @@ ARG PORT=8080
                 } => {
                     assert_eq!(host, "localhost");
                     // Fields should be initialized (placeholder values)
-                    let _ = (ssh_connected, host_installed, docker_installed, dure_installed);
+                    let _ = (
+                        ssh_connected,
+                        host_installed,
+                        docker_installed,
+                        dure_installed,
+                    );
                     assert_eq!(focus_tab, Some(crate::viewmodel::ssh::DrawerTab::Status));
                 }
                 _ => panic!("Expected RefreshCompleted event"),

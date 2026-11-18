@@ -121,14 +121,20 @@ pub struct DnsWizard {
     /// Completed domain setup - used by DNS tab to add row
     /// (provider, domain, zone_id, account_id, access_token, refresh_token, expires_at)
     pub completed_domain: Option<(
-        String,           // provider
-        String,           // domain
-        Option<String>,   // zone_id
-        Option<String>,   // account_id
-        Option<String>,   // oauth_access_token
-        Option<String>,   // oauth_refresh_token
-        Option<u64>,      // oauth_token_expiry
+        String,         // provider
+        String,         // domain
+        Option<String>, // zone_id
+        Option<String>, // account_id
+        Option<String>, // oauth_access_token
+        Option<String>, // oauth_refresh_token
+        Option<u64>,    // oauth_token_expiry
     )>,
+
+    /// Re-auth mode: true when re-authenticating existing domain
+    reauth_mode: bool,
+
+    /// Existing domain for re-auth mode
+    existing_domain: Option<String>,
 }
 
 /// Platform with VM information for selection
@@ -176,7 +182,18 @@ impl DnsWizard {
             progress_log: Vec::new(),
             should_close: false,
             completed_domain: None,
+            reauth_mode: false,
+            existing_domain: None,
         }
+    }
+
+    /// Create new wizard in re-auth mode for existing domain
+    pub fn new_reauth(profile_name: String, domain: String) -> Self {
+        let mut wizard = Self::new(profile_name);
+        wizard.reauth_mode = true;
+        wizard.existing_domain = Some(domain.clone());
+        wizard.selected_domain = Some(domain);
+        wizard
     }
 
     /// Get current state
@@ -299,8 +316,8 @@ impl DnsWizard {
             ];
 
             for (i, (label, step_state)) in steps.iter().enumerate() {
-                let is_current = std::mem::discriminant(&self.state)
-                    == std::mem::discriminant(step_state);
+                let is_current =
+                    std::mem::discriminant(&self.state) == std::mem::discriminant(step_state);
                 let is_complete = self.step_index() > i;
 
                 if is_current {
@@ -350,7 +367,8 @@ impl DnsWizard {
                 match result {
                     Ok(oauth_result) => {
                         self.oauth_result = Some(oauth_result.clone());
-                        self.progress_log.push("OAuth completed successfully".to_string());
+                        self.progress_log
+                            .push("OAuth completed successfully".to_string());
                         self.progress_log.push("Verifying API token...".to_string());
                         ui.ctx().request_repaint();
 
@@ -410,7 +428,9 @@ impl DnsWizard {
             // OAuth complete
             ui.label(format!(
                 "Connected: {}",
-                self.connected_email.as_ref().unwrap_or(&"Account connected".to_string())
+                self.connected_email
+                    .as_ref()
+                    .unwrap_or(&"Account connected".to_string())
             ));
 
             if self.api_connection_ok {
@@ -430,34 +450,41 @@ impl DnsWizard {
             if self.cloudflare_account_id.is_empty() {
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                    "Warning: Account ID required to continue"
+                    "Warning: Account ID required to continue",
                 );
             }
 
             // Restart verification button (shown if OAuth completed but token invalid)
             if !self.api_connection_ok {
                 ui.add_space(4.0);
-                if ui.add(MaterialButton::outlined("Restart Verification")).clicked() {
+                if ui
+                    .add(MaterialButton::outlined("Restart Verification"))
+                    .clicked()
+                {
                     // Clear OAuth state and restart flow
                     self.oauth_result = None;
                     self.oauth_promise = None;
                     self.api_connection_ok = false;
                     self.cloudflare_account_id.clear();
-                    self.progress_log.push("Restarting OAuth verification...".to_string());
+                    self.progress_log
+                        .push("Restarting OAuth verification...".to_string());
                     dure_info!("Restarting OAuth verification flow");
                 }
             }
         }
 
         ui.add_space(4.0);
-        
+
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             // Bottom padding (rendered first = appears at bottom)
             ui.add_space(30.0);
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-close")))
+                    .clicked()
+                {
                     self.should_close = true;
                 }
 
@@ -465,7 +492,10 @@ impl DnsWizard {
 
                 // Show "Open OAuth Screen" button if OAuth was attempted
                 if self.oauth_promise.is_some() || self.oauth_result.is_some() {
-                    if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-oauth"))).clicked() {
+                    if ui
+                        .add(MaterialButton::outlined(&tr!("dns-wizard-button-oauth")))
+                        .clicked()
+                    {
                         self.start_oauth();
                     }
                     ui.add_space(4.0);
@@ -473,7 +503,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step1(),
-                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
+                    MaterialButton::filled(&tr!("dns-wizard-button-next")),
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::DomainRegistration;
@@ -508,7 +538,7 @@ impl DnsWizard {
         if self.domains_list.is_empty() && self.fetch_domains_promise.is_none() {
             self.fetch_domains();
         }
-        
+
         // ui starts
         ui.heading("Step 2: Domain Selection");
         ui.add_space(4.0);
@@ -524,7 +554,8 @@ impl DnsWizard {
                         ui.ctx().request_repaint();
                     }
                     Err(err) => {
-                        self.progress_log.push(format!("Error: Failed to fetch domains: {}", err));
+                        self.progress_log
+                            .push(format!("Error: Failed to fetch domains: {}", err));
                         ui.ctx().request_repaint();
                     }
                 }
@@ -547,7 +578,8 @@ impl DnsWizard {
                         self.domain_name.clear();
                     }
                     Err(err) => {
-                        self.progress_log.push(format!("Error: Failed to add domain: {}", err));
+                        self.progress_log
+                            .push(format!("Error: Failed to add domain: {}", err));
                         ui.ctx().request_repaint();
                     }
                 }
@@ -569,7 +601,10 @@ impl DnsWizard {
 
             ui.add_space(4.0);
             let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
-            if ui.add_enabled(can_add, MaterialButton::filled("Add").small()).clicked() {
+            if ui
+                .add_enabled(can_add, MaterialButton::filled("Add").small())
+                .clicked()
+            {
                 self.add_domain_to_account(&self.domain_name.clone());
             }
         });
@@ -593,9 +628,11 @@ impl DnsWizard {
                         urlencoding::encode(&self.search_query)
                     );
                     if let Err(e) = webbrowser::open(&url) {
-                        self.progress_log.push(format!("Error: Failed to open browser: {}", e));
+                        self.progress_log
+                            .push(format!("Error: Failed to open browser: {}", e));
                     } else {
-                        self.progress_log.push("Opened Cloudflare dashboard".to_string());
+                        self.progress_log
+                            .push("Opened Cloudflare dashboard".to_string());
                     }
                 }
             }
@@ -611,7 +648,10 @@ impl DnsWizard {
 
             ui.add_space(8.0);
 
-            if ui.add(MaterialButton::outlined(&tr!("refresh")).small()).clicked() {
+            if ui
+                .add(MaterialButton::outlined(&tr!("refresh")).small())
+                .clicked()
+            {
                 self.fetch_domains();
                 dure_info!("Refreshing domain list from Cloudflare");
             }
@@ -623,35 +663,44 @@ impl DnsWizard {
                 self.selected_domain
                     .as_ref()
                     .map(|s| s.as_str())
-                    .unwrap_or("Select a domain")
+                    .unwrap_or("Select a domain"),
             )
             .show_ui(ui, |ui| {
                 for domain in &self.domains_list {
                     let domain_name = &domain.name;
                     let zone_id = &domain.id;
-                    if ui.selectable_label(
-                        self.selected_domain.as_ref() == Some(domain_name),
-                        domain_name
-                    ).clicked() {
+                    if ui
+                        .selectable_label(
+                            self.selected_domain.as_ref() == Some(domain_name),
+                            domain_name,
+                        )
+                        .clicked()
+                    {
                         self.selected_domain = Some(domain_name.clone());
                         self.selected_zone_id = Some(zone_id.clone());
                     }
                 }
             });
-        
+
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             // Bottom padding (rendered first = appears at bottom)
             ui.add_space(30.0);
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-close")))
+                    .clicked()
+                {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-previous")))
+                    .clicked()
+                {
                     self.state = DnsWizardState::CloudflareAuth;
                 }
 
@@ -659,7 +708,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step2(),
-                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
+                    MaterialButton::filled(&tr!("dns-wizard-button-next")),
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::VmConfiguration;
@@ -669,7 +718,7 @@ impl DnsWizard {
             // Content area (reversed order in bottom_up layout)
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.add_space(55.0);
-                
+
                 // Progress log (full-width, no border)
                 ui.set_width(ui.available_width());
                 egui::ScrollArea::vertical()
@@ -683,7 +732,7 @@ impl DnsWizard {
                                 ui.label(log);
                             }
                         }
-                    }); 
+                    });
             });
         });
     }
@@ -696,13 +745,19 @@ impl DnsWizard {
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-close")))
+                    .clicked()
+                {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-previous")))
+                    .clicked()
+                {
                     self.state = DnsWizardState::DomainRegistration;
                 }
 
@@ -710,7 +765,7 @@ impl DnsWizard {
 
                 let next_btn = ui.add_enabled(
                     self.can_proceed_from_step3(),
-                    MaterialButton::filled(&tr!("dns-wizard-button-next"))
+                    MaterialButton::filled(&tr!("dns-wizard-button-next")),
                 );
                 if next_btn.clicked() {
                     self.state = DnsWizardState::Confirmation;
@@ -729,13 +784,16 @@ impl DnsWizard {
 
                 // Platform list with dense styling
                 if self.available_platforms.is_empty() {
-                    ui.label("No platforms available. Please add a platform in Platform tab first.");
+                    ui.label(
+                        "No platforms available. Please add a platform in Platform tab first.",
+                    );
                 } else {
                     egui::ScrollArea::vertical()
                         .max_height(300.0)
                         .show(ui, |ui| {
                             for platform in &self.available_platforms.clone() {
-                                let is_selected = self.selected_vm.as_ref() == Some(&platform.project_id);
+                                let is_selected =
+                                    self.selected_vm.as_ref() == Some(&platform.project_id);
 
                                 use egui_material3::theme::get_global_color;
                                 let bg_color = if is_selected {
@@ -749,36 +807,42 @@ impl DnsWizard {
                                     .inner_margin(egui::Margin::symmetric(12, 8))
                                     .rounding(4.0);
 
-                                let response = frame.show(ui, |ui| {
-                                    ui.set_width(ui.available_width());
-                                    ui.horizontal(|ui| {
-                                        ui.add_space(4.0);
-                                        ui.label("☁");
-                                        ui.add_space(8.0);
-                                        ui.vertical(|ui| {
-                                            ui.label(
-                                                egui::RichText::new(&platform.platform_name)
-                                                    .strong()
-                                                    .color(get_global_color("onSurface"))
-                                            );
-                                            ui.label(
-                                                egui::RichText::new(format!(
-                                                    "{}, {}, {}",
-                                                    platform.project_id,
-                                                    platform.zone,
-                                                    platform.vm_external_ip
-                                                ))
-                                                .size(12.0)
-                                                .color(get_global_color("onSurfaceVariant"))
-                                            );
+                                let response = frame
+                                    .show(ui, |ui| {
+                                        ui.set_width(ui.available_width());
+                                        ui.horizontal(|ui| {
+                                            ui.add_space(4.0);
+                                            ui.label("☁");
+                                            ui.add_space(8.0);
+                                            ui.vertical(|ui| {
+                                                ui.label(
+                                                    egui::RichText::new(&platform.platform_name)
+                                                        .strong()
+                                                        .color(get_global_color("onSurface")),
+                                                );
+                                                ui.label(
+                                                    egui::RichText::new(format!(
+                                                        "{}, {}, {}",
+                                                        platform.project_id,
+                                                        platform.zone,
+                                                        platform.vm_external_ip
+                                                    ))
+                                                    .size(12.0)
+                                                    .color(get_global_color("onSurfaceVariant")),
+                                                );
+                                            });
                                         });
-                                    });
-                                }).response;
+                                    })
+                                    .response;
 
                                 if response.interact(egui::Sense::click()).clicked() {
                                     self.selected_vm = Some(platform.project_id.clone());
                                     self.vm_ip = Some(platform.vm_external_ip.clone());
-                                    dure_info!("Selected VM: {} ({})", platform.platform_name, platform.project_id);
+                                    dure_info!(
+                                        "Selected VM: {} ({})",
+                                        platform.platform_name,
+                                        platform.project_id
+                                    );
                                 }
 
                                 ui.add_space(2.0);
@@ -803,15 +867,19 @@ impl DnsWizard {
                     Ok(verified) => {
                         self.dns_verified = Some(*verified);
                         if *verified {
-                            self.dns_operation_log.push("DNS records verified - all settings correct".to_string());
+                            self.dns_operation_log
+                                .push("DNS records verified - all settings correct".to_string());
                             self.ns_records_configured = true;
                         } else {
-                            self.dns_operation_log.push("DNS records missing or incorrect - setup required".to_string());
+                            self.dns_operation_log.push(
+                                "DNS records missing or incorrect - setup required".to_string(),
+                            );
                         }
                         ui.ctx().request_repaint();
                     }
                     Err(err) => {
-                        self.dns_operation_log.push(format!("Error: Verification failed: {}", err));
+                        self.dns_operation_log
+                            .push(format!("Error: Verification failed: {}", err));
                         ui.ctx().request_repaint();
                     }
                 }
@@ -831,16 +899,19 @@ impl DnsWizard {
                     Ok(()) => {
                         self.ns_records_configured = true;
                         self.dns_verified = Some(true);
-                        self.dns_operation_log.push("DNS records created or updated successfully".to_string());
+                        self.dns_operation_log
+                            .push("DNS records created or updated successfully".to_string());
                         ui.ctx().request_repaint();
                     }
                     Err(err) => {
                         if err.contains("already exists") || err.contains("duplicate") {
                             self.ns_records_configured = true;
                             self.dns_verified = Some(true);
-                            self.dns_operation_log.push("DNS records already exist (no changes needed)".to_string());
+                            self.dns_operation_log
+                                .push("DNS records already exist (no changes needed)".to_string());
                         } else {
-                            self.dns_operation_log.push(format!("Error: Failed to setup DNS records: {}", err));
+                            self.dns_operation_log
+                                .push(format!("Error: Failed to setup DNS records: {}", err));
                         }
                         ui.ctx().request_repaint();
                     }
@@ -853,7 +924,7 @@ impl DnsWizard {
                 return;
             }
         }
-        
+
         // ui starts
         ui.heading("Step 4: DNS Setup");
         ui.add_space(4.0);
@@ -864,12 +935,10 @@ impl DnsWizard {
         let dns_needs_setup = self.dns_verified != Some(true);
         let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
 
-        let setup_btn = ui.add_enabled(
-            can_setup,
-            MaterialButton::filled("Setup DNS").small()
-        );
+        let setup_btn = ui.add_enabled(can_setup, MaterialButton::filled("Setup DNS").small());
         if setup_btn.clicked() {
-            self.dns_operation_log.push("Starting DNS setup...".to_string());
+            self.dns_operation_log
+                .push("Starting DNS setup...".to_string());
             self.create_dns_records();
         }
 
@@ -893,39 +962,46 @@ impl DnsWizard {
                 ui.monospace(format!("_xmpps-server    SRV    5 5270 xmpp.{}", domain));
             }
         });
-        
+
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             // Bottom padding (rendered first = appears at bottom)
             ui.add_space(30.0);
 
             // Buttons at bottom (rendered first in bottom_up layout)
             ui.horizontal(|ui| {
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-close"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-close")))
+                    .clicked()
+                {
                     self.should_close = true;
                 }
 
                 ui.add_space(4.0);
 
-                if ui.add(MaterialButton::outlined(&tr!("dns-wizard-button-previous"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-button-previous")))
+                    .clicked()
+                {
                     self.state = DnsWizardState::VmConfiguration;
                 }
 
                 ui.add_space(4.0);
 
-                let add_btn = ui.add_enabled(
-                    self.ns_records_configured,
-                    MaterialButton::filled("Add")
-                );
+                let add_btn =
+                    ui.add_enabled(self.ns_records_configured, MaterialButton::filled("Add"));
                 if add_btn.clicked() {
                     if let Some(domain) = &self.selected_domain {
                         // Extract OAuth tokens from oauth_result
-                        let (access_token, refresh_token, expires_at) = self.oauth_result
+                        let (access_token, refresh_token, expires_at) = self
+                            .oauth_result
                             .as_ref()
-                            .map(|r| (
-                                Some(r.access_token.clone()),
-                                r.refresh_token.clone(),
-                                Some(r.expires_at),
-                            ))
+                            .map(|r| {
+                                (
+                                    Some(r.access_token.clone()),
+                                    r.refresh_token.clone(),
+                                    Some(r.expires_at),
+                                )
+                            })
                             .unwrap_or((None, None, None));
 
                         self.completed_domain = Some((
@@ -945,7 +1021,7 @@ impl DnsWizard {
             // Content area (reversed order in bottom_up layout)
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                 ui.add_space(55.0);
-                
+
                 // DNS operation log (always visible, full-width, attached to bottom)
                 ui.set_width(ui.available_width());
                 egui::ScrollArea::vertical()
@@ -1000,7 +1076,8 @@ impl DnsWizard {
         if let Some(oauth_result) = &self.oauth_result {
             use crate::api::cloudflare::get_user_info;
 
-            self.progress_log.push("Fetching account info...".to_string());
+            self.progress_log
+                .push("Fetching account info...".to_string());
             dure_info!("Fetching Cloudflare account info");
 
             match get_user_info(&oauth_result.access_token) {
@@ -1008,14 +1085,17 @@ impl DnsWizard {
                     self.cloudflare_account_id = user_info.account_id.clone();
                     self.progress_log.push(format!(
                         "✓ Account: {} ({})",
-                        user_info.account_name,
-                        user_info.account_id
+                        user_info.account_name, user_info.account_id
                     ));
-                    dure_info!("Auto-populated Account ID: {} ({})",
-                        user_info.account_id, user_info.account_name);
+                    dure_info!(
+                        "Auto-populated Account ID: {} ({})",
+                        user_info.account_id,
+                        user_info.account_name
+                    );
                 }
                 Err(e) => {
-                    self.progress_log.push(format!("⚠ Could not auto-fetch account: {}", e));
+                    self.progress_log
+                        .push(format!("⚠ Could not auto-fetch account: {}", e));
                     dure_warn!("Failed to auto-fetch account ID: {}", e);
                 }
             }
@@ -1033,7 +1113,8 @@ impl DnsWizard {
                 Ok(valid) => {
                     self.api_connection_ok = valid;
                     if valid {
-                        self.progress_log.push("✓ API token verified successfully".to_string());
+                        self.progress_log
+                            .push("✓ API token verified successfully".to_string());
                         dure_info!("API token verified successfully");
                     } else {
                         self.progress_log.push("✗ Invalid API token".to_string());
@@ -1113,9 +1194,11 @@ impl DnsWizard {
         // ponytail: Stub NS check - returns true for now
         // Real implementation: use hickory-dns or trust-dns-resolver to query NS records
         // Upgrade when: NS misconfig becomes actual issue (domain pointing elsewhere)
-        self.progress_log.push("Checking nameservers...".to_string());
+        self.progress_log
+            .push("Checking nameservers...".to_string());
         self.ns_check_ok = true;
-        self.progress_log.push("Nameservers verified (stub)".to_string());
+        self.progress_log
+            .push("Nameservers verified (stub)".to_string());
     }
 
     /// Get default DNS records
@@ -1123,11 +1206,27 @@ impl DnsWizard {
         vec![
             format!("{:<20} A      {}", self.domain_name, ip),
             format!("{:<20} A      {}", format!("xmpp.{}", self.domain_name), ip),
-            format!("{:<20} CNAME  {}", format!("www.{}", self.domain_name), self.domain_name),
-            format!("{:<20} SRV    5 5222 xmpp.{}", "_xmpp-client", self.domain_name),
-            format!("{:<20} SRV    5 5269 xmpp.{}", "_xmpp-server", self.domain_name),
-            format!("{:<20} SRV    5 5223 xmpp.{}", "_xmpps-client", self.domain_name),
-            format!("{:<20} SRV    5 5270 xmpp.{}", "_xmpps-server", self.domain_name),
+            format!(
+                "{:<20} CNAME  {}",
+                format!("www.{}", self.domain_name),
+                self.domain_name
+            ),
+            format!(
+                "{:<20} SRV    5 5222 xmpp.{}",
+                "_xmpp-client", self.domain_name
+            ),
+            format!(
+                "{:<20} SRV    5 5269 xmpp.{}",
+                "_xmpp-server", self.domain_name
+            ),
+            format!(
+                "{:<20} SRV    5 5223 xmpp.{}",
+                "_xmpps-client", self.domain_name
+            ),
+            format!(
+                "{:<20} SRV    5 5270 xmpp.{}",
+                "_xmpps-server", self.domain_name
+            ),
         ]
     }
 
@@ -1156,7 +1255,8 @@ impl DnsWizard {
         let promise = poll_promise::Promise::spawn_thread("fetch_domains", move || {
             dure_debug!("Starting fetch_domains thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            let result = client.list_zones()
+            let result = client
+                .list_zones()
                 .map_err(|e| format!("Failed to fetch domains: {}", e));
 
             match &result {
@@ -1186,7 +1286,8 @@ impl DnsWizard {
         let promise = poll_promise::Promise::spawn_thread("add_domain", move || {
             dure_debug!("Starting add_domain thread for: {}", domain);
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            let result = client.create_zone(&domain)
+            let result = client
+                .create_zone(&domain)
                 .map(|zone| zone.name)
                 .map_err(|e| format!("Failed to add domain: {}", e));
 
@@ -1237,12 +1338,18 @@ impl DnsWizard {
             }
         };
 
-        dure_info!("Creating DNS records - Domain: {}, Zone ID: {}, VM IP: {}", domain, zone_id, ip);
+        dure_info!(
+            "Creating DNS records - Domain: {}, Zone ID: {}, VM IP: {}",
+            domain,
+            zone_id,
+            ip
+        );
 
         let promise = poll_promise::Promise::spawn_thread("create_dns", move || {
             dure_debug!("Starting create_dns thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            let result = client.create_default_xmpp_records(&zone_id, &domain, &ip)
+            let result = client
+                .create_default_xmpp_records(&zone_id, &domain, &ip)
                 .map_err(|e| format!("Failed to create DNS records: {}", e));
 
             match &result {
@@ -1292,12 +1399,18 @@ impl DnsWizard {
             }
         };
 
-        dure_info!("Verifying DNS records - Domain: {}, Zone ID: {}, VM IP: {}", domain, zone_id, ip);
+        dure_info!(
+            "Verifying DNS records - Domain: {}, Zone ID: {}, VM IP: {}",
+            domain,
+            zone_id,
+            ip
+        );
 
         let promise = poll_promise::Promise::spawn_thread("verify_dns", move || {
             dure_debug!("Starting verify_dns thread");
             let client = crate::api::cloudflare::CloudflareClient::new(token);
-            let result = client.verify_default_xmpp_records(&zone_id, &domain, &ip)
+            let result = client
+                .verify_default_xmpp_records(&zone_id, &domain, &ip)
                 .map_err(|e| format!("Failed to verify DNS records: {}", e));
 
             match &result {
@@ -1305,7 +1418,9 @@ impl DnsWizard {
                     if *verified {
                         dure_info!("DNS records verification passed - all records correct");
                     } else {
-                        dure_warn!("DNS records verification failed - records missing or incorrect");
+                        dure_warn!(
+                            "DNS records verification failed - records missing or incorrect"
+                        );
                     }
                 }
                 Err(e) => dure_error!("DNS verification error: {}", e),
@@ -1318,10 +1433,21 @@ impl DnsWizard {
     }
 
     /// Get selected platform/VM info for DNS tab binding
-    pub fn get_selected_platform_info(&self) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    pub fn get_selected_platform_info(
+        &self,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
         // Find the selected platform from available_platforms based on selected_vm (which stores project_id)
         if let Some(ref project_id) = self.selected_vm {
-            if let Some(platform) = self.available_platforms.iter().find(|p| &p.project_id == project_id) {
+            if let Some(platform) = self
+                .available_platforms
+                .iter()
+                .find(|p| &p.project_id == project_id)
+            {
                 return (
                     Some(platform.project_id.clone()),
                     Some(platform.platform_name.clone()),
@@ -1332,7 +1458,6 @@ impl DnsWizard {
         }
         (None, None, None, None)
     }
-
 }
 
 #[cfg(test)]

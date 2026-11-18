@@ -1,6 +1,6 @@
 //! Tests for api/gcp/compute module
 
-use dure::api::gcp::compute::{FirewallRule, FirewallAllowed, AccessConfig};
+use dure::api::gcp::compute::{AccessConfig, FirewallAllowed, FirewallRule};
 
 #[test]
 fn test_firewall_rule_structure() {
@@ -65,7 +65,10 @@ fn test_access_config_serialization_without_nat_ip() {
     // Verify natIP field is skipped (not present) when None
     assert!(json.get("type").is_some(), "type field must be present");
     assert!(json.get("name").is_some(), "name field must be present");
-    assert!(json.get("natIP").is_none(), "natIP field must be skipped when None");
+    assert!(
+        json.get("natIP").is_none(),
+        "natIP field must be skipped when None"
+    );
 }
 
 #[test]
@@ -78,12 +81,18 @@ fn test_access_config_serialization_json_string() {
         network_tier: None,
     };
 
-    let json_string = serde_json::to_string(&config_with_ip)
-        .expect("serialization to string failed");
+    let json_string =
+        serde_json::to_string(&config_with_ip).expect("serialization to string failed");
 
     // natIP field should be in the JSON string
-    assert!(json_string.contains("natIP"), "natIP field must be in JSON string");
-    assert!(json_string.contains("10.0.0.1"), "IP address must be in JSON string");
+    assert!(
+        json_string.contains("natIP"),
+        "natIP field must be in JSON string"
+    );
+    assert!(
+        json_string.contains("10.0.0.1"),
+        "IP address must be in JSON string"
+    );
 
     // Test with nat_ip None
     let config_without_ip = AccessConfig {
@@ -93,9 +102,12 @@ fn test_access_config_serialization_json_string() {
         network_tier: None,
     };
 
-    let json_string = serde_json::to_string(&config_without_ip)
-        .expect("serialization to string failed");
+    let json_string =
+        serde_json::to_string(&config_without_ip).expect("serialization to string failed");
 
     // natIP field should NOT be in the JSON string when None
-    assert!(!json_string.contains("natIP"), "natIP field must not be in JSON string when None");
+    assert!(
+        !json_string.contains("natIP"),
+        "natIP field must not be in JSON string when None"
+    );
 }

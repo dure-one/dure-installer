@@ -2,9 +2,9 @@
 
 // Logging provided by standard log crate
 use crate::calc::db;
-use crate::{dure_debug, dure_error, dure_info, dure_warn};
-use crate::calc::dns::{RecordType, resolve_dns};
+use crate::calc::dns::{resolve_dns, RecordType};
 use crate::storage::models::dns::{cache_dns_records, get_cached_dns_records, init_dns_table};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use diesel::prelude::*;
 

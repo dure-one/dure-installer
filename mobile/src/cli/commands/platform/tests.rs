@@ -2,7 +2,7 @@
 
 use crate::config::CloudPlatformConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::collections::VecDeque;
 
 /// Mock platform with full OAuth and VM
@@ -65,7 +65,8 @@ impl MockPlatformRunner {
     }
 
     pub async fn execute_command(&mut self, _cmd: PlatformCommand) -> Result<PlatformEvent> {
-        let event = self.responses
+        let event = self
+            .responses
             .pop_front()
             .ok_or_else(|| anyhow!("No more mock responses"))?;
 
@@ -230,12 +231,10 @@ mod runner_tests {
                 .await;
 
             assert!(result.is_err());
-            assert!(
-                result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("Permission denied")
-            );
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("Permission denied"));
         })
     }
 }
@@ -413,9 +412,11 @@ mod billing_tests {
             });
 
             let platform = mock_platform_connected();
-            let result =
-                crate::cli::commands::platform::billing::execute_billing_inner(&mut runner, &platform)
-                    .await;
+            let result = crate::cli::commands::platform::billing::execute_billing_inner(
+                &mut runner,
+                &platform,
+            )
+            .await;
 
             assert!(result.is_ok());
         })

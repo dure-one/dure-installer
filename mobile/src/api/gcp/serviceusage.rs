@@ -2,7 +2,7 @@
 //!
 //! Handles enabling and checking GCP service APIs.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 
 use super::{GcpRestClient, GCP_SERVICE_USAGE_API_BASE};

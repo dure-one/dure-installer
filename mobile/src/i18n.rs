@@ -4,8 +4,8 @@
 //! Translation files are embedded at compile time from mobile/assets/languages/fluent/
 
 // Logging provided by standard log crate
-use anyhow::Result;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use anyhow::Result;
 
 /// Embedded fluent translation files
 #[cfg(feature = "gui")]

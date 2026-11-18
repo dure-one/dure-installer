@@ -55,19 +55,11 @@ impl Default for DrawerTab {
 #[derive(Debug, Clone)]
 pub enum DrawerCommand {
     /// Switch to a different tab
-    SwitchTab {
-        tab: DrawerTab,
-    },
+    SwitchTab { tab: DrawerTab },
     /// Load operation logs for a project
-    LoadOperations {
-        project_id: String,
-        limit: i64,
-    },
+    LoadOperations { project_id: String, limit: i64 },
     /// Load stdout logs filtered by project
-    LoadLogs {
-        project_id: String,
-        limit: usize,
-    },
+    LoadLogs { project_id: String, limit: usize },
     /// Update logs from LogActor response
     UpdateLogs {
         project_id: String,
@@ -81,9 +73,7 @@ pub enum DrawerCommand {
 #[derive(Debug, Clone)]
 pub enum DrawerEvent {
     /// Tab switched successfully
-    TabSwitched {
-        tab: DrawerTab,
-    },
+    TabSwitched { tab: DrawerTab },
     /// Operation logs loaded
     OperationsLoaded {
         project_id: String,
@@ -95,10 +85,7 @@ pub enum DrawerEvent {
         lines: Vec<String>,
     },
     /// Error occurred
-    Error {
-        operation: String,
-        error: String,
-    },
+    Error { operation: String, error: String },
 }
 
 /// Drawer state

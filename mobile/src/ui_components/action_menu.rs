@@ -68,8 +68,7 @@ mod tests {
 
     #[test]
     fn test_with_icon() {
-        let menu = ActionMenu::new("SSH")
-            .with_icon(SvgEmoji::Terminal);
+        let menu = ActionMenu::new("SSH").with_icon(SvgEmoji::Terminal);
         assert_eq!(menu.icon, Some(SvgEmoji::Terminal));
     }
 }

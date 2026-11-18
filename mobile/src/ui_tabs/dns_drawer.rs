@@ -4,7 +4,7 @@ use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::tabs_primary;
 
-use crate::ui_components::drawer::{StatusLine, LogsRenderer, OperationsRenderer};
+use crate::ui_components::drawer::{LogsRenderer, OperationsRenderer, StatusLine};
 use crate::ui_tabs::dns::{DnsDomainRow, DnsDrawerState, DnsDrawerTab};
 
 /// Render the DNS drawer with tabs
@@ -22,7 +22,7 @@ pub fn render_drawer(
             .height(32.0)
             .tab(&tr!("dns-drawer-tab-status"))
             .tab(&tr!("dns-drawer-tab-logs"))
-            .tab(&tr!("dns-drawer-tab-operations"))
+            .tab(&tr!("dns-drawer-tab-operations")),
     );
     if temp_selected != drawer_state.active_tab.to_index() {
         *on_tab_switch = Some(DnsDrawerTab::from_index(temp_selected));
@@ -33,12 +33,10 @@ pub fn render_drawer(
     // Content area
     egui::ScrollArea::vertical()
         .max_height(400.0)
-        .show(ui, |ui| {
-            match drawer_state.active_tab {
-                DnsDrawerTab::Status => render_status_tab(ui, row),
-                DnsDrawerTab::Logs => render_logs_tab(ui, drawer_state),
-                DnsDrawerTab::Operations => render_operations_tab(ui, drawer_state),
-            }
+        .show(ui, |ui| match drawer_state.active_tab {
+            DnsDrawerTab::Status => render_status_tab(ui, row),
+            DnsDrawerTab::Logs => render_logs_tab(ui, drawer_state),
+            DnsDrawerTab::Operations => render_operations_tab(ui, drawer_state),
         });
 }
 
@@ -59,7 +57,11 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
 
     ui.add_space(8.0);
     use egui_material3::theme::get_global_color;
-    ui.label(egui::RichText::new(tr!("dns-status-platform-binding")).strong().color(get_global_color("onSurface")));
+    ui.label(
+        egui::RichText::new(tr!("dns-status-platform-binding"))
+            .strong()
+            .color(get_global_color("onSurface")),
+    );
     ui.separator();
 
     // Platform info
@@ -84,15 +86,22 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     }
 
     ui.add_space(8.0);
-    ui.label(egui::RichText::new(tr!("dns-status-check-status")).strong().color(get_global_color("onSurface")));
+    ui.label(
+        egui::RichText::new(tr!("dns-status-check-status"))
+            .strong()
+            .color(get_global_color("onSurface")),
+    );
     ui.separator();
 
     // NS Check Status
     if let Some(check) = &row.last_ns_check {
         if check.uses_cloudflare {
             let ns_list = check.nameservers.join(", ");
-            StatusLine::new(&tr!("dns-status-ns-check"), &tr!("dns-status-using-cloudflare", {nameservers: ns_list}))
-                .show(ui);
+            StatusLine::new(
+                &tr!("dns-status-ns-check"),
+                &tr!("dns-status-using-cloudflare", {nameservers: ns_list}),
+            )
+            .show(ui);
         } else {
             let mut msg = tr!("dns-status-not-using-cloudflare").to_string();
             if let Some(err) = &check.error {
@@ -113,11 +122,16 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
     // Settings Check Status
     if let Some(check) = &row.last_settings_check {
         if check.records_valid {
-            StatusLine::new(&tr!("dns-status-settings-check"), &tr!("dns-status-all-records-configured"))
-                .show(ui);
+            StatusLine::new(
+                &tr!("dns-status-settings-check"),
+                &tr!("dns-status-all-records-configured"),
+            )
+            .show(ui);
         } else {
             let list = check.missing_records.join(", ");
-            let mut msg = tr!("dns-status-missing-records", {count: check.missing_records.len(), list: list}).to_string();
+            let mut msg =
+                tr!("dns-status-missing-records", {count: check.missing_records.len(), list: list})
+                    .to_string();
             if let Some(err) = &check.error {
                 msg.push_str(&format!(" - Error: {}", err));
             }
@@ -126,7 +140,11 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
                 .show(ui);
         }
     } else {
-        StatusLine::new(&tr!("dns-status-settings-check"), &tr!("dns-status-not-checked")).show(ui);
+        StatusLine::new(
+            &tr!("dns-status-settings-check"),
+            &tr!("dns-status-not-checked"),
+        )
+        .show(ui);
     }
 
     // HTTPS Check Status
@@ -142,7 +160,9 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
             }
             StatusLine::new(&tr!("dns-status-https-check"), &msg).show(ui);
         } else {
-            let mut msg = if let (Some(resolved), Some(expected)) = (&check.resolved_ip, &check.expected_ip) {
+            let mut msg = if let (Some(resolved), Some(expected)) =
+                (&check.resolved_ip, &check.expected_ip)
+            {
                 tr!("dns-status-resolves-mismatch", {resolved: resolved.clone(), expected: expected.clone()}).to_string()
             } else {
                 tr!("dns-status-not-resolve-to-vm").to_string()
@@ -155,7 +175,11 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
                 .show(ui);
         }
     } else {
-        StatusLine::new(&tr!("dns-status-https-check"), &tr!("dns-status-not-checked")).show(ui);
+        StatusLine::new(
+            &tr!("dns-status-https-check"),
+            &tr!("dns-status-not-checked"),
+        )
+        .show(ui);
     }
 }
 
@@ -171,8 +195,7 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
 
 /// Render Operations tab
 fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
-    let renderer = OperationsRenderer::new()
-        .max_height(400.0);
+    let renderer = OperationsRenderer::new().max_height(400.0);
 
     renderer.show(ui, &drawer_state.operations);
 }

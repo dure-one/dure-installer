@@ -5,13 +5,13 @@
 
 // Logging provided by standard log crate
 use crate::calc::crypt::{
-    PUBLIC_KEY_SIZE, decode_base64, decrypt, encode_base64, encrypt, generate_keypair,
+    decode_base64, decrypt, encode_base64, encrypt, generate_keypair, PUBLIC_KEY_SIZE,
 };
-use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use crate::calc::db;
 use crate::storage::models::crypt::{
-    DeviceKeys, get_current_device_keys, init_crypt_table, store_device_keys,
+    get_current_device_keys, init_crypt_table, store_device_keys, DeviceKeys,
 };
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -55,7 +55,9 @@ pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: boo
 
     dure_info!("");
     dure_info!(" Data encrypted successfully");
-    dure_info!("  Size: {} bytes plaintext → {} bytes encrypted", data_bytes.len(),
+    dure_info!(
+        "  Size: {} bytes plaintext → {} bytes encrypted",
+        data_bytes.len(),
         encrypted.len()
     );
 
@@ -134,7 +136,9 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
         if let Some(existing) = get_current_device_keys(&mut conn)? {
             dure_info!("Device keys already exist for: {}", existing.device_id);
             dure_info!("");
-            dure_info!("Public key (base64): {}", encode_base64(&existing.public_key)
+            dure_info!(
+                "Public key (base64): {}",
+                encode_base64(&existing.public_key)
             );
             dure_info!("");
             dure_info!("To regenerate keys, use --force flag");

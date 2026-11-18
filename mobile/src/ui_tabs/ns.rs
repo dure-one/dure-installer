@@ -1,6 +1,6 @@
 //! NS tab - Domain and DNS record management
 
-use crate::{dure_info, dure_debug};
+use crate::{dure_debug, dure_info};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::MaterialButton;
@@ -178,8 +178,8 @@ impl Default for NsTab {
 #[derive(Clone, Debug)]
 struct DomainRowData {
     domain: String,
-    provider: String,              // Internal identifier (e.g., "cloudflare", "gcloud:email")
-    provider_display: String,      // Display name (e.g., "Cloudflare", "Google Cloud (email)")
+    provider: String, // Internal identifier (e.g., "cloudflare", "gcloud:email")
+    provider_display: String, // Display name (e.g., "Cloudflare", "Google Cloud (email)")
     records: Vec<crate::calc::ns::DnsRecord>,
 }
 
@@ -238,36 +238,45 @@ fn render_domain_operations(ui: &mut egui::Ui, domain: &DomainRowData, idx: usiz
         ui.style_mut().spacing.button_padding = egui::vec2(6.0, 2.0);
 
         // Add Record
-        if ui.add(MaterialButton::outlined("Add Record").small())
+        if ui
+            .add(MaterialButton::outlined("Add Record").small())
             .on_hover_text("Add DNS record to this domain")
             .clicked()
         {
-            ui.data_mut(|d| d.insert_temp(
-                egui::Id::new(format!("add_record_{}", idx)),
-                (domain.provider.clone(), domain.domain.clone())
-            ));
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(format!("add_record_{}", idx)),
+                    (domain.provider.clone(), domain.domain.clone()),
+                )
+            });
         }
 
         // Nameservers
-        if ui.add(MaterialButton::outlined("Nameservers").small())
+        if ui
+            .add(MaterialButton::outlined("Nameservers").small())
             .on_hover_text("View nameserver configuration")
             .clicked()
         {
-            ui.data_mut(|d| d.insert_temp(
-                egui::Id::new(format!("view_ns_{}", idx)),
-                (domain.provider.clone(), domain.domain.clone())
-            ));
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(format!("view_ns_{}", idx)),
+                    (domain.provider.clone(), domain.domain.clone()),
+                )
+            });
         }
 
         // Delete Domain
-        if ui.add(MaterialButton::outlined("Delete").small())
+        if ui
+            .add(MaterialButton::outlined("Delete").small())
             .on_hover_text("Delete domain")
             .clicked()
         {
-            ui.data_mut(|d| d.insert_temp(
-                egui::Id::new(format!("delete_domain_{}", idx)),
-                (domain.provider.clone(), domain.domain.clone())
-            ));
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(format!("delete_domain_{}", idx)),
+                    (domain.provider.clone(), domain.domain.clone()),
+                )
+            });
         }
     });
 }
@@ -282,7 +291,7 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
     if domain.records.is_empty() {
         ui.label(
             egui::RichText::new("No records yet")
-                .color(egui_material3::theme::get_global_color("onSurfaceVariant"))
+                .color(egui_material3::theme::get_global_color("onSurfaceVariant")),
         );
         ui.add_space(4.0);
     } else {
@@ -301,24 +310,27 @@ fn render_domain_drawer(ui: &mut egui::Ui, domain: &DomainRowData, idx: usize) {
 
             records_table = records_table.row(move |r| {
                 r.cell(&record_for_delete.name)
-                 .cell(&record_for_delete.record_type.as_str().to_uppercase())
-                 .cell(&record_for_delete.value)
-                 .cell_widget(move |ui| {
-                     if ui.add(MaterialButton::outlined("🗑").small())
-                         .on_hover_text("Delete record")
-                         .clicked()
-                     {
-                         ui.data_mut(|d| d.insert_temp(
-                             egui::Id::new(format!("delete_record_{}_{}", idx, rec_idx)),
-                             (
-                                 domain_for_delete.provider.clone(),
-                                 domain_for_delete.domain.clone(),
-                                 record_for_delete.name.clone(),
-                                 record_for_delete.record_type.as_str().to_string()
-                             )
-                         ));
-                     }
-                 })
+                    .cell(&record_for_delete.record_type.as_str().to_uppercase())
+                    .cell(&record_for_delete.value)
+                    .cell_widget(move |ui| {
+                        if ui
+                            .add(MaterialButton::outlined("🗑").small())
+                            .on_hover_text("Delete record")
+                            .clicked()
+                        {
+                            ui.data_mut(|d| {
+                                d.insert_temp(
+                                    egui::Id::new(format!("delete_record_{}_{}", idx, rec_idx)),
+                                    (
+                                        domain_for_delete.provider.clone(),
+                                        domain_for_delete.domain.clone(),
+                                        record_for_delete.name.clone(),
+                                        record_for_delete.record_type.as_str().to_string(),
+                                    ),
+                                )
+                            });
+                        }
+                    })
             });
         }
 
@@ -331,7 +343,7 @@ fn render_domains_table(
     ns_tab: &mut NsTab,
     current_profile: &ProfileContext,
     ui: &mut egui::Ui,
-    vm: Option<&mut crate::viewmodel::ViewModel>
+    vm: Option<&mut crate::viewmodel::ViewModel>,
 ) {
     use egui_material3::data_table;
 
@@ -365,13 +377,13 @@ fn render_domains_table(
 
         table = table.row(move |r| {
             r.cell(&row_for_cells.domain)
-             .cell(&row_for_cells.provider_display)
-             .cell_widget(move |ui| {
-                 render_domain_operations(ui, &row_for_ops, idx);
-             })
-             .drawer(move |ui| {
-                 render_domain_drawer(ui, &row_for_drawer, idx);
-             })
+                .cell(&row_for_cells.provider_display)
+                .cell_widget(move |ui| {
+                    render_domain_operations(ui, &row_for_ops, idx);
+                })
+                .drawer(move |ui| {
+                    render_domain_drawer(ui, &row_for_drawer, idx);
+                })
         });
     }
 
@@ -387,7 +399,9 @@ fn render_domains_table(
 
 /// Get config file path (Desktop)
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+fn get_config_path(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
         None => Err("No active profile - please select or create a profile first".to_string()),
@@ -396,7 +410,9 @@ fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Re
 
 /// Get config file path (Android)
 #[cfg(target_os = "android")]
-fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+fn get_config_path(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
         None => Err("No active profile - please select or create a profile first".to_string()),
@@ -405,7 +421,9 @@ fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Re
 
 /// Get config file path (WASM uses browser storage path)
 #[cfg(target_arch = "wasm32")]
-fn get_config_path(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<PathBuf, String> {
+fn get_config_path(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<PathBuf, String> {
     match profile {
         Some(ctx) => Ok(ctx.config_file.clone()),
         None => Err("No active profile - please select or create a profile first".to_string()),
@@ -426,7 +444,9 @@ fn parse_porkbun_credentials(token: &str) -> Option<(String, String)> {
 
 /// Load NS config from YAML
 #[cfg(not(target_arch = "wasm32"))]
-fn load_ns_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Result<NsConfig, String> {
+fn load_ns_config(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+) -> Result<NsConfig, String> {
     let config_path = get_config_path(profile)?;
 
     if !config_path.exists() {
@@ -450,7 +470,10 @@ fn load_ns_config(profile: &Option<crate::calc::profile::ProfileContext>) -> Res
 
 /// Save NS config to YAML
 #[cfg(not(target_arch = "wasm32"))]
-fn save_ns_config(profile: &Option<crate::calc::profile::ProfileContext>, ns_config: &NsConfig) -> Result<(), String> {
+fn save_ns_config(
+    profile: &Option<crate::calc::profile::ProfileContext>,
+    ns_config: &NsConfig,
+) -> Result<(), String> {
     let config_path = get_config_path(profile)?;
 
     if let Some(parent) = config_path.parent() {
@@ -491,7 +514,8 @@ fn add_gcp_account_to_config(
 ) -> Result<(), String> {
     use crate::calc::ns::GcpAccount;
 
-    let mut config = load_ns_config(&Some(profile.clone())).map_err(|e| format!("Failed to load config: {}", e))?;
+    let mut config = load_ns_config(&Some(profile.clone()))
+        .map_err(|e| format!("Failed to load config: {}", e))?;
 
     let account = GcpAccount {
         access_token: oauth.access_token.clone(),
@@ -506,14 +530,19 @@ fn add_gcp_account_to_config(
         .add_gcp_account(account)
         .map_err(|e| format!("Failed to add GCP account: {}", e))?;
 
-    save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Failed to save config: {}", e))?;
+    save_ns_config(&Some(profile.clone()), &config)
+        .map_err(|e| format!("Failed to save config: {}", e))?;
 
     Ok(())
 }
 
 /// Execute add provider in blocking mode (for background thread)
 #[cfg(not(target_arch = "wasm32"))]
-fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, token: String) -> Result<Vec<String>, String> {
+fn execute_add_provider_blocking(
+    profile: &ProfileContext,
+    provider: String,
+    token: String,
+) -> Result<Vec<String>, String> {
     use crate::api::{cloudflare, ns_porkbun};
     use crate::calc::ns::{NsConfig, RecordType};
 
@@ -532,8 +561,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
 
             log.push(format!("API call successful, found {} zones", zones.len()));
 
-            let mut config =
-                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config = load_ns_config(&Some(profile.clone()))
+                .map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -610,7 +639,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config)
+                    .map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -641,8 +671,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
                 domains.len()
             ));
 
-            let mut config =
-                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config = load_ns_config(&Some(profile.clone()))
+                .map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -717,7 +747,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config)
+                    .map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -734,15 +765,16 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
         "duckdns" => {
             log.push("DuckDNS domains cannot be auto-discovered. Saving provider for manual domain addition.".to_string());
 
-            let mut config =
-                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config = load_ns_config(&Some(profile.clone()))
+                .map_err(|e| format!("Error loading config: {}", e))?;
 
             let placeholder = format!("{} (provider)", provider);
             config
                 .add_domain(provider.clone(), placeholder.clone(), token.clone())
                 .map_err(|e| format!("Failed to add provider: {}", e))?;
 
-            save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
+            save_ns_config(&Some(profile.clone()), &config)
+                .map_err(|e| format!("Error saving config: {}", e))?;
 
             let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
             log.push(format!(
@@ -780,8 +812,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
                 zones.len()
             ));
 
-            let mut config =
-                load_ns_config(&Some(profile.clone())).map_err(|e| format!("Error loading config: {}", e))?;
+            let mut config = load_ns_config(&Some(profile.clone()))
+                .map_err(|e| format!("Error loading config: {}", e))?;
 
             log.push(format!(
                 "Loaded config with {} existing domains",
@@ -897,7 +929,8 @@ fn execute_add_provider_blocking(profile: &ProfileContext, provider: String, tok
 
             if added_count > 0 {
                 log.push("Saving config...".to_string());
-                save_ns_config(&Some(profile.clone()), &config).map_err(|e| format!("Error saving config: {}", e))?;
+                save_ns_config(&Some(profile.clone()), &config)
+                    .map_err(|e| format!("Error saving config: {}", e))?;
 
                 log.push("✓ Config saved successfully".to_string());
                 let _ = audit::push_gui("system", "desktop", "ns add provider", &provider);
@@ -933,7 +966,10 @@ impl NsTab {
 
     /// Check if config file has changed since last load
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn should_reload_config(&self, profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+    pub fn should_reload_config(
+        &self,
+        profile: &Option<crate::calc::profile::ProfileContext>,
+    ) -> bool {
         // If never loaded, should reload
         if self.config_last_modified.is_none() {
             return true;
@@ -954,13 +990,21 @@ impl NsTab {
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn should_reload_config(&self, _profile: &Option<crate::calc::profile::ProfileContext>) -> bool {
+    pub fn should_reload_config(
+        &self,
+        _profile: &Option<crate::calc::profile::ProfileContext>,
+    ) -> bool {
         // WASM doesn't have config files
         false
     }
 
     /// Render the NS tab UI
-    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    pub fn ui(
+        &mut self,
+        current_profile: &Option<crate::calc::profile::ProfileContext>,
+        ui: &mut egui::Ui,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         // Check if profile is selected
         if current_profile.is_none() {
             ui.label(tr!("no-profile-selected"));
@@ -974,8 +1018,8 @@ impl NsTab {
         if let Some(ref mut vm) = vm {
             let events = vm.poll_events(ui.ctx());
             for event in events {
-                use crate::viewmodel::ViewModelEvent;
                 use crate::viewmodel::ns::NsEvent;
+                use crate::viewmodel::ViewModelEvent;
 
                 match event {
                     ViewModelEvent::Ns(NsEvent::RecordAdded {
@@ -990,7 +1034,8 @@ impl NsTab {
                         if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
                             // Note: Record details already in config from UI,
                             // this event confirms API succeeded
-                            if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
+                            if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config)
+                            {
                                 self.add_progress(format!("Error saving config: {}", e));
                             } else {
                                 self.load_data(current_profile);
@@ -1032,7 +1077,9 @@ impl NsTab {
                                     }
                                 }
 
-                                if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
+                                if let Err(e) =
+                                    save_ns_config(&Some(current_profile.clone()), &config)
+                                {
                                     self.add_progress(format!("Error saving config: {}", e));
                                 } else {
                                     self.add_progress(format!(
@@ -1069,7 +1116,9 @@ impl NsTab {
                                 let name = parts[0];
                                 let record_type = parts[1];
 
-                                if let Ok(mut config) = load_ns_config(&Some(current_profile.clone())) {
+                                if let Ok(mut config) =
+                                    load_ns_config(&Some(current_profile.clone()))
+                                {
                                     if let Some(domain_entry) =
                                         config.get_domain_mut(&provider_name, &domain)
                                     {
@@ -1079,7 +1128,9 @@ impl NsTab {
                                                     == record_type.to_lowercase())
                                         });
 
-                                        if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
+                                        if let Err(e) =
+                                            save_ns_config(&Some(current_profile.clone()), &config)
+                                        {
                                             self.add_progress(format!(
                                                 "Error saving config: {}",
                                                 e
@@ -1122,7 +1173,9 @@ impl NsTab {
                                     }
                                 }
 
-                                if let Err(e) = save_ns_config(&Some(current_profile.clone()), &config) {
+                                if let Err(e) =
+                                    save_ns_config(&Some(current_profile.clone()), &config)
+                                {
                                     self.add_progress(format!("Error saving config: {}", e));
                                 } else {
                                     if let Some((sel_prov, sel_dom)) = &self.selected_domain {
@@ -1190,7 +1243,10 @@ impl NsTab {
 
         // Show error if any
         if let Some(ref error) = self.load_error {
-            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("Error: {}", error));
+            ui.colored_label(
+                egui_material3::theme::get_global_color("error"),
+                format!("Error: {}", error),
+            );
             ui.add_space(8.0);
         }
 
@@ -1252,13 +1308,15 @@ impl NsTab {
         &mut self,
         profile: &ProfileContext,
         ui: &mut egui::Ui,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         // Process each domain row's action triggers
         for idx in 0..self.domain_rows.len() {
             // Add Record trigger
             let add_record_id = egui::Id::new(format!("add_record_{}", idx));
-            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(add_record_id)) {
+            if let Some((provider, domain)) =
+                ui.data(|d| d.get_temp::<(String, String)>(add_record_id))
+            {
                 ui.data_mut(|d| d.remove::<(String, String)>(add_record_id));
 
                 // Open add record dialog with pre-filled domain
@@ -1272,7 +1330,9 @@ impl NsTab {
 
             // View Nameservers trigger
             let view_ns_id = egui::Id::new(format!("view_ns_{}", idx));
-            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(view_ns_id)) {
+            if let Some((provider, domain)) =
+                ui.data(|d| d.get_temp::<(String, String)>(view_ns_id))
+            {
                 ui.data_mut(|d| d.remove::<(String, String)>(view_ns_id));
 
                 self.show_nameservers(profile, &provider, &domain);
@@ -1280,23 +1340,31 @@ impl NsTab {
 
             // Delete Domain trigger
             let delete_domain_id = egui::Id::new(format!("delete_domain_{}", idx));
-            if let Some((provider, domain)) = ui.data(|d| d.get_temp::<(String, String)>(delete_domain_id)) {
+            if let Some((provider, domain)) =
+                ui.data(|d| d.get_temp::<(String, String)>(delete_domain_id))
+            {
                 ui.data_mut(|d| d.remove::<(String, String)>(delete_domain_id));
 
                 self.execute_delete_domain(profile, &domain, vm.as_deref_mut());
             }
 
             // Delete Record triggers (check all record indices)
-            for rec_idx in 0..100 {  // Max 100 records per domain (reasonable limit)
+            for rec_idx in 0..100 {
+                // Max 100 records per domain (reasonable limit)
                 let delete_record_id = egui::Id::new(format!("delete_record_{}_{}", idx, rec_idx));
-                if let Some((provider, domain, name, record_type)) = ui.data(|d| {
-                    d.get_temp::<(String, String, String, String)>(delete_record_id)
-                }) {
+                if let Some((provider, domain, name, record_type)) =
+                    ui.data(|d| d.get_temp::<(String, String, String, String)>(delete_record_id))
+                {
                     ui.data_mut(|d| d.remove::<(String, String, String, String)>(delete_record_id));
 
                     // ViewModel-based implementation
                     if let Some(ref mut vm) = vm {
-                        if let Err(e) = vm.delete_dns_record(provider.clone(), domain.clone(), name, record_type) {
+                        if let Err(e) = vm.delete_dns_record(
+                            provider.clone(),
+                            domain.clone(),
+                            name,
+                            record_type,
+                        ) {
                             self.error_message = format!("Failed to delete DNS record: {}", e);
                             self.show_error_dialog = true;
                         }
@@ -1305,7 +1373,7 @@ impl NsTab {
                         self.show_error_dialog = true;
                     }
 
-                    break;  // Only process one delete per frame
+                    break; // Only process one delete per frame
                 }
             }
         }
@@ -1556,7 +1624,10 @@ impl NsTab {
                             self.start_gcp_oauth();
                         }
                         ui.add_space(4.0);
-                        ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "⚠ Connection required for GCP DNS");
+                        ui.colored_label(
+                            egui_material3::theme::get_global_color("onSurfaceVariant"),
+                            "⚠ Connection required for GCP DNS",
+                        );
                     }
 
                     ui.add_space(8.0);
@@ -1867,7 +1938,11 @@ impl NsTab {
     }
 
     /// Start add nameserver provider in background (non-blocking)
-    fn start_add_provider_background(&mut self, profile: &ProfileContext, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn start_add_provider_background(
+        &mut self,
+        profile: &ProfileContext,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let provider = self.add_provider_type.clone();
@@ -3276,7 +3351,11 @@ impl NsTab {
     }
 
     /// Execute add record
-    fn execute_add_record(&mut self, profile: &ProfileContext, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
+    fn execute_add_record(
+        &mut self,
+        profile: &ProfileContext,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let name = self.add_record_name.trim().to_string();
@@ -3641,7 +3720,10 @@ impl NsTab {
                                 if matches {
                                     ui.label(format!("• {}", ns));
                                 } else {
-                                    ui.colored_label(egui::Color32::from_rgb(255, 193, 7), format!("• {}", ns));
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(255, 193, 7),
+                                        format!("• {}", ns),
+                                    );
                                 }
                             }
                         }
@@ -3799,11 +3881,13 @@ mod ns_table_tests {
         {
             use crate::calc::ns::NsConfig;
             let mut config = NsConfig::default();
-            config.add_domain(
-                "cloudflare".to_string(),
-                "example.com".to_string(),
-                "test_token".to_string()
-            ).unwrap();
+            config
+                .add_domain(
+                    "cloudflare".to_string(),
+                    "example.com".to_string(),
+                    "test_token".to_string(),
+                )
+                .unwrap();
 
             let rows = build_domain_rows(&config);
             assert_eq!(rows.len(), 1);
@@ -3818,13 +3902,15 @@ mod ns_table_tests {
     fn test_domain_with_multiple_records() {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use crate::calc::ns::{NsConfig, DnsRecord, RecordType};
+            use crate::calc::ns::{DnsRecord, NsConfig, RecordType};
             let mut config = NsConfig::default();
-            config.add_domain(
-                "cloudflare".to_string(),
-                "example.com".to_string(),
-                "test_token".to_string()
-            ).unwrap();
+            config
+                .add_domain(
+                    "cloudflare".to_string(),
+                    "example.com".to_string(),
+                    "test_token".to_string(),
+                )
+                .unwrap();
 
             let domain_entry = config.get_domain_mut("cloudflare", "example.com").unwrap();
             domain_entry.records.push(DnsRecord {
@@ -3851,7 +3937,7 @@ mod ns_table_tests {
     fn test_gcp_provider_display_format() {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use crate::calc::ns::{NsConfig, GcpAccount};
+            use crate::calc::ns::{GcpAccount, NsConfig};
             let mut config = NsConfig::default();
 
             // Add GCP account first
@@ -3866,11 +3952,13 @@ mod ns_table_tests {
             config.add_gcp_account(gcp_account).unwrap();
 
             // Now add domain to GCP account
-            config.add_domain(
-                "gcloud:user@gmail.com".to_string(),
-                "example.com".to_string(),
-                "test_token".to_string()
-            ).unwrap();
+            config
+                .add_domain(
+                    "gcloud:user@gmail.com".to_string(),
+                    "example.com".to_string(),
+                    "test_token".to_string(),
+                )
+                .unwrap();
 
             let rows = build_domain_rows(&config);
             assert_eq!(rows[0].provider, "gcloud:user@gmail.com");

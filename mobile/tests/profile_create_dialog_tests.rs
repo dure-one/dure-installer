@@ -1,6 +1,6 @@
 #![cfg(all(test, feature = "gui"))]
 
-use dure::ui_dlg::{DlgProfileCreate, CreateDialogAction, ProfileCreateResult};
+use dure::ui_dlg::{CreateDialogAction, DlgProfileCreate, ProfileCreateResult};
 
 // ============================================================================
 // State Management Tests
@@ -173,10 +173,7 @@ fn test_validate_empty_profile_name_fails() {
 
     // Assert
     assert!(result.is_none());
-    assert_eq!(
-        dialog.error_message,
-        "Profile name cannot be empty"
-    );
+    assert_eq!(dialog.error_message, "Profile name cannot be empty");
 }
 
 #[test]

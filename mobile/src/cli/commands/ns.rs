@@ -2,8 +2,8 @@
 
 // Logging provided by standard log crate
 use crate::calc::audit;
-use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use crate::calc::ns::{NsConfig, RecordType};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use directories::ProjectDirs;
@@ -21,7 +21,9 @@ fn get_config_path() -> Result<PathBuf> {
 /// Get the path to config.yml (Android)
 #[cfg(target_os = "android")]
 fn get_config_path() -> Result<PathBuf> {
-    Ok(PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
+    Ok(PathBuf::from(
+        "/data/data/app.dure.installer/files/config.yml",
+    ))
 }
 
 /// Get the path to config.yml (WASM)
@@ -115,7 +117,9 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
 
         dure_info!("Domain: {}", domain_entry.domain);
         dure_info!("Provider: {}", provider_name);
-        dure_info!("API Token: {}...", &api_token.chars().take(8).collect::<String>()
+        dure_info!(
+            "API Token: {}...",
+            &api_token.chars().take(8).collect::<String>()
         );
         dure_info!("");
         dure_info!("Records:");
@@ -124,7 +128,9 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
             dure_info!("  (no records)");
         } else {
             for record in &domain_entry.records {
-                dure_info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
+                dure_info!(
+                    "  {} -> {}",
+                    record.record_type.as_str().to_uppercase(),
                     record.value
                 );
             }
@@ -141,7 +147,9 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
                 dure_info!("  (no records)");
             } else {
                 for record in &domain_entry.records {
-                    dure_info!("  {} -> {}", record.record_type.as_str().to_uppercase(),
+                    dure_info!(
+                        "  {} -> {}",
+                        record.record_type.as_str().to_uppercase(),
                         record.value
                     );
                 }
@@ -196,7 +204,10 @@ pub fn execute_ns_add(domain: &str, provider: &str, token: &str) -> Result<()> {
     // Record audit event
     let _ = audit::push_cli("system", "cli", "ns add", domain);
 
-    dure_info!("✓ Domain '{}' added with provider '{}'", domain, provider_display
+    dure_info!(
+        "✓ Domain '{}' added with provider '{}'",
+        domain,
+        provider_display
     );
     dure_info!("");
     dure_info!("Add DNS records with:");
@@ -287,7 +298,9 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
     let record_desc = format!("{} @ {} {}", domain, record_type, value);
     let _ = audit::push_cli("system", "cli", "ns insert", &record_desc);
 
-    dure_info!("✓ Record added: {} {} -> {}", domain,
+    dure_info!(
+        "✓ Record added: {} {} -> {}",
+        domain,
         record_type.to_uppercase(),
         value
     );
@@ -363,7 +376,9 @@ pub fn execute_ns_remove(record_type: &str, domain: &str, value: &str) -> Result
     let record_desc = format!("{} {} {}", domain, record_type, value);
     let _ = audit::push_cli("system", "cli", "ns remove", &record_desc);
 
-    dure_info!("✓ Record removed: {} {} {}", domain,
+    dure_info!(
+        "✓ Record removed: {} {} {}",
+        domain,
         record_type.to_uppercase(),
         value
     );

@@ -6,7 +6,7 @@
 
 #[cfg(all(test, feature = "gui"))]
 mod profile_login_dialog_tests {
-    use dure::ui_dlg::{DlgProfileLogin, DialogAction};
+    use dure::ui_dlg::{DialogAction, DlgProfileLogin};
 
     #[test]
     fn test_new_creates_default_dialog() {
@@ -321,7 +321,7 @@ mod profile_login_dialog_tests {
     fn test_show_returns_none_when_dialog_closed() {
         // Arrange
         let mut dialog = DlgProfileLogin::new();
-        dialog.open = false;  // Dialog is closed
+        dialog.open = false; // Dialog is closed
         dialog.password = "some_password".to_string();
 
         // Act
@@ -358,7 +358,7 @@ mod profile_login_dialog_tests {
         // which is tested thoroughly above.
 
         let dialog = DlgProfileLogin::new();
-        assert!(!dialog.open);  // Just verify dialog initializes correctly
+        assert!(!dialog.open); // Just verify dialog initializes correctly
     }
 
     #[test]
@@ -426,7 +426,7 @@ mod profile_login_dialog_tests {
 
         // Assert
         assert_eq!(result, Some("user_entered_password".to_string()));
-        assert!(!dialog.open);  // Dialog closed after submit
+        assert!(!dialog.open); // Dialog closed after submit
 
         // Step 4: Verify show() would return None on next call
         // (because dialog is now closed)
@@ -453,7 +453,7 @@ mod profile_login_dialog_tests {
         // User clears password field and tries again
         dialog.password.clear();
         dialog.password = "correct_password".to_string();
-        dialog.error_message.clear();  // In show() this would be done by set_error()
+        dialog.error_message.clear(); // In show() this would be done by set_error()
 
         // Act - submit with corrected password
         let result = dialog.process_action(DialogAction::Submit);

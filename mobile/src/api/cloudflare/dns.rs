@@ -3,7 +3,7 @@
 //! Cloudflare DNS API for managing zones and DNS records.
 //! API Documentation: https://developers.cloudflare.com/api/
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -244,7 +244,11 @@ impl CloudflareClient {
             anyhow::bail!("Cloudflare API error: {}", errors.join(", "));
         }
 
-        dure_info!("Zone created successfully: {} (id: {})", result.result.name, result.result.id);
+        dure_info!(
+            "Zone created successfully: {} (id: {})",
+            result.result.name,
+            result.result.id
+        );
         Ok(result.result)
     }
 
@@ -315,7 +319,12 @@ impl CloudflareClient {
         ttl: Option<u32>,
         proxied: Option<bool>,
     ) -> Result<()> {
-        dure_debug!("Creating DNS record: {} {} -> {}", name, record_type, content);
+        dure_debug!(
+            "Creating DNS record: {} {} -> {}",
+            name,
+            record_type,
+            content
+        );
 
         let url = format!("{}/zones/{}/dns_records", API_BASE, zone_id);
 
@@ -359,7 +368,13 @@ impl CloudflareClient {
         ttl: Option<u32>,
         proxied: Option<bool>,
     ) -> Result<()> {
-        dure_debug!("Updating DNS record: {} {} -> {} (id: {})", name, record_type, content, record_id);
+        dure_debug!(
+            "Updating DNS record: {} {} -> {} (id: {})",
+            name,
+            record_type,
+            content,
+            record_id
+        );
 
         let url = format!("{}/zones/{}/dns_records/{}", API_BASE, zone_id, record_id);
 
@@ -394,7 +409,11 @@ impl CloudflareClient {
 
     /// Delete a DNS record
     pub fn delete_record(&self, zone_id: &str, record_id: &str) -> Result<()> {
-        dure_debug!("Deleting DNS record: zone={}, record_id={}", zone_id, record_id);
+        dure_debug!(
+            "Deleting DNS record: zone={}, record_id={}",
+            zone_id,
+            record_id
+        );
 
         let url = format!("{}/zones/{}/dns_records/{}", API_BASE, zone_id, record_id);
 
@@ -428,12 +447,22 @@ impl CloudflareClient {
         ttl: Option<u32>,
         proxied: Option<bool>,
     ) -> Result<()> {
-        dure_debug!("Upserting DNS record: {} {} -> {}", name, record_type, content);
+        dure_debug!(
+            "Upserting DNS record: {} {} -> {}",
+            name,
+            record_type,
+            content
+        );
 
         // Check if record already exists
         match self.find_record(zone_id, name, record_type)? {
             Some(existing) => {
-                dure_info!("Record exists, updating: {} {} (id: {})", name, record_type, existing.id);
+                dure_info!(
+                    "Record exists, updating: {} {} (id: {})",
+                    name,
+                    record_type,
+                    existing.id
+                );
                 self.update_record(
                     zone_id,
                     &existing.id,
@@ -466,13 +495,23 @@ impl CloudflareClient {
         port: u16,
         target: &str,
     ) -> Result<()> {
-        dure_debug!("Upserting SRV record: {} -> {}:{} (priority={}, weight={})",
-            name, target, port, priority, weight);
+        dure_debug!(
+            "Upserting SRV record: {} -> {}:{} (priority={}, weight={})",
+            name,
+            target,
+            port,
+            priority,
+            weight
+        );
 
         // Check if SRV record already exists
         match self.find_record(zone_id, name, "SRV")? {
             Some(existing) => {
-                dure_info!("SRV record exists, updating: {} (id: {})", name, existing.id);
+                dure_info!(
+                    "SRV record exists, updating: {} (id: {})",
+                    name,
+                    existing.id
+                );
 
                 // Delete old record and create new one (Cloudflare doesn't support PATCH for SRV data field)
                 self.delete_record(zone_id, &existing.id)?;
@@ -522,8 +561,14 @@ impl CloudflareClient {
         port: u16,
         target: &str,
     ) -> Result<()> {
-        dure_debug!("Creating SRV record: {} -> {}:{} (priority={}, weight={})",
-            name, target, port, priority, weight);
+        dure_debug!(
+            "Creating SRV record: {} -> {}:{} (priority={}, weight={})",
+            name,
+            target,
+            port,
+            priority,
+            weight
+        );
 
         let url = format!("{}/zones/{}/dns_records", API_BASE, zone_id);
 
@@ -594,14 +639,42 @@ impl CloudflareClient {
 
         // SRV records for XMPP
         dure_debug!("Upserting SRV records for XMPP services");
-        self.upsert_srv_record(zone_id, &format!("_xmpp-client._tcp.{}", domain), 5, 0, 5222, &xmpp_domain)
-            .context("Failed to upsert _xmpp-client SRV record")?;
-        self.upsert_srv_record(zone_id, &format!("_xmpp-server._tcp.{}", domain), 5, 0, 5269, &xmpp_domain)
-            .context("Failed to upsert _xmpp-server SRV record")?;
-        self.upsert_srv_record(zone_id, &format!("_xmpps-client._tcp.{}", domain), 5, 0, 5223, &xmpp_domain)
-            .context("Failed to upsert _xmpps-client SRV record")?;
-        self.upsert_srv_record(zone_id, &format!("_xmpps-server._tcp.{}", domain), 5, 0, 5270, &xmpp_domain)
-            .context("Failed to upsert _xmpps-server SRV record")?;
+        self.upsert_srv_record(
+            zone_id,
+            &format!("_xmpp-client._tcp.{}", domain),
+            5,
+            0,
+            5222,
+            &xmpp_domain,
+        )
+        .context("Failed to upsert _xmpp-client SRV record")?;
+        self.upsert_srv_record(
+            zone_id,
+            &format!("_xmpp-server._tcp.{}", domain),
+            5,
+            0,
+            5269,
+            &xmpp_domain,
+        )
+        .context("Failed to upsert _xmpp-server SRV record")?;
+        self.upsert_srv_record(
+            zone_id,
+            &format!("_xmpps-client._tcp.{}", domain),
+            5,
+            0,
+            5223,
+            &xmpp_domain,
+        )
+        .context("Failed to upsert _xmpps-client SRV record")?;
+        self.upsert_srv_record(
+            zone_id,
+            &format!("_xmpps-server._tcp.{}", domain),
+            5,
+            0,
+            5270,
+            &xmpp_domain,
+        )
+        .context("Failed to upsert _xmpps-server SRV record")?;
 
         dure_info!("Successfully set up all XMPP DNS records (7 records total)");
         Ok(())
@@ -621,34 +694,34 @@ impl CloudflareClient {
         let xmpp_domain = format!("xmpp.{}", domain);
 
         // Check A record for root domain
-        let root_a = records.iter().find(|r| {
-            r.name == domain && r.record_type == "A" && r.content == server_ip
-        });
+        let root_a = records
+            .iter()
+            .find(|r| r.name == domain && r.record_type == "A" && r.content == server_ip);
 
         // Check A record for xmpp subdomain
-        let xmpp_a = records.iter().find(|r| {
-            r.name == xmpp_domain && r.record_type == "A" && r.content == server_ip
-        });
+        let xmpp_a = records
+            .iter()
+            .find(|r| r.name == xmpp_domain && r.record_type == "A" && r.content == server_ip);
 
         // Check CNAME for www
         let www_domain = format!("www.{}", domain);
-        let www_cname = records.iter().find(|r| {
-            r.name == www_domain && r.record_type == "CNAME" && r.content == domain
-        });
+        let www_cname = records
+            .iter()
+            .find(|r| r.name == www_domain && r.record_type == "CNAME" && r.content == domain);
 
         // Check SRV records (just check existence, not full SRV data)
-        let srv_client = records.iter().find(|r| {
-            r.name == format!("_xmpp-client._tcp.{}", domain) && r.record_type == "SRV"
-        });
-        let srv_server = records.iter().find(|r| {
-            r.name == format!("_xmpp-server._tcp.{}", domain) && r.record_type == "SRV"
-        });
-        let srv_client_s = records.iter().find(|r| {
-            r.name == format!("_xmpps-client._tcp.{}", domain) && r.record_type == "SRV"
-        });
-        let srv_server_s = records.iter().find(|r| {
-            r.name == format!("_xmpps-server._tcp.{}", domain) && r.record_type == "SRV"
-        });
+        let srv_client = records
+            .iter()
+            .find(|r| r.name == format!("_xmpp-client._tcp.{}", domain) && r.record_type == "SRV");
+        let srv_server = records
+            .iter()
+            .find(|r| r.name == format!("_xmpp-server._tcp.{}", domain) && r.record_type == "SRV");
+        let srv_client_s = records
+            .iter()
+            .find(|r| r.name == format!("_xmpps-client._tcp.{}", domain) && r.record_type == "SRV");
+        let srv_server_s = records
+            .iter()
+            .find(|r| r.name == format!("_xmpps-server._tcp.{}", domain) && r.record_type == "SRV");
 
         // All records must exist for verification to pass
         let verified = root_a.is_some()
@@ -663,13 +736,27 @@ impl CloudflareClient {
             dure_info!("All XMPP DNS records verified successfully");
         } else {
             dure_warn!("XMPP DNS records verification failed - some records missing or incorrect");
-            if root_a.is_none() { dure_debug!("  Missing: {} A record", domain); }
-            if xmpp_a.is_none() { dure_debug!("  Missing: {} A record", xmpp_domain); }
-            if www_cname.is_none() { dure_debug!("  Missing: www.{} CNAME record", domain); }
-            if srv_client.is_none() { dure_debug!("  Missing: _xmpp-client SRV record"); }
-            if srv_server.is_none() { dure_debug!("  Missing: _xmpp-server SRV record"); }
-            if srv_client_s.is_none() { dure_debug!("  Missing: _xmpps-client SRV record"); }
-            if srv_server_s.is_none() { dure_debug!("  Missing: _xmpps-server SRV record"); }
+            if root_a.is_none() {
+                dure_debug!("  Missing: {} A record", domain);
+            }
+            if xmpp_a.is_none() {
+                dure_debug!("  Missing: {} A record", xmpp_domain);
+            }
+            if www_cname.is_none() {
+                dure_debug!("  Missing: www.{} CNAME record", domain);
+            }
+            if srv_client.is_none() {
+                dure_debug!("  Missing: _xmpp-client SRV record");
+            }
+            if srv_server.is_none() {
+                dure_debug!("  Missing: _xmpp-server SRV record");
+            }
+            if srv_client_s.is_none() {
+                dure_debug!("  Missing: _xmpps-client SRV record");
+            }
+            if srv_server_s.is_none() {
+                dure_debug!("  Missing: _xmpps-server SRV record");
+            }
         }
 
         Ok(verified)

@@ -1,7 +1,7 @@
 //! ehttp response cache to avoid re-fetching same URLs
 //! This cache persists responses to disk and survives activity recreations
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -124,7 +124,9 @@ impl EhttpCache {
                     - entry.timestamp;
                 dure_info!(
                     "🟡 CACHE EXPIRED: {} (age: {}s > ttl: {}s)",
-                    url, age_secs, entry.ttl_seconds
+                    url,
+                    age_secs,
+                    entry.ttl_seconds
                 );
             }
         } else {
@@ -257,7 +259,9 @@ impl EhttpCache {
 
         dure_info!(
             "💾 DISK CACHE: Loaded {} entries, removed {} expired, {} errors",
-            loaded_count, expired_count, error_count
+            loaded_count,
+            expired_count,
+            error_count
         );
     }
 
@@ -336,7 +340,8 @@ impl EhttpCache {
                     // Don't cache failed responses
                     dure_warn!(
                         "❌ NETWORK FAILED: {} (status: {}), NOT CACHING",
-                        url_for_log, resp.status
+                        url_for_log,
+                        resp.status
                     );
                     callback(Ok(resp));
                 }

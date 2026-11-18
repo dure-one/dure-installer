@@ -85,16 +85,19 @@ impl StatusGrid {
                     // Value with state color (or theme color if no state)
                     let value_text = match item.state {
                         Some(ItemState::InProgress) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(100, 181, 246)) // Info blue
+                            egui::RichText::new(&item.value)
+                                .color(egui::Color32::from_rgb(100, 181, 246)) // Info blue
                         }
                         Some(ItemState::Success) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(76, 175, 80)) // Success green (already standard)
+                            egui::RichText::new(&item.value)
+                                .color(egui::Color32::from_rgb(76, 175, 80)) // Success green (already standard)
                         }
                         Some(ItemState::Error) => {
                             egui::RichText::new(&item.value).color(get_global_color("error"))
                         }
                         Some(ItemState::Warning) => {
-                            egui::RichText::new(&item.value).color(egui::Color32::from_rgb(255, 193, 7)) // Warning amber (already standard)
+                            egui::RichText::new(&item.value)
+                                .color(egui::Color32::from_rgb(255, 193, 7)) // Warning amber (already standard)
                         }
                         None => egui::RichText::new(&item.value).color(text_color),
                     };

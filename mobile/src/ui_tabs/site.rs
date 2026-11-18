@@ -1,10 +1,10 @@
 //! Site tab - Site-to-site communication management
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
+use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
 use egui_material3::MaterialButton;
-use egui_material3::spreadsheet::{MaterialSpreadsheet, text_column};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::calc::audit;
@@ -80,7 +80,11 @@ impl Default for SiteTab {
 
 impl SiteTab {
     /// Render the site tab UI
-    pub fn ui(&mut self, current_profile: &Option<crate::calc::profile::ProfileContext>, ui: &mut egui::Ui) {
+    pub fn ui(
+        &mut self,
+        current_profile: &Option<crate::calc::profile::ProfileContext>,
+        ui: &mut egui::Ui,
+    ) {
         // Check if profile is selected
         if current_profile.is_none() {
             ui.label(tr!("no-profile-selected"));
@@ -143,7 +147,10 @@ impl SiteTab {
         }
 
         if let Some(err) = &self.load_error {
-            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {err}"));
+            ui.colored_label(
+                egui_material3::theme::get_global_color("error"),
+                format!("⚠ {err}"),
+            );
             ui.add_space(4.0);
         }
 
@@ -280,7 +287,10 @@ impl SiteTab {
 
                 if !self.add_status_message.is_empty() {
                     ui.add_space(8.0);
-                    ui.colored_label(egui_material3::theme::get_global_color("error"), &self.add_status_message);
+                    ui.colored_label(
+                        egui_material3::theme::get_global_color("error"),
+                        &self.add_status_message,
+                    );
                 }
 
                 ui.add_space(12.0);

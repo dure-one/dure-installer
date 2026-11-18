@@ -724,7 +724,6 @@ fn install_windows(_paths: &InstallPaths, _current_exe: &PathBuf) -> Result<Stri
     ))
 }
 
-
 /// Uninstall the application
 pub fn do_uninstall() -> InstallResult {
     let paths = get_install_paths();

@@ -5,9 +5,9 @@ use egui_i18n::tr;
 use egui_material3::{tabs_primary, tabs_secondary};
 
 use crate::storage::models::opslog::OperationLog;
-use crate::ui_components::drawer::{StatusLine, LogsRenderer, OperationsRenderer};
-use crate::ui_tabs::ssh::{SshRow, OperationState};
-use crate::viewmodel::ssh::{DrawerTab, DrawerState};
+use crate::ui_components::drawer::{LogsRenderer, OperationsRenderer, StatusLine};
+use crate::ui_tabs::ssh::{OperationState, SshRow};
+use crate::viewmodel::ssh::{DrawerState, DrawerTab};
 
 /// Render the SSH drawer with tabs
 pub fn render_drawer(
@@ -27,7 +27,7 @@ pub fn render_drawer(
             .tab(&tr!("ssh-drawer-tab-operations"))
             .tab(&tr!("ssh-drawer-tab-host"))
             .tab(&tr!("ssh-drawer-tab-docker"))
-            .tab(&tr!("ssh-drawer-tab-dure"))
+            .tab(&tr!("ssh-drawer-tab-dure")),
     );
     if temp_selected != drawer_state.active_tab.to_index() {
         *on_tab_switch = Some(DrawerTab::from_index(temp_selected));
@@ -38,15 +38,13 @@ pub fn render_drawer(
     // Content area (500px from recent commit)
     egui::ScrollArea::vertical()
         .max_height(500.0)
-        .show(ui, |ui| {
-            match drawer_state.active_tab {
-                DrawerTab::Status => render_status_tab(ui, row),
-                DrawerTab::Logs => render_logs_tab(ui, drawer_state),
-                DrawerTab::Operations => render_operations_tab(ui, drawer_state),
-                DrawerTab::Host => render_host_tab(ui, drawer_state),
-                DrawerTab::Docker => render_docker_tab(ui, drawer_state),
-                DrawerTab::Dure => render_dure_tab(ui, drawer_state),
-            }
+        .show(ui, |ui| match drawer_state.active_tab {
+            DrawerTab::Status => render_status_tab(ui, row),
+            DrawerTab::Logs => render_logs_tab(ui, drawer_state),
+            DrawerTab::Operations => render_operations_tab(ui, drawer_state),
+            DrawerTab::Host => render_host_tab(ui, drawer_state),
+            DrawerTab::Docker => render_docker_tab(ui, drawer_state),
+            DrawerTab::Dure => render_dure_tab(ui, drawer_state),
         });
 }
 
@@ -62,22 +60,40 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     // SSH Connection Status (inline error display)
     if let Some(check_result) = &row.last_ssh_check {
         if check_result.connected {
-            StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-connected")).show(ui);
+            StatusLine::new(
+                &tr!("ssh-drawer-status-ssh"),
+                tr!("ssh-drawer-status-connected"),
+            )
+            .show(ui);
         } else if let Some(error) = &check_result.error {
-            StatusLine::new(&tr!("ssh-drawer-status-ssh"), &format!("Failed ({})", error))
-                .error()
-                .show(ui);
+            StatusLine::new(
+                &tr!("ssh-drawer-status-ssh"),
+                &format!("Failed ({})", error),
+            )
+            .error()
+            .show(ui);
         } else {
-            StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-disconnected"))
-                .warning()
-                .show(ui);
+            StatusLine::new(
+                &tr!("ssh-drawer-status-ssh"),
+                tr!("ssh-drawer-status-disconnected"),
+            )
+            .warning()
+            .show(ui);
         }
     } else {
-        StatusLine::new(&tr!("ssh-drawer-status-ssh"), tr!("ssh-drawer-status-not-checked")).show(ui);
+        StatusLine::new(
+            &tr!("ssh-drawer-status-ssh"),
+            tr!("ssh-drawer-status-not-checked"),
+        )
+        .show(ui);
     }
 
     // Base Packages Status
-    let host_status = if row.host_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
+    let host_status = if row.host_installed {
+        tr!("ssh-drawer-status-installed")
+    } else {
+        tr!("ssh-drawer-status-not-installed")
+    };
     let mut base_line = StatusLine::new(&tr!("ssh-drawer-status-base"), host_status);
     if !row.host_installed {
         base_line = base_line.warning();
@@ -87,7 +103,10 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     // Show missing packages
     if let Some(check_result) = &row.last_host_check {
         if !check_result.missing_packages.is_empty() {
-            ui.label(format!("  Missing: {}", check_result.missing_packages.join(", ")));
+            ui.label(format!(
+                "  Missing: {}",
+                check_result.missing_packages.join(", ")
+            ));
         }
     }
 
@@ -112,7 +131,11 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
     docker_line.show(ui);
 
     // Dure Status
-    let dure_status = if row.dure_installed { tr!("ssh-drawer-status-installed") } else { tr!("ssh-drawer-status-not-installed") };
+    let dure_status = if row.dure_installed {
+        tr!("ssh-drawer-status-installed")
+    } else {
+        tr!("ssh-drawer-status-not-installed")
+    };
     let mut dure_line = StatusLine::new(&tr!("ssh-drawer-status-dure"), dure_status);
     if !row.dure_installed {
         dure_line = dure_line.warning();
@@ -123,21 +146,38 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
 
     // Operation State
     match &row.operation_state {
-        OperationState::InProgress { operation, started_at } => {
+        OperationState::InProgress {
+            operation,
+            started_at,
+        } => {
             let elapsed = chrono::Utc::now().timestamp() - started_at;
-            StatusLine::new(&tr!("ssh-drawer-status-operation"), &tr!("ssh-op-in-progress-text", {operation: operation.clone(), seconds: elapsed}))
-                .show(ui);
+            StatusLine::new(
+                &tr!("ssh-drawer-status-operation"),
+                &tr!("ssh-op-in-progress-text", {operation: operation.clone(), seconds: elapsed}),
+            )
+            .show(ui);
         }
-        OperationState::Failed { operation, error, .. } => {
-            StatusLine::new(&tr!("ssh-drawer-status-last-operation"), &tr!("ssh-op-failed-text", {operation: operation.clone()}))
-                .error()
-                .show(ui);
+        OperationState::Failed {
+            operation, error, ..
+        } => {
+            StatusLine::new(
+                &tr!("ssh-drawer-status-last-operation"),
+                &tr!("ssh-op-failed-text", {operation: operation.clone()}),
+            )
+            .error()
+            .show(ui);
             ui.label(format!("  Error: {}", error));
         }
-        OperationState::Completed { operation, completed_at } => {
+        OperationState::Completed {
+            operation,
+            completed_at,
+        } => {
             let ago = chrono::Utc::now().timestamp() - completed_at;
-            StatusLine::new(&tr!("ssh-drawer-status-last-operation"), &tr!("ssh-op-completed-ago", {operation: operation.clone(), seconds: ago}))
-                .show(ui);
+            StatusLine::new(
+                &tr!("ssh-drawer-status-last-operation"),
+                &tr!("ssh-op-completed-ago", {operation: operation.clone(), seconds: ago}),
+            )
+            .show(ui);
         }
         OperationState::Idle => {}
     }
@@ -172,8 +212,7 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
 
 /// Render Logs tab (stdout logs filtered by SSH host)
 fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
-    let renderer = LogsRenderer::new(&tr!("ssh-logs-title"))
-        .refresh_interval(1);  // 1 second auto-refresh
+    let renderer = LogsRenderer::new(&tr!("ssh-logs-title")).refresh_interval(1); // 1 second auto-refresh
 
     let refresh_id = egui::Id::new("ssh_drawer_action_refresh_logs");
     renderer.show(ui, &drawer_state.logs, refresh_id);
@@ -269,7 +308,10 @@ fn render_dure_tab(ui: &mut egui::Ui, drawer_state: &DrawerState) {
         if focus_applied {
             if let Some(ref host) = drawer_state.ssh_host {
                 ui.data_mut(|d| {
-                    d.insert_temp(egui::Id::new("dure_subtab_focus_applied").with(host), host.clone());
+                    d.insert_temp(
+                        egui::Id::new("dure_subtab_focus_applied").with(host),
+                        host.clone(),
+                    );
                 });
             }
         }
@@ -306,7 +348,11 @@ fn render_dure_status_subtab(ui: &mut egui::Ui, drawer_state: &DrawerState) -> b
 }
 
 /// Render container logs sub-tab
-fn render_dure_container_logs_subtab(ui: &mut egui::Ui, drawer_state: &DrawerState, container_name: &str) -> bool {
+fn render_dure_container_logs_subtab(
+    ui: &mut egui::Ui,
+    drawer_state: &DrawerState,
+    container_name: &str,
+) -> bool {
     ui.heading(format!("Logs: {}", container_name));
     ui.add_space(8.0);
 
@@ -330,4 +376,3 @@ fn render_dure_container_logs_subtab(ui: &mut egui::Ui, drawer_state: &DrawerSta
     }
     false
 }
-

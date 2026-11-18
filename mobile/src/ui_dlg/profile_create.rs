@@ -43,7 +43,10 @@ impl DlgProfileCreate {
 
         // Check length
         if name.len() > 64 {
-            return Err(format!("Profile name too long ({} chars, max 64)", name.len()));
+            return Err(format!(
+                "Profile name too long ({} chars, max 64)",
+                name.len()
+            ));
         }
 
         // Check valid characters: a-z, A-Z, 0-9, -, _
@@ -130,9 +133,7 @@ impl DlgProfileCreate {
             .scroll([false, false])
             .min_width(400.0)
             .min_height(350.0)
-            .resize(|r| {
-                r.default_size([400.0, 350.0])
-            })
+            .resize(|r| r.default_size([400.0, 350.0]))
             .show(ctx, |ui| {
                 ui.heading(tr!("profile-create-heading"));
                 ui.add_space(12.0);
@@ -164,7 +165,11 @@ impl DlgProfileCreate {
                     }
                 }
 
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.profile_name);
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                    ui,
+                    &response,
+                    &mut self.profile_name,
+                );
 
                 ui.add_space(8.0);
 
@@ -187,7 +192,11 @@ impl DlgProfileCreate {
                     }
                 }
 
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password);
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                    ui,
+                    &response,
+                    &mut self.password,
+                );
 
                 ui.add_space(8.0);
 
@@ -210,7 +219,11 @@ impl DlgProfileCreate {
                     }
                 }
 
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password_confirm);
+                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                    ui,
+                    &response,
+                    &mut self.password_confirm,
+                );
 
                 ui.add_space(12.0);
 

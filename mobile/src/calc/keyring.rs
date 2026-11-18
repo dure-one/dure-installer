@@ -25,13 +25,13 @@
 //! - KPKey: `~/.config/dure/id_ed25519`
 //! - KPPubKey: `~/.config/dure/id_ed25519.pub`
 
-use crate::{dure_info, dure_debug, dure_error};
+use crate::{dure_debug, dure_error, dure_info};
 use anyhow::{Context, Result};
 use keepass::{
-    Database, DatabaseKey,
     db::{Entry, Group, Value},
+    Database, DatabaseKey,
 };
-use std::fs::{File, create_dir_all};
+use std::fs::{create_dir_all, File};
 use std::io::{Cursor, Write as IoWrite};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -51,7 +51,7 @@ pub struct DatabaseHandle {
     db: Arc<RwLock<Database>>,
     kdbx_path: PathBuf,
     kpkey_path: PathBuf,
-    key: Arc<RwLock<DatabaseKey>>,  // Cached for save operations (mutable for password changes)
+    key: Arc<RwLock<DatabaseKey>>, // Cached for save operations (mutable for password changes)
 }
 
 impl DatabaseHandle {
@@ -67,11 +67,7 @@ impl DatabaseHandle {
     /// - File not found
     /// - Incorrect password/keyfile
     /// - Corrupted database
-    pub fn open(
-        kdbx_path: PathBuf,
-        kpkey_path: PathBuf,
-        password: Option<&str>,
-    ) -> Result<Self> {
+    pub fn open(kdbx_path: PathBuf, kpkey_path: PathBuf, password: Option<&str>) -> Result<Self> {
         // Build DatabaseKey from password + keyfile (both required)
         let mut key = DatabaseKey::new();
 
@@ -103,7 +99,7 @@ impl DatabaseHandle {
 
     /// Read-only access to database
     pub fn read(&self) -> RwLockReadGuard<'_, Database> {
-        self.db.read().unwrap()  // Poisoning = panic acceptable
+        self.db.read().unwrap() // Poisoning = panic acceptable
     }
 
     /// Mutable access with auto-save on drop
@@ -120,10 +116,8 @@ impl DatabaseHandle {
         let key = self.key.read().unwrap().clone();
         let mut file = File::create(&self.kdbx_path)
             .with_context(|| format!("Failed to create kdbx file: {}", self.kdbx_path.display()))?;
-        db.save(&mut file, key)
-            .context("Failed to save database")?;
-        file.sync_all()
-            .context("Failed to sync database to disk")?;
+        db.save(&mut file, key).context("Failed to save database")?;
+        file.sync_all().context("Failed to sync database to disk")?;
         Ok(())
     }
 
@@ -159,7 +153,8 @@ impl DatabaseHandle {
         let kpkey_data = std::fs::read(&self.kpkey_path)
             .with_context(|| format!("Failed to read keyfile: {}", self.kpkey_path.display()))?;
         let mut cursor = Cursor::new(kpkey_data);
-        new_key = new_key.with_keyfile(&mut cursor)
+        new_key = new_key
+            .with_keyfile(&mut cursor)
             .context("Failed to load keyfile")?;
 
         // Save database with new key
@@ -168,8 +163,7 @@ impl DatabaseHandle {
             .with_context(|| format!("Failed to create kdbx file: {}", self.kdbx_path.display()))?;
         db.save(&mut file, new_key.clone())
             .context("Failed to save database with new password")?;
-        file.sync_all()
-            .context("Failed to sync database to disk")?;
+        file.sync_all().context("Failed to sync database to disk")?;
 
         // Update cached key for future saves
         *self.key.write().unwrap() = new_key;
@@ -194,7 +188,8 @@ impl DatabaseHandle {
         // Check if key already exists
         let db = self.read();
         if db.root.entries.iter().any(|e| {
-            e.fields.get("Title")
+            e.fields
+                .get("Title")
                 .map(|v| v.get() == "sqlite_encryption_key")
                 .unwrap_or(false)
         }) {
@@ -206,15 +201,27 @@ impl DatabaseHandle {
         // Generate random 32-byte key
         let mut key_bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key_bytes);
-        let key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
+        let key_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
 
         // Store in KeePass
         let mut db = self.write_and_save();
         let mut entry = Entry::default();
-        entry.fields.insert("Title".to_string(), Value::unprotected("sqlite_encryption_key".to_string()));
-        entry.fields.insert("UserName".to_string(), Value::unprotected("dure".to_string()));
-        entry.fields.insert("Password".to_string(), Value::protected(key_base64.clone()));
-        entry.fields.insert("Notes".to_string(), Value::unprotected("Auto-generated SQLite database encryption key".to_string()));
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::unprotected("sqlite_encryption_key".to_string()),
+        );
+        entry.fields.insert(
+            "UserName".to_string(),
+            Value::unprotected("dure".to_string()),
+        );
+        entry
+            .fields
+            .insert("Password".to_string(), Value::protected(key_base64.clone()));
+        entry.fields.insert(
+            "Notes".to_string(),
+            Value::unprotected("Auto-generated SQLite database encryption key".to_string()),
+        );
         db.root.entries.push(entry);
 
         dure_info!("Generated and stored SQLite encryption key");
@@ -229,15 +236,21 @@ impl DatabaseHandle {
     /// Returns error if key entry not found
     pub fn get_db_encryption_key(&self) -> Result<String> {
         let db = self.read();
-        let entry = db.root.entries.iter()
+        let entry = db
+            .root
+            .entries
+            .iter()
             .find(|e| {
-                e.fields.get("Title")
+                e.fields
+                    .get("Title")
                     .map(|v| v.get() == "sqlite_encryption_key")
                     .unwrap_or(false)
             })
             .ok_or_else(|| anyhow::anyhow!("SQLite encryption key not found in keyring"))?;
 
-        let key = entry.fields.get("Password")
+        let key = entry
+            .fields
+            .get("Password")
             .ok_or_else(|| anyhow::anyhow!("SQLite encryption key entry has no password field"))?
             .get()
             .to_string();
@@ -270,12 +283,16 @@ impl<'a> Drop for SaveGuard<'a> {
         // Save while we still have write access
         let save_result = (|| -> Result<()> {
             let key = self.handle.key.read().unwrap().clone();
-            let mut file = File::create(&self.handle.kdbx_path)
-                .with_context(|| format!("Failed to create kdbx file: {}", self.handle.kdbx_path.display()))?;
-            self.guard.save(&mut file, key)
+            let mut file = File::create(&self.handle.kdbx_path).with_context(|| {
+                format!(
+                    "Failed to create kdbx file: {}",
+                    self.handle.kdbx_path.display()
+                )
+            })?;
+            self.guard
+                .save(&mut file, key)
                 .context("Failed to save database")?;
-            file.sync_all()
-                .context("Failed to sync database to disk")?;
+            file.sync_all().context("Failed to sync database to disk")?;
             Ok(())
         })();
 
@@ -309,13 +326,21 @@ pub fn add_key_to_handle(
     ssh_key: Option<&[u8]>,
     notes: Option<&str>,
 ) -> Result<()> {
-    let mut db = handle.write_and_save();  // Auto-saves on drop
+    let mut db = handle.write_and_save(); // Auto-saves on drop
 
     // Create entry
     let mut entry = Entry::default();
-    entry.fields.insert("Title".to_string(), Value::unprotected(domain.to_string()));
-    entry.fields.insert("UserName".to_string(), Value::unprotected(username.to_string()));
-    entry.fields.insert("Password".to_string(), Value::protected(password.to_string()));
+    entry
+        .fields
+        .insert("Title".to_string(), Value::unprotected(domain.to_string()));
+    entry.fields.insert(
+        "UserName".to_string(),
+        Value::unprotected(username.to_string()),
+    );
+    entry.fields.insert(
+        "Password".to_string(),
+        Value::protected(password.to_string()),
+    );
 
     // Add SSH key as attachment if provided
     if let Some(key_data) = ssh_key {
@@ -330,7 +355,9 @@ pub fn add_key_to_handle(
 
     // Add notes
     if let Some(n) = notes {
-        entry.fields.insert("Notes".to_string(), Value::unprotected(n.to_string()));
+        entry
+            .fields
+            .insert("Notes".to_string(), Value::unprotected(n.to_string()));
     }
 
     db.root.entries.push(entry);
@@ -352,17 +379,27 @@ pub fn update_key_to_handle(
     let mut db = handle.write_and_save();
 
     // Find existing entry
-    let entry = db.root.entries.iter_mut()
+    let entry = db
+        .root
+        .entries
+        .iter_mut()
         .find(|e| {
-            e.fields.get("Title")
+            e.fields
+                .get("Title")
                 .map(|v| v.get() == domain)
                 .unwrap_or(false)
         })
         .ok_or_else(|| anyhow::anyhow!("Key not found: {}", domain))?;
 
     // Update fields
-    entry.fields.insert("UserName".to_string(), Value::unprotected(username.to_string()));
-    entry.fields.insert("Password".to_string(), Value::protected(password.to_string()));
+    entry.fields.insert(
+        "UserName".to_string(),
+        Value::unprotected(username.to_string()),
+    );
+    entry.fields.insert(
+        "Password".to_string(),
+        Value::protected(password.to_string()),
+    );
 
     // Update SSH key
     if let Some(key_data) = ssh_key {
@@ -377,7 +414,9 @@ pub fn update_key_to_handle(
 
     // Update notes
     if let Some(n) = notes {
-        entry.fields.insert("Notes".to_string(), Value::unprotected(n.to_string()));
+        entry
+            .fields
+            .insert("Notes".to_string(), Value::unprotected(n.to_string()));
     }
 
     Ok(())
@@ -387,15 +426,13 @@ pub fn update_key_to_handle(
 ///
 /// Auto-saves on function return via SaveGuard Drop.
 /// Returns true if key was found and deleted, false otherwise.
-pub fn delete_key_from_handle(
-    handle: &DatabaseHandle,
-    domain: &str,
-) -> Result<bool> {
+pub fn delete_key_from_handle(handle: &DatabaseHandle, domain: &str) -> Result<bool> {
     let mut db = handle.write_and_save();
 
     let initial_len = db.root.entries.len();
     db.root.entries.retain(|e| {
-        e.fields.get("Title")
+        e.fields
+            .get("Title")
             .map(|v| v.get() != domain)
             .unwrap_or(true)
     });
@@ -662,7 +699,11 @@ pub fn save_kdbx(
 
 /// List all keys from KeePass database
 #[deprecated(note = "Use list_keys_from_handle instead")]
-pub fn list_keys(kdbx_path: &Path, kpkey_path: Option<&Path>, password: Option<&str>) -> Result<Vec<KeyEntry>> {
+pub fn list_keys(
+    kdbx_path: &Path,
+    kpkey_path: Option<&Path>,
+    password: Option<&str>,
+) -> Result<Vec<KeyEntry>> {
     let db = open_kdbx(kdbx_path, kpkey_path, password)?;
     let mut keys = Vec::new();
     collect_keys_from_group(&db.root, &mut keys)?;
@@ -782,7 +823,14 @@ pub fn add_key(
     db_password: Option<&str>,
 ) -> Result<()> {
     add_key_with_ssh(
-        kdbx_path, kpkey_path, domain, username, password, None, None, db_password,
+        kdbx_path,
+        kpkey_path,
+        domain,
+        username,
+        password,
+        None,
+        None,
+        db_password,
     )
 }
 
@@ -870,7 +918,12 @@ pub fn add_key_with_ssh(
 
 /// Delete a key from the KeePass database
 #[deprecated(note = "Use delete_key_from_handle instead")]
-pub fn delete_key(kdbx_path: &Path, kpkey_path: Option<&Path>, domain: &str, db_password: Option<&str>) -> Result<bool> {
+pub fn delete_key(
+    kdbx_path: &Path,
+    kpkey_path: Option<&Path>,
+    domain: &str,
+    db_password: Option<&str>,
+) -> Result<bool> {
     let mut db = open_kdbx(kdbx_path, kpkey_path, db_password)?;
 
     // Find and remove the entry
@@ -906,7 +959,14 @@ pub fn update_key(
     db_password: Option<&str>,
 ) -> Result<()> {
     update_key_with_ssh(
-        kdbx_path, kpkey_path, domain, username, password, None, None, db_password,
+        kdbx_path,
+        kpkey_path,
+        domain,
+        username,
+        password,
+        None,
+        None,
+        db_password,
     )
 }
 
@@ -1089,7 +1149,8 @@ mod tests {
 
         let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
         let key = DatabaseKey::new()
-            .with_keyfile(&mut kpkey_cursor).unwrap()
+            .with_keyfile(&mut kpkey_cursor)
+            .unwrap()
             .with_password("testpass");
 
         let mut file = File::create(&kdbx_path).unwrap();
@@ -1118,14 +1179,25 @@ mod tests {
         // Add Dure Keys group with entry
         let mut group = Group::new("Dure Keys");
         let mut entry = Entry::default();
-        entry.fields.insert("Title".to_string(), Value::unprotected("test.com".to_string()));
-        entry.fields.insert("UserName".to_string(), Value::unprotected("user".to_string()));
-        entry.fields.insert("Password".to_string(), Value::protected("pass".to_string()));
+        entry.fields.insert(
+            "Title".to_string(),
+            Value::unprotected("test.com".to_string()),
+        );
+        entry.fields.insert(
+            "UserName".to_string(),
+            Value::unprotected("user".to_string()),
+        );
+        entry
+            .fields
+            .insert("Password".to_string(), Value::protected("pass".to_string()));
         group.entries.push(entry);
         db.root.groups.push(group);
 
         let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
-        let key = DatabaseKey::new().with_keyfile(&mut kpkey_cursor).unwrap().with_password("testpass");
+        let key = DatabaseKey::new()
+            .with_keyfile(&mut kpkey_cursor)
+            .unwrap()
+            .with_password("testpass");
         let mut file = File::create(&kdbx_path).unwrap();
         db.save(&mut file, key).unwrap();
 
@@ -1150,13 +1222,25 @@ mod tests {
         std::fs::write(&kpkey_path, &[0u8; 32]).unwrap();
         let db = Database::new(Default::default());
         let mut kpkey_cursor = std::io::Cursor::new(&[0u8; 32]);
-        let key = DatabaseKey::new().with_keyfile(&mut kpkey_cursor).unwrap().with_password("testpass");
+        let key = DatabaseKey::new()
+            .with_keyfile(&mut kpkey_cursor)
+            .unwrap()
+            .with_password("testpass");
         let mut file = File::create(&kdbx_path).unwrap();
         db.save(&mut file, key).unwrap();
 
         // Test: Add key
-        let handle = DatabaseHandle::open(kdbx_path.clone(), kpkey_path.clone(), Some("testpass")).unwrap();
-        add_key_to_handle(&handle, "example.com", "testuser", "secret", None, Some("Test note")).unwrap();
+        let handle =
+            DatabaseHandle::open(kdbx_path.clone(), kpkey_path.clone(), Some("testpass")).unwrap();
+        add_key_to_handle(
+            &handle,
+            "example.com",
+            "testuser",
+            "secret",
+            None,
+            Some("Test note"),
+        )
+        .unwrap();
 
         // Verify: List keys
         let keys = list_keys_from_handle(&handle).unwrap();

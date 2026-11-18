@@ -63,7 +63,7 @@ impl LogsRenderer {
                 let new_count = current_count - prev_count;
                 ui.label(
                     RichText::new(format!("^ {} new", new_count))
-                        .color(Color32::from_rgb(76, 175, 80))
+                        .color(Color32::from_rgb(76, 175, 80)),
                 );
                 ui.data_mut(|d| d.insert_temp(log_count_id, current_count));
             }

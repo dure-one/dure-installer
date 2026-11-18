@@ -1,7 +1,7 @@
 //! SVG emoji loader with Unicode fallback
 
-use std::collections::HashMap;
 use egui::{Context, TextureHandle};
+use std::collections::HashMap;
 
 /// SVG emoji identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -207,7 +207,11 @@ impl EmojiCache {
                 // Fallback to Unicode emoji
                 use egui_material3::theme::get_global_color;
                 let unicode = emoji.to_unicode();
-                ui.label(egui::RichText::new(unicode).size(size).color(get_global_color("onSurface")));
+                ui.label(
+                    egui::RichText::new(unicode)
+                        .size(size)
+                        .color(get_global_color("onSurface")),
+                );
             }
         }
     }
@@ -239,10 +243,18 @@ mod tests {
         assert!(SvgEmoji::Warning.svg_bytes().is_some());
         // Verify all emoji have bytes
         let all_emoji = [
-            SvgEmoji::Checkmark, SvgEmoji::Progress, SvgEmoji::Circle,
-            SvgEmoji::Cross, SvgEmoji::Email, SvgEmoji::Project,
-            SvgEmoji::VM, SvgEmoji::Firewall, SvgEmoji::Key,
-            SvgEmoji::Terminal, SvgEmoji::Network, SvgEmoji::Clock,
+            SvgEmoji::Checkmark,
+            SvgEmoji::Progress,
+            SvgEmoji::Circle,
+            SvgEmoji::Cross,
+            SvgEmoji::Email,
+            SvgEmoji::Project,
+            SvgEmoji::VM,
+            SvgEmoji::Firewall,
+            SvgEmoji::Key,
+            SvgEmoji::Terminal,
+            SvgEmoji::Network,
+            SvgEmoji::Clock,
             SvgEmoji::Warning,
         ];
         for emoji in all_emoji {

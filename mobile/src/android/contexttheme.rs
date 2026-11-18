@@ -4,7 +4,7 @@
 #![allow(unsafe_code)]
 
 #[cfg(target_os = "android")]
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]
@@ -38,10 +38,7 @@ pub fn get_ui_theme_mode() -> std::io::Result<UiThemeMode> {
 
     let activity = unsafe { jni::objects::JObject::from_raw(ctx.context() as _) };
     let mut env = vm.attach_current_thread().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to attach current thread",
-        )
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread")
     })?;
 
     // Call getResources() to get Resources object

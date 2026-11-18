@@ -18,7 +18,7 @@
 // static int 	wtf(String tag, String msg)
 
 #[cfg(target_os = "android")]
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]
@@ -35,29 +35,53 @@ fn call_log_method(method_name: &str, tag: &str, msg: &str) -> std::io::Result<i
         )
     })?;
 
-    let mut env = vm
-        .attach_current_thread()
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread"))?;
+    let mut env = vm.attach_current_thread().map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to attach current thread")
+    })?;
 
     // Find android.util.Log class
-    let log_class = env.find_class("android/util/Log")
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to find Log class: {}", e)))?;
+    let log_class = env.find_class("android/util/Log").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to find Log class: {}", e),
+        )
+    })?;
 
     // Create Java strings for tag and msg
-    let j_tag = env.new_string(tag)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create tag string: {}", e)))?;
-    let j_msg = env.new_string(msg)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to create msg string: {}", e)))?;
+    let j_tag = env.new_string(tag).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to create tag string: {}", e),
+        )
+    })?;
+    let j_msg = env.new_string(msg).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to create msg string: {}", e),
+        )
+    })?;
 
     // Call the static log method
-    let result = env.call_static_method(
-        &log_class,
-        method_name,
-        "(Ljava/lang/String;Ljava/lang/String;)I",
-        &[JValue::Object(&j_tag), JValue::Object(&j_msg)],
-    ).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to call Log.{}: {}", method_name, e)))?;
+    let result = env
+        .call_static_method(
+            &log_class,
+            method_name,
+            "(Ljava/lang/String;Ljava/lang/String;)I",
+            &[JValue::Object(&j_tag), JValue::Object(&j_msg)],
+        )
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to call Log.{}: {}", method_name, e),
+            )
+        })?;
 
-    result.i().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to get int result: {}", e)))
+    result.i().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to get int result: {}", e),
+        )
+    })
 }
 
 /// Send debug log message using Android Log.d()

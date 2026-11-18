@@ -1,8 +1,8 @@
 //! Verify attestations against binaries
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::download::{compute_file_hash, download_attestations};
 use super::types::{AttestationPayload, AttestationResult, VerificationError};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use std::path::Path;
 
 /// Verify a binary against its GitHub attestations
@@ -124,7 +124,7 @@ fn verify_attestation_payload(
 
 /// Base64 decode helper
 fn base64_decode(input: &str) -> Result<Vec<u8>, VerificationError> {
-    use base64::{Engine, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine};
     STANDARD
         .decode(input)
         .map_err(|e| VerificationError::InvalidAttestation(format!("Base64 decode error: {}", e)))

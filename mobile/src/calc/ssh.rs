@@ -31,7 +31,7 @@ pub struct LinuxStatus {
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 mod desktop_impl {
     use super::*;
-    use crate::{dure_debug, dure_warn, dure_error};
+    use crate::{dure_debug, dure_error, dure_warn};
     use anyhow::Context;
     use russh::client::{self, Handle};
     use russh_keys::key::PublicKey;
@@ -63,7 +63,8 @@ mod desktop_impl {
     ) -> Result<()> {
         let address = format!("{}:{}", host_ip, port);
         let socket_addrs: Vec<_> = address.to_socket_addrs()?.collect();
-        let socket_addr = *socket_addrs.first()
+        let socket_addr = *socket_addrs
+            .first()
             .ok_or_else(|| anyhow::anyhow!("Could not resolve address: {}", address))?;
         let private_key_pem = private_key_pem.to_string();
 
@@ -96,7 +97,11 @@ mod desktop_impl {
         dure_debug!("test_connection: Starting for {}", host_config.host);
 
         let (username, hostname) = parse_ssh_host(&host_config.host)?;
-        dure_debug!("test_connection: Parsed username={}, hostname={}", username, hostname);
+        dure_debug!(
+            "test_connection: Parsed username={}, hostname={}",
+            username,
+            hostname
+        );
 
         let address = format!("{}:{}", hostname, host_config.port);
         let socket_addrs: Vec<_> = address
@@ -124,7 +129,14 @@ mod desktop_impl {
 
             dure_debug!("connect_future: Connected, starting authentication");
 
-            match authenticate(&mut session, &username, &host_config_clone, profile_keyring.as_ref()).await {
+            match authenticate(
+                &mut session,
+                &username,
+                &host_config_clone,
+                profile_keyring.as_ref(),
+            )
+            .await
+            {
                 Ok(_) => {
                     dure_debug!("connect_future: Authentication successful");
                     session
@@ -187,7 +199,13 @@ mod desktop_impl {
             let config = Arc::new(russh::client::Config::default());
             let mut session = russh::client::connect(config, socket_addr, Client).await?;
 
-            authenticate(&mut session, &username, &host_config_clone, profile_keyring.as_ref()).await?;
+            authenticate(
+                &mut session,
+                &username,
+                &host_config_clone,
+                profile_keyring.as_ref(),
+            )
+            .await?;
 
             let mut channel = session.channel_open_session().await?;
             channel.exec(true, command.as_str()).await?;
@@ -221,11 +239,18 @@ mod desktop_impl {
 
             if exit_code != 0 {
                 let error_msg = if !stderr_output.is_empty() {
-                    format!("Command failed with exit status {}:\nStderr: {}\nStdout: {}",
-                        exit_code, stderr_output.trim(), output.trim())
+                    format!(
+                        "Command failed with exit status {}:\nStderr: {}\nStdout: {}",
+                        exit_code,
+                        stderr_output.trim(),
+                        output.trim()
+                    )
                 } else {
-                    format!("Command failed with exit status {}:\n{}",
-                        exit_code, output.trim())
+                    format!(
+                        "Command failed with exit status {}:\n{}",
+                        exit_code,
+                        output.trim()
+                    )
                 };
                 anyhow::bail!(error_msg);
             }
@@ -389,22 +414,24 @@ table inet filter {
             attempted_methods.push("keyring".to_string());
 
             match load_private_key_from_keyring(keyring_domain, profile_keyring) {
-                Ok(private_key_pem) => match russh_keys::decode_secret_key(&private_key_pem, None) {
-                    Ok(key_pair) => {
-                        let auth_res = session
-                            .authenticate_publickey(username, Arc::new(key_pair))
-                            .await;
+                Ok(private_key_pem) => {
+                    match russh_keys::decode_secret_key(&private_key_pem, None) {
+                        Ok(key_pair) => {
+                            let auth_res = session
+                                .authenticate_publickey(username, Arc::new(key_pair))
+                                .await;
 
-                        if auth_res.is_ok() {
-                            return Ok(());
-                        } else if let Err(e) = auth_res {
-                            errors.push(format!("Keyring: {}", e));
+                            if auth_res.is_ok() {
+                                return Ok(());
+                            } else if let Err(e) = auth_res {
+                                errors.push(format!("Keyring: {}", e));
+                            }
+                        }
+                        Err(e) => {
+                            errors.push(format!("Keyring key decode: {}", e));
                         }
                     }
-                    Err(e) => {
-                        errors.push(format!("Keyring key decode: {}", e));
-                    }
-                },
+                }
                 Err(e) => {
                     errors.push(format!("Keyring: {}", e));
                 }
@@ -439,7 +466,10 @@ table inet filter {
                     }
                 }
             } else {
-                errors.push(format!("Private key file not found: {}", key_path.display()));
+                errors.push(format!(
+                    "Private key file not found: {}",
+                    key_path.display()
+                ));
             }
         }
 
@@ -487,15 +517,12 @@ table inet filter {
         let key_entry = keys
             .iter()
             .find(|k| k.domain == domain)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Key not found in keyring for domain '{}'",
-                    domain
-                )
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("Key not found in keyring for domain '{}'", domain))?;
 
         // Use ssh_key field (binary), not password (matches platform tab)
-        let ssh_key_bytes = key_entry.ssh_key.as_ref()
+        let ssh_key_bytes = key_entry
+            .ssh_key
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("SSH key not found in keyring entry"))?;
 
         // Convert binary to UTF-8 string (should be OpenSSH format)
@@ -547,11 +574,15 @@ table inet filter {
             .trim()
             .to_string();
 
-        let load = execute_command(host_config, "cat /proc/loadavg | awk '{print $1, $2, $3}'", None)
-            .await
-            .unwrap_or_else(|_| "unknown".to_string())
-            .trim()
-            .to_string();
+        let load = execute_command(
+            host_config,
+            "cat /proc/loadavg | awk '{print $1, $2, $3}'",
+            None,
+        )
+        .await
+        .unwrap_or_else(|_| "unknown".to_string())
+        .trim()
+        .to_string();
 
         let memory = execute_command(
             host_config,
@@ -685,28 +716,17 @@ table inet filter {
     }
 
     /// Docker stop (stub implementation)
-    pub fn docker_stop(
-        _config: &SshHostConfig,
-        _container_name: &str,
-    ) -> Result<()> {
+    pub fn docker_stop(_config: &SshHostConfig, _container_name: &str) -> Result<()> {
         anyhow::bail!("Docker stop not yet implemented")
     }
 
     /// Port open (stub implementation)
-    pub fn port_open(
-        _config: &SshHostConfig,
-        _port: u16,
-        _protocol: &str,
-    ) -> Result<()> {
+    pub fn port_open(_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
         anyhow::bail!("Port open not yet implemented")
     }
 
     /// Port close (stub implementation)
-    pub fn port_close(
-        _config: &SshHostConfig,
-        _port: u16,
-        _protocol: &str,
-    ) -> Result<()> {
+    pub fn port_close(_config: &SshHostConfig, _port: u16, _protocol: &str) -> Result<()> {
         anyhow::bail!("Port close not yet implemented")
     }
 
@@ -724,7 +744,10 @@ table inet filter {
         let mut missing = Vec::new();
 
         for pkg in &required_packages {
-            let cmd = format!("dpkg -l | grep -q '^ii  {}' && echo installed || echo missing", pkg);
+            let cmd = format!(
+                "dpkg -l | grep -q '^ii  {}' && echo installed || echo missing",
+                pkg
+            );
             let output = execute_command(host_config, &cmd, None).await?;
 
             if output.trim() == "missing" {
@@ -752,7 +775,9 @@ table inet filter {
     }
 
     /// Check if Dure mycart is installed and running
-    pub async fn check_dure_mycart(host_config: &SshHostConfig) -> Result<(bool, bool, Vec<String>)> {
+    pub async fn check_dure_mycart(
+        host_config: &SshHostConfig,
+    ) -> Result<(bool, bool, Vec<String>)> {
         // Check if repo exists
         let check_repo = "test -d /srv/dure-mycart && echo exists || echo missing";
         let repo_output = execute_command(host_config, check_repo, None).await?;
@@ -931,7 +956,12 @@ pub async fn check_host_packages(
     host_config: &SshHostConfig,
     profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<Vec<String>> {
-    let output = execute_command(host_config, "command -v curl wget git || true", profile_keyring).await?;
+    let output = execute_command(
+        host_config,
+        "command -v curl wget git || true",
+        profile_keyring,
+    )
+    .await?;
     let missing = Vec::new(); // TODO: parse output properly
     Ok(missing)
 }
@@ -942,7 +972,12 @@ pub async fn check_docker_version(
     host_config: &SshHostConfig,
     profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<Option<String>> {
-    let output = execute_command(host_config, "docker --version 2>/dev/null || true", profile_keyring).await?;
+    let output = execute_command(
+        host_config,
+        "docker --version 2>/dev/null || true",
+        profile_keyring,
+    )
+    .await?;
     if output.contains("Docker version") {
         Ok(Some(output.trim().to_string()))
     } else {
@@ -956,7 +991,12 @@ pub async fn check_dure_mycart(
     host_config: &SshHostConfig,
     profile_keyring: Option<&std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) -> Result<(bool, bool, Vec<String>)> {
-    let output = execute_command(host_config, "systemctl is-active dure-mycart 2>/dev/null || echo inactive", profile_keyring).await?;
+    let output = execute_command(
+        host_config,
+        "systemctl is-active dure-mycart 2>/dev/null || echo inactive",
+        profile_keyring,
+    )
+    .await?;
     let installed = !output.contains("not found");
     let running = output.trim() == "active";
     let services = vec![];

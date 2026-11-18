@@ -8,12 +8,12 @@
 //!   Event Details (timestamps, IP addresses, actor IDs, device IDs, object affected)
 //!   Changes in Privilege (identity switches, elevated privilege grants)
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::calc::db;
 use crate::storage::models::audit::{
-    AuditCategory, AuditEvent, AuditOutcome, AuditRecord, clear_all, init_audit_table, list_recent,
-    record,
+    clear_all, init_audit_table, list_recent, record, AuditCategory, AuditEvent, AuditOutcome,
+    AuditRecord,
 };
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 
 /// Record a user action originating from any surface (cli / gui / wasm).

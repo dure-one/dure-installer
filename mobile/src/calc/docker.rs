@@ -2,11 +2,11 @@
 //!
 //! Provides Docker Hub API integration and container lifecycle management
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::calc::ssh;
+use crate::config::{DockerContainerConfig, SshHostConfig};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use crate::config::{SshHostConfig, DockerContainerConfig};
-use crate::calc::ssh;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerImageMetadata {
@@ -74,10 +74,7 @@ pub async fn fetch_docker_image_metadata(image: &str) -> Result<DockerImageMetad
         .into_json()?;
 
     // Extract description
-    let description = response["description"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let description = response["description"].as_str().unwrap_or("").to_string();
 
     // Note: tags require separate API call to /v2/repositories/{namespace}/{name}/tags
     // For now, return "latest" as default
@@ -102,7 +99,12 @@ pub async fn install_docker_daemon(host_config: &SshHostConfig) -> Result<Vec<St
     let mut progress = Vec::new();
 
     progress.push("Downloading Docker installer...".to_string());
-    ssh::execute_command(host_config, "curl -fsSL https://get.docker.com -o get-docker.sh", None).await?;
+    ssh::execute_command(
+        host_config,
+        "curl -fsSL https://get.docker.com -o get-docker.sh",
+        None,
+    )
+    .await?;
 
     progress.push("Installing Docker...".to_string());
     ssh::execute_command(host_config, "sudo sh get-docker.sh", None).await?;

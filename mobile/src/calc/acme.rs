@@ -3,7 +3,7 @@
 //! Provides SSL certificate management using acme.sh with SQLite-based storage
 //! for certificate results and renewal tracking.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -610,7 +610,8 @@ fn delete_cloudflare_record(
 
     dure_debug!(
         "  Searching for record with name='{}' type='{}'",
-        full_name, record_type
+        full_name,
+        record_type
     );
     dure_debug!("  Calling Cloudflare API to find record...");
 
@@ -645,7 +646,9 @@ fn delete_cloudflare_record(
                     for rec in &records {
                         dure_debug!(
                             "    - {} ({}) -> {}",
-                            rec.name, rec.record_type, rec.content
+                            rec.name,
+                            rec.record_type,
+                            rec.content
                         );
                     }
                     dure_debug!("  Total records: {}", records.len());
@@ -934,7 +937,8 @@ fn set_porkbun_a_record(api_token: &str, domain: &str, subdomain: &str, ip: &str
     dure_debug!("    URL: /dns/create/{}", domain);
     dure_debug!(
         "    Body: subdomain='{}', type='A', content='{}', ttl=600",
-        porkbun_subdomain, ip
+        porkbun_subdomain,
+        ip
     );
 
     client
@@ -982,7 +986,8 @@ fn set_porkbun_txt_record(
     dure_debug!("    URL: /dns/create/{}", domain);
     dure_debug!(
         "    Body: subdomain='{}', type='TXT', content='{}', ttl=600",
-        porkbun_subdomain, txt_value
+        porkbun_subdomain,
+        txt_value
     );
 
     client
@@ -1030,7 +1035,8 @@ fn set_porkbun_aaaa_record(
     dure_debug!("    URL: /dns/create/{}", domain);
     dure_debug!(
         "    Body: subdomain='{}', type='AAAA', content='{}', ttl=600",
-        porkbun_subdomain, ipv6
+        porkbun_subdomain,
+        ipv6
     );
 
     client
@@ -1084,7 +1090,9 @@ fn delete_porkbun_record(
     dure_debug!("  Calling Porkbun delete API...");
     dure_debug!(
         "    URL: /dns/deleteByNameType/{}/{}/{}",
-        domain, record_type, subdomain
+        domain,
+        record_type,
+        subdomain
     );
 
     client

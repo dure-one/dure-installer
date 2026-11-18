@@ -3,7 +3,7 @@
 //! Example CLI commands demonstrating MVVM pattern for async operations.
 
 // Logging provided by standard log crate
-use crate::viewmodel::{ViewModel, ViewModelEvent, platform::PlatformEvent};
+use crate::viewmodel::{platform::PlatformEvent, ViewModel, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use std::time::Duration;
@@ -102,7 +102,14 @@ pub async fn delete_vm(platform_name: String, vm_name: String, zone: String) -> 
 
     // Use default config path for CLI
     let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
-    vm.delete_vm(profile_config_path, platform_name.clone(), vm_name.clone(), zone, false, None)?;
+    vm.delete_vm(
+        profile_config_path,
+        platform_name.clone(),
+        vm_name.clone(),
+        zone,
+        false,
+        None,
+    )?;
 
     println!("Deleting VM '{}'...", vm_name);
 

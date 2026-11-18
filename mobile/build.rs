@@ -78,7 +78,10 @@ fn main() {
                         println!("cargo:warning=Successfully built go-webauthn-cli");
                     }
                     Ok(s) => {
-                        println!("cargo:warning=Failed to build go-webauthn-cli (exit code: {:?})", s.code());
+                        println!(
+                            "cargo:warning=Failed to build go-webauthn-cli (exit code: {:?})",
+                            s.code()
+                        );
                         println!("cargo:warning=Run: cd crates/go-webauthn && ./build-cli.sh");
                     }
                     Err(e) => {
@@ -88,7 +91,9 @@ fn main() {
                 }
             } else {
                 println!("cargo:warning=Go compiler not found - skipping go-webauthn-cli build");
-                println!("cargo:warning=Install Go or run: cd crates/go-webauthn && ./build-cli.sh");
+                println!(
+                    "cargo:warning=Install Go or run: cd crates/go-webauthn && ./build-cli.sh"
+                );
             }
         }
     }

@@ -1,8 +1,8 @@
 //! NS actor implementation
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::{DnsDomain, DnsProvider, DnsRecord, NsCommand, NsEvent};
-use crate::viewmodel::{ViewModelEvent, runtime};
+use crate::viewmodel::{runtime, ViewModelEvent};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
 
 pub struct NsActor {
@@ -74,7 +74,9 @@ impl NsActor {
                 #[cfg(any(target_os = "android", target_arch = "wasm32"))]
                 {
                     let _ = (provider_name, domain, record_type, name, value, ttl);
-                    Err(anyhow::anyhow!("DNS record management not available on this platform"))
+                    Err(anyhow::anyhow!(
+                        "DNS record management not available on this platform"
+                    ))
                 }
             }
             NsCommand::DeleteRecord {
@@ -324,8 +326,15 @@ impl NsActor {
     }
 
     async fn delete_domain(&mut self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        let log_id = self.start_operation("delete_domain", &domain, true).await.unwrap_or(None);
-        self.log_to_tab(&domain, crate::viewmodel::logs::LogLevel::Info, "Deleting domain...");
+        let log_id = self
+            .start_operation("delete_domain", &domain, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &domain,
+            crate::viewmodel::logs::LogLevel::Info,
+            "Deleting domain...",
+        );
 
         let result = runtime::unblock({
             move || -> anyhow::Result<()> {
@@ -337,7 +346,9 @@ impl NsActor {
 
         match result {
             Ok(_) => {
-                let _ = self.end_operation_success("delete_domain", &domain, log_id).await;
+                let _ = self
+                    .end_operation_success("delete_domain", &domain, log_id)
+                    .await;
                 self.send_event(NsEvent::DomainDeleted {
                     provider_name,
                     domain,
@@ -347,7 +358,9 @@ impl NsActor {
                 Ok(())
             }
             Err(e) => {
-                let _ = self.end_operation_failed("delete_domain", &domain, log_id, &e).await;
+                let _ = self
+                    .end_operation_failed("delete_domain", &domain, log_id, &e)
+                    .await;
                 Err(e)
             }
         }
@@ -380,7 +393,7 @@ impl NsActor {
             let name = name.clone();
             let value = value.clone();
             move || -> anyhow::Result<String> {
-                use crate::calc::ns::{DnsRecord, NsConfig, RecordType, apply_record};
+                use crate::calc::ns::{apply_record, DnsRecord, NsConfig, RecordType};
 
                 // Load config to get api_token
                 let config_path = Self::get_config_path()?;
@@ -451,7 +464,7 @@ impl NsActor {
             let name = name.clone();
             let record_type = record_type.clone();
             move || -> anyhow::Result<()> {
-                use crate::calc::acme::{DnsProvider, DnsProviderType, delete_dns_record};
+                use crate::calc::acme::{delete_dns_record, DnsProvider, DnsProviderType};
                 use crate::calc::ns::NsConfig;
 
                 // Load config to get API token and provider type
@@ -587,7 +600,12 @@ impl NsActor {
     }
 
     /// Write log to Logs tab (classified by domain_name)
-    fn log_to_tab(&self, domain_name: &str, level: crate::viewmodel::logs::LogLevel, message: impl Into<String>) {
+    fn log_to_tab(
+        &self,
+        domain_name: &str,
+        level: crate::viewmodel::logs::LogLevel,
+        message: impl Into<String>,
+    ) {
         crate::viewmodel::logs::append_log(Some(domain_name.to_string()), level, message.into());
     }
 
@@ -600,16 +618,18 @@ impl NsActor {
         is_cud: bool,
     ) -> anyhow::Result<Option<i64>> {
         // Always log to Logs tab
-        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Info, format!("▶ Starting {}", op_name));
+        self.log_to_tab(
+            domain_name,
+            crate::viewmodel::logs::LogLevel::Info,
+            format!("▶ Starting {}", op_name),
+        );
 
         // Only log to Operations history if CUD operation
         if is_cud {
-            let log_id = self.repository.log_operation(
-                domain_name,
-                op_name,
-                "dns",
-                None,
-            ).await?;
+            let log_id = self
+                .repository
+                .log_operation(domain_name, op_name, "dns", None)
+                .await?;
             Ok(Some(log_id))
         } else {
             Ok(None)
@@ -624,7 +644,11 @@ impl NsActor {
         log_id: Option<i64>,
     ) -> anyhow::Result<()> {
         // Always log to Logs tab
-        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Info, format!("✓ {} completed", op_name));
+        self.log_to_tab(
+            domain_name,
+            crate::viewmodel::logs::LogLevel::Info,
+            format!("✓ {} completed", op_name),
+        );
 
         // Mark history if CUD operation
         if let Some(id) = log_id {
@@ -644,7 +668,11 @@ impl NsActor {
         let error_msg = format!("{:#}", error);
 
         // Always log to Logs tab
-        self.log_to_tab(domain_name, crate::viewmodel::logs::LogLevel::Error, format!("✗ {} failed: {}", op_name, error_msg));
+        self.log_to_tab(
+            domain_name,
+            crate::viewmodel::logs::LogLevel::Error,
+            format!("✗ {} failed: {}", op_name, error_msg),
+        );
 
         // Mark history if CUD operation
         if let Some(id) = log_id {
@@ -662,7 +690,9 @@ impl NsActor {
     /// Helper to get config file path (Android)
     #[cfg(target_os = "android")]
     fn get_config_path() -> anyhow::Result<std::path::PathBuf> {
-        Ok(std::path::PathBuf::from("/data/data/app.dure.installer/files/config.yml"))
+        Ok(std::path::PathBuf::from(
+            "/data/data/app.dure.installer/files/config.yml",
+        ))
     }
 
     /// Helper to get config file path (WASM)

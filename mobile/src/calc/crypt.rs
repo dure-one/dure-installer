@@ -16,11 +16,11 @@
 //!
 //! Reference: docs/MSG_EXCHANGE.md section "X25519 + ChaCha20-Poly1305"
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use chacha20poly1305::{
-    ChaCha20Poly1305, Nonce,
     aead::{Aead, KeyInit, OsRng},
+    ChaCha20Poly1305, Nonce,
 };
 use rand::RngCore;
 use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};

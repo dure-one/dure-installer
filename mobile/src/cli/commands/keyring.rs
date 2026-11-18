@@ -48,7 +48,9 @@ pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
     dure_info!("  Output: {}", output_path.display());
     dure_info!("");
     dure_warn!(" Keep this file secure! It contains your credentials.");
-    dure_info!("  The file is protected by your KPKey: {}", get_default_kpkey_path()?.display()
+    dure_info!(
+        "  The file is protected by your KPKey: {}",
+        get_default_kpkey_path()?.display()
     );
 
     Ok(())
@@ -130,7 +132,9 @@ pub fn execute_key_status() -> Result<()> {
         // Print keys
         for key in &keys {
             let created = format_timestamp(key.created_at);
-            dure_info!("{:<30} {:<30} {:<15}", truncate(&key.domain, 28),
+            dure_info!(
+                "{:<30} {:<30} {:<15}",
+                truncate(&key.domain, 28),
                 truncate(&key.username, 28),
                 created
             );
@@ -158,7 +162,14 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
     let kpkey_path = get_default_kpkey_path()?;
 
     // Add the key
-    add_key(&kdbx_path, Some(&kpkey_path), &domain, &username, &password, None)?;
+    add_key(
+        &kdbx_path,
+        Some(&kpkey_path),
+        &domain,
+        &username,
+        &password,
+        None,
+    )?;
 
     dure_info!("");
     dure_info!(" Key added successfully");

@@ -1,7 +1,7 @@
 //! Download attestations from GitHub
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::types::{AttestationBundle, AttestationsResponse, VerificationError};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;

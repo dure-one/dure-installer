@@ -39,7 +39,7 @@ mod migration_tests {
                     completed_at INTEGER,
                     error_message TEXT,
                     details TEXT
-                )"
+                )",
             )
             .execute(&mut conn)
             .expect("Failed to create operation_logs table");
@@ -53,24 +53,20 @@ mod migration_tests {
             .expect("Failed to insert test operation");
 
             // Manually run migration SQL
-            diesel::sql_query(
-                "ALTER TABLE operation_logs ADD COLUMN operation_source TEXT"
-            )
-            .execute(&mut conn)
-            .expect("Failed to add operation_source column");
+            diesel::sql_query("ALTER TABLE operation_logs ADD COLUMN operation_source TEXT")
+                .execute(&mut conn)
+                .expect("Failed to add operation_source column");
 
-            diesel::sql_query(
-                "ALTER TABLE operation_logs ADD COLUMN relevant_id TEXT"
-            )
-            .execute(&mut conn)
-            .expect("Failed to add relevant_id column");
+            diesel::sql_query("ALTER TABLE operation_logs ADD COLUMN relevant_id TEXT")
+                .execute(&mut conn)
+                .expect("Failed to add relevant_id column");
 
             // Backfill existing records
             diesel::sql_query(
                 "UPDATE operation_logs
                  SET operation_source = 'platform',
                      relevant_id = project_id
-                 WHERE operation_source IS NULL"
+                 WHERE operation_source IS NULL",
             )
             .execute(&mut conn)
             .expect("Failed to backfill operations");
@@ -89,7 +85,7 @@ mod migration_tests {
             let ops: Vec<Row> = diesel::sql_query(
                 "SELECT id, operation_source, relevant_id
                  FROM operation_logs
-                 WHERE operation_source = 'platform' AND relevant_id = 'test-project'"
+                 WHERE operation_source = 'platform' AND relevant_id = 'test-project'",
             )
             .load(&mut conn)
             .expect("Failed to load operations");

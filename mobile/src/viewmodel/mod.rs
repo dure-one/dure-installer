@@ -14,7 +14,7 @@ mod tests;
 
 pub use common::*;
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
 use std::collections::{HashMap, VecDeque};
 
@@ -113,8 +113,10 @@ impl ViewModel {
 
                 // Create actors
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
-                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
+                let drawer_actor =
+                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
+                let ssh_actor =
+                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
@@ -169,8 +171,10 @@ impl ViewModel {
                 dure_info!("ViewModel runtime started (headless)");
 
                 let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-                let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
-                let ssh_actor = ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
+                let drawer_actor =
+                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
+                let ssh_actor =
+                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
                 let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
@@ -225,7 +229,8 @@ impl ViewModel {
             dure_info!("ViewModel runtime started (WASM)");
 
             let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
-            let drawer_actor = platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
+            let drawer_actor =
+                platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
             let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
@@ -270,7 +275,9 @@ impl ViewModel {
         }
 
         if !events.is_empty() {
-            dure_debug!("🔍 ViewModel: Collected {} events, requesting repaint", events.len()
+            dure_debug!(
+                "🔍 ViewModel: Collected {} events, requesting repaint",
+                events.len()
             );
             ctx.request_repaint();
         }
@@ -350,9 +357,16 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn list_vms(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
+    pub fn list_vms(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::ListVMs { profile_config_path, platform_name })
+            .send_blocking(platform::PlatformCommand::ListVMs {
+                profile_config_path,
+                platform_name,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -422,9 +436,16 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn fetch_firewall_rules(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
+    pub fn fetch_firewall_rules(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::FetchFirewallRules { profile_config_path, platform_name })
+            .send_blocking(platform::PlatformCommand::FetchFirewallRules {
+                profile_config_path,
+                platform_name,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -547,7 +568,12 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn select_project(&self, profile_config_path: std::path::PathBuf, platform_name: String, project_id: String) -> anyhow::Result<()> {
+    pub fn select_project(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        project_id: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::SelectProject {
                 profile_config_path,
@@ -631,9 +657,16 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn scan_existing_vms(&self, profile_config_path: std::path::PathBuf, platform_name: String) -> anyhow::Result<()> {
+    pub fn scan_existing_vms(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::ScanExistingVMs { profile_config_path, platform_name })
+            .send_blocking(platform::PlatformCommand::ScanExistingVMs {
+                profile_config_path,
+                platform_name,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -794,10 +827,7 @@ impl ViewModel {
     /// Check if SSH host is reachable (TCP port check with timeout)
     pub fn check_host_health(&self, name: String, timeout_secs: u8) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::CheckHostHealth {
-                name,
-                timeout_secs,
-            })
+            .send_blocking(ssh::SshCommand::CheckHostHealth { name, timeout_secs })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -1085,7 +1115,11 @@ impl ViewModel {
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::InstallDure { host, env_config, profile_kdbx })
+            .send_blocking(ssh::SshCommand::InstallDure {
+                host,
+                env_config,
+                profile_kdbx,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -1097,7 +1131,11 @@ impl ViewModel {
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         self.ssh_tx
-            .send_blocking(ssh::SshCommand::RemoveDure { host, delete_data, profile_kdbx })
+            .send_blocking(ssh::SshCommand::RemoveDure {
+                host,
+                delete_data,
+                profile_kdbx,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

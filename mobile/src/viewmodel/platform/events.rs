@@ -1,7 +1,7 @@
 //! Platform actor events
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::api::gcp::bigquery::BillingRecord;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 #[derive(Debug, Clone)]
 pub struct VmInfo {
@@ -54,7 +54,7 @@ pub struct FullFirewallRule {
     pub priority: u32,
     pub source_ranges: Vec<String>,
     pub dest_ranges: Vec<String>,
-    pub allowed: Vec<String>,  // Formatted as "tcp:22", "udp:53", "icmp"
+    pub allowed: Vec<String>, // Formatted as "tcp:22", "udp:53", "icmp"
     pub denied: Vec<String>,
     pub source_tags: Vec<String>,
     pub source_service_accounts: Vec<String>,
@@ -179,7 +179,7 @@ pub enum PlatformEvent {
     /// Operation failed with error
     OperationFailed {
         platform_name: String,
-        operation: String,    // "firewall", "restart", etc.
+        operation: String, // "firewall", "restart", etc.
         error: String,
     },
 }

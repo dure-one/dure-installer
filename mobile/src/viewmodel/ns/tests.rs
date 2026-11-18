@@ -14,7 +14,10 @@ mod tests {
             let actor = super::super::NsActor::new(cmd_rx, event_tx);
             smol::spawn(actor.run()).detach();
 
-            cmd_tx.send(super::super::NsCommand::ListProviders).await.unwrap();
+            cmd_tx
+                .send(super::super::NsCommand::ListProviders)
+                .await
+                .unwrap();
 
             let timeout = smol::Timer::after(std::time::Duration::from_secs(5));
             smol::pin!(timeout);

@@ -3,8 +3,8 @@
 //! Handles platform-level GCP operations including status computation,
 //! project selection, and OAuth management.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::config::CloudPlatformConfig;
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 
 /// Compute platform-level status string

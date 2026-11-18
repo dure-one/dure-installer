@@ -40,7 +40,10 @@ fn test_dns_over_https_ns_query() {
 
     let dns_resp: DnsResponse = response.into_json().expect("Should parse JSON");
     assert!(dns_resp.answer.is_some(), "Should have NS records");
-    assert!(!dns_resp.answer.unwrap().is_empty(), "Should have at least one NS record");
+    assert!(
+        !dns_resp.answer.unwrap().is_empty(),
+        "Should have at least one NS record"
+    );
 }
 
 #[test]
@@ -86,5 +89,8 @@ fn test_https_connection_check() {
 
     assert!(result.is_ok(), "HTTPS connection should succeed");
     let response = result.unwrap();
-    assert!(response.status() >= 200 && response.status() < 400, "Should get success status");
+    assert!(
+        response.status() >= 200 && response.status() < 400,
+        "Should get success status"
+    );
 }

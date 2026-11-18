@@ -17,10 +17,7 @@ fn test_oauth_result_structure() {
 
 #[test]
 fn test_oauth_handler_creation() {
-    let handler = OAuthHandler::new(
-        "client_id".to_string(),
-        "client_secret".to_string(),
-    );
+    let handler = OAuthHandler::new("client_id".to_string(), "client_secret".to_string());
 
     assert_eq!(handler.client_id(), "client_id");
     assert_eq!(handler.client_secret(), "client_secret");

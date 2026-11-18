@@ -1,6 +1,6 @@
 //! Tests for Cloudflare OAuth with PKCE
 
-use dure::api::cloudflare::oauth::{CloudflareOAuthHandler, OAuthResult, generate_pkce_pair};
+use dure::api::cloudflare::oauth::{generate_pkce_pair, CloudflareOAuthHandler, OAuthResult};
 
 #[test]
 fn test_oauth_handler_creation() {
@@ -22,11 +22,15 @@ fn test_pkce_challenge_generation() {
 
     // code_verifier: 43-128 chars, base64url(random(32 bytes))
     assert!(verifier.len() >= 43 && verifier.len() <= 128);
-    assert!(verifier.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(verifier
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 
     // code_challenge: base64url(sha256(code_verifier))
     assert_eq!(challenge.len(), 43); // SHA256 = 32 bytes → base64url = 43 chars
-    assert!(challenge.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
+    assert!(challenge
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_'));
 }
 
 #[test]
@@ -42,7 +46,9 @@ fn test_pkce_challenge_uniqueness() {
 #[test]
 fn test_build_auth_url() {
     let handler = CloudflareOAuthHandler::new("test_client_id".into(), "secret".into());
-    let url = handler.build_auth_url("http://localhost:8080/callback", "state123").unwrap();
+    let url = handler
+        .build_auth_url("http://localhost:8080/callback", "state123")
+        .unwrap();
 
     // Verify URL contains required OAuth parameters
     assert!(url.contains("client_id=test_client_id"));

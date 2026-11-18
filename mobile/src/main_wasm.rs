@@ -3,7 +3,7 @@
 //! This module contains the WASM-specific initialization code that runs
 //! when the application is loaded in a web browser.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::wasm_bindgen::JsCast as _;
 
 /// WASM entry point — called automatically by the browser via wasm-bindgen.

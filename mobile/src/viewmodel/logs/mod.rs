@@ -1,12 +1,12 @@
-pub mod types;
 pub mod actor;
+pub mod types;
 
-pub use types::{LogBuffer, LogCommand, LogEvent, LogLevel};
 pub use actor::log_actor_loop;
+pub use types::{LogBuffer, LogCommand, LogEvent, LogLevel};
 
 use smol::channel::Sender;
-use std::sync::RwLock;
 use std::cell::RefCell;
+use std::sync::RwLock;
 
 static LOG_SENDER: RwLock<Option<Sender<LogCommand>>> = RwLock::new(None);
 
@@ -49,7 +49,11 @@ pub fn get_host_context() -> Option<String> {
 }
 
 pub fn append_log(host_id_override: Option<String>, level: LogLevel, message: String) {
-    log::debug!("[APPEND_LOG] Called with override={:?}, message='{}'", host_id_override, message);
+    log::debug!(
+        "[APPEND_LOG] Called with override={:?}, message='{}'",
+        host_id_override,
+        message
+    );
 
     let host_id = match host_id_override {
         Some(id) => {
@@ -64,14 +68,22 @@ pub fn append_log(host_id_override: Option<String>, level: LogLevel, message: St
     };
 
     if let Some(sender) = get_log_sender() {
-        log::debug!("[APPEND_LOG] Sending AppendLog command - host_id='{}', level={:?}, msg='{}'", host_id, level, message);
+        log::debug!(
+            "[APPEND_LOG] Sending AppendLog command - host_id='{}', level={:?}, msg='{}'",
+            host_id,
+            level,
+            message
+        );
         let cmd = LogCommand::AppendLog {
             host_id: host_id.clone(),
             level,
             message: message.clone(),
         };
         match sender.try_send(cmd) {
-            Ok(_) => log::debug!("[APPEND_LOG] ✓ Command sent successfully for host '{}'", host_id),
+            Ok(_) => log::debug!(
+                "[APPEND_LOG] ✓ Command sent successfully for host '{}'",
+                host_id
+            ),
             Err(e) => log::error!("[APPEND_LOG] ✗ Failed to send command: {}", e),
         }
     } else {
@@ -96,7 +108,11 @@ mod tests {
 
             let cmd = rx.try_recv().unwrap();
             match cmd {
-                LogCommand::AppendLog { project_id, level, message } => {
+                LogCommand::AppendLog {
+                    project_id,
+                    level,
+                    message,
+                } => {
                     assert_eq!(project_id, "test-proj");
                     assert_eq!(level, LogLevel::Info);
                     assert_eq!(message, "test msg");

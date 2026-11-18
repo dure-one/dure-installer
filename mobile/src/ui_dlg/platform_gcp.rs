@@ -42,17 +42,17 @@
 //! }
 //! ```
 
-use eframe::egui;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::MaterialButton;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
-use crate::api::gcp::GcpRestClient;
 use crate::api::gcp::compute::{Image, InstanceRequest, Metadata, MetadataItem};
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
-use crate::calc::gcp::{Instance, MachineType, Region, get_common_machine_types};
+use crate::api::gcp::GcpRestClient;
+use crate::calc::gcp::{get_common_machine_types, Instance, MachineType, Region};
 use crate::calc::keyring;
 use crate::config::{AppConfig, CloudPlatformConfig};
 
@@ -542,7 +542,10 @@ impl GcpWizard {
             ui.add_space(16.0);
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-                if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(tr!("button-cancel")))
+                    .clicked()
+                {
                     self.hide();
                 }
             });
@@ -571,11 +574,17 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+            if ui
+                .add(MaterialButton::outlined(tr!("button-cancel")))
+                .clicked()
+            {
                 self.hide();
             }
 
-            if ui.add(MaterialButton::outlined(tr!("button-next-arrow"))).clicked() {
+            if ui
+                .add(MaterialButton::outlined(tr!("button-next-arrow")))
+                .clicked()
+            {
                 // Load OAuth from selected platform and refresh if expired
                 if let Some(platform) = self
                     .available_platforms
@@ -666,7 +675,10 @@ impl GcpWizard {
                         self.projects_load_error = None;
                     }
 
-                    ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "After enabling, click Retry");
+                    ui.colored_label(
+                        egui_material3::theme::get_global_color("onSurfaceVariant"),
+                        "After enabling, click Retry",
+                    );
                 });
 
                 ui.add_space(12.0);
@@ -716,7 +728,10 @@ impl GcpWizard {
             && self.oauth_result.is_some()
             && self.projects_load_error.is_none()
         {
-            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "⏳ Loading projects...");
+            ui.colored_label(
+                egui_material3::theme::get_global_color("onSurfaceVariant"),
+                "⏳ Loading projects...",
+            );
             ui.add_space(4.0);
         }
 
@@ -888,12 +903,18 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+            if ui
+                .add(MaterialButton::outlined(tr!("button-cancel")))
+                .clicked()
+            {
                 self.hide();
             }
 
             ui.add_enabled_ui(can_proceed, |ui| {
-                if ui.add(MaterialButton::outlined(tr!("button-next-arrow"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(tr!("button-next-arrow")))
+                    .clicked()
+                {
                     // If we couldn't load projects due to API error, try to proceed anyway
                     // The project might exist even if we couldn't list it
                     if has_load_error && !is_new_project {
@@ -1011,12 +1032,18 @@ impl GcpWizard {
         ui.horizontal(|ui| {
             ui.label("Disk Size (GB):");
             ui.add(egui::TextEdit::singleline(&mut self.disk_size_gb).desired_width(80.0));
-            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "Minimum: 10 GB");
+            ui.colored_label(
+                egui_material3::theme::get_global_color("onSurfaceVariant"),
+                "Minimum: 10 GB",
+            );
         });
 
         // Validation
         if let Err(e) = validate_disk_size(&self.disk_size_gb) {
-            ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", e));
+            ui.colored_label(
+                egui_material3::theme::get_global_color("error"),
+                format!("⚠ {}", e),
+            );
         }
 
         ui.add_space(8.0);
@@ -1024,16 +1051,24 @@ impl GcpWizard {
         // Swap size input (optional)
         ui.horizontal(|ui| {
             ui.label("Swap Size (GB):");
-            ui.add(egui::TextEdit::singleline(&mut self.swap_size_gb)
-                .desired_width(80.0)
-                .hint_text("Auto"));
-            ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "Leave empty for automatic (0-8GB)");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.swap_size_gb)
+                    .desired_width(80.0)
+                    .hint_text("Auto"),
+            );
+            ui.colored_label(
+                egui_material3::theme::get_global_color("onSurfaceVariant"),
+                "Leave empty for automatic (0-8GB)",
+            );
         });
 
         // Validation
         if !self.swap_size_gb.is_empty() {
             if let Err(e) = validate_swap_size(&self.swap_size_gb) {
-                ui.colored_label(egui_material3::theme::get_global_color("error"), format!("⚠ {}", e));
+                ui.colored_label(
+                    egui_material3::theme::get_global_color("error"),
+                    format!("⚠ {}", e),
+                );
             }
         }
 
@@ -1066,7 +1101,11 @@ impl GcpWizard {
 
         // Reset zone if region changed
         if prev_region != self.selected_region {
-            if let Some(region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+            if let Some(region) = self
+                .available_regions
+                .iter()
+                .find(|r| r.name == self.selected_region)
+            {
                 if let Some(first_zone) = region.zones.first() {
                     self.selected_zone = first_zone.clone();
                 }
@@ -1114,7 +1153,11 @@ impl GcpWizard {
         // Fetch reserved IPs when region is selected — once per region.
         // Set last_fetched_region on BOTH success and error so an empty list
         // or a failing API call doesn't refetch every frame.
-        if let Some(selected_region) = self.available_regions.iter().find(|r| r.name == self.selected_region) {
+        if let Some(selected_region) = self
+            .available_regions
+            .iter()
+            .find(|r| r.name == self.selected_region)
+        {
             if self.last_fetched_region.as_ref() != Some(&selected_region.name) {
                 if let Some(oauth) = &self.oauth_result {
                     use crate::api::gcp::GcpRestClient;
@@ -1122,19 +1165,35 @@ impl GcpWizard {
 
                     match client.list_addresses(&self.selected_project_id, &selected_region.name) {
                         Ok(addresses) => {
-                            dure_info!("=== Fetched {} addresses for region {} ===", addresses.len(), selected_region.name);
+                            dure_info!(
+                                "=== Fetched {} addresses for region {} ===",
+                                addresses.len(),
+                                selected_region.name
+                            );
                             for addr in &addresses {
-                                dure_info!("  Address: {} = {} (status: {}, type: {})",
-                                    addr.name, addr.address, addr.status, addr.address_type);
+                                dure_info!(
+                                    "  Address: {} = {} (status: {}, type: {})",
+                                    addr.name,
+                                    addr.address,
+                                    addr.status,
+                                    addr.address_type
+                                );
                             }
                             self.available_reserved_ips = addresses
                                 .into_iter()
                                 .filter(|a| a.status == "RESERVED" && a.address_type == "EXTERNAL")
                                 .collect();
-                            dure_info!("  Filtered to {} RESERVED+EXTERNAL addresses", self.available_reserved_ips.len());
+                            dure_info!(
+                                "  Filtered to {} RESERVED+EXTERNAL addresses",
+                                self.available_reserved_ips.len()
+                            );
                         }
                         Err(e) => {
-                            dure_warn!("Failed to list reserved IPs for region {}: {}", selected_region.name, e);
+                            dure_warn!(
+                                "Failed to list reserved IPs for region {}: {}",
+                                selected_region.name,
+                                e
+                            );
                             self.available_reserved_ips.clear();
                         }
                     }
@@ -1163,14 +1222,14 @@ impl GcpWizard {
                     ui.selectable_value(
                         &mut self.selected_ip_option,
                         IpOption::Ephemeral,
-                        "Ephemeral (auto-assigned)"
+                        "Ephemeral (auto-assigned)",
                     );
 
                     for (idx, addr) in self.available_reserved_ips.iter().enumerate() {
                         ui.selectable_value(
                             &mut self.selected_ip_option,
                             IpOption::Reserved(idx),
-                            format!("Reserved: {} ({})", addr.address, addr.name)
+                            format!("Reserved: {} ({})", addr.address, addr.name),
                         );
                     }
                 });
@@ -1178,7 +1237,10 @@ impl GcpWizard {
 
         if !self.available_reserved_ips.is_empty() {
             ui.add_space(4.0);
-            if ui.add(MaterialButton::text(tr!("button-manage-ips")).small()).clicked() {
+            if ui
+                .add(MaterialButton::text(tr!("button-manage-ips")).small())
+                .clicked()
+            {
                 let url = format!(
                     "https://console.cloud.google.com/networking/addresses/list?project={}",
                     self.selected_project_id
@@ -1212,12 +1274,18 @@ impl GcpWizard {
 
         // Right-bottom aligned buttons
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined(tr!("button-cancel"))).clicked() {
+            if ui
+                .add(MaterialButton::outlined(tr!("button-cancel")))
+                .clicked()
+            {
                 self.hide();
             }
 
             ui.add_enabled_ui(can_create, |ui| {
-                if ui.add(MaterialButton::outlined(tr!("button-create-server"))).clicked() {
+                if ui
+                    .add(MaterialButton::outlined(tr!("button-create-server")))
+                    .clicked()
+                {
                     self.start_server_creation();
                 }
             });
@@ -1232,7 +1300,10 @@ impl GcpWizard {
         ui.label("Please wait while we create your GCP Compute Engine instance...");
 
         ui.add_space(8.0);
-        ui.colored_label(egui_material3::theme::get_global_color("onSurfaceVariant"), "This usually takes 1-2 minutes...");
+        ui.colored_label(
+            egui_material3::theme::get_global_color("onSurfaceVariant"),
+            "This usually takes 1-2 minutes...",
+        );
 
         ui.add_space(16.0);
 
@@ -1355,14 +1426,20 @@ impl GcpWizard {
                 ),
             );
         } else {
-            ui.colored_label(egui_material3::theme::get_global_color("error"), "⚠ Instance information not available");
+            ui.colored_label(
+                egui_material3::theme::get_global_color("error"),
+                "⚠ Instance information not available",
+            );
             ui.label("The creation may have failed. Check the GCP Console.");
         }
 
         ui.add_space(16.0);
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
-            if ui.add(MaterialButton::outlined(tr!("button-close"))).clicked() {
+            if ui
+                .add(MaterialButton::outlined(tr!("button-close")))
+                .clicked()
+            {
                 self.hide();
             }
         });
@@ -1585,7 +1662,7 @@ impl GcpWizard {
 
             ui.horizontal(|ui| {
                 if ui.button("← Start Over").clicked() {
-                    self.state = WizardState::ConfigureServer;  // ✅ Back to server config
+                    self.state = WizardState::ConfigureServer; // ✅ Back to server config
                     self.progress_log.clear();
 
                     // Reset server configuration fields
@@ -1699,8 +1776,15 @@ impl GcpWizard {
         let kpkey_path = keyring::get_default_kpkey_path()
             .map_err(|e| format!("Failed to get KPKey path: {}", e))?;
 
-        keyring::update_key(&kdbx_path, Some(&kpkey_path), &domain, username, password, None)
-            .map_err(|e| format!("Failed to store OAuth token: {}", e))?;
+        keyring::update_key(
+            &kdbx_path,
+            Some(&kpkey_path),
+            &domain,
+            username,
+            password,
+            None,
+        )
+        .map_err(|e| format!("Failed to store OAuth token: {}", e))?;
 
         Ok(())
     }
@@ -1955,15 +2039,28 @@ impl GcpWizard {
                 (None, Some("STANDARD".to_string()))
             }
             IpOption::Reserved(idx) => {
-                dure_info!("🔍 Static IP selection: Reserved index={}, available_ips={}", idx, self.available_reserved_ips.len());
+                dure_info!(
+                    "🔍 Static IP selection: Reserved index={}, available_ips={}",
+                    idx,
+                    self.available_reserved_ips.len()
+                );
                 if *idx < self.available_reserved_ips.len() {
                     let addr = &self.available_reserved_ips[*idx];
                     let ip = addr.address.clone();
                     let tier = addr.network_tier.clone();
-                    dure_info!("✅ Using static IP: {} ({}) with tier: {:?}", ip, addr.name, tier);
+                    dure_info!(
+                        "✅ Using static IP: {} ({}) with tier: {:?}",
+                        ip,
+                        addr.name,
+                        tier
+                    );
                     (Some(ip), tier)
                 } else {
-                    dure_warn!("❌ Static IP index out of bounds: {} >= {}", idx, self.available_reserved_ips.len());
+                    dure_warn!(
+                        "❌ Static IP index out of bounds: {} >= {}",
+                        idx,
+                        self.available_reserved_ips.len()
+                    );
                     (None, None)
                 }
             }
@@ -1979,7 +2076,9 @@ impl GcpWizard {
         let kdbx_handle = match &self.profile_kdbx_handle {
             Some(h) => h.clone(),
             None => {
-                self.state = WizardState::Error("No profile keyring loaded. Please select a profile first.".to_string());
+                self.state = WizardState::Error(
+                    "No profile keyring loaded. Please select a profile first.".to_string(),
+                );
                 return;
             }
         };
@@ -1997,8 +2096,13 @@ impl GcpWizard {
                     .map_err(|e| format!("Failed to generate SSH key: {}", e))?;
 
             // Store private key in profile's keyring
-            Self::store_ssh_key_in_keyring(&instance_name, &platform_name, &ssh_private_key, &kdbx_handle)
-                .map_err(|e| format!("Failed to store SSH key: {}", e))?;
+            Self::store_ssh_key_in_keyring(
+                &instance_name,
+                &platform_name,
+                &ssh_private_key,
+                &kdbx_handle,
+            )
+            .map_err(|e| format!("Failed to store SSH key: {}", e))?;
 
             // Create instance request with startup script
             let mut instance_req =
@@ -2036,7 +2140,11 @@ impl GcpWizard {
                 network_tier: selected_network_tier.clone(),
             }]);
 
-            dure_info!("🌐 Network config: nat_ip = {:?}, network_tier = {:?}", selected_nat_ip, selected_network_tier);
+            dure_info!(
+                "🌐 Network config: nat_ip = {:?}, network_tier = {:?}",
+                selected_nat_ip,
+                selected_network_tier
+            );
 
             // Create the instance
             let operation = client
@@ -2135,12 +2243,7 @@ impl GcpWizard {
                 Self::ed25519_to_openssh_private(&private_key_bytes, &public_key_bytes)?;
             let public_key = Self::ed25519_to_openssh_public(&public_key_bytes)?;
 
-            Ok((
-                private_key,
-                public_key,
-                private_key_bytes,
-                public_key_bytes,
-            ))
+            Ok((private_key, public_key, private_key_bytes, public_key_bytes))
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -2382,7 +2485,8 @@ if [ $TOTAL_MEM_GB -lt 8 ]; then
     fi
 else
     echo "Memory is ${TOTAL_MEM_GB}GB, no swap needed"
-fi"#.to_string()
+fi"#
+            .to_string()
         };
 
         format!(
@@ -2503,7 +2607,8 @@ fn validate_swap_size(input: &str) -> Result<u32, String> {
         return Ok(0); // 0 means auto
     }
 
-    let size = input.parse::<u32>()
+    let size = input
+        .parse::<u32>()
         .map_err(|_| "Must be a number".to_string())?;
 
     if size > 32 {

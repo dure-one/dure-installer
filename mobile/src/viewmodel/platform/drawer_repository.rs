@@ -36,7 +36,10 @@ impl DrawerRepository {
                 if db_path_str == "dure.db" {
                     // No profile loaded yet - skip initialization
                     // Table will be created when profile is actually loaded
-                    dure_debug!("DrawerRepository: Skipping init - no profile loaded yet (db_path={})", db_path_str);
+                    dure_debug!(
+                        "DrawerRepository: Skipping init - no profile loaded yet (db_path={})",
+                        db_path_str
+                    );
                     return Ok(());
                 }
             }
@@ -87,12 +90,7 @@ impl DrawerRepository {
         let error_msg = error.into();
         smol::unblock(move || {
             let mut conn = db::establish_connection();
-            update_log_status(
-                &mut conn,
-                log_id,
-                OperationStatus::Failed,
-                Some(error_msg),
-            )
+            update_log_status(&mut conn, log_id, OperationStatus::Failed, Some(error_msg))
         })
         .await
         .context("Failed to mark operation as failed")

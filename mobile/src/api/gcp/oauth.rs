@@ -16,7 +16,7 @@
 //! 7. Store refresh token securely (keyring)
 //! 8. Close local server
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -416,14 +416,19 @@ pub fn refresh_access_token(
         return Err(anyhow::anyhow!("OAuth client_id is not configured"));
     }
     if client_secret.is_empty() {
-        dure_error!("OAuth client_secret is empty - check GOOGLE_OAUTH_CLIENT_SECRET environment variable");
+        dure_error!(
+            "OAuth client_secret is empty - check GOOGLE_OAUTH_CLIENT_SECRET environment variable"
+        );
         return Err(anyhow::anyhow!("OAuth client_secret is not configured"));
     }
     if refresh_token.is_empty() {
         return Err(anyhow::anyhow!("Refresh token is empty"));
     }
 
-    dure_debug!("Refreshing access token (client_id: {}...)", &client_id.chars().take(10).collect::<String>());
+    dure_debug!(
+        "Refreshing access token (client_id: {}...)",
+        &client_id.chars().take(10).collect::<String>()
+    );
 
     let params = [
         ("client_id", client_id),

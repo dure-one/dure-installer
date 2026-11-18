@@ -9,7 +9,7 @@
 #![allow(unsafe_code)]
 
 #[cfg(target_os = "android")]
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use jni::objects::JValue;
 
 #[cfg(target_os = "android")]
@@ -204,7 +204,10 @@ pub fn get_application_label(package_id: &str) -> std::io::Result<String> {
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to convert label to String for {}: {}", package_id, e),
+                format!(
+                    "Failed to convert label to String for {}: {}",
+                    package_id, e
+                ),
             )
         })?;
 
@@ -213,7 +216,10 @@ pub fn get_application_label(package_id: &str) -> std::io::Result<String> {
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to convert label to Rust string for {}: {}", package_id, e),
+                format!(
+                    "Failed to convert label to Rust string for {}: {}",
+                    package_id, e
+                ),
             )
         })?
         .into();
@@ -533,13 +539,12 @@ pub fn get_installer_package_name(package_id: &str) -> std::io::Result<Option<St
     })?;
 
     // Call getInstallerPackageName
-    let installer_result = env
-        .call_method(
-            &package_manager,
-            "getInstallerPackageName",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            &[JValue::Object(&j_package_id)],
-        );
+    let installer_result = env.call_method(
+        &package_manager,
+        "getInstallerPackageName",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        &[JValue::Object(&j_package_id)],
+    );
 
     // Clear pending JNI exception (may throw if package not found)
     let _ = env.exception_clear();
@@ -558,7 +563,10 @@ pub fn get_installer_package_name(package_id: &str) -> std::io::Result<Option<St
                             .map_err(|e| {
                                 std::io::Error::new(
                                     std::io::ErrorKind::Other,
-                                    format!("Failed to convert installer name to Rust string: {}", e),
+                                    format!(
+                                        "Failed to convert installer name to Rust string: {}",
+                                        e
+                                    ),
                                 )
                             })?
                             .into();

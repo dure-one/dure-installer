@@ -9,8 +9,7 @@ use dure::api::cloudflare::CloudflareOAuthHandler;
 // OAuth client ID is loaded from .env at compile time
 // Redirect URI is now dynamic (random port selected at runtime)
 fn get_client_id() -> &'static str {
-    option_env!("CLOUDFLARE_OAUTH_CLIENT_ID")
-        .unwrap_or("54d11594-84e4-41aa-b438-e81b8fa78ee7")
+    option_env!("CLOUDFLARE_OAUTH_CLIENT_ID").unwrap_or("54d11594-84e4-41aa-b438-e81b8fa78ee7")
 }
 
 fn main() {
@@ -41,7 +40,10 @@ fn main() {
     match handler.run_oauth_flow() {
         Ok(result) => {
             println!("\n✓ OAuth flow completed successfully!");
-            println!("  Access token: {}...", &result.access_token.chars().take(20).collect::<String>());
+            println!(
+                "  Access token: {}...",
+                &result.access_token.chars().take(20).collect::<String>()
+            );
             println!("  Refresh token: {}", result.refresh_token.is_some());
             println!("  Expires at: {}", result.expires_at);
         }

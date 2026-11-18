@@ -1,10 +1,10 @@
 //! SSH actor events
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::calc::ansible::AnsibleRoleMetadata;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::config::{DockerContainerConfig, AnsibleRoleConfig};
+use crate::config::{AnsibleRoleConfig, DockerContainerConfig};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 /// Drawer events for SSH operations
 #[derive(Debug, Clone)]
@@ -215,8 +215,8 @@ pub enum SshEvent {
     /// Docker containers removed (batch operation)
     DockerContainersRemoved {
         host_name: String,
-        removed: Vec<String>,           // successfully removed
-        failed: Vec<(String, String)>,  // (container_name, error_message)
+        removed: Vec<String>,          // successfully removed
+        failed: Vec<(String, String)>, // (container_name, error_message)
     },
 
     ServiceError {

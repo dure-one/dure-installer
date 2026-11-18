@@ -308,7 +308,11 @@ impl CloudflareRegistrarClient {
     }
 
     /// Get Cloudflare's recommended nameservers for a domain
-    pub fn get_cloudflare_nameservers(&self, account_id: &str, domain: &str) -> Result<Vec<String>> {
+    pub fn get_cloudflare_nameservers(
+        &self,
+        account_id: &str,
+        domain: &str,
+    ) -> Result<Vec<String>> {
         // First, get the domain info which includes assigned nameservers
         let domain_info = self.get_domain(account_id, domain)?;
 
@@ -342,7 +346,9 @@ impl CloudflareRegistrarClient {
         let response = match response {
             Ok(resp) => resp,
             Err(ureq::Error::Status(code, resp)) => {
-                let body = resp.into_string().unwrap_or_else(|_| format!("HTTP {}", code));
+                let body = resp
+                    .into_string()
+                    .unwrap_or_else(|_| format!("HTTP {}", code));
                 dure_error!("Domain search API error {}: {}", code, body);
                 anyhow::bail!("Domain search failed with status {}: {}", code, body);
             }
@@ -371,16 +377,21 @@ impl CloudflareRegistrarClient {
             message: String,
         }
 
-        let body = response.into_string()
+        let body = response
+            .into_string()
             .context("Failed to read response body")?;
 
         dure_debug!("Domain search response: {}", &body[..body.len().min(500)]);
 
-        let search_response: SearchResponse = serde_json::from_str(&body)
-            .context(format!("Failed to parse search response: {}", &body[..body.len().min(200)]))?;
+        let search_response: SearchResponse = serde_json::from_str(&body).context(format!(
+            "Failed to parse search response: {}",
+            &body[..body.len().min(200)]
+        ))?;
 
         if !search_response.success {
-            let error_msg = search_response.errors.iter()
+            let error_msg = search_response
+                .errors
+                .iter()
                 .map(|e| format!("{}:{}", e.code, e.message))
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -499,10 +510,7 @@ mod tests {
             id: "test123".to_string(),
             name: "example.com".to_string(),
             status: "active".to_string(),
-            nameservers: vec![
-                "ns1.example.com".to_string(),
-                "ns2.example.com".to_string(),
-            ],
+            nameservers: vec!["ns1.example.com".to_string(), "ns2.example.com".to_string()],
             created_at: None,
             expires_at: None,
         };

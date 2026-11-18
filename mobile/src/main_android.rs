@@ -10,7 +10,7 @@ use eframe::NativeOptions;
 use jni::JNIEnv;
 
 use crate::dure::DureApp;
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 /// Get Android internal files directory using JNI
 fn get_android_files_dir(app: &AndroidApp) -> Option<String> {
@@ -31,23 +31,17 @@ fn get_android_files_dir(app: &AndroidApp) -> Option<String> {
         let activity_obj = jni::objects::JObject::from_raw(activity as jni::sys::jobject);
 
         // Call getFilesDir() on the Activity
-        let files_dir = env.call_method(
-            &activity_obj,
-            "getFilesDir",
-            "()Ljava/io/File;",
-            &[]
-        ).ok()?;
+        let files_dir = env
+            .call_method(&activity_obj, "getFilesDir", "()Ljava/io/File;", &[])
+            .ok()?;
 
         // Get the File object
         let file_obj = files_dir.l().ok()?;
 
         // Call getAbsolutePath() on the File object
-        let path_result = env.call_method(
-            &file_obj,
-            "getAbsolutePath",
-            "()Ljava/lang/String;",
-            &[]
-        ).ok()?;
+        let path_result = env
+            .call_method(&file_obj, "getAbsolutePath", "()Ljava/lang/String;", &[])
+            .ok()?;
 
         // Get the String object
         let path_jstring = path_result.l().ok()?;
@@ -87,7 +81,12 @@ fn get_status_bar_height(app: &AndroidApp) -> f32 {
         let activity_obj = jni::objects::JObject::from_raw(activity as jni::sys::jobject);
 
         // Get Resources: activity.getResources()
-        let resources = match env.call_method(&activity_obj, "getResources", "()Landroid/content/res/Resources;", &[]) {
+        let resources = match env.call_method(
+            &activity_obj,
+            "getResources",
+            "()Landroid/content/res/Resources;",
+            &[],
+        ) {
             Ok(r) => match r.l() {
                 Ok(obj) => obj,
                 Err(e) => {
@@ -123,7 +122,7 @@ fn get_status_bar_height(app: &AndroidApp) -> f32 {
                 jni::objects::JValue::Object(&name),
                 jni::objects::JValue::Object(&def_type),
                 jni::objects::JValue::Object(&def_package),
-            ]
+            ],
         ) {
             Ok(id) => match id.i() {
                 Ok(i) => i,
@@ -150,7 +149,7 @@ fn get_status_bar_height(app: &AndroidApp) -> f32 {
             &resources,
             "getDimensionPixelSize",
             "(I)I",
-            &[jni::objects::JValue::Int(resource_id)]
+            &[jni::objects::JValue::Int(resource_id)],
         ) {
             Ok(h) => match h.i() {
                 Ok(i) => i,
@@ -181,7 +180,7 @@ pub fn android_main(app: AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Debug)
-            .with_tag("Dure")
+            .with_tag("Dure"),
     );
 
     dure_info!("Dure v{} starting on Android", env!("CARGO_PKG_VERSION"));

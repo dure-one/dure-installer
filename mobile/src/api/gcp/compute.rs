@@ -2,12 +2,12 @@
 //!
 //! Handles VM instances, firewall rules, and zone/region operations.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use urlencoding;
 
-use super::{GCP_COMPUTE_API_BASE, GcpRestClient};
+use super::{GcpRestClient, GCP_COMPUTE_API_BASE};
 
 // ============================================================================
 // Instance Types
@@ -451,7 +451,12 @@ impl GcpRestClient {
         zone: &str,
         instance: &InstanceRequest,
     ) -> Result<Operation> {
-        dure_info!(project_id = project_id, "Creating VM instance '{}' in zone {}", instance.name, zone);
+        dure_info!(
+            project_id = project_id,
+            "Creating VM instance '{}' in zone {}",
+            instance.name,
+            zone
+        );
 
         let url = format!(
             "{}/projects/{}/zones/{}/instances",
@@ -560,7 +565,13 @@ impl GcpRestClient {
         instance_name: &str,
         force: bool,
     ) -> Result<Operation> {
-        dure_info!(project_id = project_id, "Deleting VM instance '{}' from zone {} (noGracefulShutdown={})", instance_name, zone, force);
+        dure_info!(
+            project_id = project_id,
+            "Deleting VM instance '{}' from zone {} (noGracefulShutdown={})",
+            instance_name,
+            zone,
+            force
+        );
 
         let mut url = format!(
             "{}/projects/{}/zones/{}/instances/{}",
@@ -749,24 +760,40 @@ impl GcpRestClient {
         let iap_enabled = rules.iter().any(|rule| {
             let allows_ssh = rule.allowed.iter().any(|a| {
                 let proto = a.ip_protocol.to_lowercase();
-                (proto == "tcp" && a.ports.as_ref().map_or(false, |ports| ports.iter().any(|p| p == "22")))
+                (proto == "tcp"
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22")))
                     || proto == "all"
             });
 
             if allows_ssh {
-                let proto_desc = rule.allowed.iter()
+                let proto_desc = rule
+                    .allowed
+                    .iter()
                     .map(|a| a.ip_protocol.as_str())
                     .collect::<Vec<_>>()
                     .join(", ");
-                dure_info!("🔍 IAP check: Rule '{}' allows SSH (protocol: {})", rule.name, proto_desc);
+                dure_info!(
+                    "🔍 IAP check: Rule '{}' allows SSH (protocol: {})",
+                    rule.name,
+                    proto_desc
+                );
 
                 if let Some(ranges) = &rule.source_ranges {
-                    dure_info!("🔍 IAP check: Rule '{}' has {} source ranges: {:?}",
-                        rule.name, ranges.len(), ranges);
+                    dure_info!(
+                        "🔍 IAP check: Rule '{}' has {} source ranges: {:?}",
+                        rule.name,
+                        ranges.len(),
+                        ranges
+                    );
 
                     let has_iap_range = ranges.iter().any(|r| r.starts_with("35.235."));
                     if has_iap_range {
-                        dure_info!("🔍 IAP check: ✅ Rule '{}' has IAP range (35.235.*)", rule.name);
+                        dure_info!(
+                            "🔍 IAP check: ✅ Rule '{}' has IAP range (35.235.*)",
+                            rule.name
+                        );
                     }
                     return has_iap_range;
                 } else {
@@ -776,15 +803,26 @@ impl GcpRestClient {
             false
         });
 
-        dure_info!("🔍 IAP check result: {}", if iap_enabled { "ENABLED" } else { "NOT ENABLED" });
+        dure_info!(
+            "🔍 IAP check result: {}",
+            if iap_enabled {
+                "ENABLED"
+            } else {
+                "NOT ENABLED"
+            }
+        );
         Ok(iap_enabled)
     }
 
     pub fn check_ip_whitelisted(&self, project_id: &str, ip: &str) -> Result<bool> {
-        use crate::{dure_info};
+        use crate::dure_info;
 
         let rules = self.list_firewall_rules(project_id)?;
-        dure_info!("🔍 Checking if IP {} is whitelisted for DIRECT access. Found {} firewall rules", ip, rules.len());
+        dure_info!(
+            "🔍 Checking if IP {} is whitelisted for DIRECT access. Found {} firewall rules",
+            ip,
+            rules.len()
+        );
 
         // Check ONLY for direct IP access (not IAP)
         // IAP detection is handled separately by is_iap_enabled()
@@ -792,23 +830,36 @@ impl GcpRestClient {
             // Check if rule allows SSH (tcp:22 or protocol:all)
             let allows_ssh = rule.allowed.iter().any(|a| {
                 let proto = a.ip_protocol.to_lowercase();
-                (proto == "tcp" && a.ports.as_ref().map_or(false, |ports| ports.iter().any(|p| p == "22")))
+                (proto == "tcp"
+                    && a.ports
+                        .as_ref()
+                        .map_or(false, |ports| ports.iter().any(|p| p == "22")))
                     || proto == "all"
             });
 
             if allows_ssh {
                 if let Some(ranges) = &rule.source_ranges {
                     if super::ip_in_ranges(ip, ranges) {
-                        dure_info!("🔍 IP {} matched in rule '{}' with protocol {}",
-                            ip, rule.name,
-                            rule.allowed.iter().map(|a| &a.ip_protocol).next().unwrap_or(&"unknown".to_string()));
+                        dure_info!(
+                            "🔍 IP {} matched in rule '{}' with protocol {}",
+                            ip,
+                            rule.name,
+                            rule.allowed
+                                .iter()
+                                .map(|a| &a.ip_protocol)
+                                .next()
+                                .unwrap_or(&"unknown".to_string())
+                        );
                         return Ok(true);
                     }
                 }
             }
         }
 
-        dure_info!("🔍 IP {} not found in any SSH firewall rules for direct access", ip);
+        dure_info!(
+            "🔍 IP {} not found in any SSH firewall rules for direct access",
+            ip
+        );
         Ok(false)
     }
 
@@ -836,10 +887,7 @@ impl GcpRestClient {
                     GCP_COMPUTE_API_BASE, project_id, rule.name
                 );
 
-                dure_info!(
-                    "🔥 Updating firewall rule '{}' with IP: {}",
-                    rule.name, ip
-                );
+                dure_info!("🔥 Updating firewall rule '{}' with IP: {}", rule.name, ip);
                 dure_debug!("PATCH URL: {}", url);
                 dure_debug!("Body: {}", body.to_string());
 
@@ -969,7 +1017,10 @@ impl GcpRestClient {
 
         // If both failed, return error
         if all_images.is_empty() && !errors.is_empty() {
-            return Err(anyhow::anyhow!("Failed to fetch images: {}", errors.join("; ")));
+            return Err(anyhow::anyhow!(
+                "Failed to fetch images: {}",
+                errors.join("; ")
+            ));
         }
 
         dure_info!("Total images before filtering: {}", all_images.len());
@@ -1043,7 +1094,8 @@ impl GcpRestClient {
             let response_text = response.into_string().unwrap_or_default();
             return Err(anyhow::anyhow!(
                 "Failed to update firewall rule (status {}): {}",
-                status, response_text
+                status,
+                response_text
             ));
         }
 
@@ -1064,10 +1116,7 @@ impl GcpRestClient {
 pub fn extract_zone_name(zone: &str) -> String {
     if zone.contains("/zones/") {
         // Extract zone name from GCP URL format
-        zone.split("/zones/")
-            .last()
-            .unwrap_or(zone)
-            .to_string()
+        zone.split("/zones/").last().unwrap_or(zone).to_string()
     } else {
         // Already in short form, return as-is
         zone.to_string()
@@ -1244,27 +1293,23 @@ mod tests {
         };
 
         // Test the filter logic inline
-        assert!(
-            x86.architecture
-                .as_ref()
-                .map(|a| a.to_uppercase() == "X86_64")
-                .unwrap_or(false)
-        );
+        assert!(x86
+            .architecture
+            .as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
 
-        assert!(
-            !arm.architecture
-                .as_ref()
-                .map(|a| a.to_uppercase() == "X86_64")
-                .unwrap_or(false)
-        );
+        assert!(!arm
+            .architecture
+            .as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
 
-        assert!(
-            !none
-                .architecture
-                .as_ref()
-                .map(|a| a.to_uppercase() == "X86_64")
-                .unwrap_or(false)
-        );
+        assert!(!none
+            .architecture
+            .as_ref()
+            .map(|a| a.to_uppercase() == "X86_64")
+            .unwrap_or(false));
     }
 
     #[test]
@@ -1279,13 +1324,17 @@ mod tests {
     fn test_extract_zone_name() {
         // Test full GCP zone URL format
         assert_eq!(
-            extract_zone_name("https://www.googleapis.com/compute/v1/projects/dure-432719/zones/us-west1-a"),
+            extract_zone_name(
+                "https://www.googleapis.com/compute/v1/projects/dure-432719/zones/us-west1-a"
+            ),
             "us-west1-a"
         );
 
         // Test another zone
         assert_eq!(
-            extract_zone_name("https://www.googleapis.com/compute/v1/projects/my-project/zones/europe-west1-b"),
+            extract_zone_name(
+                "https://www.googleapis.com/compute/v1/projects/my-project/zones/europe-west1-b"
+            ),
             "europe-west1-b"
         );
 

@@ -4,7 +4,7 @@ use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::{AppConfig, CloudPlatformConfig};
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -62,7 +62,9 @@ pub async fn execute_addvm_inner(
     zone: String,
     machine_type: String,
 ) -> Result<()> {
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .ok_or_else(|| anyhow!("Platform has no project selected"))?;
     let event = runner
         .execute_command(PlatformCommand::CreateVM {

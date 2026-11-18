@@ -1,6 +1,6 @@
-#[cfg(test)]
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use super::*;
+#[cfg(test)]
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 #[test]
 fn test_viewmodel_headless_initialization() {

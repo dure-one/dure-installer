@@ -8,13 +8,13 @@
 //!
 //! Supports A, AAAA, TXT, and NS record types.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::calc::acme::{
-    DnsProvider, DnsProviderType, set_a_record, set_aaaa_record, set_txt_record,
+    set_a_record, set_aaaa_record, set_txt_record, DnsProvider, DnsProviderType,
 };
 
 /// DNS record type

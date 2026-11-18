@@ -2,7 +2,7 @@
 //!
 //! Provides shared client, utilities, and types for all GCP services.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -300,19 +300,18 @@ pub fn get_common_regions() -> Vec<Region> {
     ]
 }
 
-
 // ============================================================================
 // Submodules
 // ============================================================================
 
+pub mod bigquery;
+pub mod billing;
 pub mod compute;
 pub mod compute_addresses;
-pub mod resourcemanager;
-pub mod billing;
-pub mod bigquery;
-pub mod serviceusage;
 pub mod dns;
 pub mod oauth;
+pub mod resourcemanager;
+pub mod serviceusage;
 
 // Re-export commonly used types
 pub use compute_addresses::{Address, AddressList};

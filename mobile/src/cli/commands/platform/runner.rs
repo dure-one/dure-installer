@@ -2,7 +2,7 @@
 
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
 use crate::viewmodel::{ViewModel, ViewModelEvent};
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::time::{Duration, Instant};
 
 /// CLI-specific ViewModel runner
@@ -48,8 +48,14 @@ impl PlatformCliRunner {
                 force,
                 ..
             } => {
-                self.vm
-                    .delete_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), *force, None)?;
+                self.vm.delete_vm(
+                    profile_config_path.clone(),
+                    platform_name.clone(),
+                    vm_name.clone(),
+                    zone.clone(),
+                    *force,
+                    None,
+                )?;
             }
             PlatformCommand::RestartVM {
                 profile_config_path,
@@ -57,8 +63,12 @@ impl PlatformCliRunner {
                 vm_name,
                 zone,
             } => {
-                self.vm
-                    .restart_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone())?;
+                self.vm.restart_vm(
+                    profile_config_path.clone(),
+                    platform_name.clone(),
+                    vm_name.clone(),
+                    zone.clone(),
+                )?;
             }
             PlatformCommand::RegenerateVM {
                 profile_config_path,
@@ -67,8 +77,13 @@ impl PlatformCliRunner {
                 zone,
                 profile_kdbx,
             } => {
-                self.vm
-                    .regenerate_vm(profile_config_path.clone(), platform_name.clone(), vm_name.clone(), zone.clone(), profile_kdbx.clone())?;
+                self.vm.regenerate_vm(
+                    profile_config_path.clone(),
+                    platform_name.clone(),
+                    vm_name.clone(),
+                    zone.clone(),
+                    profile_kdbx.clone(),
+                )?;
             }
             PlatformCommand::UpdateFirewall {
                 platform_name,
@@ -95,8 +110,12 @@ impl PlatformCliRunner {
             PlatformCommand::ListProjects { platform_name } => {
                 self.vm.list_projects(platform_name.clone())?;
             }
-            PlatformCommand::ListVMs { profile_config_path, platform_name } => {
-                self.vm.list_vms(profile_config_path.clone(), platform_name.clone())?;
+            PlatformCommand::ListVMs {
+                profile_config_path,
+                platform_name,
+            } => {
+                self.vm
+                    .list_vms(profile_config_path.clone(), platform_name.clone())?;
             }
             _ => {
                 return Err(anyhow!("Command not yet supported: {:?}", cmd));

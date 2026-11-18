@@ -2,7 +2,7 @@
 
 use crate::cli::commands::platform::helpers::*;
 use crate::config::AppConfig;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 /// Get config file path
@@ -31,7 +31,10 @@ pub fn format_platform_list(config: &AppConfig) -> String {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
-        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
+        let project_id = platform
+            .gcp_selected_project_id
+            .as_deref()
+            .unwrap_or("(no project)");
         output.push_str(&format!(
             "{:<20} {:<8} {}\n",
             project_id,
@@ -57,7 +60,9 @@ pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
         .iter()
         .find(|p| p.gcp_selected_project_id.as_ref() == Some(&name.to_string()))
         .ok_or_else(|| {
-            let available: Vec<_> = config.platforms.iter()
+            let available: Vec<_> = config
+                .platforms
+                .iter()
                 .filter_map(|p| p.gcp_selected_project_id.as_ref())
                 .collect();
             anyhow!(
@@ -72,7 +77,10 @@ pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
         })?;
 
     let mut output = String::new();
-    let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_deref()
+        .unwrap_or("(no project)");
     output.push_str(&format!("Platform: {}\n", project_id));
     output.push_str(&format!(
         "Type: {}\n",
@@ -151,7 +159,10 @@ pub fn execute_platform_combined() -> Result<()> {
 
     for platform in &config.platforms {
         let steps = format_steps(platform);
-        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
+        let project_id = platform
+            .gcp_selected_project_id
+            .as_deref()
+            .unwrap_or("(no project)");
         println!(
             "{:<20} {:<8} {}",
             project_id,
@@ -171,7 +182,10 @@ pub fn execute_platform_combined() -> Result<()> {
             println!();
         }
 
-        let project_id = platform.gcp_selected_project_id.as_deref().unwrap_or("(no project)");
+        let project_id = platform
+            .gcp_selected_project_id
+            .as_deref()
+            .unwrap_or("(no project)");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("Platform: {}", project_id);
         println!("Type: {}", platform.platform_type.to_uppercase());

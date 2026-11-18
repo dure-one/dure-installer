@@ -66,7 +66,7 @@ pub fn execute_billing_command(_name: String) -> Result<()> {
 }
 
 use crate::config::AppConfig;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
 /// Get config file path

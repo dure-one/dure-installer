@@ -3,9 +3,9 @@
 //! Handles VM lifecycle management including creation, deletion,
 //! restart, regeneration, and SSH key generation.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
 use crate::api::gcp::GcpRestClient;
 use crate::config::{CloudPlatformConfig, VmInstance};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 
 /// Generate Ed25519 SSH keypair
@@ -95,7 +95,9 @@ pub fn regenerate_vm(
 
     // Generate VM name
     let vm_name = format!("dure-vm-{}", chrono::Utc::now().timestamp());
-    let project_id = platform.gcp_selected_project_id.as_ref()
+    let project_id = platform
+        .gcp_selected_project_id
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
     let keyring_domain = format!("gcp.{}.{}", project_id, vm_name);
 

@@ -1,8 +1,8 @@
 //! SSH host management CLI commands
 
 // Logging provided by standard log crate
-use anyhow::{Context, Result};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
@@ -72,7 +72,9 @@ pub fn execute_ssh_status() -> Result<()> {
         dure_info!("   Port: {}", host.port);
 
         if host.private_key_path.is_some() {
-            dure_info!("   Auth: Private key ({})", host.private_key_path.as_ref().unwrap()
+            dure_info!(
+                "   Auth: Private key ({})",
+                host.private_key_path.as_ref().unwrap()
             );
         } else if host.password.is_some() {
             dure_info!("   Auth: Password");
@@ -80,13 +82,14 @@ pub fn execute_ssh_status() -> Result<()> {
             dure_info!("   Auth: SSH agent");
         }
 
-        dure_info!("   Initialized: {}", if host.initialized { "Yes" } else { "No" }
+        dure_info!(
+            "   Initialized: {}",
+            if host.initialized { "Yes" } else { "No" }
         );
 
         // Test connection (russh uses tokio, wrap with async-compat)
         eprint!("   Status: ");
-        match smol::block_on(async { ssh::test_connection(host, None).await })
-        {
+        match smol::block_on(async { ssh::test_connection(host, None).await }) {
             Ok(result) => {
                 if result.success {
                     dure_info!(" Connected");
@@ -146,8 +149,7 @@ pub fn execute_ssh_add(
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)
     dure_info!("Testing SSH connection to {}...", host);
-    match smol::block_on(async { ssh::test_connection(&ssh_host, None).await })
-    {
+    match smol::block_on(async { ssh::test_connection(&ssh_host, None).await }) {
         Ok(result) => {
             if result.success {
                 dure_info!(" Connection successful");
@@ -216,9 +218,7 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
     dure_info!("");
 
     // Run initialization (russh uses tokio, wrap with async-compat)
-    let progress_log = smol::block_on(async {
-        ssh::initialize_host(host_config).await
-    })?;
+    let progress_log = smol::block_on(async { ssh::initialize_host(host_config).await })?;
 
     // Print progress
     for line in &progress_log {

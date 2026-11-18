@@ -1,8 +1,8 @@
 //! Configuration migration from V1 (with platform.name) to V2 (project_id-based)
 
 // Logging provided by standard log crate
-use serde::{Deserialize, Serialize};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::config::{AppConfig, CloudPlatformConfig, VmInstance};
@@ -61,7 +61,10 @@ pub struct AppConfigV1 {
 fn migrate_platform_v1_to_v2(v1: CloudPlatformConfigV1) -> Option<CloudPlatformConfig> {
     // Only migrate platforms with valid gcp_selected_project_id
     if v1.platform_type == "gcp" && v1.gcp_selected_project_id.is_none() {
-        dure_warn!(" Skipping platform '{}': no gcp_selected_project_id", v1.name);
+        dure_warn!(
+            " Skipping platform '{}': no gcp_selected_project_id",
+            v1.name
+        );
         return None;
     }
 
@@ -165,8 +168,14 @@ mod tests {
 
         assert_eq!(v2_config.platforms.len(), 1);
         assert_eq!(v2_config.platforms[0].platform_type, "gcp");
-        assert_eq!(v2_config.platforms[0].gcp_selected_project_id, Some("my-gcp-project".to_string()));
-        assert_eq!(v2_config.platforms[0].gcp_connected_email, Some("test@example.com".to_string()));
+        assert_eq!(
+            v2_config.platforms[0].gcp_selected_project_id,
+            Some("my-gcp-project".to_string())
+        );
+        assert_eq!(
+            v2_config.platforms[0].gcp_connected_email,
+            Some("test@example.com".to_string())
+        );
         assert_eq!(v2_config.platforms[0].cached_total_project_count, None);
     }
 
@@ -213,9 +222,11 @@ mod tests {
 /// 5. Verify new database is readable
 /// 6. Delete old files only after successful verification
 #[cfg(not(target_arch = "wasm32"))]
-pub fn migrate_profile_database(profile_ctx: &crate::calc::profile::ProfileContext) -> anyhow::Result<()> {
-    use std::fs;
+pub fn migrate_profile_database(
+    profile_ctx: &crate::calc::profile::ProfileContext,
+) -> anyhow::Result<()> {
     use anyhow::Context;
+    use std::fs;
 
     // Old location: config_dir/dure.db
     let old_db_path = profile_ctx.config_dir.join("dure.db");
@@ -227,16 +238,26 @@ pub fn migrate_profile_database(profile_ctx: &crate::calc::profile::ProfileConte
 
     // Check if migration needed
     if !old_db_path.exists() {
-        dure_debug!("No migration needed - old database not found at {}", old_db_path.display());
+        dure_debug!(
+            "No migration needed - old database not found at {}",
+            old_db_path.display()
+        );
         return Ok(());
     }
 
     if new_db_path.exists() {
-        dure_info!("Migration already complete - database exists at {}", new_db_path.display());
+        dure_info!(
+            "Migration already complete - database exists at {}",
+            new_db_path.display()
+        );
         return Ok(());
     }
 
-    dure_info!("Migrating database from {} to {}", old_db_path.display(), new_db_path.display());
+    dure_info!(
+        "Migrating database from {} to {}",
+        old_db_path.display(),
+        new_db_path.display()
+    );
 
     // Create data directory if needed
     if let Some(parent) = new_db_path.parent() {
@@ -245,8 +266,13 @@ pub fn migrate_profile_database(profile_ctx: &crate::calc::profile::ProfileConte
     }
 
     // Copy main database file
-    fs::copy(&old_db_path, new_db_path)
-        .with_context(|| format!("Failed to copy database from {} to {}", old_db_path.display(), new_db_path.display()))?;
+    fs::copy(&old_db_path, new_db_path).with_context(|| {
+        format!(
+            "Failed to copy database from {} to {}",
+            old_db_path.display(),
+            new_db_path.display()
+        )
+    })?;
     dure_info!("✓ Copied main database file");
 
     // Copy WAL file if exists
@@ -283,19 +309,16 @@ pub fn migrate_profile_database(profile_ctx: &crate::calc::profile::ProfileConte
     }
 
     // Delete old files only after successful verification
-    fs::remove_file(&old_db_path)
-        .with_context(|| format!("Failed to remove old database file"))?;
+    fs::remove_file(&old_db_path).with_context(|| format!("Failed to remove old database file"))?;
     dure_info!("✓ Removed old database file");
 
     if old_wal_path.exists() {
-        fs::remove_file(&old_wal_path)
-            .with_context(|| format!("Failed to remove old WAL file"))?;
+        fs::remove_file(&old_wal_path).with_context(|| format!("Failed to remove old WAL file"))?;
         dure_info!("✓ Removed old WAL file");
     }
 
     if old_shm_path.exists() {
-        fs::remove_file(&old_shm_path)
-            .with_context(|| format!("Failed to remove old SHM file"))?;
+        fs::remove_file(&old_shm_path).with_context(|| format!("Failed to remove old SHM file"))?;
         dure_info!("✓ Removed old SHM file");
     }
 

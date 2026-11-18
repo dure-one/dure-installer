@@ -81,107 +81,208 @@ impl DlgDbDebugger {
         }
     }
 
-    fn load_device_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_device_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::device;
         let devices = device::list_authenticated_devices(conn)
             .map_err(|e| format!("Failed to load devices: {}", e))?;
 
-        let cols = vec!["device_id".to_string(), "public_key".to_string(), "session_id".to_string(),
-                       "authenticated_at".to_string(), "last_seen".to_string()];
-        let rows = devices.into_iter().map(|d| {
-            vec![d.device_id, d.public_key, d.session_id,
-                 d.authenticated_at.to_string(), d.last_seen.to_string()]
-        }).collect();
+        let cols = vec![
+            "device_id".to_string(),
+            "public_key".to_string(),
+            "session_id".to_string(),
+            "authenticated_at".to_string(),
+            "last_seen".to_string(),
+        ];
+        let rows = devices
+            .into_iter()
+            .map(|d| {
+                vec![
+                    d.device_id,
+                    d.public_key,
+                    d.session_id,
+                    d.authenticated_at.to_string(),
+                    d.last_seen.to_string(),
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_crypt_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_crypt_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::crypt;
         let keys = crypt::list_device_keys(conn)
             .map_err(|e| format!("Failed to load crypt keys: {}", e))?;
 
-        let cols = vec!["device_id".to_string(), "private_key".to_string(), "public_key".to_string(),
-                       "created_at".to_string()];
-        let rows = keys.into_iter().map(|k| {
-            vec![k.device_id,
-                 format!("{:?}", k.private_key),
-                 format!("{:?}", k.public_key),
-                 k.created_at.to_string()]
-        }).collect();
+        let cols = vec![
+            "device_id".to_string(),
+            "private_key".to_string(),
+            "public_key".to_string(),
+            "created_at".to_string(),
+        ];
+        let rows = keys
+            .into_iter()
+            .map(|k| {
+                vec![
+                    k.device_id,
+                    format!("{:?}", k.private_key),
+                    format!("{:?}", k.public_key),
+                    k.created_at.to_string(),
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_session_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_session_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::session;
         // Show sessions active in last 24 hours
         let sessions = session::list_active_sessions(conn, 24 * 3600)
             .map_err(|e| format!("Failed to load sessions: {}", e))?;
 
-        let cols = vec!["session_id".to_string(), "domain".to_string(), "session_type".to_string(),
-                       "connected_at".to_string(), "last_seen".to_string(), "request_count".to_string()];
-        let rows = sessions.into_iter().map(|s| {
-            vec![s.session_id, s.domain, s.session_type,
-                 s.connected_at.to_string(), s.last_seen.to_string(), s.request_count.to_string()]
-        }).collect();
+        let cols = vec![
+            "session_id".to_string(),
+            "domain".to_string(),
+            "session_type".to_string(),
+            "connected_at".to_string(),
+            "last_seen".to_string(),
+            "request_count".to_string(),
+        ];
+        let rows = sessions
+            .into_iter()
+            .map(|s| {
+                vec![
+                    s.session_id,
+                    s.domain,
+                    s.session_type,
+                    s.connected_at.to_string(),
+                    s.last_seen.to_string(),
+                    s.request_count.to_string(),
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_site_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_site_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::site;
-        let sites = site::list_sites(conn)
-            .map_err(|e| format!("Failed to load sites: {}", e))?;
+        let sites = site::list_sites(conn).map_err(|e| format!("Failed to load sites: {}", e))?;
 
-        let cols = vec!["domain".to_string(), "public_key".to_string(), "status".to_string(),
-                       "last_seen".to_string(), "created_at".to_string()];
-        let rows = sites.into_iter().map(|s| {
-            vec![s.domain, s.public_key, s.status,
-                 s.last_seen.map(|t| t.to_string()).unwrap_or_default(),
-                 s.created_at.to_string()]
-        }).collect();
+        let cols = vec![
+            "domain".to_string(),
+            "public_key".to_string(),
+            "status".to_string(),
+            "last_seen".to_string(),
+            "created_at".to_string(),
+        ];
+        let rows = sites
+            .into_iter()
+            .map(|s| {
+                vec![
+                    s.domain,
+                    s.public_key,
+                    s.status,
+                    s.last_seen.map(|t| t.to_string()).unwrap_or_default(),
+                    s.created_at.to_string(),
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_opslog_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_opslog_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::opslog;
         let logs = opslog::list_all(conn, 1000)
             .map_err(|e| format!("Failed to load operations: {}", e))?;
 
-        let cols = vec!["id".to_string(), "operation_type".to_string(), "status".to_string(),
-                       "project_id".to_string(), "started_at".to_string()];
-        let rows = logs.into_iter().map(|op| {
-            vec![op.id.to_string(), op.operation_type, op.status,
-                 op.project_id, op.started_at.to_string()]
-        }).collect();
+        let cols = vec![
+            "id".to_string(),
+            "operation_type".to_string(),
+            "status".to_string(),
+            "project_id".to_string(),
+            "started_at".to_string(),
+        ];
+        let rows = logs
+            .into_iter()
+            .map(|op| {
+                vec![
+                    op.id.to_string(),
+                    op.operation_type,
+                    op.status,
+                    op.project_id,
+                    op.started_at.to_string(),
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_audit_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
+    fn load_audit_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::storage::models::audit;
         let audits = audit::list_recent(conn, 1000)
             .map_err(|e| format!("Failed to load audit logs: {}", e))?;
 
-        let cols = vec!["id".to_string(), "timestamp".to_string(), "actor_id".to_string(),
-                       "action".to_string(), "object".to_string(), "outcome".to_string()];
-        let rows = audits.into_iter().map(|a| {
-            vec![a.id.to_string(), a.timestamp.to_string(), a.actor_id,
-                 a.action, a.object, a.outcome]
-        }).collect();
+        let cols = vec![
+            "id".to_string(),
+            "timestamp".to_string(),
+            "actor_id".to_string(),
+            "action".to_string(),
+            "object".to_string(),
+            "outcome".to_string(),
+        ];
+        let rows = audits
+            .into_iter()
+            .map(|a| {
+                vec![
+                    a.id.to_string(),
+                    a.timestamp.to_string(),
+                    a.actor_id,
+                    a.action,
+                    a.object,
+                    a.outcome,
+                ]
+            })
+            .collect();
 
         Ok((cols, rows))
     }
 
-    fn load_dns_data(&self, conn: &mut SqliteConnection) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
-        use crate::storage::models::dns;
+    fn load_dns_data(
+        &self,
+        conn: &mut SqliteConnection,
+    ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
         use crate::calc::dns::RecordType;
+        use crate::storage::models::dns;
         // Get all A records as a sample (DNS cache is per-domain and type)
         // ponytail: Just show empty result - DNS cache needs specific domain
-        let cols = vec!["domain".to_string(), "record_type".to_string(), "value".to_string(),
-                       "ttl".to_string()];
+        let cols = vec![
+            "domain".to_string(),
+            "record_type".to_string(),
+            "value".to_string(),
+            "ttl".to_string(),
+        ];
         let rows = vec![]; // Empty - DNS cache requires specific lookups
 
         Ok((cols, rows))
@@ -207,7 +308,10 @@ impl DlgDbDebugger {
                 ui.separator();
 
                 if let Some(err) = &self.error_message {
-                    ui.colored_label(egui_material3::theme::get_global_color("error"), format!("Error: {}", err));
+                    ui.colored_label(
+                        egui_material3::theme::get_global_color("error"),
+                        format!("Error: {}", err),
+                    );
                     ui.separator();
                 }
 

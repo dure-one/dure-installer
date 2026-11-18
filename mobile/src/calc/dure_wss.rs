@@ -2,10 +2,10 @@
 //!
 //! Provides installation and lifecycle management for Dure-WSS service
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
-use anyhow::Result;
-use crate::config::{SshHostConfig, DureWssConfig};
 use crate::calc::ssh;
+use crate::config::{DureWssConfig, SshHostConfig};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use anyhow::Result;
 
 /// Install Dure-WSS via official install script
 pub async fn install_dure_wss(

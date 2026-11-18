@@ -106,18 +106,12 @@ impl NewOperationLog {
     }
 
     /// Create a platform operation log entry (specialization of new with gcp external_system)
-    pub fn platform(
-        platform_id: impl Into<String>,
-        operation_type: impl Into<String>,
-    ) -> Self {
+    pub fn platform(platform_id: impl Into<String>, operation_type: impl Into<String>) -> Self {
         Self::new(platform_id, operation_type, "gcp")
     }
 
     /// Create an SSH operation log entry
-    pub fn ssh(
-        ssh_host: impl Into<String>,
-        operation_type: impl Into<String>,
-    ) -> Self {
+    pub fn ssh(ssh_host: impl Into<String>, operation_type: impl Into<String>) -> Self {
         let ssh_host_str = ssh_host.into();
         Self {
             operation_source: "ssh".to_string(),
@@ -414,24 +408,20 @@ pub fn list_all(conn: &mut SqliteConnection, limit: i64) -> Result<Vec<Operation
 
 /// Delete operation logs older than the given timestamp
 pub fn delete_older_than(conn: &mut SqliteConnection, timestamp: i64) -> Result<usize> {
-    let deleted = diesel::sql_query(
-        "DELETE FROM operation_logs WHERE started_at < ?1",
-    )
-    .bind::<diesel::sql_types::BigInt, _>(timestamp)
-    .execute(conn)
-    .context("Failed to delete old operation logs")?;
+    let deleted = diesel::sql_query("DELETE FROM operation_logs WHERE started_at < ?1")
+        .bind::<diesel::sql_types::BigInt, _>(timestamp)
+        .execute(conn)
+        .context("Failed to delete old operation logs")?;
 
     Ok(deleted)
 }
 
 /// Delete all operation logs for a specific project
 pub fn delete_by_project(conn: &mut SqliteConnection, project_id: &str) -> Result<usize> {
-    let deleted = diesel::sql_query(
-        "DELETE FROM operation_logs WHERE project_id = ?1",
-    )
-    .bind::<diesel::sql_types::Text, _>(project_id)
-    .execute(conn)
-    .context("Failed to delete operation logs for project")?;
+    let deleted = diesel::sql_query("DELETE FROM operation_logs WHERE project_id = ?1")
+        .bind::<diesel::sql_types::Text, _>(project_id)
+        .execute(conn)
+        .context("Failed to delete operation logs for project")?;
 
     Ok(deleted)
 }
@@ -633,10 +623,19 @@ mod tests {
         assert_eq!(OperationStatus::Success.as_str(), "success");
         assert_eq!(OperationStatus::Failed.as_str(), "failed");
 
-        assert_eq!(OperationStatus::from_str("running"), OperationStatus::Running);
-        assert_eq!(OperationStatus::from_str("success"), OperationStatus::Success);
+        assert_eq!(
+            OperationStatus::from_str("running"),
+            OperationStatus::Running
+        );
+        assert_eq!(
+            OperationStatus::from_str("success"),
+            OperationStatus::Success
+        );
         assert_eq!(OperationStatus::from_str("failed"), OperationStatus::Failed);
-        assert_eq!(OperationStatus::from_str("unknown"), OperationStatus::Failed);
+        assert_eq!(
+            OperationStatus::from_str("unknown"),
+            OperationStatus::Failed
+        );
     }
 
     #[test]
@@ -680,7 +679,8 @@ mod tests {
             assert_eq!(ssh_ops_again[0].id, ssh_id);
 
             // Verify platform ops don't include SSH ops
-            let platform_ops_again = get_platform_operations(&mut conn, "test-project", 10).unwrap();
+            let platform_ops_again =
+                get_platform_operations(&mut conn, "test-project", 10).unwrap();
             assert_eq!(platform_ops_again.len(), 1);
             assert_eq!(platform_ops_again[0].id, platform_id);
         }

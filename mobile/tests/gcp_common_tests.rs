@@ -1,6 +1,6 @@
 //! Tests for api/gcp common module
 
-use dure::api::gcp::{get_current_ip, ip_in_ranges, get_common_machine_types};
+use dure::api::gcp::{get_common_machine_types, get_current_ip, ip_in_ranges};
 
 #[test]
 fn test_get_current_ip() {

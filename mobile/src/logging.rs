@@ -32,7 +32,11 @@ pub fn module_name(path: &str) -> String {
         let rest = path.strip_prefix("viewmodel::").unwrap();
         let parts: Vec<&str> = rest.split("::").collect();
         if parts.len() >= 2 {
-            return format!("{}::{}", capitalize_component(parts[0]), capitalize_component(parts[1]));
+            return format!(
+                "{}::{}",
+                capitalize_component(parts[0]),
+                capitalize_component(parts[1])
+            );
         }
         return capitalize_component(rest);
     }
@@ -75,9 +79,11 @@ pub fn module_name(path: &str) -> String {
     // Fallback: use last 2 components or capitalize single component
     let parts: Vec<&str> = path.split("::").collect();
     if parts.len() >= 2 {
-        format!("{}::{}",
-                capitalize_component(parts[parts.len() - 2]),
-                capitalize_component(parts[parts.len() - 1]))
+        format!(
+            "{}::{}",
+            capitalize_component(parts[parts.len() - 2]),
+            capitalize_component(parts[parts.len() - 1])
+        )
     } else if parts.len() == 1 {
         capitalize_component(parts[0])
     } else {
@@ -147,7 +153,10 @@ mod tests {
 
     #[test]
     fn test_module_name_viewmodel() {
-        assert_eq!(module_name("dure::viewmodel::platform::actor"), "Platform::Actor");
+        assert_eq!(
+            module_name("dure::viewmodel::platform::actor"),
+            "Platform::Actor"
+        );
     }
 
     #[test]
@@ -171,9 +180,18 @@ mod tests {
 }
 
 // Helper function for routing logs to actor
-pub fn log_to_actor(host_id: Option<String>, level: crate::viewmodel::logs::LogLevel, message: String) {
+pub fn log_to_actor(
+    host_id: Option<String>,
+    level: crate::viewmodel::logs::LogLevel,
+    message: String,
+) {
     let id_str = host_id.as_ref().map(|s| s.as_str()).unwrap_or("<context>");
-    log::trace!("[LOG_ROUTE] Routing log to actor - host_id='{}', level={:?}, msg='{}'", id_str, level, message);
+    log::trace!(
+        "[LOG_ROUTE] Routing log to actor - host_id='{}', level={:?}, msg='{}'",
+        id_str,
+        level,
+        message
+    );
     crate::viewmodel::logs::append_log(host_id, level, message);
 }
 

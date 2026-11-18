@@ -66,9 +66,7 @@ impl DlgProfileDelete {
             .scroll([false, false])
             .min_width(400.0)
             .min_height(200.0)
-            .resize(|r| {
-                r.default_size([400.0, 200.0])
-            })
+            .resize(|r| r.default_size([400.0, 200.0]))
             .show(ctx, |ui| {
                 ui.heading(tr!("profile-delete-heading"));
                 ui.add_space(12.0);
@@ -278,4 +276,3 @@ mod tests {
         assert_eq!(dialog.profile_name, profile_name);
     }
 }
-

@@ -8,11 +8,11 @@
 //!
 //! All migrations are embedded and run automatically on connection establishment.
 
-use crate::{dure_info, dure_debug, dure_warn, dure_error};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use diesel::prelude::*;
 use std::sync::Mutex;
 
-use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 #[cfg(target_family = "wasm")]
 use std::sync::Once;
@@ -26,7 +26,6 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 /// WASM VFS selector: 0 = Memory, 1 = OPFS SAH Pool, 2 = Relaxed IndexedDB
 #[cfg(target_family = "wasm")]
 static VFS: Mutex<(i32, Once)> = Mutex::new((0, Once::new()));
-
 
 #[cfg(not(target_family = "wasm"))]
 static DB_PATH: Mutex<Option<String>> = Mutex::new(None);
@@ -45,7 +44,9 @@ pub fn set_db_path(path: String) {
     // Reset flags when database path changes
     let mut migrations_ran = MIGRATIONS_RAN.lock().expect("MIGRATIONS_RAN lock poisoned");
     *migrations_ran = false;
-    let mut encryption_logged = ENCRYPTION_LOGGED.lock().expect("ENCRYPTION_LOGGED lock poisoned");
+    let mut encryption_logged = ENCRYPTION_LOGGED
+        .lock()
+        .expect("ENCRYPTION_LOGGED lock poisoned");
     *encryption_logged = false;
 }
 
@@ -59,14 +60,18 @@ pub fn get_db_path() -> String {
 /// Set the database encryption key
 #[cfg(not(target_family = "wasm"))]
 pub fn set_db_encryption_key(key: String) {
-    let mut db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+    let mut db_key = DB_ENCRYPTION_KEY
+        .lock()
+        .expect("DB_ENCRYPTION_KEY lock poisoned");
     *db_key = Some(key);
 }
 
 /// Clear the database encryption key (on logout)
 #[cfg(not(target_family = "wasm"))]
 pub fn clear_db_encryption_key() {
-    let mut db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+    let mut db_key = DB_ENCRYPTION_KEY
+        .lock()
+        .expect("DB_ENCRYPTION_KEY lock poisoned");
     *db_key = None;
 }
 
@@ -123,10 +128,18 @@ pub mod sqlite {
                 // Only create directory if path has a real parent (not empty/current dir)
                 if !parent.as_os_str().is_empty() && parent != std::path::Path::new(".") {
                     if !parent.exists() {
-                        dure_warn!("Database parent directory doesn't exist: {}", parent.display());
+                        dure_warn!(
+                            "Database parent directory doesn't exist: {}",
+                            parent.display()
+                        );
                         dure_warn!("This usually means the profile was deleted. Attempting to create directory...");
-                        std::fs::create_dir_all(parent)
-                            .unwrap_or_else(|e| panic!("Failed to create database directory {}: {}", parent.display(), e));
+                        std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+                            panic!(
+                                "Failed to create database directory {}: {}",
+                                parent.display(),
+                                e
+                            )
+                        });
                     }
                 }
             }
@@ -135,7 +148,9 @@ pub mod sqlite {
                 .unwrap_or_else(|e| panic!("Error connecting to {}: {}", url, e));
 
             // CRITICAL: Set encryption BEFORE any other operations
-            let db_key = DB_ENCRYPTION_KEY.lock().expect("DB_ENCRYPTION_KEY lock poisoned");
+            let db_key = DB_ENCRYPTION_KEY
+                .lock()
+                .expect("DB_ENCRYPTION_KEY lock poisoned");
             if let Some(key) = db_key.as_ref() {
                 // Set cipher (AES-256-CBC for hardware acceleration)
                 diesel::sql_query("PRAGMA cipher = 'aes256cbc';")
@@ -195,7 +210,7 @@ pub mod sqlite {
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 #[wasm_bindgen(js_name = installOpfsSahpool)]
 pub async fn install_opfs_sahpool() {
-    use sqlite_wasm_vfs::sahpool::{OpfsSAHPoolCfg, install};
+    use sqlite_wasm_vfs::sahpool::{install, OpfsSAHPoolCfg};
     install::<sqlite_wasm_rs::WasmOsCallback>(&OpfsSAHPoolCfg::default(), false)
         .await
         .unwrap();
@@ -205,7 +220,7 @@ pub async fn install_opfs_sahpool() {
 #[cfg(all(target_family = "wasm", target_os = "unknown"))]
 #[wasm_bindgen(js_name = installRelaxedIdb)]
 pub async fn install_relaxed_idb() {
-    use sqlite_wasm_vfs::relaxed_idb::{RelaxedIdbCfg, install};
+    use sqlite_wasm_vfs::relaxed_idb::{install, RelaxedIdbCfg};
     install::<sqlite_wasm_rs::WasmOsCallback>(&RelaxedIdbCfg::default(), false)
         .await
         .unwrap();
@@ -333,8 +348,8 @@ mod tests {
     #[cfg(not(any(feature = "postgres", target_family = "wasm")))]
     #[test]
     fn test_sqlite_encryption() {
-        use tempfile::tempdir;
         use diesel::prelude::*;
+        use tempfile::tempdir;
 
         // NOTE: This test verifies the encryption *setup* works correctly.
         // Full encryption verification requires libsqlite3-hotbundle with encryption compiled in.
@@ -348,7 +363,8 @@ mod tests {
         use rand::RngCore;
         let mut key_bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut key_bytes);
-        let encryption_key = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
+        let encryption_key =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, key_bytes);
 
         // Act 1: Test encryption key management
         set_db_encryption_key(encryption_key.clone());
@@ -356,7 +372,11 @@ mod tests {
         // Verify key is set
         let db_key_guard = DB_ENCRYPTION_KEY.lock().unwrap();
         assert!(db_key_guard.is_some(), "Encryption key should be set");
-        assert_eq!(db_key_guard.as_ref().unwrap(), &encryption_key, "Key mismatch");
+        assert_eq!(
+            db_key_guard.as_ref().unwrap(),
+            &encryption_key,
+            "Key mismatch"
+        );
         drop(db_key_guard);
 
         // Act 2: Establish connection with encryption (PRAGMA commands executed)
@@ -374,8 +394,7 @@ mod tests {
                 .expect("Failed to insert data");
 
             // Verify data can be queried
-            let result = diesel::sql_query("SELECT COUNT(*) FROM test_secrets")
-                .execute(&mut conn);
+            let result = diesel::sql_query("SELECT COUNT(*) FROM test_secrets").execute(&mut conn);
 
             assert!(result.is_ok(), "Should be able to query database");
         }
@@ -397,8 +416,8 @@ mod tests {
     #[cfg(not(any(feature = "postgres", target_family = "wasm")))]
     #[test]
     fn test_encryption_key_storage() {
-        use tempfile::tempdir;
         use std::io::Cursor;
+        use tempfile::tempdir;
 
         // Arrange: Create temporary keyring
         let temp_dir = tempdir().unwrap();
@@ -430,21 +449,31 @@ mod tests {
             kdbx_path.clone(),
             kpkey_path.clone(),
             Some("testpass"),
-        ).expect("Failed to open test database");
+        )
+        .expect("Failed to open test database");
 
         // Act: Generate DB encryption key
-        let generated_key = handle.generate_db_encryption_key()
+        let generated_key = handle
+            .generate_db_encryption_key()
             .expect("Failed to generate DB encryption key");
 
         // Assert: Key should be 44 characters (32 bytes base64-encoded)
-        assert_eq!(generated_key.len(), 44, "Generated key should be 32 bytes base64-encoded (44 chars)");
+        assert_eq!(
+            generated_key.len(),
+            44,
+            "Generated key should be 32 bytes base64-encoded (44 chars)"
+        );
 
         // Act: Retrieve the key
-        let retrieved_key = handle.get_db_encryption_key()
+        let retrieved_key = handle
+            .get_db_encryption_key()
             .expect("Failed to retrieve DB encryption key");
 
         // Assert: Retrieved key should match generated key
-        assert_eq!(retrieved_key, generated_key, "Retrieved key should match generated key");
+        assert_eq!(
+            retrieved_key, generated_key,
+            "Retrieved key should match generated key"
+        );
 
         // Act: Try to generate again (should fail - key exists)
         let result = handle.generate_db_encryption_key();

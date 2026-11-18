@@ -163,8 +163,14 @@ mod tests {
         let app = DureApp::default();
 
         // Assert - profile state should be None
-        assert!(app.current_profile.is_none(), "current_profile should be None on default");
-        assert!(app.pending_profile_name.is_none(), "pending_profile_name should be None on default");
+        assert!(
+            app.current_profile.is_none(),
+            "current_profile should be None on default"
+        );
+        assert!(
+            app.pending_profile_name.is_none(),
+            "pending_profile_name should be None on default"
+        );
     }
 
     #[test]
