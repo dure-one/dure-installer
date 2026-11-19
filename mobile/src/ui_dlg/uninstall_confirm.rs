@@ -38,9 +38,15 @@ impl DlgUninstallConfirm {
 
         let title = tr!("uninstall-confirm-title");
 
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
         dialog("uninstall_confirm_dialog", &title, &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
             .content(|ui, _| {
-                ui.set_width(300.0);
                 if count == 1 {
                     ui.label(tr!("uninstall-confirm-single", { name: self.packages[0].clone() }));
                 } else {

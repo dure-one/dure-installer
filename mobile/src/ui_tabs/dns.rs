@@ -1574,14 +1574,17 @@ impl DnsTab {
         if self.show_ns_check_dialog {
             let ns_check_results = self.ns_check_results.clone();
 
+            let window_width = ui.ctx().viewport_rect().width();
+            let window_height = ui.ctx().viewport_rect().height();
+
             dialog(
                 "ns_server_check_dialog",
                 tr!("dns-dialog-ns-title"),
                 &mut self.show_ns_check_dialog,
             )
-            .min_width(400.0)
-            .max_width(400.0)
-            .max_height(450.0)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
             .scrollable(true)
             .content(|ui, open| {
                 if ns_check_results.is_empty() {
@@ -1754,14 +1757,18 @@ impl DnsTab {
                 .is_some();
 
             let mut show_dialog = self.show_dns_settings_dialog;
+
+            let window_width = ui.ctx().viewport_rect().width();
+            let window_height = ui.ctx().viewport_rect().height();
+
             dialog(
                 "dns_settings_check_dialog",
                 &tr!("dns-settings-dialog-title"),
                 &mut show_dialog,
             )
-            .min_width(500.0)
-            .max_width(500.0)
-            .max_height(450.0)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
             .scrollable(true)
             .content(|ui, open| {
                 if let Some((check_result, display_msgs)) = &dns_settings_result {
@@ -2001,14 +2008,17 @@ impl DnsTab {
         if self.show_https_check_dialog {
             let https_check_result = self.https_check_result.clone();
 
+            let window_width = ui.ctx().viewport_rect().width();
+            let window_height = ui.ctx().viewport_rect().height();
+
             dialog(
                 "https_connection_check_dialog",
                 tr!("dns-dialog-https-title"),
                 &mut self.show_https_check_dialog,
             )
-            .min_width(400.0)
-            .max_width(400.0)
-            .max_height(450.0)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
             .scrollable(true)
             .content(|ui, open| {
                 if let Some(result) = &https_check_result {

@@ -446,7 +446,7 @@ pub struct SshTab {
 
     /// Install Dure wizard dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    install_dure_dialog: Option<crate::ui_dlg::install_dure::InstallDure>,
+    install_dure_dialog: Option<crate::ui_dlg::ssh::install_dure::InstallDure>,
 }
 
 impl Default for SshTab {
@@ -1247,7 +1247,7 @@ impl SshTab {
                 // Update install wizard dialog if open for this host
                 if let Some(dialog) = &mut self.install_dure_dialog {
                     if dialog.state.host == host {
-                        use crate::ui_dlg::install_dure_stt::InstallStep;
+                        use crate::ui_dlg::ssh::install_dure_stt::InstallStep;
                         if success {
                             dialog.state.step = InstallStep::Complete;
                             dure_info!("[UI::SSH] Updated dialog to Complete state");
@@ -1675,7 +1675,7 @@ impl SshTab {
                         });
 
                     // Open new wizard dialog
-                    let mut dlg = crate::ui_dlg::install_dure::InstallDure::new(host.clone())
+                    let mut dlg = crate::ui_dlg::ssh::install_dure::InstallDure::new(host.clone())
                         .with_domain(platform_domain.clone())
                         .with_keyring((*current_profile_kdbx).clone());
 
@@ -1856,13 +1856,17 @@ impl SshTab {
         let add_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
 
+        let window_width = ui.ctx().viewport_rect().width();
+        let window_height = ui.ctx().viewport_rect().height();
+
         dialog(
             "add_ssh_host_dialog",
             &tr!("ssh-dialog-add-title"),
             &mut self.show_add_dialog,
         )
-        .min_width(400.0)
-        .max_height(500.0)
+        .min_width(350.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
         .scrollable(true)
         .content(|ui, open| {
             ui.label(tr!("ssh-dialog-add-heading"));
@@ -2064,13 +2068,17 @@ impl SshTab {
         let save_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
 
+        let window_width = ui.ctx().viewport_rect().width();
+        let window_height = ui.ctx().viewport_rect().height();
+
         dialog(
             "edit_ssh_host_dialog",
             &tr!("ssh-dialog-edit-title"),
             &mut self.show_edit_dialog,
         )
-        .min_width(400.0)
-        .max_height(500.0)
+        .min_width(350.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
         .scrollable(true)
         .content(|ui, open| {
             ui.label(tr!("ssh-dialog-edit-heading"));
@@ -2259,12 +2267,18 @@ impl SshTab {
         let remove_requested = Cell::new(false);
         let cancel_requested = Cell::new(false);
 
+        let window_width = ui.ctx().viewport_rect().width();
+        let window_height = ui.ctx().viewport_rect().height();
+
         dialog(
             "remove_dure_dialog",
             "Remove Dure",
             &mut self.show_remove_dure_dialog,
         )
-        .min_width(400.0)
+        .min_width(350.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
+        .scrollable(true)
         .content(|ui, open| {
             ui.label(format!("Remove Dure from host: {}", self.remove_dure_host));
             ui.add_space(12.0);
@@ -2343,13 +2357,17 @@ impl SshTab {
         let install_requested = Cell::new(false);
         let cancel_requested = Cell::new(false);
 
+        let window_width = ui.ctx().viewport_rect().width();
+        let window_height = ui.ctx().viewport_rect().height();
+
         dialog(
             "install_dure_dialog",
             "Install Dure",
             &mut self.show_install_dure_dialog,
         )
-        .min_width(450.0)
-        .max_height(500.0)
+        .min_width(350.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
         .scrollable(true)
         .content(|ui, open| {
             ui.label(format!("Install Dure on host: {}", self.install_dure_host));

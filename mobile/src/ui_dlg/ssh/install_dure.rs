@@ -171,7 +171,13 @@ impl InstallDure {
         let title = format!("Install Dure - {}", self.state.host);
         let mut open = !self.state.should_close;
 
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
         dialog("install_dure_dialog", &title, &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
             .scrollable(true)
             .content(|ui, _| {
                 self.render_header(ui);
