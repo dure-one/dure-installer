@@ -1617,12 +1617,32 @@ impl SshTab {
                     }
                 }
                 SshAction::InstallDure(host) => {
+                    // Look up platform domain for this host
+                    let platform_domain = self.rows.iter()
+                        .find(|r| r.host == host)
+                        .and_then(|row| row.platform_id.clone())
+                        .and_then(|platform_id| {
+                            // Load config and find platform
+                            profile.as_ref().map(|p| {
+                                let config = AppConfig::load_or_default(&p.config_file);
+                                config.platforms.iter()
+                                    .find(|plat| plat.platform_type == platform_id)
+                                    .and_then(|plat| plat.bound_domain.clone())
+                            }).flatten()
+                        });
+
                     // Open new wizard dialog
                     self.install_dure_dialog = Some(
                         crate::ui_dlg::install_dure::InstallDure::new(host.clone())
+                            .with_domain(platform_domain.clone())
                             .with_keyring((*current_profile_kdbx).clone()),
                     );
-                    dure_info!("Opening install Dure wizard for {}", host);
+
+                    if let Some(domain) = platform_domain {
+                        dure_info!("Opening install Dure wizard for {} (domain: {})", host, domain);
+                    } else {
+                        dure_info!("Opening install Dure wizard for {} (no platform domain)", host);
+                    }
                 }
                 SshAction::RemoveDure(host) => {
                     // Open remove dialog
@@ -1651,10 +1671,16 @@ impl SshTab {
             if let Some(ref vm) = vm {
                 // Legacy code path - use defaults for version and image_tag
                 // TODO: Remove this once old dialog is fully replaced by wizard
+                // Convert HashMap to Vec<EnvField> (no comments in legacy path)
+                let env_fields: Vec<crate::calc::env_parser::EnvField> = env_config
+                    .into_iter()
+                    .map(|(k, v)| crate::calc::env_parser::EnvField::new(k, v))
+                    .collect();
+
                 let _ = vm.install_dure(
                     host,
                     "main".to_string(),  // Default version
-                    env_config,
+                    env_fields,
                     "latest".to_string(),  // Default image tag
                     (*current_profile_kdbx).clone(),
                 );

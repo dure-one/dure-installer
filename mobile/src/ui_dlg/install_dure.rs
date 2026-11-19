@@ -25,6 +25,11 @@ impl InstallDure {
         }
     }
 
+    pub fn with_domain(mut self, domain: Option<String>) -> Self {
+        self.state.replacement_domain = domain;
+        self
+    }
+
     pub fn with_keyring(
         mut self,
         keyring: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
@@ -153,12 +158,8 @@ impl InstallDure {
             self.state.pending_install = false;
 
             if let Some(ref mut vm_ref) = vm {
-                let env_config: std::collections::HashMap<String, String> = self
-                    .state
-                    .env_fields
-                    .iter()
-                    .map(|f| (f.key.clone(), f.value.clone()))
-                    .collect();
+                // Pass env_fields directly (preserves comments and order)
+                let env_fields = self.state.env_fields.clone();
 
                 let version = self.state.available_versions[self.state.selected_version.unwrap()]
                     .clone();
@@ -167,7 +168,7 @@ impl InstallDure {
                 match vm_ref.install_dure(
                     self.state.host.clone(),
                     version,
-                    env_config,
+                    env_fields,
                     image_tag,
                     self.profile_keyring.clone(),
                 ) {
@@ -275,22 +276,7 @@ impl InstallDure {
                 }
             }
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label("Image Tag:");
-                let image_options = ["latest", "test", "dev"];
-                let mut selected_idx = image_options
-                    .iter()
-                    .position(|&s| s == self.state.image_tag.as_str())
-                    .unwrap_or(0);
-
-                egui::ComboBox::from_id_source("image_tag_select")
-                    .selected_text(self.state.image_tag.as_str())
-                    .show_ui(ui, |ui| {
-                        for &tag in &image_options {
-                            ui.selectable_value(&mut self.state.image_tag, tag.to_string(), tag);
-                        }
-                    });
-            });
+            
         });
 
         ui.separator();
@@ -349,7 +335,7 @@ impl InstallDure {
 
     fn render_complete(&mut self, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
-            ui.heading("✓ Installation Complete");
+            ui.heading("Installation Complete");
             ui.add_space(20.0);
 
             egui::ScrollArea::vertical()
@@ -364,7 +350,7 @@ impl InstallDure {
 
     fn render_error(&mut self, ui: &mut egui::Ui, error: &str) {
         ui.vertical_centered(|ui| {
-            ui.heading("⚠ Error");
+            ui.heading("Error");
             ui.add_space(20.0);
             ui.colored_label(egui::Color32::from_rgb(200, 50, 50), error);
         });
@@ -374,7 +360,7 @@ impl InstallDure {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Close button (always available, always works)
-                if ui.add(MaterialButton::text(tr!("close"))).clicked() {
+                if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
                     self.state.should_close = true;
                     ui.ctx().request_repaint();
                 }
@@ -392,7 +378,7 @@ impl InstallDure {
                     self.state.step,
                     InstallStep::Complete | InstallStep::Error(_)
                 ) {
-                    if ui.add(MaterialButton::outlined("Reset")).clicked() {
+                    if ui.add(MaterialButton::filled("Reset")).clicked() {
                         self.state.reset();
                         self.state.start_fetch_tags();
                         ui.ctx().request_repaint();

@@ -1,7 +1,5 @@
 //! SSH actor commands
 
-use std::collections::HashMap;
-
 /// Drawer commands for SSH operations
 #[derive(Debug, Clone)]
 pub enum DrawerCommand {
@@ -230,7 +228,7 @@ pub enum SshCommand {
     InstallDure {
         host: String,
         version: String,
-        env_config: HashMap<String, String>,
+        env_fields: Vec<crate::calc::env_parser::EnvField>,
         image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },

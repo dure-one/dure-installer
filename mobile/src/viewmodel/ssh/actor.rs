@@ -663,11 +663,11 @@ impl SshActor {
             SshCommand::InstallDure {
                 host,
                 version,
-                env_config,
+                env_fields,
                 image_tag,
                 profile_kdbx,
             } => {
-                self.handle_install_dure(host, version, env_config, image_tag, profile_kdbx)
+                self.handle_install_dure(host, version, env_fields, image_tag, profile_kdbx)
                     .await
             }
             SshCommand::RemoveDure {
@@ -2998,7 +2998,7 @@ impl SshActor {
         &mut self,
         host: String,
         version: String,
-        env_config: std::collections::HashMap<String, String>,
+        env_fields: Vec<crate::calc::env_parser::EnvField>,
         image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
@@ -3033,7 +3033,7 @@ impl SshActor {
         match crate::calc::dure_mycart::install_dure_with_config(
             &host_config,
             &version,
-            &env_config,
+            &env_fields,
             &image_tag,
             profile_kdbx.as_ref(),
         )

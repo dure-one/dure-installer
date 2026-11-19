@@ -52,6 +52,10 @@ pub struct InstallDureState {
     #[serde(skip)]
     pub download_env_promise: Option<Promise<Result<String, String>>>,
 
+    // Domain replacement (from platform config)
+    #[serde(skip)]
+    pub replacement_domain: Option<String>,
+
     // Step 3: Installation (via ViewModel, no promise needed)
     #[serde(skip)]
     pub progress_log: Vec<String>, // Installation progress messages
@@ -82,6 +86,7 @@ impl InstallDureState {
             active_tab: 0,
             image_tag: "latest".to_string(),
             download_env_promise: None,
+            replacement_domain: None,
             progress_log: Vec::new(),
             install_success: false,
             error_message: None,
@@ -168,7 +173,20 @@ impl InstallDureState {
                 match result {
                     Ok(content) => {
                         self.env_editor_text = content.clone();
+
+                        // Replace example.com with platform domain if available
+                        if let Some(domain) = &self.replacement_domain {
+                            // Case-insensitive replacement of example.com
+                            self.env_editor_text = self
+                                .env_editor_text
+                                .replace("example.com", domain)
+                                .replace("Example.com", domain)
+                                .replace("EXAMPLE.COM", domain);
+                        }
+
+                        // Parse after replacement so env_fields have correct values
                         self.sync_editor_to_form();
+
                         self.step = InstallStep::ConfigEdit;
                     }
                     Err(e) => {

@@ -1112,7 +1112,7 @@ impl ViewModel {
         &self,
         host: String,
         version: String,
-        env_config: std::collections::HashMap<String, String>,
+        env_fields: Vec<crate::calc::env_parser::EnvField>,
         image_tag: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
@@ -1120,7 +1120,7 @@ impl ViewModel {
             .send_blocking(ssh::SshCommand::InstallDure {
                 host,
                 version,
-                env_config,
+                env_fields,
                 image_tag,
                 profile_kdbx,
             })

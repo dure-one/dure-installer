@@ -10,6 +10,35 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Parse PROSODY_ADMINS env var (comma-separated emails)
+///
+/// # Format
+/// "admin@dure.co,user@example.com" → [("admin", "dure.co"), ("user", "example.com")]
+///
+/// # Returns
+/// Vector of (username, domain) tuples
+fn parse_prosody_admins(value: &str) -> Vec<(String, String)> {
+    value
+        .split(',')
+        .filter_map(|email| {
+            let email = email.trim();
+            if email.is_empty() {
+                return None;
+            }
+
+            // Split on @ to get username and domain
+            if let Some((user, domain)) = email.split_once('@') {
+                let user = user.trim();
+                let domain = domain.trim();
+                if !user.is_empty() && !domain.is_empty() {
+                    return Some((user.to_string(), domain.to_string()));
+                }
+            }
+            None
+        })
+        .collect()
+}
+
 /// Container status from docker compose ps
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DureContainer {
@@ -79,7 +108,7 @@ pub async fn get_container_logs(
 pub async fn install_dure_with_config(
     host_config: &SshHostConfig,
     version: &str,
-    env_config: &HashMap<String, String>,
+    env_fields: &[crate::calc::env_parser::EnvField],
     image_tag: &str,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
 ) -> Result<Vec<String>> {
@@ -96,25 +125,33 @@ pub async fn install_dure_with_config(
     if dir_result.trim() == "exists" {
         progress.push(format!("Updating existing installation to {}...", version));
 
-        // Try git update with reset to handle dirty state
-        let update_cmd = format!(
-            "cd /srv/dure-mycart && git fetch && git checkout {} && git reset --hard",
-            version
-        );
+        // Try git update with proper branch/tag handling
+        let update_cmd = if version == "main" || version == "test" {
+            format!(
+                "cd /srv/dure-mycart && git fetch origin && git checkout {} && git reset --hard origin/{}",
+                version, version
+            )
+        } else {
+            // For tags, fetch and checkout tag
+            format!(
+                "cd /srv/dure-mycart && git fetch --tags && git checkout {}",
+                version
+            )
+        };
 
         match ssh::execute_command(host_config, &update_cmd, profile_keyring).await {
-            Ok(_) => {
+            Ok(output) => {
                 progress.push(format!("✓ Updated to {}", version));
-                dure_info!("Git update successful");
+                dure_info!("Git update successful: {}", output.trim());
             }
             Err(e) => {
                 progress.push(format!("Git update failed: {}, removing directory...", e));
-                dure_debug!("Git update failed, removing corrupt directory");
+                dure_info!("Git update failed, will clone fresh: {}", e);
 
-                // Remove corrupt directory
+                // Remove directory and clone fresh
                 ssh::execute_command(host_config, "rm -rf /srv/dure-mycart", profile_keyring)
                     .await
-                    .context("Failed to remove corrupt directory")?;
+                    .context("Failed to remove directory")?;
 
                 need_clone = true;
             }
@@ -246,13 +283,9 @@ pub async fn install_dure_with_config(
         }
     }
 
-    // Write .env file
+    // Write .env file (preserves comments and order)
     progress.push("Writing configuration...".to_string());
-    let env_content: Vec<String> = env_config
-        .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect();
-    let env_text = env_content.join("\n");
+    let env_text = crate::calc::env_parser::generate_env_file(env_fields);
 
     let write_env = format!(
         "cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n{}\nENVEOF",
@@ -264,22 +297,35 @@ pub async fn install_dure_with_config(
 
     progress.push(".env file created".to_string());
 
-    // Run docker compose with appropriate flags
+    // Run docker compose with appropriate flags (capture stderr)
     progress.push(format!("Starting services with {} image...", image_tag));
     let compose_cmd = match image_tag {
-        "latest" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose up -d",
-        "test" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose -f docker-compose.yml -f docker-compose.test.yml up -d",
-        "dev" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d",
+        "latest" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose up -d 2>&1",
+        "test" => "cd /srv/dure-mycart/prosody-mycart-stack && MYCART_IMAGE_TAG=test docker compose -f docker-compose.yml up -d 2>&1",
+        "dev" => "cd /srv/dure-mycart/prosody-mycart-stack && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d 2>&1",
         _ => return Err(anyhow::anyhow!("Invalid image tag: {}", image_tag)),
     };
 
     match ssh::execute_command(host_config, compose_cmd, profile_keyring).await {
         Ok(output) => {
-            progress.push("✓ Docker compose started".to_string());
-            if !output.trim().is_empty() {
-                progress.push(output);
+            let output_trimmed = output.trim();
+            // Check for common error indicators in output even if command succeeded
+            if output_trimmed.contains("Error") || output_trimmed.contains("error") {
+                let err_msg = format!("Docker compose failed: {}", output_trimmed);
+                progress.push(format!("✗ {}", err_msg));
+                Err(anyhow::anyhow!(err_msg))
+            } else {
+                progress.push("✓ Docker compose started".to_string());
+                if !output_trimmed.is_empty() {
+                    progress.push(output_trimmed.to_string());
+                }
+
+                // Post-install: Initialize dure-mycart and register prosody admins
+                run_post_install_commands(host_config, env_fields, profile_keyring, &mut progress)
+                    .await?;
+
+                Ok(progress)
             }
-            Ok(progress)
         }
         Err(e) => {
             let err_msg = format!("Failed to start docker compose: {}", e);
@@ -287,6 +333,136 @@ pub async fn install_dure_with_config(
             Err(anyhow::anyhow!(err_msg))
         }
     }
+}
+
+/// Run post-installation commands after docker compose
+///
+/// Waits for containers to be ready, then:
+/// 1. Runs dure-mycart install to initialize database and admin user
+/// 2. Registers all prosody admins from PROSODY_ADMINS env var
+async fn run_post_install_commands(
+    host_config: &SshHostConfig,
+    env_fields: &[crate::calc::env_parser::EnvField],
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+    progress: &mut Vec<String>,
+) -> Result<()> {
+    use crate::calc::env_parser::get_env_value;
+
+    progress.push("Running post-install configuration...".to_string());
+
+    // Extract required env vars
+    let mycart_domain = get_env_value(env_fields, "MYCART_DOMAIN");
+    let admin_email = get_env_value(env_fields, "MYCART_INITIAL_ADMIN_ID");
+    let admin_password = get_env_value(env_fields, "MYCART_INITIAL_ADMIN_PW");
+    let prosody_admin_pw = get_env_value(env_fields, "PROSODY_ADMIN_PW");
+    let prosody_admins = get_env_value(env_fields, "PROSODY_ADMINS");
+
+    // Validate required fields
+    if mycart_domain.is_none() || admin_email.is_none() || admin_password.is_none() {
+        progress.push("⚠ Skipping post-install: missing required env vars (MYCART_DOMAIN, MYCART_INITIAL_ADMIN_ID, MYCART_INITIAL_ADMIN_PW)".to_string());
+        return Ok(());
+    }
+
+    let domain = mycart_domain.unwrap();
+    let email = admin_email.unwrap();
+    let password = admin_password.unwrap();
+
+    // Wait for containers to be ready (max 30 seconds)
+    progress.push("Waiting for containers to be ready...".to_string());
+    let mut retries = 15; // 15 * 2s = 30s
+    let mut containers_ready = false;
+
+    while retries > 0 {
+        let check_cmd = "cd /srv/dure-mycart/prosody-mycart-stack && docker compose ps --format '{{.State}}' 2>/dev/null";
+        if let Ok(output) = ssh::execute_command(host_config, check_cmd, profile_keyring).await {
+            // Check if all containers are "running"
+            let all_running = output
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .all(|line| line.trim().to_lowercase().contains("running"));
+
+            if all_running && !output.trim().is_empty() {
+                containers_ready = true;
+                break;
+            }
+        }
+
+        // Wait 2 seconds before retry
+        smol::Timer::after(std::time::Duration::from_secs(2)).await;
+        retries -= 1;
+    }
+
+    if !containers_ready {
+        progress.push("⚠ Containers not ready after 30s, skipping post-install".to_string());
+        return Ok(());
+    }
+
+    progress.push("✓ Containers ready".to_string());
+
+    // Run dure-mycart install command
+    progress.push(format!("Initializing dure-mycart for {}...", domain));
+    let install_cmd = format!(
+        "docker exec dure-mycart /bin/busybox sh -c 'cd /app && /app/dure-mycart install --domain {} --email {} --password {} --db sqlite' 2>&1",
+        domain, email, password
+    );
+
+    match ssh::execute_command(host_config, &install_cmd, profile_keyring).await {
+        Ok(output) => {
+            progress.push("✓ Dure-mycart initialized".to_string());
+            dure_info!("dure-mycart install output: {}", output.trim());
+            if !output.trim().is_empty() {
+                // Log but don't add to progress (may be verbose)
+                dure_debug!("Install output: {}", output.trim());
+            }
+        }
+        Err(e) => {
+            progress.push(format!("⚠ Failed to initialize dure-mycart: {}", e));
+            dure_error!("dure-mycart install failed: {}", e);
+            // Don't fail entire install, just log
+        }
+    }
+
+    // Register prosody admins
+    if let Some(admins_str) = prosody_admins {
+        if let Some(admin_pw) = prosody_admin_pw {
+            let admins = parse_prosody_admins(&admins_str);
+            if !admins.is_empty() {
+                progress.push(format!("Registering {} prosody admin(s)...", admins.len()));
+
+                for (username, domain) in admins {
+                    let register_cmd = format!(
+                        "docker exec prosody /usr/bin/prosodyctl register {} {} {} 2>&1",
+                        username, domain, admin_pw
+                    );
+
+                    match ssh::execute_command(host_config, &register_cmd, profile_keyring).await {
+                        Ok(_) => {
+                            progress.push(format!("✓ Registered admin: {}@{}", username, domain));
+                            dure_info!("Registered prosody admin: {}@{}", username, domain);
+                        }
+                        Err(e) => {
+                            progress.push(format!(
+                                "⚠ Failed to register {}@{}: {}",
+                                username, domain, e
+                            ));
+                            dure_error!("prosodyctl register failed: {}", e);
+                            // Continue with next admin
+                        }
+                    }
+                }
+            } else {
+                progress
+                    .push("⚠ PROSODY_ADMINS is empty or invalid format".to_string());
+            }
+        } else {
+            progress.push("⚠ Skipping prosody admin registration: PROSODY_ADMIN_PW not set".to_string());
+        }
+    } else {
+        progress.push("⚠ Skipping prosody admin registration: PROSODY_ADMINS not set".to_string());
+    }
+
+    progress.push("✓ Post-install configuration complete".to_string());
+    Ok(())
 }
 
 /// Install dure-mycart via git clone and docker compose (legacy wrapper)
@@ -607,5 +783,49 @@ mod tests {
         assert_eq!(container.name, "mycart-web");
         assert_eq!(container.status, "Up 2 hours");
         assert_eq!(container.image, "dure/mycart:latest");
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_single() {
+        let result = parse_prosody_admins("admin@dure.co");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], ("admin".to_string(), "dure.co".to_string()));
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_multiple() {
+        let result = parse_prosody_admins("admin@dure.co,user@example.com,test@test.org");
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], ("admin".to_string(), "dure.co".to_string()));
+        assert_eq!(result[1], ("user".to_string(), "example.com".to_string()));
+        assert_eq!(result[2], ("test".to_string(), "test.org".to_string()));
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_with_spaces() {
+        let result = parse_prosody_admins(" admin@dure.co , user@example.com ");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], ("admin".to_string(), "dure.co".to_string()));
+        assert_eq!(result[1], ("user".to_string(), "example.com".to_string()));
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_empty() {
+        let result = parse_prosody_admins("");
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_invalid() {
+        let result = parse_prosody_admins("invalid,no-at-sign,@nodomain,username@");
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_prosody_admins_mixed_valid_invalid() {
+        let result = parse_prosody_admins("admin@dure.co,invalid,user@test.com");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], ("admin".to_string(), "dure.co".to_string()));
+        assert_eq!(result[1], ("user".to_string(), "test.com".to_string()));
     }
 }

@@ -63,7 +63,19 @@ pub fn parse_env_file(content: &str) -> Vec<EnvField> {
 
         // KEY=VALUE line
         if let Some((key, value)) = trimmed.split_once('=') {
-            let mut field = EnvField::new(key.trim(), value.trim());
+            let key_trimmed = key.trim();
+            let value_trimmed = value.trim();
+
+            // Strip surrounding quotes if present (single or double)
+            let value_unquoted = if (value_trimmed.starts_with('"') && value_trimmed.ends_with('"'))
+                || (value_trimmed.starts_with('\'') && value_trimmed.ends_with('\''))
+            {
+                &value_trimmed[1..value_trimmed.len() - 1]
+            } else {
+                value_trimmed
+            };
+
+            let mut field = EnvField::new(key_trimmed, value_unquoted);
 
             if let Some(comment) = pending_comment.take() {
                 field.comment = Some(comment);
@@ -90,10 +102,42 @@ pub fn generate_env_file(fields: &[EnvField]) -> String {
         }
 
         // Add KEY=VALUE
-        output.push_str(&format!("{}={}\n", field.key, field.value));
+        // .env format: quotes optional, most parsers handle spaces/special chars correctly
+        // Only quote if value has leading/trailing whitespace or starts with quote
+        let value = &field.value;
+        let needs_quotes = value != value.trim() || value.starts_with('"') || value.starts_with('\'');
+
+        if needs_quotes {
+            output.push_str(&format!("{}=\"{}\"\n", field.key, value));
+        } else {
+            output.push_str(&format!("{}={}\n", field.key, value));
+        }
     }
 
     output
+}
+
+/// Extract domain from env fields
+///
+/// Looks for MYCART_DOMAIN or XMPP_DOMAIN and returns first non-empty value
+pub fn get_domain_from_env(fields: &[EnvField]) -> Option<String> {
+    for key in &["MYCART_DOMAIN", "XMPP_DOMAIN"] {
+        if let Some(field) = fields.iter().find(|f| f.key == *key) {
+            let trimmed = field.value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Get environment variable value by key
+pub fn get_env_value(fields: &[EnvField], key: &str) -> Option<String> {
+    fields
+        .iter()
+        .find(|f| f.key == key)
+        .map(|f| f.value.clone())
 }
 
 #[cfg(test)]
@@ -183,6 +227,33 @@ DB_PORT=5432
     }
 
     #[test]
+    fn test_generate_with_spaces() {
+        let fields = vec![
+            EnvField::new("MSG", "Hello world"),
+            EnvField::new("PATH", "/usr/bin"),
+            EnvField::new("SPACED", " value "),
+        ];
+
+        let output = generate_env_file(&fields);
+        // Spaces in middle: no quotes needed (.env parsers handle this)
+        assert!(output.contains("MSG=Hello world\n"));
+        assert!(output.contains("PATH=/usr/bin\n"));
+        // Leading/trailing spaces: needs quotes
+        assert!(output.contains("SPACED=\" value \"\n"));
+    }
+
+    #[test]
+    fn test_parse_quoted_values() {
+        let input = "KEY1=\"value with spaces\"\nKEY2='single quoted'\nKEY3=unquoted\n";
+        let fields = parse_env_file(input);
+
+        assert_eq!(fields.len(), 3);
+        assert_eq!(fields[0].value, "value with spaces");
+        assert_eq!(fields[1].value, "single quoted");
+        assert_eq!(fields[2].value, "unquoted");
+    }
+
+    #[test]
     fn test_roundtrip() {
         let input = r#"# Comment 1
 KEY1=value1
@@ -192,5 +263,74 @@ KEY2=value2
         let fields = parse_env_file(input);
         let output = generate_env_file(&fields);
         assert_eq!(output, input);
+    }
+
+    #[test]
+    fn test_get_domain_from_env_mycart() {
+        let fields = vec![
+            EnvField::new("OTHER_KEY", "value"),
+            EnvField::new("MYCART_DOMAIN", "dure.co"),
+            EnvField::new("XMPP_DOMAIN", "xmpp.dure.co"),
+        ];
+
+        let domain = get_domain_from_env(&fields);
+        assert_eq!(domain, Some("dure.co".to_string()));
+    }
+
+    #[test]
+    fn test_get_domain_from_env_xmpp_fallback() {
+        let fields = vec![
+            EnvField::new("OTHER_KEY", "value"),
+            EnvField::new("XMPP_DOMAIN", "xmpp.dure.co"),
+        ];
+
+        let domain = get_domain_from_env(&fields);
+        assert_eq!(domain, Some("xmpp.dure.co".to_string()));
+    }
+
+    #[test]
+    fn test_get_domain_from_env_empty() {
+        let fields = vec![
+            EnvField::new("MYCART_DOMAIN", ""),
+            EnvField::new("XMPP_DOMAIN", "   "),
+        ];
+
+        let domain = get_domain_from_env(&fields);
+        assert_eq!(domain, None);
+    }
+
+    #[test]
+    fn test_get_domain_from_env_none() {
+        let fields = vec![EnvField::new("OTHER_KEY", "value")];
+
+        let domain = get_domain_from_env(&fields);
+        assert_eq!(domain, None);
+    }
+
+    #[test]
+    fn test_get_env_value_exists() {
+        let fields = vec![
+            EnvField::new("KEY1", "value1"),
+            EnvField::new("KEY2", "value2"),
+        ];
+
+        let value = get_env_value(&fields, "KEY2");
+        assert_eq!(value, Some("value2".to_string()));
+    }
+
+    #[test]
+    fn test_get_env_value_missing() {
+        let fields = vec![EnvField::new("KEY1", "value1")];
+
+        let value = get_env_value(&fields, "MISSING");
+        assert_eq!(value, None);
+    }
+
+    #[test]
+    fn test_get_env_value_empty() {
+        let fields = vec![EnvField::new("KEY1", "")];
+
+        let value = get_env_value(&fields, "KEY1");
+        assert_eq!(value, Some("".to_string()));
     }
 }
