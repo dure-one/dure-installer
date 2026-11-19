@@ -1,7 +1,8 @@
 pub use super::profile_delete_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
+use std::cell::Cell;
 
 impl DlgProfileDelete {
     pub fn new() -> Self {
@@ -56,18 +57,17 @@ impl DlgProfileDelete {
             return None;
         }
 
-        let mut dialog_action = DeleteDialogAction::None;
+        let dialog_action = Cell::new(DeleteDialogAction::None);
 
-        egui::Window::new(tr!("profile-delete-title"))
-            .id(egui::Id::new("profile_delete_window"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(400.0)
-            .min_height(200.0)
-            .resize(|r| r.default_size([400.0, 200.0]))
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("profile_delete_dialog", &tr!("profile-delete-title"), &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("profile-delete-heading"));
                 ui.add_space(12.0);
 
@@ -82,20 +82,16 @@ impl DlgProfileDelete {
                 );
                 ui.add_space(12.0);
 
-                // Action buttons
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled(tr!("delete"))).clicked() {
-                            dialog_action = DeleteDialogAction::Submit;
-                        }
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            dialog_action = DeleteDialogAction::Cancel;
-                        }
-                    });
-                });
-            });
+            })
+            .action(tr!("cancel"), || {
+                dialog_action.set(DeleteDialogAction::Cancel);
+            })
+            .primary_action(tr!("delete"), || {
+                dialog_action.set(DeleteDialogAction::Submit);
+            })
+            .show(ctx);
 
-        self.process_action(dialog_action)
+        self.process_action(dialog_action.get())
     }
 }
 

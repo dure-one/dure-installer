@@ -1,7 +1,8 @@
 pub use super::profile_login_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
+use std::cell::Cell;
 
 impl DlgProfileLogin {
     pub fn new() -> Self {
@@ -64,18 +65,17 @@ impl DlgProfileLogin {
             return None;
         }
 
-        let mut dialog_action = DialogAction::None;
+        let dialog_action = Cell::new(DialogAction::None);
 
-        egui::Window::new(tr!("profile-login-title"))
-            .id(egui::Id::new("profile_login_window"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(400.0)
-            .min_height(250.0)
-            .resize(|r| r.default_size([400.0, 250.0]))
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("profile_login_dialog", &tr!("profile-login-title"), &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("profile-login-heading"));
                 ui.add_space(12.0);
 
@@ -115,19 +115,15 @@ impl DlgProfileLogin {
 
                 ui.add_space(12.0);
 
-                // Action buttons
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled(tr!("ok"))).clicked() {
-                            dialog_action = DialogAction::Submit;
-                        }
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            dialog_action = DialogAction::Cancel;
-                        }
-                    });
-                });
-            });
+            })
+            .action(tr!("cancel"), || {
+                dialog_action.set(DialogAction::Cancel);
+            })
+            .primary_action(tr!("ok"), || {
+                dialog_action.set(DialogAction::Submit);
+            })
+            .show(ctx);
 
-        self.process_action(dialog_action)
+        self.process_action(dialog_action.get())
     }
 }

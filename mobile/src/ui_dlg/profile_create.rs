@@ -1,7 +1,8 @@
 pub use super::profile_create_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
+use std::cell::Cell;
 
 impl DlgProfileCreate {
     pub fn new() -> Self {
@@ -123,18 +124,17 @@ impl DlgProfileCreate {
             return None;
         }
 
-        let mut dialog_action = CreateDialogAction::None;
+        let dialog_action = Cell::new(CreateDialogAction::None);
 
-        egui::Window::new(tr!("profile-create-title"))
-            .id(egui::Id::new("profile_create_window"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(400.0)
-            .min_height(350.0)
-            .resize(|r| r.default_size([400.0, 350.0]))
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("profile_create_dialog", &tr!("profile-create-title"), &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("profile-create-heading"));
                 ui.add_space(12.0);
 
@@ -227,19 +227,15 @@ impl DlgProfileCreate {
 
                 ui.add_space(12.0);
 
-                // Action buttons
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled(tr!("create"))).clicked() {
-                            dialog_action = CreateDialogAction::Submit;
-                        }
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            dialog_action = CreateDialogAction::Cancel;
-                        }
-                    });
-                });
-            });
+            })
+            .action(tr!("cancel"), || {
+                dialog_action.set(CreateDialogAction::Cancel);
+            })
+            .primary_action(tr!("create"), || {
+                dialog_action.set(CreateDialogAction::Submit);
+            })
+            .show(ctx);
 
-        self.process_action(dialog_action)
+        self.process_action(dialog_action.get())
     }
 }
