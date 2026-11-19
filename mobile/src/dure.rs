@@ -285,10 +285,9 @@ impl eframe::App for DureApp {
         // Initialize ViewModel on first update (lazy initialization)
         if self.viewmodel.is_none() {
             info!("🔥 Initializing ViewModel");
-            let profile_config_path = self.current_profile.as_ref().map(|p| p.config_file.clone());
             self.viewmodel = Some(crate::viewmodel::ViewModel::new(
                 ctx.clone(),
-                profile_config_path,
+                self.current_profile.clone(),
             ));
         }
 

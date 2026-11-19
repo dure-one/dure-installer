@@ -3,6 +3,7 @@
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 use crate::calc::docker;
+use crate::calc::profile::ProfileContext;
 use crate::config::{DockerContainerConfig, SshHostConfig};
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
@@ -11,7 +12,7 @@ use smol::channel::{Receiver, Sender};
 pub struct SshActor {
     command_rx: Receiver<SshCommand>,
     event_tx: Sender<ViewModelEvent>,
-    profile_config_path: Option<std::path::PathBuf>,
+    profile: Option<ProfileContext>,
     repository: crate::viewmodel::platform::DrawerRepository,
 }
 
@@ -19,12 +20,12 @@ impl SshActor {
     pub fn new(
         command_rx: Receiver<SshCommand>,
         event_tx: Sender<ViewModelEvent>,
-        profile_config_path: Option<std::path::PathBuf>,
+        profile: Option<ProfileContext>,
     ) -> Self {
         Self {
             command_rx,
             event_tx,
-            profile_config_path,
+            profile,
             repository: crate::viewmodel::platform::DrawerRepository::new(),
         }
     }
@@ -33,8 +34,9 @@ impl SshActor {
         &self,
     ) -> anyhow::Result<(crate::config::AppConfig, std::path::PathBuf)> {
         let config_path = self
-            .profile_config_path
-            .clone()
+            .profile
+            .as_ref()
+            .map(|p| p.config_file.clone())
             .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
         Ok((config, config_path))
@@ -42,8 +44,9 @@ impl SshActor {
 
     fn load_host_config(&self, host_name: &str) -> anyhow::Result<SshHostConfig> {
         let config_path = self
-            .profile_config_path
-            .clone()
+            .profile
+            .as_ref()
+            .map(|p| p.config_file.clone())
             .unwrap_or_else(|| Self::get_config_path().unwrap());
         let config = crate::config::AppConfig::load_or_default(&config_path);
         config

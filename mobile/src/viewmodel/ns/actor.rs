@@ -1,6 +1,7 @@
 //! NS actor implementation
 
 use super::{DnsDomain, DnsProvider, DnsRecord, NsCommand, NsEvent};
+use crate::calc::profile::ProfileContext;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
@@ -9,14 +10,20 @@ pub struct NsActor {
     command_rx: Receiver<NsCommand>,
     event_tx: Sender<ViewModelEvent>,
     repository: crate::viewmodel::platform::DrawerRepository,
+    profile: Option<ProfileContext>,
 }
 
 impl NsActor {
-    pub fn new(command_rx: Receiver<NsCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
+    pub fn new(
+        command_rx: Receiver<NsCommand>,
+        event_tx: Sender<ViewModelEvent>,
+        profile: Option<ProfileContext>,
+    ) -> Self {
         Self {
             command_rx,
             event_tx,
             repository: crate::viewmodel::platform::DrawerRepository::new(),
+            profile,
         }
     }
 

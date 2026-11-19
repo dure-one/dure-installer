@@ -1,6 +1,7 @@
 //! Drawer actor implementation for tab management and operation logging
 
 use super::{DrawerCommand, DrawerEvent, DrawerRepository, DrawerState};
+use crate::calc::profile::ProfileContext;
 use crate::viewmodel::logs::LogCommand;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info};
@@ -13,6 +14,7 @@ pub struct DrawerActor {
     logs_tx: Sender<LogCommand>,
     repository: DrawerRepository,
     state: DrawerState,
+    profile: Option<ProfileContext>,
 }
 
 impl DrawerActor {
@@ -20,6 +22,7 @@ impl DrawerActor {
         command_rx: Receiver<DrawerCommand>,
         event_tx: Sender<ViewModelEvent>,
         logs_tx: Sender<LogCommand>,
+        profile: Option<ProfileContext>,
     ) -> Self {
         Self {
             command_rx,
@@ -27,6 +30,7 @@ impl DrawerActor {
             logs_tx,
             repository: DrawerRepository::new(),
             state: DrawerState::new(),
+            profile,
         }
     }
 

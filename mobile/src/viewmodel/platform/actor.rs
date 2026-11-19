@@ -2,6 +2,7 @@
 
 use super::{DrawerRepository, PlatformCommand, PlatformEvent, VmInfo};
 use crate::api::gcp::GcpRestClient;
+use crate::calc::profile::ProfileContext;
 use crate::config::AppConfig;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
@@ -12,14 +13,20 @@ pub struct PlatformActor {
     command_rx: Receiver<PlatformCommand>,
     event_tx: Sender<ViewModelEvent>,
     repository: DrawerRepository,
+    profile: Option<ProfileContext>,
 }
 
 impl PlatformActor {
-    pub fn new(command_rx: Receiver<PlatformCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
+    pub fn new(
+        command_rx: Receiver<PlatformCommand>,
+        event_tx: Sender<ViewModelEvent>,
+        profile: Option<ProfileContext>,
+    ) -> Self {
         Self {
             command_rx,
             event_tx,
             repository: DrawerRepository::new(),
+            profile,
         }
     }
 

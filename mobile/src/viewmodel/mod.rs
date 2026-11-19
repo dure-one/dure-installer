@@ -14,6 +14,7 @@ mod tests;
 
 pub use common::*;
 
+use crate::calc::profile::ProfileContext;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
 use std::collections::{HashMap, VecDeque};
@@ -40,8 +41,8 @@ pub struct ViewModel {
     #[cfg(feature = "gui")]
     egui_ctx: Option<egui::Context>,
 
-    // Profile config path (for actor config loading)
-    profile_config_path: Option<std::path::PathBuf>,
+    // Profile context (for profile-aware operations)
+    profile: Option<ProfileContext>,
 }
 
 enum RuntimeHandle {
@@ -81,7 +82,7 @@ pub struct ErrorRecord {
 impl ViewModel {
     /// Create ViewModel for GUI mode (Desktop/Android)
     #[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
-    pub fn new(ctx: egui::Context, profile_config_path: Option<std::path::PathBuf>) -> Self {
+    pub fn new(ctx: egui::Context, profile: Option<ProfileContext>) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
@@ -94,7 +95,7 @@ impl ViewModel {
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
-        let profile_config_path_for_actor = profile_config_path.clone();
+        let profile_for_actor = profile.clone();
 
         // Spawn background thread with smol executor
         let runtime_handle = std::thread::spawn(move || {
@@ -102,12 +103,12 @@ impl ViewModel {
                 dure_info!("ViewModel runtime started");
 
                 // Create actors
-                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
                 let drawer_actor =
-                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
+                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
-                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
-                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
+                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
+                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
@@ -131,13 +132,13 @@ impl ViewModel {
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
             egui_ctx: Some(ctx),
-            profile_config_path,
+            profile,
         }
     }
 
     /// Create ViewModel for CLI mode (headless)
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn new_headless(profile_config_path: Option<std::path::PathBuf>) -> Self {
+    pub fn new_headless(profile: Option<ProfileContext>) -> Self {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
@@ -150,18 +151,18 @@ impl ViewModel {
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
-        let profile_config_path_for_actor = profile_config_path.clone();
+        let profile_for_actor = profile.clone();
 
         let runtime_handle = std::thread::spawn(move || {
             smol::block_on(async {
                 dure_info!("ViewModel runtime started (headless)");
 
-                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
                 let drawer_actor =
-                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
+                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
-                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
-                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
+                    ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
+                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
@@ -184,20 +185,19 @@ impl ViewModel {
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
             #[cfg(feature = "gui")]
             egui_ctx: None,
-            profile_config_path,
+            profile,
         }
     }
 
     /// Create ViewModel for WASM (browser)
     #[cfg(target_arch = "wasm32")]
-    pub fn new_wasm(profile_config_path: Option<std::path::PathBuf>) -> Self {
+    pub fn new_wasm(profile: Option<ProfileContext>) -> Self {
         use wasm_bindgen_futures::spawn_local;
 
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, _ssh_rx) = smol::channel::unbounded(); // Unused in WASM
         let (ns_tx, ns_rx) = smol::channel::unbounded();
-        let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -206,15 +206,16 @@ impl ViewModel {
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
+        let profile_for_actor = profile.clone();
 
         // Spawn actors in Web Worker context
         spawn_local(async move {
             dure_info!("ViewModel runtime started (WASM)");
 
-            let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone());
+            let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
             let drawer_actor =
-                platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
-            let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
+                platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
+            let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
@@ -239,7 +240,7 @@ impl ViewModel {
             runtime_handle: None,
             #[cfg(feature = "gui")]
             egui_ctx: None,
-            profile_config_path,
+            profile,
         }
     }
 
