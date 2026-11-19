@@ -12,6 +12,7 @@ use egui_i18n::tr;
 use egui_material3::datatable::data_table;
 use egui_material3::{badge, dialog, BadgeColor, BadgeSize, MaterialButton};
 use poll_promise::Promise;
+use std::cell::Cell;
 
 use crate::calc::profile::ProfileContext;
 
@@ -1400,20 +1401,20 @@ impl DnsTab {
         if self.show_add_dns_wizard {
             if let Some(wizard) = &mut self.dns_wizard {
                 let mut open = true;
-                egui::Window::new("Add DNS - Automated Setup")
-                    .id(egui::Id::new("add_dns_wizard_dialog"))
-                    .title_bar(false)
-                    .open(&mut open)
-                    .resizable(false)
-                    .collapsible(false)
-                    .scroll([false, true])
-                    .min_width(400.0)
-                    .max_width(400.0)
-                    .min_height(460.0)
-                    .resize(|r| r.default_size([400.0, 510.0]))
-                    .show(ui.ctx(), |ui| {
+                let ctx = ui.ctx().clone();
+
+                let window_width = ctx.viewport_rect().width();
+                let window_height = ctx.viewport_rect().height();
+
+                dialog("add_dns_wizard_dialog", "Add DNS - Automated Setup", &mut open)
+                    .min_width(350.0)
+                    .max_width(window_width - 40.0)
+                    .max_height(window_height - 40.0)
+                    .scrollable(true)
+                    .content(|ui, _open| {
                         wizard.ui(ui, profile);
-                    });
+                    })
+                    .show(&ctx);
 
                 // Close wizard if requested or window closed
                 if !open || wizard.should_close {
