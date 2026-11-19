@@ -1637,21 +1637,42 @@ impl SshTab {
                             platform_id
                         })
                         .and_then(|platform_id| {
-                            dure_debug!("[SSH] Looking for platform with id: {}", platform_id);
-                            // Load config and find platform
+                            dure_debug!("[SSH] Looking for platform with project id: {}", platform_id);
+                            // Load config and find platform by project ID (not platform_type)
                             profile.as_ref().map(|p| {
                                 let config = AppConfig::load_or_default(&p.config_file);
                                 dure_debug!("[SSH] Config has {} platforms", config.platforms.len());
 
+                                // Match by actual project ID fields, not platform_type
                                 let found_platform = config.platforms.iter()
-                                    .find(|plat| plat.platform_type == platform_id);
+                                    .find(|plat| {
+                                        // Check GCP project ID
+                                        if let Some(ref gcp_id) = plat.gcp_selected_project_id {
+                                            if gcp_id == &platform_id {
+                                                return true;
+                                            }
+                                        }
+                                        // Check Firebase project ID
+                                        if let Some(ref fb_id) = plat.firebase_project_id {
+                                            if fb_id == &platform_id {
+                                                return true;
+                                            }
+                                        }
+                                        // Check Supabase project ref
+                                        if let Some(ref sb_ref) = plat.supabase_project_ref {
+                                            if sb_ref == &platform_id {
+                                                return true;
+                                            }
+                                        }
+                                        false
+                                    });
 
                                 if let Some(plat) = found_platform {
-                                    dure_debug!("[SSH] Found platform {}, bound_domain: {:?}",
+                                    dure_debug!("[SSH] Found platform (type: {}), bound_domain: {:?}",
                                         plat.platform_type, plat.bound_domain);
                                     plat.bound_domain.clone()
                                 } else {
-                                    dure_warn!("[SSH] No platform found with id: {}", platform_id);
+                                    dure_warn!("[SSH] No platform found with project id: {}", platform_id);
                                     None
                                 }
                             }).flatten()
