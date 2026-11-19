@@ -3,6 +3,7 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
+use std::cell::Cell;
 use egui_material3::{
     badge, data_table, dialog, linear_progress, notification, BadgeColor, BadgeSize, DataTableCell,
     MaterialButton, NotificationAlign,
@@ -3132,7 +3133,8 @@ impl PlatformTab {
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        let mut open = self.show_add_dialog;
+        let add_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
 
         let title = if self.add_platform_reauth_mode {
             tr!("reauth-platform-title")
@@ -3146,18 +3148,23 @@ impl PlatformTab {
             tr!("add-platform-heading")
         };
 
-        egui::Window::new(&title)
-            .id(egui::Id::new("add_platform_dialog"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .scroll([false, true])
-            .min_width(500.0)
-            .min_height(400.0)
-            .resize(|r| {
-                r.default_size([500.0, 450.0])
-            })
-            .show(ctx, |ui| {
+        let button_text = if self.add_platform_reauth_mode {
+            tr!("reauth")
+        } else {
+            tr!("add")
+        };
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        let mut open = self.show_add_dialog;
+
+        dialog("add_platform_dialog", &title, &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(&heading);
                 ui.add_space(12.0);
 
@@ -3321,42 +3328,39 @@ impl PlatformTab {
                     ui.add_space(8.0);
                 }
 
-                // Action buttons (right-to-left layout)
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let button_text = if self.add_platform_reauth_mode {
-                            tr!("reauth")
-                        } else {
-                            tr!("add")
-                        };
-
-                        let can_add = if self.add_platform_reauth_mode {
-                            // In re-auth mode, only need OAuth connection
-                            self.add_platform_connected_email.is_some()
-                        } else {
-                            // In add mode, need OAuth + project selection
-                            self.add_platform_type != "gcp"
-                                || (self.add_platform_connected_email.is_some()
-                                    && (self.add_platform_selected_project.is_some()
-                                        || (!self.add_platform_new_project_id.is_empty())))
-                        };
-
-                        ui.add_enabled_ui(can_add, |ui| {
-                            if ui.add(MaterialButton::filled(&button_text)).clicked() {
-                                self.execute_add_platform(current_profile, vm.as_deref_mut());
-                                self.reset_add_dialog_state();
-                            }
-                        });
-
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            self.reset_add_dialog_state();
-                        }
-                    });
-                });
-            });
+            })
+            .action(&tr!("cancel"), || {
+                cancel_clicked.set(true);
+            })
+            .primary_action(&button_text, || {
+                add_clicked.set(true);
+            })
+            .show(ctx);
 
         if !open {
             self.reset_add_dialog_state();
+        }
+
+        if cancel_clicked.get() {
+            self.reset_add_dialog_state();
+        }
+
+        if add_clicked.get() {
+            let can_add = if self.add_platform_reauth_mode {
+                // In re-auth mode, only need OAuth connection
+                self.add_platform_connected_email.is_some()
+            } else {
+                // In add mode, need OAuth + project selection
+                self.add_platform_type != "gcp"
+                    || (self.add_platform_connected_email.is_some()
+                        && (self.add_platform_selected_project.is_some()
+                            || (!self.add_platform_new_project_id.is_empty())))
+            };
+
+            if can_add {
+                self.execute_add_platform(current_profile, vm.as_deref_mut());
+                self.reset_add_dialog_state();
+            }
         }
     }
 
@@ -3828,14 +3832,26 @@ impl PlatformTab {
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        let mut open = self.show_delete_vm_dialog;
-        let mut should_clear_progress = false;
+        let next_clicked = Cell::new(false);
+        let yes_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
 
-        egui::Window::new("Delete VM")
-            .open(&mut open)
-            .resizable(false)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        let is_confirming = self.delete_vm_confirming;
+        let button_text = if is_confirming {
+            tr!("platform-delete-vm-yes")
+        } else {
+            tr!("platform-delete-vm-next")
+        };
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("delete_vm_dialog", "Delete VM", &mut self.show_delete_vm_dialog)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 if self.delete_vm_confirming {
                     // Confirmation step
                     ui.heading(tr!("platform-delete-vm-confirm"));
@@ -3889,21 +3905,6 @@ impl PlatformTab {
                             }
 
                             ui.add_space(12.0);
-
-                            let name_clone = name.clone();
-                            let zone_clone = zone.clone();
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                                if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-yes"))).clicked() {
-                                    self.execute_delete_vm(profile, name_clone, zone_clone, vm);
-                                    self.show_delete_vm_dialog = false;
-                                }
-
-                                if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-cancel"))).clicked() {
-                                    self.delete_vm_confirming = false;
-                                    should_clear_progress = true;
-                                }
-                            });
                         }
                     }
                 } else {
@@ -3943,24 +3944,46 @@ impl PlatformTab {
                     }
 
                     ui.add_space(12.0);
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                        let can_delete = self.delete_vm_selected.is_some();
-                        ui.add_enabled_ui(can_delete, |ui| {
-                            if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-next"))).clicked() {
-                                self.delete_vm_confirming = true;
-                            }
-                        });
-
-                        if ui.add(MaterialButton::outlined(tr!("platform-delete-vm-cancel"))).clicked() {
-                            self.show_delete_vm_dialog = false;
-                            should_clear_progress = true;
-                        }
-                    });
                 }
-            });
+            })
+            .action(&tr!("platform-delete-vm-cancel"), || {
+                cancel_clicked.set(true);
+            })
+            .primary_action(&button_text, || {
+                if is_confirming {
+                    yes_clicked.set(true);
+                } else {
+                    next_clicked.set(true);
+                }
+            })
+            .show(ctx);
 
-        if !open || should_clear_progress {
+        let mut should_clear_progress = false;
+
+        if cancel_clicked.get() {
+            if self.delete_vm_confirming {
+                self.delete_vm_confirming = false;
+                should_clear_progress = true;
+            } else {
+                self.show_delete_vm_dialog = false;
+                should_clear_progress = true;
+            }
+        }
+
+        if next_clicked.get() && self.delete_vm_selected.is_some() {
+            self.delete_vm_confirming = true;
+        }
+
+        if yes_clicked.get() {
+            if let Some(idx) = self.delete_vm_selected {
+                if let Some((name, zone, _)) = self.delete_vm_list.get(idx).cloned() {
+                    self.execute_delete_vm(profile, name, zone, vm);
+                    self.show_delete_vm_dialog = false;
+                }
+            }
+        }
+
+        if should_clear_progress {
             // Clear progress bar when dialog is closed or cancelled
             if let Some(row) = self
                 .rows
@@ -3978,26 +4001,27 @@ impl PlatformTab {
 
     fn render_error_dialog(&mut self, ctx: &egui::Context) {
         if let Some(error) = self.load_error.clone() {
-            let mut open = self.show_error_dialog;
+            let ok_clicked = Cell::new(false);
 
-            egui::Window::new("⚠️ Error")
-                .open(&mut open)
-                .resizable(false)
-                .collapsible(false)
-                .show(ctx, |ui| {
+            let window_width = ctx.viewport_rect().width();
+            let window_height = ctx.viewport_rect().height();
+
+            dialog("error_dialog", "⚠️ Error", &mut self.show_error_dialog)
+                .min_width(350.0)
+                .max_width(window_width - 40.0)
+                .max_height(window_height - 40.0)
+                .scrollable(true)
+                .content(|ui, _open| {
                     ui.add_space(8.0);
                     ui.colored_label(egui_material3::theme::get_global_color("error"), &error);
                     ui.add_space(12.0);
+                })
+                .primary_action("OK", || {
+                    ok_clicked.set(true);
+                })
+                .show(ctx);
 
-                    ui.horizontal(|ui| {
-                        if ui.add(MaterialButton::filled("OK")).clicked() {
-                            self.show_error_dialog = false;
-                            self.load_error = None;
-                        }
-                    });
-                });
-
-            if !open {
+            if ok_clicked.get() {
                 self.show_error_dialog = false;
                 self.load_error = None;
             }
@@ -4388,18 +4412,18 @@ impl PlatformTab {
         ctx: &egui::Context,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        let mut open = self.show_delete_platform_dialog;
+        let delete_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
 
-        egui::Window::new(tr!("delete-platform-title"))
-            .id(egui::Id::new("delete_platform_dialog"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(450.0)
-            .min_height(300.0)
-            .resize(|r| r.default_size([450.0, 300.0]))
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("delete_platform_dialog", &tr!("delete-platform-title"), &mut self.show_delete_platform_dialog)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("delete-platform-heading"));
                 ui.add_space(12.0);
 
@@ -4445,26 +4469,23 @@ impl PlatformTab {
                 );
 
                 ui.add_space(12.0);
+            })
+            .action(&tr!("cancel"), || {
+                cancel_clicked.set(true);
+            })
+            .primary_action(&tr!("delete"), || {
+                delete_clicked.set(true);
+            })
+            .show(ctx);
 
-                // Action buttons (right-to-left layout like profile_create)
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled(tr!("delete"))).clicked() {
-                            self.execute_delete_platform(current_profile, vm.as_deref_mut());
-                            self.show_delete_platform_dialog = false;
-                            self.delete_platform_delete_vms = false;
-                            self.delete_platform_delete_project = false;
-                        }
-                        if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                            self.show_delete_platform_dialog = false;
-                            self.delete_platform_delete_vms = false;
-                            self.delete_platform_delete_project = false;
-                        }
-                    });
-                });
-            });
+        if cancel_clicked.get() {
+            self.show_delete_platform_dialog = false;
+            self.delete_platform_delete_vms = false;
+            self.delete_platform_delete_project = false;
+        }
 
-        if !open {
+        if delete_clicked.get() {
+            self.execute_delete_platform(current_profile, vm.as_deref_mut());
             self.show_delete_platform_dialog = false;
             self.delete_platform_delete_vms = false;
             self.delete_platform_delete_project = false;
@@ -4478,14 +4499,18 @@ impl PlatformTab {
         ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        let mut open = self.show_select_project_dialog;
+        let select_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
 
-        egui::Window::new("Select GCP Project")
-            .open(&mut open)
-            .resizable(false)
-            .collapsible(false)
-            .default_width(500.0)
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("select_project_dialog", "Select GCP Project", &mut self.show_select_project_dialog)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("platform-select-project-heading"));
                 ui.add_space(8.0);
 
@@ -4522,29 +4547,21 @@ impl PlatformTab {
                 }
 
                 ui.add_space(12.0);
+            })
+            .action("Cancel", || {
+                cancel_clicked.set(true);
+            })
+            .primary_action(&tr!("platform-select-project-button"), || {
+                select_clicked.set(true);
+            })
+            .show(ctx);
 
-                ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {
-                        self.show_select_project_dialog = false;
-                    }
+        if cancel_clicked.get() {
+            self.show_select_project_dialog = false;
+        }
 
-                    let select_enabled = self.select_project_selected.is_some();
-                    let select_button =
-                        MaterialButton::filled(tr!("platform-select-project-button"));
-                    let select_button = if select_enabled {
-                        select_button
-                    } else {
-                        select_button.enabled(false)
-                    };
-
-                    if ui.add(select_button).clicked() {
-                        self.execute_select_project(current_profile, vm);
-                        self.show_select_project_dialog = false;
-                    }
-                });
-            });
-
-        if !open {
+        if select_clicked.get() && self.select_project_selected.is_some() {
+            self.execute_select_project(current_profile, vm);
             self.show_select_project_dialog = false;
         }
     }

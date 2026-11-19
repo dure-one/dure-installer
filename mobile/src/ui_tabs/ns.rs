@@ -3,8 +3,9 @@
 use crate::{dure_debug, dure_info};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
 use poll_promise::Promise;
+use std::cell::Cell;
 
 use crate::calc::audit;
 use crate::calc::ns::{NsConfig, RecordType};
@@ -1429,12 +1430,19 @@ impl NsTab {
             return;
         }
 
+        let add_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
         let mut open = true;
-        egui::Window::new("Add Nameserver Provider")
-            .id(egui::Id::new("ns_add_provider_dialog"))
-            .open(&mut open)
-            .resizable(false)
-            .show(ctx, |ui| {
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("ns_add_provider_dialog", "Add Nameserver Provider", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label("Provider type:");
                 egui::ComboBox::from_id_salt("provider_type_combo")
                     .selected_text(match self.add_provider_type.as_str() {
@@ -1646,45 +1654,29 @@ impl NsTab {
                 }
 
                 ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    let can_add = if self.add_provider_type == "gcloud" {
-                        self.add_gcp_connected_email.is_some()
-                            && !self.add_gcp_project_id.is_empty()
-                    } else {
-                        true
-                    };
 
-                    let add_button = if can_add {
-                        MaterialButton::filled("Add")
-                    } else {
-                        MaterialButton::filled("Add").enabled(false)
-                    };
+                let can_add = if self.add_provider_type == "gcloud" {
+                    self.add_gcp_connected_email.is_some()
+                        && !self.add_gcp_project_id.is_empty()
+                } else {
+                    true
+                };
 
-                    if ui.add(add_button).clicked() {
-                        self.start_add_provider_background(profile, vm.as_deref_mut());
-                        self.show_add_provider_dialog = false;
+                if !can_add && self.add_provider_type == "gcloud" {
+                    if self.add_gcp_connected_email.is_none() {
+                        ui.label("⚠ Connect to Google Cloud first");
+                    } else if self.add_gcp_project_id.is_empty() {
+                        ui.label("⚠ Project ID required");
                     }
-
-                    if ui.add(MaterialButton::text("Cancel")).clicked() {
-                        self.show_add_provider_dialog = false;
-                        self.add_gcp_oauth_result = None;
-                        self.add_gcp_oauth_promise = None;
-                        self.add_gcp_connected_email = None;
-                        self.add_gcp_project_id.clear();
-                        self.add_gcp_projects.clear();
-                        self.add_gcp_projects_loaded = false;
-                        self.add_gcp_projects_error = None;
-                    }
-
-                    if !can_add && self.add_provider_type == "gcloud" {
-                        if self.add_gcp_connected_email.is_none() {
-                            ui.label("⚠ Connect to Google Cloud first");
-                        } else if self.add_gcp_project_id.is_empty() {
-                            ui.label("⚠ Project ID required");
-                        }
-                    }
-                });
-            });
+                }
+            })
+            .action("Cancel", || {
+                cancel_clicked.set(true);
+            })
+            .primary_action("Add", || {
+                add_clicked.set(true);
+            })
+            .show(ctx);
 
         if !open {
             self.show_add_provider_dialog = false;
@@ -1695,6 +1687,31 @@ impl NsTab {
             self.add_gcp_projects.clear();
             self.add_gcp_projects_loaded = false;
             self.add_gcp_projects_error = None;
+        }
+
+        if cancel_clicked.get() {
+            self.show_add_provider_dialog = false;
+            self.add_gcp_oauth_result = None;
+            self.add_gcp_oauth_promise = None;
+            self.add_gcp_connected_email = None;
+            self.add_gcp_project_id.clear();
+            self.add_gcp_projects.clear();
+            self.add_gcp_projects_loaded = false;
+            self.add_gcp_projects_error = None;
+        }
+
+        if add_clicked.get() {
+            let can_add = if self.add_provider_type == "gcloud" {
+                self.add_gcp_connected_email.is_some()
+                    && !self.add_gcp_project_id.is_empty()
+            } else {
+                true
+            };
+
+            if can_add {
+                self.start_add_provider_background(profile, vm.as_deref_mut());
+                self.show_add_provider_dialog = false;
+            }
         }
     }
 
@@ -1721,12 +1738,19 @@ impl NsTab {
             }
         }
 
+        let add_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
         let mut open = true;
-        egui::Window::new("Add Domain")
-            .id(egui::Id::new("ns_add_domain_manual_dialog"))
-            .open(&mut open)
-            .resizable(false)
-            .show(ctx, |ui| {
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("ns_add_domain_manual_dialog", "Add Domain", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label("Domain name (primary domain only):");
                 ui.text_edit_singleline(&mut self.add_domain);
 
@@ -1811,36 +1835,36 @@ impl NsTab {
                 }
 
                 ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    let can_add = !self.add_domain.is_empty()
-                        && self.add_domain_provider != "porkbun"
-                        && (self.add_domain_provider != "gcloud"
-                            || !self.add_domain_existing_gcp_accounts.is_empty());
-                    let add_button = if can_add {
-                        MaterialButton::filled("Add")
-                    } else {
-                        MaterialButton::filled("Add").enabled(false)
-                    };
-
-                    if ui.add(add_button).clicked() {
-                        self.execute_add_domain_manual(profile);
-                        self.show_add_domain_dialog = false;
-                        // Reset GCP accounts list for next open
-                        self.add_domain_existing_gcp_accounts.clear();
-                    }
-
-                    if ui.add(MaterialButton::text("Cancel")).clicked() {
-                        self.show_add_domain_dialog = false;
-                        // Reset GCP accounts list for next open
-                        self.add_domain_existing_gcp_accounts.clear();
-                    }
-                });
-            });
+            })
+            .action("Cancel", || {
+                cancel_clicked.set(true);
+            })
+            .primary_action("Add", || {
+                add_clicked.set(true);
+            })
+            .show(ctx);
 
         if !open {
             self.show_add_domain_dialog = false;
-            // Reset GCP accounts list for next open
             self.add_domain_existing_gcp_accounts.clear();
+        }
+
+        if cancel_clicked.get() {
+            self.show_add_domain_dialog = false;
+            self.add_domain_existing_gcp_accounts.clear();
+        }
+
+        if add_clicked.get() {
+            let can_add = !self.add_domain.is_empty()
+                && self.add_domain_provider != "porkbun"
+                && (self.add_domain_provider != "gcloud"
+                    || !self.add_domain_existing_gcp_accounts.is_empty());
+
+            if can_add {
+                self.execute_add_domain_manual(profile);
+                self.show_add_domain_dialog = false;
+                self.add_domain_existing_gcp_accounts.clear();
+            }
         }
     }
 
@@ -1855,12 +1879,19 @@ impl NsTab {
             return;
         }
 
+        let add_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
         let mut open = true;
-        egui::Window::new("Add DNS Record")
-            .id(egui::Id::new("ns_add_record_dialog"))
-            .open(&mut open)
-            .resizable(false)
-            .show(ctx, |ui| {
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("ns_add_record_dialog", "Add DNS Record", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label("Record name (e.g., www, @, mail):");
                 ui.text_edit_singleline(&mut self.add_record_name);
 
@@ -1893,19 +1924,25 @@ impl NsTab {
                 );
 
                 ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.execute_add_record(profile, vm);
-                        self.show_add_record_dialog = false;
-                    }
-
-                    if ui.add(MaterialButton::text("Cancel")).clicked() {
-                        self.show_add_record_dialog = false;
-                    }
-                });
-            });
+            })
+            .action("Cancel", || {
+                cancel_clicked.set(true);
+            })
+            .primary_action("Add", || {
+                add_clicked.set(true);
+            })
+            .show(ctx);
 
         if !open {
+            self.show_add_record_dialog = false;
+        }
+
+        if cancel_clicked.get() {
+            self.show_add_record_dialog = false;
+        }
+
+        if add_clicked.get() {
+            self.execute_add_record(profile, vm);
             self.show_add_record_dialog = false;
         }
     }
@@ -1916,23 +1953,27 @@ impl NsTab {
             return;
         }
 
+        let ok_clicked = Cell::new(false);
         let mut open = true;
-        egui::Window::new("Error")
-            .id(egui::Id::new("ns_error_dialog"))
-            .open(&mut open)
-            .resizable(false)
-            .show(ctx, |ui| {
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("ns_error_dialog", "Error", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label(&self.error_message);
-
                 ui.add_space(16.0);
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled("OK")).clicked() {
-                        self.show_error_dialog = false;
-                    }
-                });
-            });
+            })
+            .primary_action("OK", || {
+                ok_clicked.set(true);
+            })
+            .show(ctx);
 
-        if !open {
+        if !open || ok_clicked.get() {
             self.show_error_dialog = false;
         }
     }
@@ -3676,13 +3717,19 @@ impl NsTab {
             return;
         }
 
+        let close_clicked = Cell::new(false);
         let mut open = true;
-        egui::Window::new(format!("Nameservers - {}", self.ns_dialog_domain))
-            .id(egui::Id::new("ns_nameservers_dialog"))
-            .open(&mut open)
-            .resizable(true)
-            .default_width(600.0)
-            .show(ctx, |ui| {
+        let title = format!("Nameservers - {}", self.ns_dialog_domain);
+
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("ns_nameservers_dialog", &title, &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 if self.ns_dialog_loading {
                     ui.spinner();
                     ui.label("Loading nameservers...");
@@ -3750,12 +3797,13 @@ impl NsTab {
                 }
 
                 ui.add_space(8.0);
-                if ui.add(MaterialButton::text("Close")).clicked() {
-                    self.show_nameservers_dialog = false;
-                }
-            });
+            })
+            .primary_action("Close", || {
+                close_clicked.set(true);
+            })
+            .show(ctx);
 
-        if !open {
+        if !open || close_clicked.get() {
             self.show_nameservers_dialog = false;
         }
     }
