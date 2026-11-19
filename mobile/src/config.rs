@@ -24,10 +24,10 @@ pub struct VmInstance {
     pub ssh_key_name: Option<String>, // Keyring domain for SSH private key
 }
 
-/// Cloud platform configuration (GCP, Firebase, Supabase)
+/// Cloud platform configuration (GCP)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CloudPlatformConfig {
-    pub platform_type: String, // "gcp", "firebase", "supabase"
+    pub platform_type: String, // "gcp"
 
     // GCP specific
     pub gcp_oauth_access_token: Option<String>,
@@ -35,15 +35,6 @@ pub struct CloudPlatformConfig {
     pub gcp_oauth_token_expiry: Option<i64>, // Unix timestamp
     pub gcp_connected_email: Option<String>, // Connected Google account email
     pub gcp_selected_project_id: Option<String>, // Selected GCP project for this platform
-
-    // Firebase specific
-    pub firebase_project_id: Option<String>,
-    pub firebase_api_key: Option<String>,
-
-    // Supabase specific
-    pub supabase_project_ref: Option<String>,
-    pub supabase_api_url: Option<String>,
-    pub supabase_anon_key: Option<String>,
 
     // Common fields
     pub api_token: Option<String>,
@@ -427,11 +418,6 @@ mod tests {
             gcp_oauth_access_token: None,
             gcp_oauth_refresh_token: None,
             gcp_oauth_token_expiry: None,
-            firebase_project_id: None,
-            firebase_api_key: None,
-            supabase_project_ref: None,
-            supabase_api_url: None,
-            supabase_anon_key: None,
             api_token: None,
             service_account_json: None,
             vms: vec![],
@@ -450,11 +436,6 @@ mod tests {
             gcp_oauth_access_token: None,
             gcp_oauth_refresh_token: None,
             gcp_oauth_token_expiry: None,
-            firebase_project_id: None,
-            firebase_api_key: None,
-            supabase_project_ref: None,
-            supabase_api_url: None,
-            supabase_anon_key: None,
             api_token: None,
             service_account_json: None,
             vms: vec![],

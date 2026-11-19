@@ -3047,20 +3047,6 @@ impl PlatformTab {
                 // GCP details are now in VMs
                 "Platform configured".to_string()
             }
-            "firebase" => {
-                if let Some(project) = &platform.firebase_project_id {
-                    format!("P: {}", project)
-                } else {
-                    "Firebase platform".to_string()
-                }
-            }
-            "supabase" => {
-                if let Some(url) = &platform.supabase_api_url {
-                    format!("URL: {}", url)
-                } else {
-                    "Supabase platform".to_string()
-                }
-            }
             _ => "Platform configured".to_string(),
         }
     }

@@ -16,7 +16,6 @@ pub mod gcp;
 pub mod hosting_gcp;
 pub mod keyring;
 pub mod ns;
-pub mod platform;
 pub mod platform_gcp;
 pub mod profile;
 pub mod session;

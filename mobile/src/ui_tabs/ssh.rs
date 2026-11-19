@@ -703,10 +703,6 @@ impl SshTab {
                     // Get platform identifier (GCP uses gcp_selected_project_id)
                     let platform_id = if platform.platform_type == "gcp" {
                         platform.gcp_selected_project_id.as_ref()
-                    } else if platform.platform_type == "firebase" {
-                        platform.firebase_project_id.as_ref()
-                    } else if platform.platform_type == "supabase" {
-                        platform.supabase_project_ref.as_ref()
                     } else {
                         None
                     };
@@ -1649,23 +1645,10 @@ impl SshTab {
                                     .find(|plat| {
                                         // Check GCP project ID
                                         if let Some(ref gcp_id) = plat.gcp_selected_project_id {
-                                            if gcp_id == &platform_id {
-                                                return true;
-                                            }
+                                            gcp_id == &platform_id
+                                        } else {
+                                            false
                                         }
-                                        // Check Firebase project ID
-                                        if let Some(ref fb_id) = plat.firebase_project_id {
-                                            if fb_id == &platform_id {
-                                                return true;
-                                            }
-                                        }
-                                        // Check Supabase project ref
-                                        if let Some(ref sb_ref) = plat.supabase_project_ref {
-                                            if sb_ref == &platform_id {
-                                                return true;
-                                            }
-                                        }
-                                        false
                                     });
 
                                 if let Some(plat) = found_platform {
