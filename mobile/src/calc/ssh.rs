@@ -262,10 +262,10 @@ mod desktop_impl {
             Ok(output)
         });
 
-        // 30-second timeout for command execution
+        // 10-minute timeout for command execution (docker compose pull can be slow)
         let timeout_future = async {
-            smol::Timer::after(Duration::from_secs(30)).await;
-            anyhow::bail!("Command execution timeout (30s)")
+            smol::Timer::after(Duration::from_secs(600)).await;
+            anyhow::bail!("Command execution timeout (10 minutes)")
         };
 
         smol::future::race(exec_future, timeout_future).await
