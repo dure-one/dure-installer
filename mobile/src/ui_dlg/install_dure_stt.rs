@@ -176,12 +176,30 @@ impl InstallDureState {
 
                         // Replace example.com with platform domain if available
                         if let Some(domain) = &self.replacement_domain {
+                            crate::dure_info!(
+                                "[InstallDure] Replacing example.com with domain: {}",
+                                domain
+                            );
+                            crate::dure_debug!(
+                                "[InstallDure] Content before replacement (first 200 chars): {}",
+                                &self.env_editor_text.chars().take(200).collect::<String>()
+                            );
+
                             // Case-insensitive replacement of example.com
                             self.env_editor_text = self
                                 .env_editor_text
                                 .replace("example.com", domain)
                                 .replace("Example.com", domain)
                                 .replace("EXAMPLE.COM", domain);
+
+                            crate::dure_debug!(
+                                "[InstallDure] Content after replacement (first 200 chars): {}",
+                                &self.env_editor_text.chars().take(200).collect::<String>()
+                            );
+                        } else {
+                            crate::dure_warn!(
+                                "[InstallDure] No replacement_domain set, keeping example.com"
+                            );
                         }
 
                         // Parse after replacement so env_fields have correct values

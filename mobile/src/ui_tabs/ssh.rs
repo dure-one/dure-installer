@@ -1,6 +1,6 @@
 //! SSH tab - SSH host configuration and management with drawer
 
-use crate::{dure_debug, dure_error, dure_info};
+use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{dialog, MaterialButton};
@@ -1618,16 +1618,42 @@ impl SshTab {
                 }
                 SshAction::InstallDure(host) => {
                     // Look up platform domain for this host
+                    dure_debug!("[SSH] Looking up platform domain for host: {}", host);
+
+                    let row = self.rows.iter().find(|r| r.host == host);
+                    if let Some(row) = row {
+                        dure_debug!("[SSH] Found row, platform_id: {:?}", row.platform_id);
+                    } else {
+                        dure_warn!("[SSH] No row found for host: {}", host);
+                    }
+
                     let platform_domain = self.rows.iter()
                         .find(|r| r.host == host)
-                        .and_then(|row| row.platform_id.clone())
+                        .and_then(|row| {
+                            let platform_id = row.platform_id.clone();
+                            if platform_id.is_none() {
+                                dure_warn!("[SSH] Host {} has no platform_id", host);
+                            }
+                            platform_id
+                        })
                         .and_then(|platform_id| {
+                            dure_debug!("[SSH] Looking for platform with id: {}", platform_id);
                             // Load config and find platform
                             profile.as_ref().map(|p| {
                                 let config = AppConfig::load_or_default(&p.config_file);
-                                config.platforms.iter()
-                                    .find(|plat| plat.platform_type == platform_id)
-                                    .and_then(|plat| plat.bound_domain.clone())
+                                dure_debug!("[SSH] Config has {} platforms", config.platforms.len());
+
+                                let found_platform = config.platforms.iter()
+                                    .find(|plat| plat.platform_type == platform_id);
+
+                                if let Some(plat) = found_platform {
+                                    dure_debug!("[SSH] Found platform {}, bound_domain: {:?}",
+                                        plat.platform_type, plat.bound_domain);
+                                    plat.bound_domain.clone()
+                                } else {
+                                    dure_warn!("[SSH] No platform found with id: {}", platform_id);
+                                    None
+                                }
                             }).flatten()
                         });
 
@@ -1639,9 +1665,9 @@ impl SshTab {
                     );
 
                     if let Some(domain) = platform_domain {
-                        dure_info!("Opening install Dure wizard for {} (domain: {})", host, domain);
+                        dure_info!("[SSH] Opening install Dure wizard for {} (domain: {})", host, domain);
                     } else {
-                        dure_info!("Opening install Dure wizard for {} (no platform domain)", host);
+                        dure_info!("[SSH] Opening install Dure wizard for {} (no platform domain)", host);
                     }
                 }
                 SshAction::RemoveDure(host) => {

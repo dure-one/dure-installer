@@ -26,6 +26,11 @@ impl InstallDure {
     }
 
     pub fn with_domain(mut self, domain: Option<String>) -> Self {
+        if let Some(ref d) = domain {
+            dure_info!("[InstallDure] Setting replacement_domain: {}", d);
+        } else {
+            dure_info!("[InstallDure] No domain provided (replacement_domain = None)");
+        }
         self.state.replacement_domain = domain;
         self
     }
@@ -198,11 +203,14 @@ impl InstallDure {
     fn render_header(&mut self, ui: &mut egui::Ui) {
         // Show domain if present
         if let Some(domain) = &self.state.replacement_domain {
+            dure_debug!("[InstallDure] Rendering domain label: {}", domain);
             ui.horizontal(|ui| {
                 ui.label("Domain:");
                 ui.strong(domain); // Bold for emphasis
             });
             ui.add_space(4.0);
+        } else {
+            dure_debug!("[InstallDure] No replacement_domain in state, not showing domain label");
         }
 
         // Version selector
