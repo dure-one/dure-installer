@@ -267,6 +267,12 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     add_platform_existing_project_id: String,
 
+    // Add platform wizard state
+    #[cfg_attr(feature = "serde", serde(skip))]
+    wizard_dialog_open: bool,
+    #[cfg_attr(feature = "serde", serde(skip))]
+    wizard_current_step: usize,
+
     // Init progress state
     #[cfg_attr(feature = "serde", serde(skip))]
     init_in_progress: bool,
@@ -460,6 +466,8 @@ impl Default for PlatformTab {
             add_platform_new_project_id: String::new(),
             add_platform_reauth_mode: false,
             add_platform_existing_project_id: String::new(),
+            wizard_dialog_open: false,
+            wizard_current_step: 0,
             init_in_progress: false,
             init_platform_name: None,
             init_progress_log: Vec::new(),
@@ -1837,7 +1845,8 @@ impl PlatformTab {
                 .add(MaterialButton::filled(tr!("platform-button-add")))
                 .clicked()
             {
-                self.show_add_dialog = true;
+                self.wizard_dialog_open = true;
+                self.wizard_current_step = 0;
                 self.add_platform_type = "gcp".to_string();
             }
             ui.add_space(8.0);
@@ -2582,6 +2591,11 @@ impl PlatformTab {
         // Add platform dialog
         if self.show_add_dialog {
             self.render_add_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        }
+
+        // Add Platform Wizard
+        if self.wizard_dialog_open {
+            self.render_add_platform_wizard(current_profile, ui.ctx(), vm.as_deref_mut());
         }
 
         // Delete Platform dialog
@@ -3474,6 +3488,316 @@ impl PlatformTab {
                 }
             }
         }
+    }
+
+    /// Render add platform wizard dialog
+    fn render_add_platform_wizard(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        ctx: &egui::Context,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        let mut open = self.wizard_dialog_open;
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("add_platform_wizard", &tr!("platform-wizard-title"), &mut open)
+            .min_width(500.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, open| {
+                // Step indicator
+                ui.add_space(10.0);
+                self.render_wizard_step_indicator(ui);
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                // Step content
+                match self.wizard_current_step {
+                    0 => self.render_wizard_oauth_step(ui),
+                    1 => self.render_wizard_project_step(ui),
+                    2 => self.render_wizard_confirm_step(ui),
+                    3 => self.render_wizard_success_step(ui),
+                    _ => {}
+                }
+
+                // Navigation buttons
+                ui.add_space(20.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                self.render_wizard_navigation(ui, open, current_profile, vm);
+            })
+            .show(ctx);
+
+        self.wizard_dialog_open = open;
+    }
+
+    /// Render wizard step indicator (progress bar)
+    fn render_wizard_step_indicator(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            let steps = [
+                ("1. OAuth", 0),
+                ("2. Project", 1),
+                ("3. Confirm", 2),
+                ("4. Done", 3),
+            ];
+
+            for (i, (label, step_num)) in steps.iter().enumerate() {
+                let is_current = self.wizard_current_step == *step_num;
+                let is_complete = self.wizard_current_step > *step_num;
+
+                if is_current {
+                    ui.add(MaterialButton::filled(*label).small());
+                } else if is_complete {
+                    ui.add(MaterialButton::outlined(*label).small());
+                } else {
+                    ui.add(MaterialButton::outlined(*label).small().enabled(false));
+                }
+
+                if i < steps.len() - 1 {
+                    ui.add_space(5.0);
+                }
+            }
+        });
+    }
+
+    /// Step 0: OAuth connection
+    fn render_wizard_oauth_step(&mut self, ui: &mut egui::Ui) {
+        ui.heading(tr!("platform-wizard-oauth-title"));
+        ui.add_space(10.0);
+        ui.label(tr!("platform-wizard-oauth-desc"));
+        ui.add_space(15.0);
+
+        // Check if OAuth is complete
+        if let Some(email) = &self.add_platform_connected_email {
+            ui.colored_label(
+                egui_material3::theme::get_global_color("success"),
+                format!("✓ Connected as: {}", email),
+            );
+        } else if let Some(promise) = &self.add_platform_oauth_promise {
+            // Poll OAuth promise
+            if let Some(result) = promise.ready() {
+                match result {
+                    Ok(oauth_result) => {
+                        self.add_platform_oauth_result = Some(oauth_result.clone());
+                        // Fetch email
+                        #[cfg(not(target_arch = "wasm32"))]
+                        self.fetch_connected_email();
+                        self.add_platform_oauth_promise = None;
+
+                        // Fetch projects
+                        if self.add_platform_project_list.is_empty() {
+                            if let Some(oauth_result) = &self.add_platform_oauth_result {
+                                use crate::api::gcp::GcpRestClient;
+                                let client = GcpRestClient::new(oauth_result.access_token.clone());
+                                match client.list_projects(None) {
+                                    Ok(project_list) => {
+                                        self.add_platform_project_list = project_list
+                                            .projects
+                                            .into_iter()
+                                            .filter(|p| p.is_active())
+                                            .map(|p| {
+                                                (p.id().to_string(), p.display_name().to_string())
+                                            })
+                                            .collect();
+                                    }
+                                    Err(e) => {
+                                        dure_debug!("Failed to fetch projects: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.load_error = Some(format!("OAuth failed: {}", e));
+                        self.add_platform_oauth_promise = None;
+                    }
+                }
+            } else {
+                ui.spinner();
+                ui.label(tr!("platform-add-oauth-waiting"));
+            }
+        } else {
+            if ui
+                .add(MaterialButton::filled(tr!("platform-add-oauth-connect")))
+                .clicked()
+            {
+                self.start_add_platform_oauth();
+            }
+        }
+    }
+
+    /// Step 1: Project selection
+    fn render_wizard_project_step(&mut self, ui: &mut egui::Ui) {
+        ui.heading(tr!("platform-wizard-project-title"));
+        ui.add_space(10.0);
+        ui.label(tr!("platform-wizard-project-desc"));
+        ui.add_space(15.0);
+
+        // Reuse existing project selection logic
+        ui.radio_value(
+            &mut self.add_platform_create_new,
+            false,
+            tr!("platform-add-project-existing"),
+        );
+
+        if !self.add_platform_create_new {
+            ui.add_space(5.0);
+            for (idx, (project_id, project_name)) in
+                self.add_platform_project_list.iter().enumerate()
+            {
+                ui.radio_value(
+                    &mut self.add_platform_selected_project,
+                    Some(idx),
+                    format!("{} ({})", project_name, project_id),
+                );
+            }
+        }
+
+        ui.add_space(10.0);
+        ui.radio_value(
+            &mut self.add_platform_create_new,
+            true,
+            tr!("platform-add-project-new"),
+        );
+
+        if self.add_platform_create_new {
+            ui.add_space(5.0);
+            ui.horizontal(|ui| {
+                ui.label(tr!("platform-add-project-id"));
+                ui.text_edit_singleline(&mut self.add_platform_new_project_id);
+            });
+        }
+    }
+
+    /// Step 2: Confirmation
+    fn render_wizard_confirm_step(&self, ui: &mut egui::Ui) {
+        ui.heading(tr!("platform-wizard-confirm-title"));
+        ui.add_space(10.0);
+        ui.label(tr!("platform-wizard-confirm-desc"));
+        ui.add_space(15.0);
+
+        ui.label(format!(
+            "Email: {}",
+            self.add_platform_connected_email
+                .as_ref()
+                .unwrap_or(&"Not connected".to_string())
+        ));
+
+        if self.add_platform_create_new {
+            ui.label(format!(
+                "Project: New - {}",
+                if self.add_platform_new_project_id.is_empty() {
+                    "Not specified"
+                } else {
+                    &self.add_platform_new_project_id
+                }
+            ));
+        } else {
+            let project_info = self
+                .add_platform_selected_project
+                .and_then(|idx| self.add_platform_project_list.get(idx))
+                .map(|(id, name)| format!("{} ({})", name, id))
+                .unwrap_or_else(|| "Not selected".to_string());
+            ui.label(format!("Project: {}", project_info));
+        }
+    }
+
+    /// Step 3: Success
+    fn render_wizard_success_step(&mut self, ui: &mut egui::Ui) {
+        ui.heading(tr!("platform-wizard-success-title"));
+        ui.add_space(10.0);
+        ui.label(tr!("platform-wizard-success-desc"));
+        ui.add_space(15.0);
+
+        ui.colored_label(
+            egui_material3::theme::get_global_color("success"),
+            "✓ Platform added successfully!",
+        );
+    }
+
+    /// Render wizard navigation buttons
+    fn render_wizard_navigation(
+        &mut self,
+        ui: &mut egui::Ui,
+        open: &mut bool,
+        current_profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        ui.horizontal(|ui| {
+            // Close button
+            if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
+                *open = false;
+                self.reset_wizard_state();
+            }
+
+            ui.add_space(10.0);
+
+            // Previous button (disabled on first step)
+            let can_go_back = self.wizard_current_step > 0 && self.wizard_current_step < 3;
+            if ui
+                .add(MaterialButton::outlined(tr!("previous")).enabled(can_go_back))
+                .clicked()
+            {
+                if self.wizard_current_step > 0 {
+                    self.wizard_current_step -= 1;
+                }
+            }
+
+            ui.add_space(10.0);
+
+            // Next/Finish button
+            if self.wizard_current_step < 3 {
+                // Validate current step before allowing Next
+                let can_proceed = self.can_proceed_wizard();
+
+                if ui
+                    .add(MaterialButton::filled(tr!("next")).enabled(can_proceed))
+                    .clicked()
+                {
+                    // Step 2 → 3: Execute add platform command
+                    if self.wizard_current_step == 2 {
+                        self.execute_add_platform(current_profile, vm);
+                        // Force reload on next frame
+                        self.loaded = false;
+                    }
+                    self.wizard_current_step += 1;
+                }
+            } else {
+                // Final step - show Finish button
+                if ui.add(MaterialButton::filled(tr!("finish"))).clicked() {
+                    *open = false;
+                    self.reset_wizard_state();
+                }
+            }
+        });
+    }
+
+    /// Check if wizard can proceed to next step
+    fn can_proceed_wizard(&self) -> bool {
+        match self.wizard_current_step {
+            0 => self.add_platform_connected_email.is_some(), // OAuth connected
+            1 => {
+                // Project selected
+                if self.add_platform_create_new {
+                    !self.add_platform_new_project_id.is_empty()
+                } else {
+                    self.add_platform_selected_project.is_some()
+                }
+            }
+            2 => true, // Confirm step - always allow
+            _ => false,
+        }
+    }
+
+    /// Reset wizard state
+    fn reset_wizard_state(&mut self) {
+        self.wizard_dialog_open = false;
+        self.wizard_current_step = 0;
+        self.reset_add_dialog_state(); // Reuse existing reset logic
     }
 
     fn render_init_progress(&mut self, ui: &mut egui::Ui) {
@@ -6365,5 +6689,121 @@ mod tests {
         // Clear state
         tab.firewall_last_refresh_time = None;
         assert!(tab.firewall_last_refresh_time.is_none());
+    }
+
+    // Wizard tests
+    #[test]
+    fn test_wizard_initial_state() {
+        let tab = PlatformTab::default();
+        assert!(!tab.wizard_dialog_open);
+        assert_eq!(tab.wizard_current_step, 0);
+        assert!(tab.add_platform_connected_email.is_none());
+    }
+
+    #[test]
+    fn test_wizard_step_validation_oauth() {
+        let mut tab = PlatformTab::default();
+
+        // Step 0: OAuth required
+        tab.wizard_current_step = 0;
+        assert!(!tab.can_proceed_wizard());
+
+        // After OAuth connection
+        tab.add_platform_connected_email = Some("test@example.com".to_string());
+        assert!(tab.can_proceed_wizard());
+    }
+
+    #[test]
+    fn test_wizard_step_validation_project_existing() {
+        let mut tab = PlatformTab::default();
+        tab.wizard_current_step = 1;
+        tab.add_platform_create_new = false;
+
+        // No project selected
+        assert!(!tab.can_proceed_wizard());
+
+        // Project selected
+        tab.add_platform_project_list = vec![
+            ("project-1".to_string(), "Project 1".to_string()),
+        ];
+        tab.add_platform_selected_project = Some(0);
+        assert!(tab.can_proceed_wizard());
+    }
+
+    #[test]
+    fn test_wizard_step_validation_project_new() {
+        let mut tab = PlatformTab::default();
+        tab.wizard_current_step = 1;
+        tab.add_platform_create_new = true;
+
+        // Empty project ID
+        assert!(!tab.can_proceed_wizard());
+
+        // Project ID entered
+        tab.add_platform_new_project_id = "new-project".to_string();
+        assert!(tab.can_proceed_wizard());
+    }
+
+    #[test]
+    fn test_wizard_step_validation_confirm() {
+        let mut tab = PlatformTab::default();
+        tab.wizard_current_step = 2;
+
+        // Confirm step always allows proceeding
+        assert!(tab.can_proceed_wizard());
+    }
+
+    #[test]
+    fn test_wizard_state_reset() {
+        let mut tab = PlatformTab::default();
+
+        // Set wizard state
+        tab.wizard_dialog_open = true;
+        tab.wizard_current_step = 2;
+        tab.add_platform_connected_email = Some("test@example.com".to_string());
+        tab.add_platform_project_list = vec![
+            ("project-1".to_string(), "Project 1".to_string()),
+        ];
+
+        // Reset
+        tab.reset_wizard_state();
+
+        // Verify reset
+        assert!(!tab.wizard_dialog_open);
+        assert_eq!(tab.wizard_current_step, 0);
+        assert!(tab.add_platform_connected_email.is_none());
+        assert!(tab.add_platform_project_list.is_empty());
+    }
+
+    #[test]
+    fn test_wizard_navigation_forward() {
+        let mut tab = PlatformTab::default();
+
+        // Start at step 0
+        assert_eq!(tab.wizard_current_step, 0);
+
+        // Complete OAuth
+        tab.add_platform_connected_email = Some("test@example.com".to_string());
+
+        // Can proceed → simulate Next click
+        assert!(tab.can_proceed_wizard());
+        tab.wizard_current_step += 1;
+
+        // Now at step 1
+        assert_eq!(tab.wizard_current_step, 1);
+    }
+
+    #[test]
+    fn test_wizard_navigation_backward() {
+        let mut tab = PlatformTab::default();
+
+        // Start at step 1
+        tab.wizard_current_step = 1;
+
+        // Go back
+        tab.wizard_current_step -= 1;
+
+        // Now at step 0
+        assert_eq!(tab.wizard_current_step, 0);
     }
 }
