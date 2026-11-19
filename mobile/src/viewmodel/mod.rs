@@ -735,25 +735,6 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn port_open(&self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::PortOpen {
-                host_name,
-                port,
-                protocol,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn port_close(&self, host_name: String, port: u16, protocol: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::PortClose {
-                host_name,
-                port,
-                protocol,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
 
     // Service management commands
     pub fn get_linux_status(&self, host: String) -> anyhow::Result<()> {
@@ -783,26 +764,6 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn install_ansible(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::InstallAnsible { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn get_ansible_status(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::GetAnsibleStatus { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn uninstall_ansible(&self, host: String) -> anyhow::Result<()> {
-        self.ssh_tx
-            .send_blocking(ssh::SshCommand::UninstallAnsible { name: host })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
 
     /// Check if SSH host is reachable (TCP port check with timeout)
     pub fn check_host_health(&self, name: String, timeout_secs: u8) -> anyhow::Result<()> {
@@ -886,105 +847,6 @@ impl ViewModel {
             .send_blocking(ssh::SshCommand::ListDockerContainers { host_name: host });
     }
 
-    // Ansible Lifecycle Management
-
-    /// Validate Ansible role and fetch metadata from Galaxy
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn validate_ansible_role(&self, role: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::ValidateAnsibleRole { role });
-    }
-
-    /// Install Ansible role on host (auto-installs Ansible if needed)
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn install_ansible_role(
-        &self,
-        host: String,
-        instance_name: String,
-        galaxy_name: String,
-        variables: Vec<(String, String)>,
-        ports: Vec<u16>,
-    ) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::InstallAnsibleRole {
-                host_name: host,
-                instance_name,
-                galaxy_name,
-                variables,
-                ports,
-            });
-    }
-
-    /// Remove Ansible role from host
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn remove_ansible_role(&self, host: String, instance_name: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::RemoveAnsibleRole {
-                host_name: host,
-                instance_name,
-            });
-    }
-
-    /// List Ansible roles installed on host
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    pub fn list_ansible_roles(&self, host: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::ListAnsibleRoles { host_name: host });
-    }
-
-    // Dure-WSS Lifecycle Management
-
-    /// Install Dure-WSS service on host
-    pub fn install_dure_wss(
-        &self,
-        host: String,
-        domain: String,
-        email: String,
-        channel: String,
-        variant: String,
-    ) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::InstallDureWssService {
-                host_name: host,
-                domain,
-                email,
-                channel,
-                variant,
-            });
-    }
-
-    /// Start Dure-WSS service
-    pub fn start_dure_wss(&self, host: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::StartDureWss { host_name: host });
-    }
-
-    /// Stop Dure-WSS service
-    pub fn stop_dure_wss(&self, host: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::StopDureWss { host_name: host });
-    }
-
-    /// Restart Dure-WSS service
-    pub fn restart_dure_wss(&self, host: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::RestartDureWss { host_name: host });
-    }
-
-    /// Uninstall Dure-WSS service
-    pub fn uninstall_dure_wss(&self, host: String) {
-        let _ = self
-            .ssh_tx
-            .send_blocking(ssh::SshCommand::UninstallDureWss { host_name: host });
-    }
 
     // Legacy compatibility stubs for old UI code (will be removed in Tasks 5-7)
     #[deprecated(note = "Use install_dure_wss with full parameters")]

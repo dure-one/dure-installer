@@ -105,52 +105,7 @@ pub enum SshEvent {
         containers: Vec<DockerContainerConfig>,
     },
 
-    // Ansible Lifecycle Events
-    #[cfg(not(target_arch = "wasm32"))]
-    AnsibleRoleValidated {
-        role: String,
-        metadata: AnsibleRoleMetadata,
-    },
-    AnsibleDaemonInstallRequired {
-        host_name: String,
-    },
-    AnsibleDaemonInstalled {
-        host_name: String,
-    },
-    AnsibleRoleInstalled {
-        host_name: String,
-        instance_name: String,
-    },
-    AnsibleRoleRemoved {
-        host_name: String,
-        instance_name: String,
-    },
-    AnsibleRolesListed {
-        host_name: String,
-        roles: Vec<String>,
-    },
-
-    // Dure-WSS Lifecycle Events
-    DureWssServiceInstalled {
-        host_name: String,
-        domain: String,
-    },
-    DureWssStarted {
-        host_name: String,
-    },
-    DureWssStopped {
-        host_name: String,
-    },
-    DureWssUninstalled {
-        host_name: String,
-    },
-
-    // Deployment Events
-    DureWssDeployed {
-        host_name: String,
-        domain: String,
-        service_status: String,
-    },
+    // Ansible and Dure-WSS events removed (no longer supported)
 
     // Service Management Events
     LinuxStatusRetrieved {
@@ -175,25 +130,7 @@ pub enum SshEvent {
         name: String,
     },
 
-    AnsibleInstalled {
-        name: String,
-    },
-    AnsibleStatusRetrieved {
-        name: String,
-        installed: bool,
-    },
-    AnsibleUninstalled {
-        name: String,
-    },
-
-    // Legacy Dure-WSS events (temporary - kept for backward compatibility)
-    DureWssInstalled {
-        name: String,
-    },
-    DureWssStatusRetrieved {
-        name: String,
-        installed: bool,
-    },
+    // Ansible and WSS status events removed
 
     /// Host health check completed (TCP port check result)
     HostHealthChecked {

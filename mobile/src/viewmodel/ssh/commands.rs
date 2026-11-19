@@ -80,72 +80,6 @@ pub enum SshCommand {
         tag: String,
     },
 
-    // Ansible Lifecycle
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    ValidateAnsibleRole {
-        role: String,
-    },
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    InstallAnsibleRole {
-        host_name: String,
-        instance_name: String,
-        galaxy_name: String,
-        variables: Vec<(String, String)>,
-        ports: Vec<u16>,
-    },
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    RemoveAnsibleRole {
-        host_name: String,
-        instance_name: String,
-    },
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    ListAnsibleRoles {
-        host_name: String,
-    },
-
-    // Dure-WSS Lifecycle
-    InstallDureWssService {
-        host_name: String,
-        domain: String,
-        email: String,
-        channel: String,
-        variant: String,
-    },
-    StartDureWss {
-        host_name: String,
-    },
-    StopDureWss {
-        host_name: String,
-    },
-    RestartDureWss {
-        host_name: String,
-    },
-    UninstallDureWss {
-        host_name: String,
-    },
-
-    // Port Management
-    PortOpen {
-        host_name: String,
-        port: u16,
-        protocol: String,
-    },
-    PortClose {
-        host_name: String,
-        port: u16,
-        protocol: String,
-    },
-    PortList {
-        host_name: String,
-    },
-
-    // Dure WSS Deployment
-    DeployDureWss {
-        host_name: String,
-        domain: String,
-        acme_email: String,
-    },
-
     // Service Management
     GetLinuxStatus {
         name: String,
@@ -161,19 +95,6 @@ pub enum SshCommand {
     },
     #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
     UninstallDocker {
-        name: String,
-    },
-
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    InstallAnsible {
-        name: String,
-    },
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    GetAnsibleStatus {
-        name: String,
-    },
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    UninstallAnsible {
         name: String,
     },
 

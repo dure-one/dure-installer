@@ -549,7 +549,7 @@ impl SshTab {
                                 .last_dure_check
                                 .as_ref()
                                 .map(|c| c.installed)
-                                .unwrap_or_else(|| host_config.dure_wss_config.is_some()),
+                                .unwrap_or(false),
                             ssh_private_key: host_config.private_key_path.clone(),
                             drawer_open: false,
                             drawer_state,
