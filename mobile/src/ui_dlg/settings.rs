@@ -2,7 +2,7 @@ use crate::ui_dlg::settings_stt::*;
 use crate::Settings;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{get_global_theme, MaterialButton, ThemeMode};
+use egui_material3::{dialog, get_global_theme, MaterialButton, ThemeMode};
 use sys_locale::get_locale;
 
 impl DlgSettings {
@@ -53,26 +53,17 @@ impl DlgSettings {
         self.save_clicked = false;
         self.theme_to_apply = None;
 
-        let mut close_clicked = false;
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
 
-        egui::Window::new(tr!("settings"))
-            .id(egui::Id::new("settings_window"))
-            .title_bar(false)
-            .resizable(true)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(400.0)
-            .min_height(300.0)
-            .show(ctx, |ui| {
+        dialog("settings_dialog", &tr!("settings"), &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("settings"));
                 ui.add_space(8.0);
-
-                let max_height = ui.available_height() - 50.0;
-
-                egui::ScrollArea::both()
-                    .id_salt("settings_scroll")
-                    .max_height(max_height)
-                    .show(ui, |ui| {
                         // Language Selector
                         ui.horizontal(|ui| {
                             ui.label(tr!("language"));
@@ -276,26 +267,14 @@ impl DlgSettings {
                                 );
                             }
                         });
-                    });
 
                 ui.add_space(8.0);
-
-                // Bottom buttons
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled(tr!("ok"))).clicked() {
-                        self.save_clicked = true;
-                        close_clicked = true;
-                    }
-
-                    if ui.add(MaterialButton::outlined(tr!("cancel"))).clicked() {
-                        close_clicked = true;
-                    }
-                });
-            });
-
-        if close_clicked {
-            self.close();
-        }
+            })
+            .action(tr!("cancel"), || {})
+            .primary_action(tr!("ok"), || {
+                self.save_clicked = true;
+            })
+            .show(ctx);
     }
 }
 

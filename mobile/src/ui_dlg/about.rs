@@ -2,7 +2,7 @@ pub use super::about_stt::*;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
 
 impl DlgAbout {
     pub fn new() -> Self {
@@ -38,30 +38,17 @@ impl DlgAbout {
         let website_label = tr!("about-website");
         let credits_label = tr!("about-credits");
 
-        let mut close_clicked = false;
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
 
-        egui::Window::new(tr!("about"))
-            .id(egui::Id::new("about_window"))
-            .title_bar(false)
-            .resizable(true)
-            .collapsible(false)
-            .scroll([false, false])
-            .min_width(600.0)
-            .min_height(450.0)
-            .resize(|r| {
-                r.default_size([ctx.content_rect().width() - 40.0, ctx.content_rect().height() - 40.0])
-                    .max_size([ctx.content_rect().width() - 40.0, ctx.content_rect().height() - 40.0])
-            })
-            .show(ctx, |ui| {
+        dialog("about_dialog", &tr!("about"), &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading(tr!("app-title"));
                 ui.add_space(8.0);
-
-                let max_height = ui.available_height() - 50.0;
-
-                egui::ScrollArea::both()
-                    .id_salt("about_scroll")
-                    .max_height(max_height)
-                    .show(ui, |ui| {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(format!("{}: {}", tr!("about-version"), version));
 
@@ -131,25 +118,13 @@ impl DlgAbout {
                         ui.add_space(12.0);
                         ui.heading("Assets");
                         ui.add_space(4.0);
-                        ui.label("• Solar Icons (CC Attribution)");
-                        ui.label("• Noto Emoji (Apache-2.0)");
-                        ui.label("• Twemoji (CC-BY 4.0)");
-                    });
+                ui.label("• Solar Icons (CC Attribution)");
+                ui.label("• Noto Emoji (Apache-2.0)");
+                ui.label("• Twemoji (CC-BY 4.0)");
 
                 ui.add_space(8.0);
-
-                // Close button
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled(tr!("ok"))).clicked() {
-                            close_clicked = true;
-                        }
-                    });
-                });
-            });
-
-        if close_clicked {
-            self.close();
-        }
+            })
+            .primary_action(tr!("ok"), || {})
+            .show(ctx);
     }
 }
