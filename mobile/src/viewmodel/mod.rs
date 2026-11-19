@@ -8,7 +8,6 @@ pub mod ns;
 pub mod platform;
 pub mod runtime;
 pub mod ssh;
-pub mod wss;
 
 #[cfg(test)]
 mod tests;
@@ -26,7 +25,6 @@ pub struct ViewModel {
     drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
     ns_tx: Sender<ns::NsCommand>,
-    wss_tx: Sender<wss::WssCommand>,
     logs_tx: Sender<logs::LogCommand>,
 
     // Unified event receiver
@@ -61,7 +59,6 @@ struct WasmExecutorHandle;
 pub struct ViewModelState {
     pub active_operations: HashMap<String, OperationProgress>,
     pub recent_errors: VecDeque<ErrorRecord>,
-    pub wss_connections: HashMap<String, WssConnectionInfo>,
     #[cfg(feature = "gui")]
     pub textures: HashMap<String, egui::TextureHandle>,
 }
@@ -80,13 +77,6 @@ pub struct ErrorRecord {
     pub actor: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct WssConnectionInfo {
-    pub connection_id: String,
-    pub url: String,
-    pub connected_at: chrono::DateTime<chrono::Utc>,
-    pub status: String,
-}
 
 impl ViewModel {
     /// Create ViewModel for GUI mode (Desktop/Android)
@@ -96,7 +86,6 @@ impl ViewModel {
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
-        let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -119,14 +108,12 @@ impl ViewModel {
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
-                let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
-                smol::spawn(wss_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 // Keep thread alive
@@ -139,7 +126,6 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             ns_tx,
-            wss_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -156,7 +142,6 @@ impl ViewModel {
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (ns_tx, ns_rx) = smol::channel::unbounded();
-        let (wss_tx, wss_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -177,13 +162,11 @@ impl ViewModel {
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_config_path_for_actor);
                 let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
-                let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(ns_actor.run()).detach();
-                smol::spawn(wss_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 std::future::pending::<()>().await
@@ -195,7 +178,6 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             ns_tx,
-            wss_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -233,7 +215,6 @@ impl ViewModel {
             let drawer_actor =
                 platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer);
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone());
-            let wss_actor = wss::WssActor::new(wss_rx, event_tx.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
@@ -243,7 +224,6 @@ impl ViewModel {
                 platform_actor.run(),
                 drawer_actor.run(),
                 ns_actor.run(),
-                wss_actor.run(),
                 logs_actor,
             );
         });
@@ -253,7 +233,6 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             ns_tx,
-            wss_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),

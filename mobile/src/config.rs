@@ -249,14 +249,6 @@ pub struct SshHostConfig {
     #[serde(default)]
     pub docker_containers: Vec<DockerContainerConfig>,
 
-    /// Ansible roles installed on this host
-    #[serde(default)]
-    pub ansible_roles: Vec<AnsibleRoleConfig>,
-
-    /// Dure-WSS service configuration
-    #[serde(default)]
-    pub dure_wss_config: Option<DureWssConfig>,
-
     // Cached check results
     /// Last SSH connection check result
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -280,28 +272,6 @@ fn default_ssh_port() -> u16 {
     22
 }
 
-impl Default for SshHostConfig {
-    fn default() -> Self {
-        Self {
-            host: String::new(),
-            password: None,
-            private_key_path: None,
-            keyring_domain: None,
-            port: default_ssh_port(),
-            initialized: false,
-            last_status: None,
-            platform_id: None,
-            docker_containers: Vec::new(),
-            ansible_roles: Vec::new(),
-            dure_wss_config: None,
-            last_ssh_check: None,
-            last_host_check: None,
-            last_docker_check: None,
-            last_dure_check: None,
-        }
-    }
-}
-
 /// Docker container configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerContainerConfig {
@@ -319,35 +289,26 @@ pub struct DockerContainerConfig {
     pub status: String,
 }
 
-/// Ansible role configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnsibleRoleConfig {
-    /// Unique instance name (e.g., "wireguard-main")
-    pub name: String,
-    /// Galaxy role namespace (e.g., "serhii9132.wireguard")
-    pub galaxy_name: String,
-    /// Role variables (key-value pairs)
-    pub variables: Vec<(String, String)>,
-    /// Port mappings for services this role manages
-    pub ports: Vec<u16>,
-    /// Installation status
-    pub installed: bool,
+impl Default for SshHostConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            password: None,
+            private_key_path: None,
+            keyring_domain: None,
+            port: default_ssh_port(),
+            initialized: false,
+            last_status: None,
+            platform_id: None,
+            docker_containers: Vec::new(),
+            last_ssh_check: None,
+            last_host_check: None,
+            last_docker_check: None,
+            last_dure_check: None,
+        }
+    }
 }
 
-/// Dure-WSS service configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DureWssConfig {
-    /// Domain for TLS cert (e.g., "api.dure.one")
-    pub domain: String,
-    /// Email for ACME notifications
-    pub email: String,
-    /// Release channel (stable, dev, beta)
-    pub channel: String,
-    /// Binary variant (headless, gui)
-    pub variant: String,
-    /// Service status (running, stopped, not_installed)
-    pub status: String,
-}
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

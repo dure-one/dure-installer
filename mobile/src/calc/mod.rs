@@ -1,8 +1,6 @@
 // controller for api, db, android  <-- calc --> ui.
 
 pub mod acme; // DNS provider utilities only (no CLI)
-#[cfg(not(target_arch = "wasm32"))]
-pub mod ansible;
 pub mod audit;
 pub mod crypt;
 pub mod db;
@@ -10,7 +8,6 @@ pub mod dns;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod docker;
 pub mod dure_mycart;
-pub mod dure_wss;
 pub mod env_parser;
 pub mod gcp;
 pub mod hosting_gcp;

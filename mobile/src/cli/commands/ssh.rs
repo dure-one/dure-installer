@@ -139,8 +139,6 @@ pub fn execute_ssh_add(
         last_status: None,
         platform_id: None,
         docker_containers: Vec::new(),
-        ansible_roles: Vec::new(),
-        dure_wss_config: None,
         last_ssh_check: None,
         last_host_check: None,
         last_docker_check: None,

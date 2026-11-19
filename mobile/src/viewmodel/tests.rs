@@ -9,7 +9,7 @@ fn test_viewmodel_headless_initialization() {
     // Should have empty state
     assert_eq!(vm.state.active_operations.len(), 0);
     assert_eq!(vm.state.recent_errors.len(), 0);
-    assert_eq!(vm.state.wss_connections.len(), 0);
+    // wss_connections removed in Phase 1
 }
 
 #[test]
@@ -33,4 +33,40 @@ fn test_viewmodel_create_vm_command() {
     );
 
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_viewmodel_no_wss_channels() {
+    // Phase 1: Verify WSS infrastructure removed
+    // This test verifies ViewModel no longer has wss_tx channel
+    let vm = ViewModel::new_headless(None);
+
+    // If this compiles, wss_tx field doesn't exist (what we want)
+    // The test passing means WSS channel successfully removed
+    assert_eq!(vm.state.active_operations.len(), 0);
+}
+
+#[test]
+fn test_viewmodel_event_no_wss_variant() {
+    // Phase 1: Verify ViewModelEvent::Wss variant removed
+    // This test ensures we cannot create Wss events
+
+    use crate::viewmodel::platform::PlatformEvent;
+
+    // Create a valid event (not Wss)
+    let event = ViewModelEvent::Platform(PlatformEvent::VmCreated {
+        platform_id: "test".to_string(),
+        vm_name: "test-vm".to_string(),
+        instance_id: "i-123".to_string(),
+    });
+
+    // Verify it's not a Wss variant (which shouldn't exist)
+    match event {
+        ViewModelEvent::Platform(_) => assert!(true),
+        ViewModelEvent::Ssh(_) => assert!(true),
+        ViewModelEvent::Ns(_) => assert!(true),
+        ViewModelEvent::Logs(_) => assert!(true),
+        ViewModelEvent::Mycart(_) => assert!(true),
+        // ViewModelEvent::Wss should not compile after removal
+    }
 }

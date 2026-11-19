@@ -2981,8 +2981,6 @@ impl PlatformTab {
                                         last_status: None,
                                         platform_id: Some(platform_name.clone()),
                                         docker_containers: Vec::new(),
-                                        ansible_roles: Vec::new(),
-                                        dure_wss_config: None,
                                         ..Default::default()
                                     });
                                 }

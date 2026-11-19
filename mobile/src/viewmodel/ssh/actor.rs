@@ -1,12 +1,9 @@
 //! SSH actor implementation
 
 use super::{DockerContainer, SshCommand, SshEvent, SshHostInfo};
-use crate::calc::dure_wss;
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use crate::calc::{ansible, docker};
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-use crate::config::{AnsibleRoleConfig, DockerContainerConfig};
-use crate::config::{DureWssConfig, SshHostConfig};
+use crate::calc::docker;
+use crate::config::SshHostConfig;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
@@ -116,34 +113,7 @@ impl SshActor {
         Ok(())
     }
 
-    #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-    fn save_ansible_role(&self, host_name: &str, role: AnsibleRoleConfig) -> anyhow::Result<()> {
-        let config_path = Self::get_config_path()?;
-        let mut config = crate::config::AppConfig::load_or_default(&config_path);
-
-        if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == *host_name) {
-            host.ansible_roles.push(role);
-            config.save(&config_path)?;
-        }
-
-        Ok(())
-    }
-
-    fn save_dure_wss_config(
-        &self,
-        host_name: &str,
-        dure_config: DureWssConfig,
-    ) -> anyhow::Result<()> {
-        let config_path = Self::get_config_path()?;
-        let mut config = crate::config::AppConfig::load_or_default(&config_path);
-
-        if let Some(host) = config.ssh_hosts.iter_mut().find(|h| h.host == *host_name) {
-            host.dure_wss_config = Some(dure_config);
-            config.save(&config_path)?;
-        }
-
-        Ok(())
-    }
+    // Ansible and WSS functions removed - no longer supported
 
     /// Check if SSH host is reachable via TCP port check with timeout
     async fn handle_check_host_health(&self, name: String, timeout_secs: u8) {
@@ -736,8 +706,6 @@ impl SshActor {
                     last_status: None,
                     platform_id: None,
                     docker_containers: Vec::new(),
-                    ansible_roles: Vec::new(),
-                    dure_wss_config: None,
                     last_ssh_check: None,
                     last_host_check: None,
                     last_docker_check: None,

@@ -1,9 +1,7 @@
 //! SSH actor events
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::calc::ansible::AnsibleRoleMetadata;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::config::{AnsibleRoleConfig, DockerContainerConfig};
+use crate::config::DockerContainerConfig;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 /// Drawer events for SSH operations
