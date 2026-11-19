@@ -196,6 +196,16 @@ impl InstallDure {
     }
 
     fn render_header(&mut self, ui: &mut egui::Ui) {
+        // Show domain if present
+        if let Some(domain) = &self.state.replacement_domain {
+            ui.horizontal(|ui| {
+                ui.label("Domain:");
+                ui.strong(domain); // Bold for emphasis
+            });
+            ui.add_space(4.0);
+        }
+
+        // Version selector
         ui.horizontal(|ui| {
             ui.label("Version:");
 
@@ -294,10 +304,25 @@ impl InstallDure {
 
     fn render_form_tab(&mut self, ui: &mut egui::Ui) {
         for field in &mut self.state.env_fields {
-            let mut input = MaterialInput::outlined(&mut field.value).label(&field.key);
-            if let Some(comment) = &field.comment {
-                input = input.helper_text(comment);
+            // Render all comment lines above the field
+            if !field.comments.is_empty() {
+                for comment in &field.comments {
+                    if comment.is_empty() {
+                        // Empty comment line → add spacing
+                        ui.add_space(4.0);
+                    } else if comment.contains("====") || comment.contains("----") {
+                        // Section header → use stronger style
+                        ui.strong(comment);
+                    } else {
+                        // Regular comment
+                        ui.label(comment);
+                    }
+                }
+                ui.add_space(4.0);
             }
+
+            // Render input field
+            let input = MaterialInput::outlined(&mut field.value).label(&field.key);
             ui.add(input);
             ui.add_space(8.0);
         }

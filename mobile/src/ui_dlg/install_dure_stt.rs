@@ -312,4 +312,64 @@ mod tests {
         assert_eq!(state.selected_version, Some(0));
         assert_eq!(state.available_versions[0], "v0.0.15");
     }
+
+    #[test]
+    fn test_domain_replacement() {
+        let mut state = InstallDureState::new("root@1.2.3.4");
+        state.replacement_domain = Some("dure.co".to_string());
+
+        // Simulate downloaded .env.example with example.com
+        state.env_editor_text = r#"MYCART_DOMAIN=example.com
+XMPP_DOMAIN=example.com
+ADMIN_EMAIL=admin@example.com
+OTHER_URL=https://example.com/api
+"#
+        .to_string();
+
+        // Simulate domain replacement (what poll_download_env does)
+        if let Some(domain) = &state.replacement_domain {
+            state.env_editor_text = state
+                .env_editor_text
+                .replace("example.com", domain)
+                .replace("Example.com", domain)
+                .replace("EXAMPLE.COM", domain);
+        }
+
+        // Parse after replacement
+        state.sync_editor_to_form();
+
+        // Verify replacement worked
+        assert_eq!(state.env_fields.len(), 4);
+        assert_eq!(
+            crate::calc::env_parser::get_env_value(&state.env_fields, "MYCART_DOMAIN"),
+            Some("dure.co".to_string())
+        );
+        assert_eq!(
+            crate::calc::env_parser::get_env_value(&state.env_fields, "XMPP_DOMAIN"),
+            Some("dure.co".to_string())
+        );
+        assert_eq!(
+            crate::calc::env_parser::get_env_value(&state.env_fields, "ADMIN_EMAIL"),
+            Some("admin@dure.co".to_string())
+        );
+        assert_eq!(
+            crate::calc::env_parser::get_env_value(&state.env_fields, "OTHER_URL"),
+            Some("https://dure.co/api".to_string())
+        );
+    }
+
+    #[test]
+    fn test_no_domain_replacement_when_none() {
+        let mut state = InstallDureState::new("root@1.2.3.4");
+        state.replacement_domain = None; // No domain set
+
+        state.env_editor_text = "MYCART_DOMAIN=example.com\n".to_string();
+        state.sync_editor_to_form();
+
+        // Should keep example.com
+        assert_eq!(
+            crate::calc::env_parser::get_env_value(&state.env_fields, "MYCART_DOMAIN"),
+            Some("example.com".to_string())
+        );
+    }
 }

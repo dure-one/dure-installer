@@ -11,7 +11,10 @@ pub struct EnvField {
     pub key: String,
     /// Current value
     pub value: String,
-    /// Comment line above this field (if any)
+    /// Comment lines above this field (can be multiple, preserves order)
+    pub comments: Vec<String>,
+    /// Legacy single comment field (deprecated, kept for backward compat)
+    #[serde(skip)]
     pub comment: Option<String>,
 }
 
@@ -20,12 +23,22 @@ impl EnvField {
         Self {
             key: key.into(),
             value: value.into(),
+            comments: Vec::new(),
             comment: None,
         }
     }
 
+    /// Add a single comment (backward compatible)
     pub fn with_comment(mut self, comment: impl Into<String>) -> Self {
-        self.comment = Some(comment.into());
+        self.comments.push(comment.into());
+        self.comment = self.comments.last().cloned();
+        self
+    }
+
+    /// Add multiple comments (preserves all)
+    pub fn with_comments(mut self, comments: Vec<String>) -> Self {
+        self.comments = comments;
+        self.comment = self.comments.last().cloned();
         self
     }
 }
@@ -43,21 +56,20 @@ impl EnvField {
 /// Vector of EnvField with keys, values, and associated comments
 pub fn parse_env_file(content: &str) -> Vec<EnvField> {
     let mut fields = Vec::new();
-    let mut pending_comment: Option<String> = None;
+    let mut pending_comments: Vec<String> = Vec::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
 
-        // Skip empty lines
+        // Empty lines: keep accumulating comments (don't clear)
         if trimmed.is_empty() {
-            pending_comment = None;
             continue;
         }
 
         // Comment line
         if trimmed.starts_with('#') {
             let comment_text = trimmed.trim_start_matches('#').trim();
-            pending_comment = Some(comment_text.to_string());
+            pending_comments.push(comment_text.to_string());
             continue;
         }
 
@@ -77,15 +89,16 @@ pub fn parse_env_file(content: &str) -> Vec<EnvField> {
 
             let mut field = EnvField::new(key_trimmed, value_unquoted);
 
-            if let Some(comment) = pending_comment.take() {
-                field.comment = Some(comment);
+            // Attach all accumulated comments to this field
+            if !pending_comments.is_empty() {
+                field = field.with_comments(pending_comments.clone());
+                pending_comments.clear();
             }
 
             fields.push(field);
         }
 
-        // Clear pending comment if line was not KEY=VALUE
-        pending_comment = None;
+        // Don't clear pending_comments for unrecognized lines
     }
 
     fields
@@ -96,9 +109,14 @@ pub fn generate_env_file(fields: &[EnvField]) -> String {
     let mut output = String::new();
 
     for field in fields {
-        // Add comment if present
-        if let Some(comment) = &field.comment {
-            output.push_str(&format!("# {}\n", comment));
+        // Add all comments
+        for comment in &field.comments {
+            if comment.is_empty() {
+                // Empty comment line (preserves blank comment lines like "# ")
+                output.push_str("#\n");
+            } else {
+                output.push_str(&format!("# {}\n", comment));
+            }
         }
 
         // Add KEY=VALUE
@@ -167,9 +185,11 @@ DB_PORT=5432
 
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0].key, "DB_HOST");
-        assert_eq!(fields[0].comment, Some("Database host".to_string()));
+        assert_eq!(fields[0].comments, vec!["Database host"]);
+        assert_eq!(fields[0].comment, Some("Database host".to_string())); // Backward compat
         assert_eq!(fields[1].key, "DB_PORT");
-        assert_eq!(fields[1].comment, Some("Database port".to_string()));
+        assert_eq!(fields[1].comments, vec!["Database port"]);
+        assert_eq!(fields[1].comment, Some("Database port".to_string())); // Backward compat
     }
 
     #[test]
@@ -332,5 +352,77 @@ KEY2=value2
 
         let value = get_env_value(&fields, "KEY1");
         assert_eq!(value, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_parse_multiline_comments() {
+        let input = r#"# ============================================================================
+# Section Header
+# ============================================================================
+
+# Variable description
+KEY=value
+"#;
+        let fields = parse_env_file(input);
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].comments.len(), 4); // All 4 comment lines before KEY
+        assert!(fields[0].comments[0].contains("===="));
+        assert_eq!(fields[0].comments[1], "Section Header");
+        assert!(fields[0].comments[2].contains("===="));
+        assert_eq!(fields[0].comments[3], "Variable description");
+    }
+
+    #[test]
+    fn test_generate_preserves_all_comments() {
+        let field = EnvField::new("KEY", "value").with_comments(vec![
+            "====...".to_string(),
+            "Section".to_string(),
+            "====...".to_string(),
+            "".to_string(),
+            "Description".to_string(),
+        ]);
+        let output = generate_env_file(&[field]);
+        assert_eq!(output.lines().count(), 6); // 5 comments + 1 KEY=VALUE
+        assert!(output.contains("# ====..."));
+        assert!(output.contains("# Section"));
+        assert!(output.contains("# Description"));
+    }
+
+    #[test]
+    fn test_leading_comments_preserved() {
+        let input = r#"# File header
+# Second line
+
+KEY=value"#;
+        let fields = parse_env_file(input);
+        // Leading comments become part of first field's comments
+        assert_eq!(fields[0].comments.len(), 2);
+        assert_eq!(fields[0].comments[0], "File header");
+        assert_eq!(fields[0].comments[1], "Second line");
+    }
+
+    #[test]
+    fn test_empty_comment_lines_preserved() {
+        let input = r#"# Comment 1
+#
+# Comment 2
+KEY=value"#;
+        let fields = parse_env_file(input);
+        assert_eq!(fields[0].comments.len(), 3);
+        assert_eq!(fields[0].comments[0], "Comment 1");
+        assert_eq!(fields[0].comments[1], ""); // Empty comment line
+        assert_eq!(fields[0].comments[2], "Comment 2");
+    }
+
+    #[test]
+    fn test_comments_between_attributes() {
+        let input = r#"KEY1=value1
+# Section divider
+# More info
+KEY2=value2"#;
+        let fields = parse_env_file(input);
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields[0].comments.len(), 0); // No comments before KEY1
+        assert_eq!(fields[1].comments.len(), 2); // 2 comments before KEY2
     }
 }
