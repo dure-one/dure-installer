@@ -22,6 +22,7 @@ use egui_i18n::tr;
 // Theme loading is done in main.rs, not here
 use egui_material3::*;
 use log::info;
+use std::cell::Cell;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -1130,22 +1131,26 @@ impl DureApp {
             return;
         }
 
-        let mut close_clicked = false;
+        let ok_clicked = Cell::new(false);
 
-        egui::Window::new(tr!("install"))
-            .id(egui::Id::new("install_dialog"))
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("install_dialog", &tr!("install"), &mut self.install_dialog_open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label(&self.install_message);
                 ui.add_space(8.0);
+            })
+            .primary_action(&tr!("ok"), || {
+                ok_clicked.set(true);
+            })
+            .show(ctx);
 
-                if ui.button(tr!("ok")).clicked() {
-                    close_clicked = true;
-                }
-            });
-
-        if close_clicked {
+        if ok_clicked.get() {
             self.install_dialog_open = false;
         }
     }
