@@ -45,9 +45,10 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{dialog, MaterialButton};
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 
 use crate::api::gcp::compute::{Image, InstanceRequest, Metadata, MetadataItem};
 use crate::api::gcp::oauth::{OAuthHandler, OAuthResult};
@@ -426,13 +427,15 @@ impl GcpWizard {
 
         let mut open = true;
 
-        egui::Window::new("Add VM")
-            .open(&mut open)
-            .resizable(true)
-            .default_width(450.0)
-            .default_height(450.0)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("add_vm_wizard", "Add VM", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 // Progress indicator
                 self.render_progress_indicator(ui);
 
@@ -449,7 +452,8 @@ impl GcpWizard {
                     WizardState::Complete => self.render_complete(ui),
                     WizardState::Error(err) => self.render_error(ui, &err),
                 }
-            });
+            })
+            .show(ctx);
 
         if !open {
             self.hide();
