@@ -4,6 +4,8 @@ pub use super::db_debugger_stt::*;
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 use eframe::egui;
+use egui_material3::dialog;
+use std::cell::Cell;
 
 impl DlgDbDebugger {
     pub fn new() -> Self {
@@ -293,16 +295,18 @@ impl DlgDbDebugger {
             return;
         }
 
-        let mut close_clicked = false;
+        let close_clicked = Cell::new(false);
+        let mut open = true;
 
-        egui::Window::new("🔍 Database Debugger (Hidden)")
-            .id(egui::Id::new("db_debugger_window"))
-            .resizable(true)
-            .collapsible(false)
-            .scroll([false, true])
-            .default_width(800.0)
-            .default_height(600.0)
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("db_debugger_window", "🔍 Database Debugger (Hidden)", &mut open)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.heading("Database Debugger");
                 ui.label("⚠️ Hidden debug tool - Ctrl+Shift+D x3 to open");
                 ui.separator();
@@ -395,12 +399,13 @@ impl DlgDbDebugger {
                 }
 
                 ui.separator();
-                if ui.button("Close").clicked() {
-                    close_clicked = true;
-                }
-            });
+            })
+            .primary_action("Close", || {
+                close_clicked.set(true);
+            })
+            .show(ctx);
 
-        if close_clicked {
+        if !open || close_clicked.get() {
             self.close();
         }
     }
