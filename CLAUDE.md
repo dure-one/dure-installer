@@ -108,24 +108,19 @@ RUST_LOG=debug cargo test                 # With logging
 ## Documentation
 
 **Start here**:
+- **[ARCH.sudolang.md](./ARCH.sudolang.md)** - Architecture summary (SudoLang format)
 - **[docs/INDEX.md](./docs/INDEX.md)** - Doc index w/ status flags
-- **[docs/PROJECT_SUMMARY.md](./docs/PROJECT_SUMMARY.md)** - Detailed architecture
-- **[docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Commands and patterns
-- **[docs/INSTALLING.md](./docs/INSTALLING.md)** - Install guide
 - **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Common issues
-- **[docs/GUIDELINES_RUST_CODING.md](./docs/GUIDELINES_RUST_CODING.md)** - Rust standards
-- **[docs/GUIDELINES_GIT_COMMITS.md](./docs/GUIDELINES_GIT_COMMITS.md)** - Git conventions
 
 ## For AI Assistants
 
 1. **Start with this file (CLAUDE.md)** - Full project context
-2. **Read [docs/INDEX.md](./docs/INDEX.md)** - Know valid docs vs. needs review
-3. **Check [docs/PROJECT_SUMMARY.md](./docs/PROJECT_SUMMARY.md)** - Deep architecture
-4. **Use [docs/QUICK_REFERENCE.md](./docs/QUICK_REFERENCE.md)** - Fast cmd/pattern lookup
-5. **Ignore docs marked with ⚠️** - Reference different project (beads_rust)
-6. **Focus on `mobile/src/`** - Actual app code (despite dir name)
-7. **Check `.github/workflows/`** - Build configs and CI/CD
-8. **Remember**: Requires **Rust nightly**, prefers **musl** on Linux
+2. **Read [ARCH.sudolang.md](./ARCH.sudolang.md)** - Architecture summary (layers, actors, data flow, tech stack)
+3. **Read [docs/INDEX.md](./docs/INDEX.md)** - Know valid docs vs. needs review
+4. **Ignore docs marked with ⚠️** - Reference different project (beads_rust)
+5. **Focus on `mobile/src/`** - Actual app code (despite dir name)
+6. **Check `.github/workflows/`** - Build configs and CI/CD
+7. **Remember**: Requires **Rust nightly**, prefers **musl** on Linux
 
 ## Contributing
 
