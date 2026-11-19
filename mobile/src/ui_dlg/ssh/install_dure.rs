@@ -83,6 +83,7 @@ impl InstallDure {
         // Trigger EAB fetch when provider changes to GTS (and we have credentials)
         if self.state.acme_provider == super::install_dure_stt::AcmeProvider::GoogleTrustServices
             && self.state.fetch_eab_promise.is_none()
+            && !self.state.eab_fetch_attempted
             && self.state.gcp_project_id.is_some()
             && self.state.gcp_access_token.is_some()
         {
@@ -136,8 +137,25 @@ impl InstallDure {
                         if host_matches && is_installing {
                             dure_info!("[UiDlg::Ins] Processing event - transitioning state");
 
+                            dure_debug!(
+                                "[UiDlg::Ins] Before update - progress_log has {} entries",
+                                self.state.progress_log.len()
+                            );
+
                             // Update progress log with actual installation progress
                             self.state.progress_log = progress;
+                            ctx.request_repaint(); // Force UI update after progress change
+
+                            dure_info!(
+                                "[UiDlg::Ins] After update - progress_log has {} entries",
+                                self.state.progress_log.len()
+                            );
+                            if !self.state.progress_log.is_empty() {
+                                dure_debug!(
+                                    "[UiDlg::Ins] Last progress message: {}",
+                                    self.state.progress_log.last().unwrap()
+                                );
+                            }
 
                             if success {
                                 self.state.step = InstallStep::Complete;
@@ -204,6 +222,15 @@ impl InstallDure {
             if let Some(ref mut vm_ref) = vm {
                 // Pass env_fields directly (preserves comments and order)
                 let env_fields = self.state.env_fields.clone();
+
+                dure_info!(
+                    "[InstallDure] Sending install command with {} env fields",
+                    env_fields.len()
+                );
+                dure_debug!(
+                    "[InstallDure] env_fields keys: {:?}",
+                    env_fields.iter().map(|f| &f.key).collect::<Vec<_>>()
+                );
 
                 let version = self.state.available_versions[self.state.selected_version.unwrap()]
                     .clone();
@@ -530,6 +557,8 @@ impl InstallDure {
                     "ACME_DIRECTORY_URL",
                     "https://dv.acme-v02.api.pki.goog/directory",
                 );
+                // Reset fetch flag to allow re-fetch when switching back to GTS
+                self.state.eab_fetch_attempted = false;
                 // Keys will be filled by update_env_fields_for_gts when fetched
             }
         }

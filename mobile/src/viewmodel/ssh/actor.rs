@@ -3048,6 +3048,19 @@ impl SshActor {
                 let _ = self
                     .end_operation_success("install_dure", &host, log_id)
                     .await;
+
+                dure_info!(
+                    "[SshActor] Sending DureInstallCompleted event: host={}, success=true, progress_entries={}",
+                    host,
+                    progress.len()
+                );
+                if !progress.is_empty() {
+                    dure_debug!(
+                        "[SshActor] Last progress message: {}",
+                        progress.last().unwrap()
+                    );
+                }
+
                 self.send_event(SshEvent::DureInstallCompleted {
                     host,
                     success: true,

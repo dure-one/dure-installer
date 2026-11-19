@@ -283,19 +283,59 @@ pub async fn install_dure_with_config(
         }
     }
 
+    // Verify target directory exists
+    let check_compose_dir =
+        "test -d /srv/dure-mycart/prosody-mycart-stack && echo exists || echo missing";
+    let dir_check = ssh::execute_command(host_config, check_compose_dir, profile_keyring)
+        .await
+        .context("Failed to check prosody-mycart-stack directory")?;
+
+    if dir_check.trim() == "missing" {
+        return Err(anyhow::anyhow!(
+            "Directory /srv/dure-mycart/prosody-mycart-stack does not exist. Repository may be corrupt."
+        ));
+    }
+    progress.push("✓ Target directory verified".to_string());
+    dure_info!("prosody-mycart-stack directory exists");
+
     // Write .env file (preserves comments and order)
     progress.push("Writing configuration...".to_string());
     let env_text = crate::calc::env_parser::generate_env_file(env_fields);
+
+    dure_info!(
+        "Generated .env content: {} bytes, {} fields",
+        env_text.len(),
+        env_fields.len()
+    );
+    dure_debug!(
+        ".env content preview (first 200 chars): {}",
+        env_text.chars().take(200).collect::<String>()
+    );
 
     let write_env = format!(
         "cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n{}\nENVEOF",
         env_text
     );
-    ssh::execute_command(host_config, &write_env, profile_keyring)
-        .await
-        .context("Failed to write .env file")?;
 
-    progress.push(".env file created".to_string());
+    dure_debug!("Writing .env file with heredoc command ({} bytes)", write_env.len());
+
+    let write_result = ssh::execute_command(host_config, &write_env, profile_keyring).await;
+
+    match write_result {
+        Ok(output) => {
+            dure_info!(".env file written successfully");
+            if !output.trim().is_empty() {
+                dure_debug!(".env write command output: {}", output.trim());
+            }
+            progress.push("✓ .env file created".to_string());
+        }
+        Err(e) => {
+            let err_msg = format!("Failed to write .env file: {}", e);
+            dure_error!("{}", err_msg);
+            progress.push(format!("✗ {}", err_msg));
+            return Err(anyhow::anyhow!(err_msg));
+        }
+    }
 
     // Run docker compose with appropriate flags (capture stderr)
     progress.push(format!("Starting services with {} image...", image_tag));
@@ -827,5 +867,34 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], ("admin".to_string(), "dure.co".to_string()));
         assert_eq!(result[1], ("user".to_string(), "test.com".to_string()));
+    }
+
+    #[test]
+    fn test_env_fields_to_heredoc() {
+        let env_fields = vec![
+            crate::calc::env_parser::EnvField::new("MYCART_DOMAIN", "example.com"),
+            crate::calc::env_parser::EnvField::new("ADMIN_EMAIL", "admin@example.com"),
+            crate::calc::env_parser::EnvField::new("SPECIAL", "value$with$dollar"),
+        ];
+
+        let env_text = crate::calc::env_parser::generate_env_file(&env_fields);
+
+        // Verify heredoc format
+        let heredoc = format!(
+            "cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n{}\nENVEOF",
+            env_text
+        );
+
+        // Verify content is in heredoc
+        assert!(heredoc.contains("MYCART_DOMAIN=example.com"));
+        assert!(heredoc.contains("ADMIN_EMAIL=admin@example.com"));
+        assert!(heredoc.contains("SPECIAL=value$with$dollar"));
+
+        // Verify quoted delimiter prevents variable expansion
+        assert!(heredoc.contains("'ENVEOF'"));
+
+        // Verify heredoc structure
+        assert!(heredoc.starts_with("cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n"));
+        assert!(heredoc.ends_with("\nENVEOF"));
     }
 }
