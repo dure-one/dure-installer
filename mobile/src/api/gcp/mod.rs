@@ -14,6 +14,7 @@ pub const GCP_COMPUTE_API_BASE: &str = "https://compute.googleapis.com/compute/v
 pub const GCP_RESOURCE_MANAGER_API_BASE: &str = "https://cloudresourcemanager.googleapis.com/v1";
 pub const GCP_BILLING_API_BASE: &str = "https://cloudbilling.googleapis.com/v1";
 pub const GCP_SERVICE_USAGE_API_BASE: &str = "https://serviceusage.googleapis.com/v1";
+pub const GCP_PUBLIC_CA_API_BASE: &str = "https://publicca.googleapis.com/v1";
 
 // ============================================================================
 // API Configuration
@@ -310,6 +311,7 @@ pub mod compute;
 pub mod compute_addresses;
 pub mod dns;
 pub mod oauth;
+pub mod publicca;
 pub mod resourcemanager;
 pub mod serviceusage;
 

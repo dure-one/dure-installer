@@ -1675,11 +1675,28 @@ impl SshTab {
                         });
 
                     // Open new wizard dialog
-                    self.install_dure_dialog = Some(
-                        crate::ui_dlg::install_dure::InstallDure::new(host.clone())
-                            .with_domain(platform_domain.clone())
-                            .with_keyring((*current_profile_kdbx).clone()),
-                    );
+                    let mut dlg = crate::ui_dlg::install_dure::InstallDure::new(host.clone())
+                        .with_domain(platform_domain.clone())
+                        .with_keyring((*current_profile_kdbx).clone());
+
+                    // Get GCP project ID and access token from platform config
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Ok((config, _)) = crate::config::load_config(&profile_context) {
+                        // Find host config to get platform_id
+                        if let Some(host_config) = config.ssh_hosts.iter().find(|h| h.host == host) {
+                            if let Some(platform_id) = &host_config.platform_id {
+                                // Find platform config
+                                if let Some(platform) = config.platforms.iter().find(|p| {
+                                    p.gcp_selected_project_id.as_ref() == Some(platform_id)
+                                }) {
+                                    dlg.state.gcp_project_id = platform.gcp_selected_project_id.clone();
+                                    dlg.state.gcp_access_token = platform.gcp_oauth_access_token.clone();
+                                }
+                            }
+                        }
+                    }
+
+                    self.install_dure_dialog = Some(dlg);
 
                     if let Some(domain) = platform_domain {
                         dure_info!("[SSH] Opening install Dure wizard for {} (domain: {})", host, domain);

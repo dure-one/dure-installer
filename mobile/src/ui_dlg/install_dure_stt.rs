@@ -7,6 +7,19 @@ use crate::calc::env_parser::EnvField;
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
+/// ACME provider selection
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AcmeProvider {
+    LetsEncrypt,
+    GoogleTrustServices,
+}
+
+impl Default for AcmeProvider {
+    fn default() -> Self {
+        Self::LetsEncrypt
+    }
+}
+
 /// Installation step in the wizard flow
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum InstallStep {
@@ -56,6 +69,16 @@ pub struct InstallDureState {
     #[serde(skip)]
     pub replacement_domain: Option<String>,
 
+    // ACME provider configuration
+    #[serde(default)]
+    pub acme_provider: AcmeProvider,
+    #[serde(skip)]
+    pub fetch_eab_promise: Option<Promise<Result<(String, String), String>>>, // (keyId, hmacKey)
+    #[serde(skip)]
+    pub gcp_project_id: Option<String>, // From platform config
+    #[serde(skip)]
+    pub gcp_access_token: Option<String>, // From platform config
+
     // Step 3: Installation (via ViewModel, no promise needed)
     #[serde(skip)]
     pub progress_log: Vec<String>, // Installation progress messages
@@ -87,6 +110,10 @@ impl InstallDureState {
             image_tag: "latest".to_string(),
             download_env_promise: None,
             replacement_domain: None,
+            acme_provider: AcmeProvider::default(),
+            fetch_eab_promise: None,
+            gcp_project_id: None,
+            gcp_access_token: None,
             progress_log: Vec::new(),
             install_success: false,
             error_message: None,
@@ -226,6 +253,36 @@ impl InstallDureState {
         self.env_editor_text = crate::calc::env_parser::generate_env_file(&self.env_fields);
     }
 
+    /// Start fetching GCP External Account Keys for ACME EAB
+    pub fn start_fetch_eab_keys(&mut self, project_id: String, access_token: String) {
+        if self.fetch_eab_promise.is_some() {
+            return;
+        }
+
+        let promise = Promise::spawn_thread("fetch_eab", move || {
+            smol::block_on(async move {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                match client.create_external_account_key(&project_id, "global") {
+                    Ok(key) => Ok((key.key_id, key.b64_mac_key)),
+                    Err(e) => Err(format!("Failed to fetch EAB keys: {}", e)),
+                }
+            })
+        });
+
+        self.fetch_eab_promise = Some(promise);
+    }
+
+    /// Poll EAB key fetch promise and return result if ready
+    pub fn poll_fetch_eab(&mut self) -> Option<Result<(String, String), String>> {
+        if let Some(promise) = &self.fetch_eab_promise {
+            if let Some(result) = promise.ready() {
+                self.fetch_eab_promise = None;
+                return Some(result.clone());
+            }
+        }
+        None
+    }
+
     /// Reset wizard to initial state
     pub fn reset(&mut self) {
         let host = self.host.clone();
@@ -244,6 +301,12 @@ mod tests {
         assert_eq!(state.step, InstallStep::VersionSelect);
         assert!(state.selected_version.is_none());
         assert_eq!(state.active_tab, 0);
+    }
+
+    #[test]
+    fn test_acme_provider_default() {
+        let state = InstallDureState::new("test-host");
+        assert_eq!(state.acme_provider, AcmeProvider::LetsEncrypt);
     }
 
     #[test]
