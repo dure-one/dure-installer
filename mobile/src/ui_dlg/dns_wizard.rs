@@ -228,7 +228,7 @@ impl DnsWizard {
 
     /// Check if can proceed from Step 2
     pub fn can_proceed_from_step2(&self) -> bool {
-        self.selected_domain.is_some()
+        self.selected_domain.is_some() && self.selected_zone_id.is_some()
     }
 
     /// Test helper: set domain input
@@ -1371,6 +1371,8 @@ impl DnsWizard {
             Some(result) => result.access_token.clone(),
             None => {
                 dure_error!("No OAuth token available for DNS verification");
+                // Set dns_verified to prevent infinite retry
+                self.dns_verified = Some(false);
                 return;
             }
         };
@@ -1379,6 +1381,8 @@ impl DnsWizard {
             Some(id) => id.clone(),
             None => {
                 dure_error!("No zone ID available for DNS verification");
+                // Set dns_verified to prevent infinite retry
+                self.dns_verified = Some(false);
                 return;
             }
         };
