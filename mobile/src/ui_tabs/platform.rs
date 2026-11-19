@@ -1481,8 +1481,13 @@ impl PlatformTab {
                             platform_name,
                             projects.len()
                         );
-                        self.select_project_list = projects;
+                        self.select_project_list = projects.clone();
                         self.select_project_loading = false;
+
+                        // Also populate add platform wizard list if active
+                        if self.show_add_dialog || self.wizard_dialog_open {
+                            self.add_platform_project_list = projects;
+                        }
 
                         // Show the dialog now that projects are loaded
                         if !self.show_select_project_dialog {
@@ -1639,6 +1644,23 @@ impl PlatformTab {
 
                             // Update last refresh time
                             row.last_refresh_time = Some(chrono::Utc::now().timestamp());
+                        }
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::IpWhitelistChecked {
+                        platform_name,
+                        whitelisted,
+                        current_ip,
+                    }) => {
+                        // Update row firewall status
+                        if let Some(row) =
+                            self.rows.iter_mut().find(|r| r.project_id == platform_name)
+                        {
+                            row.firewall_updated = whitelisted;
+                            row.firewall_status = if whitelisted {
+                                format!("✅ Whitelisted ({})", current_ip)
+                            } else {
+                                format!("❌ Not whitelisted ({})", current_ip)
+                            };
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::OperationFailed {
@@ -2813,11 +2835,11 @@ impl PlatformTab {
                         // Borrow platform after get_valid_access_token
                         let platform = &app_config.platforms[idx];
 
-                        // Compute firewall status (synchronous check)
-                        let firewall_status_str = compute_firewall_status(
-                            access_token.as_deref(),
-                            platform.gcp_selected_project_id.as_deref(),
-                        );
+                        // Use only cached firewall status (no synchronous network call)
+                        let firewall_status_str = platform
+                            .cached_firewall_status
+                            .clone()
+                            .unwrap_or_else(|| "? Not checked".to_string());
 
                         // firewall_updated is true if IP is whitelisted (status starts with ✅)
                         let firewall_updated = firewall_status_str.starts_with("✅");
@@ -3239,24 +3261,10 @@ impl PlatformTab {
                         if !self.add_platform_reauth_mode {
                             // Fetch projects if not already fetched
                             if self.add_platform_project_list.is_empty() {
-                                if let Some(oauth_result) = &self.add_platform_oauth_result {
-                                    use crate::api::gcp::GcpRestClient;
-                                    let client = GcpRestClient::new(oauth_result.access_token.clone());
-                                    match client.list_projects(None) {
-                                        Ok(project_list) => {
-                                            self.add_platform_project_list = project_list
-                                                .projects
-                                                .into_iter()
-                                                .filter(|p| p.is_active())
-                                                .map(|p| {
-                                                    (p.id().to_string(), p.display_name().to_string())
-                                                })
-                                                .collect();
-                                        }
-                                        Err(e) => {
-                                            dure_debug!("Failed to fetch projects: {}", e);
-                                        }
-                                    }
+                                if let Some(ref vm) = vm {
+                                    // Use temporary platform name for OAuth wizard
+                                    let _ = vm.list_projects("temp-platform".to_string());
+                                    // Projects will be populated via ProjectsListed event
                                 }
                             }
 
@@ -3493,7 +3501,7 @@ impl PlatformTab {
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
         ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
+        mut vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         let mut open = self.wizard_dialog_open;
         let window_width = ctx.viewport_rect().width();
@@ -3514,7 +3522,7 @@ impl PlatformTab {
 
                 // Step content
                 match self.wizard_current_step {
-                    0 => self.render_wizard_oauth_step(ui),
+                    0 => self.render_wizard_oauth_step(ui, vm.as_deref_mut()),
                     1 => self.render_wizard_project_step(ui),
                     2 => self.render_wizard_confirm_step(ui),
                     3 => self.render_wizard_success_step(ui),
@@ -3563,7 +3571,11 @@ impl PlatformTab {
     }
 
     /// Step 0: OAuth connection
-    fn render_wizard_oauth_step(&mut self, ui: &mut egui::Ui) {
+    fn render_wizard_oauth_step(
+        &mut self,
+        ui: &mut egui::Ui,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
         ui.heading(tr!("platform-wizard-oauth-title"));
         ui.add_space(10.0);
         ui.label(tr!("platform-wizard-oauth-desc"));
@@ -3588,24 +3600,10 @@ impl PlatformTab {
 
                         // Fetch projects
                         if self.add_platform_project_list.is_empty() {
-                            if let Some(oauth_result) = &self.add_platform_oauth_result {
-                                use crate::api::gcp::GcpRestClient;
-                                let client = GcpRestClient::new(oauth_result.access_token.clone());
-                                match client.list_projects(None) {
-                                    Ok(project_list) => {
-                                        self.add_platform_project_list = project_list
-                                            .projects
-                                            .into_iter()
-                                            .filter(|p| p.is_active())
-                                            .map(|p| {
-                                                (p.id().to_string(), p.display_name().to_string())
-                                            })
-                                            .collect();
-                                    }
-                                    Err(e) => {
-                                        dure_debug!("Failed to fetch projects: {}", e);
-                                    }
-                                }
+                            if let Some(ref vm) = vm {
+                                // Use temporary platform name for OAuth wizard
+                                let _ = vm.list_projects("temp-platform".to_string());
+                                // Projects will be populated via ProjectsListed event
                             }
                         }
                     }

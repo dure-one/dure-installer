@@ -26,6 +26,17 @@ pub struct DockerContainer {
     pub status: String,
 }
 
+/// Operation log entry
+#[derive(Debug, Clone)]
+pub struct OperationLog {
+    pub id: i64,
+    pub project_id: String,
+    pub operation_type: String,
+    pub status: String,
+    pub started_at: i64,
+    pub completed_at: Option<i64>,
+}
+
 #[derive(Debug, Clone)]
 pub enum SshEvent {
     // Host Events
@@ -296,4 +307,11 @@ pub enum SshEvent {
 
     /// Drawer event passthrough
     Drawer(DrawerEvent),
+
+    // Operation Logging Events
+    /// Operation logs retrieved
+    OperationLogsRetrieved {
+        host: String,
+        logs: Vec<OperationLog>,
+    },
 }

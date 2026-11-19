@@ -114,6 +114,10 @@ pub enum PlatformCommand {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
     },
+    CheckIpWhitelist {
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    },
     UpdateFirewallRule {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
@@ -160,6 +164,21 @@ pub enum PlatformCommand {
 
     // Refresh all platform data
     RefreshAll,
+
+    // Operation Logging
+    /// Create operation log entry
+    CreateOperationLog {
+        platform_name: String,
+        operation_type: String,
+        operation_subtype: String,
+    },
+
+    /// Update operation log status
+    UpdateOperationLog {
+        log_id: i64,
+        status: String,
+        error_message: Option<String>,
+    },
 }
 
 #[cfg(test)]

@@ -64,6 +64,7 @@ impl PlatformActor {
             PlatformCommand::RegenerateVM { .. } => "regenerate_vm",
             PlatformCommand::UpdateFirewall { .. } => "update_firewall",
             PlatformCommand::FetchFirewallRules { .. } => "fetch_firewall_rules",
+            PlatformCommand::CheckIpWhitelist { .. } => "check_ip_whitelist",
             PlatformCommand::UpdateFirewallRule { .. } => "update_firewall_rule",
             PlatformCommand::RemoveIpFromFirewall { .. } => "remove_ip_from_firewall",
             PlatformCommand::FlushFirewallRule { .. } => "flush_firewall_rule",
@@ -79,6 +80,8 @@ impl PlatformActor {
             PlatformCommand::DeletePlatform { .. } => "delete_platform",
             PlatformCommand::RefreshPlatform { .. } => "refresh_platform",
             PlatformCommand::RefreshAll => "refresh_all",
+            PlatformCommand::CreateOperationLog { .. } => "create_operation_log",
+            PlatformCommand::UpdateOperationLog { .. } => "update_operation_log",
         }
         .to_string();
 
@@ -157,6 +160,10 @@ impl PlatformActor {
                 self.fetch_firewall_rules(profile_config_path, platform_name)
                     .await
             }
+            PlatformCommand::CheckIpWhitelist {
+                profile_config_path,
+                platform_name,
+            } => self.check_ip_whitelist(profile_config_path, platform_name).await,
             PlatformCommand::UpdateFirewallRule {
                 profile_config_path,
                 platform_name,
@@ -288,6 +295,22 @@ impl PlatformActor {
                 profile_kdbx,
             } => {
                 self.refresh_platform(profile_config_path, platform_name, profile_kdbx)
+                    .await
+            }
+            PlatformCommand::CreateOperationLog {
+                platform_name,
+                operation_type,
+                operation_subtype,
+            } => {
+                self.create_operation_log(platform_name, operation_type, operation_subtype)
+                    .await
+            }
+            PlatformCommand::UpdateOperationLog {
+                log_id,
+                status,
+                error_message,
+            } => {
+                self.update_operation_log(log_id, status, error_message)
                     .await
             }
             _ => {
@@ -1107,6 +1130,59 @@ impl PlatformActor {
         self.send_event(PlatformEvent::FirewallRulesFetched {
             platform_name,
             rules,
+            current_ip,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn check_ip_whitelist(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
+        // Get current IP
+        let current_ip = runtime::unblock(|| crate::api::gcp::get_current_ip()).await?;
+
+        // Get valid access token from profile config
+        let (access_token, _) =
+            Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone())
+                .await?;
+
+        // Get project ID
+        let platform = runtime::unblock({
+            let platform_name = platform_name.clone();
+            let profile_config_path = profile_config_path.clone();
+            move || {
+                let config = AppConfig::load_or_default(&profile_config_path);
+                config
+                    .platforms
+                    .into_iter()
+                    .find(|p| p.gcp_selected_project_id.as_deref() == Some(&platform_name))
+                    .ok_or_else(|| anyhow::anyhow!("Platform '{}' not found", platform_name))
+            }
+        })
+        .await?;
+
+        let project_id = platform
+            .gcp_selected_project_id
+            .ok_or_else(|| anyhow::anyhow!("No GCP project selected"))?;
+
+        // Check if IP is whitelisted
+        let whitelisted = runtime::unblock({
+            let project_id = project_id.clone();
+            let current_ip = current_ip.clone();
+            move || -> anyhow::Result<bool> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                client.check_ip_whitelisted(&project_id, &current_ip)
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::IpWhitelistChecked {
+            platform_name,
+            whitelisted,
             current_ip,
         })
         .await;
@@ -2748,6 +2824,77 @@ impl PlatformActor {
         if let Some(id) = log_id {
             self.repository.mark_failed(id, &error_msg).await?;
         }
+        Ok(())
+    }
+
+    /// Create operation log entry
+    async fn create_operation_log(
+        &mut self,
+        platform_name: String,
+        operation_type: String,
+        operation_subtype: String,
+    ) -> anyhow::Result<()> {
+        let platform_name_clone = platform_name.clone();
+        let operation_type_clone = operation_type.clone();
+
+        let log_id = runtime::unblock(move || -> anyhow::Result<i64> {
+            use crate::calc::db;
+            use crate::storage::models::opslog::NewOperationLog;
+
+            let mut conn = db::establish_connection();
+            let log = NewOperationLog::new(&platform_name_clone, &operation_type_clone, &operation_subtype);
+            let log_id = crate::storage::models::opslog::create_log(&mut conn, log)?;
+
+            Ok(log_id)
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::OperationLogCreated {
+            platform_name,
+            log_id,
+            operation_type,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    /// Update operation log status
+    async fn update_operation_log(
+        &mut self,
+        log_id: i64,
+        status: String,
+        error_message: Option<String>,
+    ) -> anyhow::Result<()> {
+        let status_clone = status.clone();
+
+        runtime::unblock(move || -> anyhow::Result<()> {
+            use crate::calc::db;
+            use crate::storage::models::opslog::OperationStatus;
+
+            let mut conn = db::establish_connection();
+
+            // Parse status string to enum
+            let status_enum = match status_clone.as_str() {
+                "success" => OperationStatus::Success,
+                "failed" => OperationStatus::Failed,
+                _ => OperationStatus::Running,
+            };
+
+            crate::storage::models::opslog::update_log_status(
+                &mut conn,
+                log_id,
+                status_enum,
+                error_message,
+            )?;
+
+            Ok(())
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::OperationLogUpdated { log_id, status })
+            .await;
+
         Ok(())
     }
 }

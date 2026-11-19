@@ -419,6 +419,19 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn check_ip_whitelist(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CheckIpWhitelist {
+                profile_config_path,
+                platform_name,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn update_firewall_rule(
         &self,
         profile_config_path: std::path::PathBuf,
@@ -644,6 +657,38 @@ impl ViewModel {
     pub fn send_drawer_command(&self, cmd: platform::DrawerCommand) -> anyhow::Result<()> {
         self.drawer_tx
             .send_blocking(cmd)
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Create operation log entry
+    pub fn create_operation_log(
+        &self,
+        platform_name: String,
+        operation_type: String,
+        operation_subtype: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CreateOperationLog {
+                platform_name,
+                operation_type,
+                operation_subtype,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Update operation log status
+    pub fn update_operation_log(
+        &self,
+        log_id: i64,
+        status: String,
+        error_message: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::UpdateOperationLog {
+                log_id,
+                status,
+                error_message,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -979,6 +1024,13 @@ impl ViewModel {
     pub fn get_ssh_logs(&self, host: String) -> anyhow::Result<()> {
         self.logs_tx
             .send_blocking(logs::LogCommand::GetLogs { host_id: host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Get operation logs for SSH host
+    pub fn get_operation_logs(&self, host: String, limit: usize) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::GetOperationLogs { host, limit })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

@@ -236,6 +236,7 @@ impl SshActor {
             SshCommand::RemoveDockerContainers { host_name, .. } => Some(host_name.clone()),
             SshCommand::ListHosts => None,
             SshCommand::Drawer(_) => None,
+            SshCommand::GetOperationLogs { host, .. } => Some(host.clone()),
         }
     }
 
@@ -541,6 +542,9 @@ impl SshActor {
             SshCommand::Drawer(_drawer_cmd) => {
                 Err(anyhow::anyhow!("Drawer command not yet implemented"))
             }
+            SshCommand::GetOperationLogs { host, limit } => {
+                self.get_operation_logs(host, limit).await
+            }
 
             // Catch-all for cfg-gated commands on Android/WASM
             #[cfg(any(target_os = "android", target_arch = "wasm32"))]
@@ -703,6 +707,38 @@ impl SshActor {
         .await?;
 
         self.send_event(SshEvent::HostsListed { hosts: host_infos })
+            .await;
+        Ok(())
+    }
+
+    /// Get operation logs for host
+    async fn get_operation_logs(&mut self, host: String, limit: usize) -> anyhow::Result<()> {
+        let host_clone = host.clone();
+
+        let logs = runtime::unblock(move || -> anyhow::Result<Vec<crate::viewmodel::ssh::OperationLog>> {
+            use crate::calc::db;
+            use crate::storage::models::opslog::list_by_project;
+
+            let mut conn = db::establish_connection();
+            let ops = list_by_project(&mut conn, &host_clone, limit as i64)?;
+
+            let logs = ops
+                .into_iter()
+                .map(|op| crate::viewmodel::ssh::OperationLog {
+                    id: op.id,
+                    project_id: op.project_id,
+                    operation_type: op.operation_type,
+                    status: op.status,
+                    started_at: op.started_at,
+                    completed_at: op.completed_at,
+                })
+                .collect();
+
+            Ok(logs)
+        })
+        .await?;
+
+        self.send_event(SshEvent::OperationLogsRetrieved { host, logs })
             .await;
         Ok(())
     }
@@ -1747,6 +1783,9 @@ impl SshActor {
             }
             SshEvent::Drawer(_) => {
                 format!("Drawer(...)")
+            }
+            SshEvent::OperationLogsRetrieved { host, logs } => {
+                format!("OperationLogsRetrieved({}, {} logs)", host, logs.len())
             }
         }
     }

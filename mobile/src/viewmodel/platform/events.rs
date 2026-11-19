@@ -148,6 +148,11 @@ pub enum PlatformEvent {
         operation: String, // "add_ip", "remove_ip", "flush"
         focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
+    IpWhitelistChecked {
+        platform_name: String,
+        whitelisted: bool,
+        current_ip: String,
+    },
 
     // Billing Events
     BillingFetched {
@@ -181,5 +186,19 @@ pub enum PlatformEvent {
         platform_name: String,
         operation: String, // "firewall", "restart", etc.
         error: String,
+    },
+
+    // Operation Logging Events
+    /// Operation log created
+    OperationLogCreated {
+        platform_name: String,
+        log_id: i64,
+        operation_type: String,
+    },
+
+    /// Operation log updated
+    OperationLogUpdated {
+        log_id: i64,
+        status: String,
     },
 }

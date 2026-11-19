@@ -163,4 +163,11 @@ pub enum SshCommand {
     // Drawer commands
     /// Drawer-specific command passthrough
     Drawer(DrawerCommand),
+
+    // Operation Logging
+    /// Get operation logs for host
+    GetOperationLogs {
+        host: String,
+        limit: usize,
+    },
 }
