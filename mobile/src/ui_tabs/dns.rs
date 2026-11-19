@@ -717,24 +717,25 @@ impl DnsTab {
                                                 )
                                             });
                                         }
-
-                                        if ui
-                                            .add(
-                                                MaterialButton::outlined(tr!("dns-button-delete"))
-                                                    .small(),
-                                            )
-                                            .on_hover_text(tr!("dns-button-delete-tooltip"))
-                                            .clicked()
-                                        {
-                                            ui.data_mut(|d| {
-                                                d.insert_temp(
-                                                    egui::Id::new("dns_delete_domain"),
-                                                    domain.clone(),
-                                                )
-                                            });
-                                        }
                                     },
                                 );
+
+                                // Delete button (always enabled, even during re-auth)
+                                if ui
+                                    .add(
+                                        MaterialButton::outlined(tr!("dns-button-delete"))
+                                            .small(),
+                                    )
+                                    .on_hover_text(tr!("dns-button-delete-tooltip"))
+                                    .clicked()
+                                {
+                                    ui.data_mut(|d| {
+                                        d.insert_temp(
+                                            egui::Id::new("dns_delete_domain"),
+                                            domain.clone(),
+                                        )
+                                    });
+                                }
                             }); // Close ui.horizontal_wrapped
 
                             // Overlay progress on foreground layer
