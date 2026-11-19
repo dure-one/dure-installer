@@ -274,10 +274,19 @@ impl InstallDureState {
 
     /// Poll EAB key fetch promise and return result if ready
     pub fn poll_fetch_eab(&mut self) -> Option<Result<(String, String), String>> {
-        if let Some(promise) = &self.fetch_eab_promise {
-            if let Some(result) = promise.ready() {
-                self.fetch_eab_promise = None;
-                return Some(result.clone());
+        // Check if promise is ready without borrowing
+        let is_ready = self
+            .fetch_eab_promise
+            .as_ref()
+            .map(|p| p.ready().is_some())
+            .unwrap_or(false);
+
+        if is_ready {
+            // Take ownership of the promise to avoid borrow checker issues
+            if let Some(promise) = self.fetch_eab_promise.take() {
+                if let Some(result) = promise.ready() {
+                    return Some(result.clone());
+                }
             }
         }
         None

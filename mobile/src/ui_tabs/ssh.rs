@@ -1681,13 +1681,14 @@ impl SshTab {
 
                     // Get GCP project ID and access token from platform config
                     #[cfg(not(target_arch = "wasm32"))]
-                    if let Ok((config, _)) = crate::config::load_config(&profile_context) {
+                    if let Some(ref p) = profile {
+                        let config = AppConfig::load_or_default(&p.config_file);
                         // Find host config to get platform_id
                         if let Some(host_config) = config.ssh_hosts.iter().find(|h| h.host == host) {
-                            if let Some(platform_id) = &host_config.platform_id {
+                            if let Some(ref platform_id) = host_config.platform_id {
                                 // Find platform config
-                                if let Some(platform) = config.platforms.iter().find(|p| {
-                                    p.gcp_selected_project_id.as_ref() == Some(platform_id)
+                                if let Some(platform) = config.platforms.iter().find(|plat| {
+                                    plat.gcp_selected_project_id.as_ref() == Some(platform_id)
                                 }) {
                                     dlg.state.gcp_project_id = platform.gcp_selected_project_id.clone();
                                     dlg.state.gcp_access_token = platform.gcp_oauth_access_token.clone();
