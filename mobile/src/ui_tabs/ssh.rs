@@ -1367,23 +1367,27 @@ impl SshTab {
         }
 
         // Error dialog
-        let mut close_error = false;
         if let Some(ref error) = self.load_error {
             let error_msg = error.clone();
-            egui::Window::new("Error")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-                .show(ui.ctx(), |ui| {
+            let mut show_error = true;
+            let window_width = ui.ctx().viewport_rect().width();
+            let window_height = ui.ctx().viewport_rect().height();
+
+            dialog("ssh_error_dialog", "Error", &mut show_error)
+                .min_width(350.0)
+                .max_width(window_width - 40.0)
+                .max_height(window_height - 40.0)
+                .scrollable(true)
+                .content(|ui, _open| {
                     ui.label(&error_msg);
-                    if ui.add(MaterialButton::filled("OK")).clicked() {
-                        close_error = true;
-                    }
-                });
-        }
-        if close_error {
-            self.load_error = None;
-            return;
+                })
+                .primary_action("OK", || {})
+                .show(ui.ctx());
+
+            if !show_error {
+                self.load_error = None;
+                return;
+            }
         }
         if self.load_error.is_some() {
             return;

@@ -3,8 +3,10 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
+use egui_material3::dialog;
 use egui_material3::spreadsheet::{text_column, MaterialSpreadsheet};
 use egui_material3::MaterialButton;
+use std::cell::Cell;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::calc::audit;
@@ -254,13 +256,18 @@ impl SiteTab {
     }
 
     fn render_add_dialog(&mut self, ctx: &egui::Context) {
-        let mut open = true;
+        let add_clicked = Cell::new(false);
+        let cancel_clicked = Cell::new(false);
 
-        egui::Window::new("Add Site")
-            .open(&mut open)
-            .resizable(false)
-            .collapsible(false)
-            .show(ctx, |ui| {
+        let window_width = ctx.viewport_rect().width();
+        let window_height = ctx.viewport_rect().height();
+
+        dialog("add_site_dialog", "Add Site", &mut self.show_add_dialog)
+            .min_width(350.0)
+            .max_width(window_width - 40.0)
+            .max_height(window_height - 40.0)
+            .scrollable(true)
+            .content(|ui, _open| {
                 ui.label("Configure a new site for site-to-site communication:");
                 ui.add_space(8.0);
 
@@ -296,22 +303,21 @@ impl SiteTab {
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
+            })
+            .action("Cancel", || {
+                cancel_clicked.set(true);
+            })
+            .primary_action("Add", || {
+                add_clicked.set(true);
+            })
+            .show(ctx);
 
-                ui.horizontal(|ui| {
-                    if ui.add(MaterialButton::filled("Add")).clicked() {
-                        self.execute_add_site();
-                    }
-
-                    if ui.add(MaterialButton::text("Cancel")).clicked() {
-                        self.show_add_dialog = false;
-                        self.add_status_message.clear();
-                    }
-                });
-            });
-
-        if !open {
+        if cancel_clicked.get() {
             self.show_add_dialog = false;
             self.add_status_message.clear();
+        }
+        if add_clicked.get() {
+            self.execute_add_site();
         }
     }
 
