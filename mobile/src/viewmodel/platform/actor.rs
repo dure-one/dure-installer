@@ -60,6 +60,7 @@ impl PlatformActor {
             PlatformCommand::ScanExistingVMs { .. } => "scan_vms",
             PlatformCommand::CreateVM { .. } => "create_vm",
             PlatformCommand::DeleteVM { .. } => "delete_vm",
+            PlatformCommand::CheckVmStaticIp { .. } => "check_vm_static_ip",
             PlatformCommand::RestartVM { .. } => "restart_vm",
             PlatformCommand::RegenerateVM { .. } => "regenerate_vm",
             PlatformCommand::UpdateFirewall { .. } => "update_firewall",
@@ -71,6 +72,7 @@ impl PlatformActor {
             PlatformCommand::CreateFirewallRule { .. } => "create_firewall_rule",
             PlatformCommand::DeleteFirewallRule { .. } => "delete_firewall_rule",
             PlatformCommand::FetchBilling { .. } => "fetch_billing",
+            PlatformCommand::DiscoverBillingTable { .. } => "discover_billing_table",
             PlatformCommand::ListProjects { .. } => "list_projects",
             PlatformCommand::SelectProject { .. } => "select_project",
             PlatformCommand::StartOAuth { .. } => "start_oauth",
@@ -123,6 +125,15 @@ impl PlatformActor {
                     release_ip,
                 )
                 .await
+            }
+            PlatformCommand::CheckVmStaticIp {
+                platform_name,
+                vm_name,
+                zone,
+                external_ip,
+            } => {
+                self.check_vm_static_ip(platform_name, vm_name, zone, external_ip)
+                    .await
             }
             PlatformCommand::RestartVM {
                 profile_config_path,
@@ -227,6 +238,10 @@ impl PlatformActor {
                 )
                 .await
             }
+            PlatformCommand::DiscoverBillingTable {
+                platform_name,
+                project_id,
+            } => self.discover_billing_table(platform_name, project_id).await,
             PlatformCommand::ListProjects { platform_name } => {
                 self.list_projects(platform_name).await
             }
@@ -868,6 +883,49 @@ impl PlatformActor {
                 Err(e)
             }
         }
+    }
+
+    async fn check_vm_static_ip(
+        &mut self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        external_ip: String,
+    ) -> anyhow::Result<()> {
+        // Get access token
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
+        // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
+        let region = zone.rsplitn(2, '-').nth(1).unwrap_or(&zone).to_string();
+
+        // Check if IP is static
+        let (has_static_ip, ip_address, ip_name) = runtime::unblock({
+            let external_ip = external_ip.clone();
+            let platform_name = platform_name.clone();
+            move || -> anyhow::Result<(bool, Option<String>, Option<String>)> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                let addresses = client.list_addresses(&platform_name, &region)?;
+
+                // Find address matching this IP
+                if let Some(addr) = addresses.iter().find(|a| a.address == external_ip) {
+                    Ok((true, Some(addr.address.clone()), Some(addr.name.clone())))
+                } else {
+                    Ok((false, None, None))
+                }
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::VmStaticIpChecked {
+            platform_name,
+            vm_name,
+            has_static_ip,
+            ip_address,
+            ip_name,
+        })
+        .await;
+
+        Ok(())
     }
 
     async fn regenerate_vm(
@@ -1642,6 +1700,33 @@ impl PlatformActor {
             "[ACTOR] BillingFetched event sent for platform '{}'",
             platform_name
         );
+
+        Ok(())
+    }
+
+    async fn discover_billing_table(
+        &mut self,
+        platform_name: String,
+        project_id: String,
+    ) -> anyhow::Result<()> {
+        // Get access token from in-memory state (already validated during OAuth)
+        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+
+        // Discover billing table
+        let (dataset, table) = runtime::unblock({
+            move || -> anyhow::Result<(String, String)> {
+                let client = crate::api::gcp::GcpRestClient::new(access_token);
+                client.discover_billing_table(&project_id)
+            }
+        })
+        .await?;
+
+        self.send_event(PlatformEvent::BillingTableDiscovered {
+            platform_name,
+            dataset,
+            table,
+        })
+        .await;
 
         Ok(())
     }

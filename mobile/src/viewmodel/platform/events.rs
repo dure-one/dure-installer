@@ -116,6 +116,13 @@ pub enum PlatformEvent {
         vm_name: String,
         focus_tab: Option<crate::viewmodel::platform::DrawerTab>,
     },
+    VmStaticIpChecked {
+        platform_name: String,
+        vm_name: String,
+        has_static_ip: bool,
+        ip_address: Option<String>,
+        ip_name: Option<String>,
+    },
     VMRestarted {
         platform_name: String,
         vm_name: String,
@@ -158,6 +165,11 @@ pub enum PlatformEvent {
     BillingFetched {
         platform_name: String,
         records: Vec<BillingRecord>,
+    },
+    BillingTableDiscovered {
+        platform_name: String,
+        dataset: String,
+        table: String,
     },
 
     /// Refresh completed with comprehensive status

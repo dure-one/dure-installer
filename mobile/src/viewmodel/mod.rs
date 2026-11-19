@@ -361,6 +361,23 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn check_vm_static_ip(
+        &self,
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        external_ip: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::CheckVmStaticIp {
+                platform_name,
+                vm_name,
+                zone,
+                external_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn restart_vm(
         &self,
         profile_config_path: std::path::PathBuf,
@@ -526,6 +543,19 @@ impl ViewModel {
                 project_id,
                 dataset,
                 table,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn discover_billing_table(
+        &self,
+        platform_name: String,
+        project_id: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::DiscoverBillingTable {
+                platform_name,
+                project_id,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }

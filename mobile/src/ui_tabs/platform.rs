@@ -947,23 +947,6 @@ fn load_ssh_key_from_keyring(
 ///
 /// # Arguments
 /// * `access_token` - Valid (non-expired) OAuth access token. Caller should use get_valid_access_token() to ensure token is fresh.
-fn fetch_project_count(access_token: Option<&str>) -> usize {
-    if let Some(token) = access_token {
-        use crate::api::gcp::GcpRestClient;
-        let client = GcpRestClient::new(token.to_string());
-
-        match client.list_projects(None) {
-            Ok(list) => list.projects.len(),
-            Err(e) => {
-                dure_debug!("Failed to fetch project count: {}", e);
-                0
-            }
-        }
-    } else {
-        0
-    }
-}
-
 /// Format project count for display
 fn format_project_count_display(count: Option<usize>) -> String {
     match count {
@@ -1200,6 +1183,15 @@ impl PlatformTab {
                     ViewModelEvent::Platform(PlatformEvent::BillingFetched { records, .. }) => {
                         self.billing_data = Some(records);
                         self.billing_loading = false;
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::BillingTableDiscovered {
+                        platform_name: _,
+                        dataset,
+                        table,
+                    }) => {
+                        dure_info!("[BILLING] Discovered billing table: dataset={}, table={}", dataset, table);
+                        self.billing_dataset = dataset;
+                        self.billing_table = table;
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
                         platform_name,
@@ -1471,6 +1463,18 @@ impl PlatformTab {
                                 }
                             }
                         }
+                    }
+                    ViewModelEvent::Platform(PlatformEvent::VmStaticIpChecked {
+                        platform_name: _,
+                        vm_name: _,
+                        has_static_ip,
+                        ip_address,
+                        ip_name,
+                    }) => {
+                        dure_info!("✅ Static IP check complete: has_static={}", has_static_ip);
+                        self.delete_vm_has_static_ip = has_static_ip;
+                        self.delete_vm_ip_address = ip_address;
+                        self.delete_vm_ip_name = ip_name;
                     }
                     ViewModelEvent::Platform(PlatformEvent::ProjectsListed {
                         platform_name,
@@ -2499,6 +2503,7 @@ impl PlatformTab {
 
                     self.show_delete_vm_confirmation(
                         &Some(current_profile.clone()),
+                        vm.as_deref_mut(),
                         platform_name,
                         vm_name,
                         vm_zone,
@@ -3087,80 +3092,6 @@ impl PlatformTab {
     }
 
     /// Fetch GCP account summary (billing accounts, projects, VMs)
-    #[cfg(not(target_arch = "wasm32"))]
-    fn fetch_gcp_summary(&mut self, platform: &CloudPlatformConfig) -> Option<String> {
-        use crate::api::gcp::GcpRestClient;
-
-        // Check if we have a cached summary (keyed by project_id)
-        let project_id = platform.gcp_selected_project_id.as_ref()?;
-        if let Some(cached) = self.platform_summaries.get(project_id) {
-            return Some(cached.clone());
-        }
-
-        // Get access token
-        let access_token = platform.gcp_oauth_access_token.as_ref()?;
-
-        // Check token expiry
-        let now = chrono::Utc::now().timestamp();
-        if let Some(expiry) = platform.gcp_oauth_token_expiry {
-            if now >= expiry {
-                return Some("OAuth expired".to_string());
-            }
-        }
-
-        let client = GcpRestClient::new(access_token.clone());
-        let mut summary_parts = Vec::new();
-
-        // Fetch billing accounts
-        if let Ok(billing_list) = client.list_billing_accounts() {
-            let count = billing_list.billing_accounts.len();
-            if count > 0 {
-                let name = &billing_list.billing_accounts[0].display_name;
-                if count == 1 {
-                    summary_parts.push(format!("1 billing account({})", name));
-                } else {
-                    summary_parts.push(format!("{} billing accounts({}...)", count, name));
-                }
-            }
-        }
-
-        // Fetch projects
-        if let Ok(project_list) = client.list_projects(None) {
-            let count = project_list.projects.len();
-            if count > 0 {
-                let name = &project_list.projects[0].project_id;
-                if count == 1 {
-                    summary_parts.push(format!("1 project({})", name));
-                } else {
-                    summary_parts.push(format!("{} projects({}...)", count, name));
-                }
-            }
-        }
-
-        // Show configured VMs
-        let vm_count = platform.vms.len();
-        if vm_count > 0 {
-            let name = &platform.vms[0].name;
-            if vm_count == 1 {
-                summary_parts.push(format!("1 vm({})", name));
-            } else {
-                summary_parts.push(format!("{} vms({}...)", vm_count, name));
-            }
-        }
-
-        if summary_parts.is_empty() {
-            None
-        } else {
-            let summary = summary_parts.join(", ");
-            // Cache the summary (keyed by project_id)
-            if let Some(project_id) = &platform.gcp_selected_project_id {
-                self.platform_summaries
-                    .insert(project_id.clone(), summary.clone());
-            }
-            Some(summary)
-        }
-    }
-
     fn render_add_dialog(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
@@ -3237,8 +3168,8 @@ impl PlatformTab {
                             match result {
                                 Ok(oauth_result) => {
                                     self.add_platform_oauth_result = Some(oauth_result.clone());
-                                    // Fetch account email
-                                    self.fetch_connected_email();
+                                    // Set default connected account label (email fetch removed)
+                                    self.add_platform_connected_email = Some("Connected Account".to_string());
                                     self.add_platform_oauth_promise = None;
                                 }
                                 Err(e) => {
@@ -3593,9 +3524,8 @@ impl PlatformTab {
                 match result {
                     Ok(oauth_result) => {
                         self.add_platform_oauth_result = Some(oauth_result.clone());
-                        // Fetch email
-                        #[cfg(not(target_arch = "wasm32"))]
-                        self.fetch_connected_email();
+                        // Set default connected account label (email fetch removed)
+                        self.add_platform_connected_email = Some("Connected Account".to_string());
                         self.add_platform_oauth_promise = None;
 
                         // Fetch projects
@@ -4040,6 +3970,7 @@ impl PlatformTab {
     fn show_delete_vm_confirmation(
         &mut self,
         profile: &Option<crate::calc::profile::ProfileContext>,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -4072,57 +4003,23 @@ impl PlatformTab {
                     dure_info!("✓ Platform found: {}", platform_name);
                     if let Some(token) = platform.gcp_oauth_access_token.as_ref() {
                         dure_info!("✓ OAuth token exists");
-                        if let Some(vm) = platform
+                        if let Some(vm_config) = platform
                             .vms
                             .iter()
                             .find(|v| v.name == vm_name && v.zone == zone)
                         {
                             dure_info!("✓ VM found: {}", vm_name);
-                            if let Some(external_ip) = &vm.external_ip {
+                            if let Some(external_ip) = &vm_config.external_ip {
                                 dure_info!("✓ VM has external_ip: {}", external_ip);
-                                // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
-                                let region =
-                                    zone.rsplitn(2, '-').nth(1).unwrap_or(&zone).to_string();
-                                dure_info!("  Region extracted from zone {}: {}", zone, region);
-
-                                // Query addresses to check if IP is static
-                                use crate::api::gcp::GcpRestClient;
-                                let client = GcpRestClient::new(token.clone());
-
-                                match client.list_addresses(&platform_name, &region) {
-                                    Ok(addresses) => {
-                                        dure_info!(
-                                            "✓ Addresses API returned {} addresses",
-                                            addresses.len()
-                                        );
-                                        for addr in &addresses {
-                                            dure_info!(
-                                                "  Address: {} = {} (status: {}, type: {})",
-                                                addr.name,
-                                                addr.address,
-                                                addr.status,
-                                                addr.address_type
-                                            );
-                                        }
-                                        // Find address matching this IP
-                                        if let Some(addr) =
-                                            addresses.iter().find(|a| &a.address == external_ip)
-                                        {
-                                            dure_info!(
-                                                "✓ MATCH FOUND: {} is static IP (name: {})",
-                                                external_ip,
-                                                addr.name
-                                            );
-                                            self.delete_vm_has_static_ip = true;
-                                            self.delete_vm_ip_address = Some(addr.address.clone());
-                                            self.delete_vm_ip_name = Some(addr.name.clone());
-                                        } else {
-                                            dure_info!("✗ NO MATCH: {} not found in addresses list (ephemeral IP)", external_ip);
-                                        }
-                                    }
-                                    Err(e) => {
-                                        dure_warn!("✗ Addresses API failed: {}", e);
-                                    }
+                                // Trigger async static IP check via actor
+                                if let Some(vm) = vm {
+                                    let _ = vm.check_vm_static_ip(
+                                        platform_name.clone(),
+                                        vm_name.clone(),
+                                        zone.clone(),
+                                        external_ip.clone(),
+                                    );
+                                    dure_info!("✓ Static IP check triggered via actor");
                                 }
                             } else {
                                 dure_info!("✗ VM has no external_ip field");
@@ -4953,34 +4850,6 @@ impl PlatformTab {
             }));
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    fn fetch_connected_email(&mut self) {
-        if let Some(oauth) = &self.add_platform_oauth_result {
-            use crate::api::gcp::GcpRestClient;
-
-            let client = GcpRestClient::new(oauth.access_token.clone());
-
-            // Get user info from OAuth2 userinfo endpoint
-            match client.get_user_info() {
-                Ok(user_info) => {
-                    // Use email if available, fallback to name, or "Connected Account"
-                    let display = if let Some(email) = user_info.email {
-                        email
-                    } else if let Some(name) = user_info.name {
-                        name
-                    } else {
-                        "Connected Account".to_string()
-                    };
-                    self.add_platform_connected_email = Some(display);
-                }
-                Err(e) => {
-                    dure_debug!("Failed to fetch user info: {}", e);
-                    self.add_platform_connected_email = Some("Connected Account".to_string());
-                }
-            }
-        }
-    }
-
     fn fetch_billing_data(
         &mut self,
         profile: &crate::calc::profile::ProfileContext,
@@ -5068,36 +4937,26 @@ impl PlatformTab {
                     "[BILLING] Auto-discovering billing table for project: {}",
                     project_id
                 );
-                let client = crate::api::gcp::GcpRestClient::new(access_token.clone());
-
-                match client.discover_billing_table(&project_id) {
-                    Ok((dataset, table)) => {
-                        dure_info!(
-                            "[BILLING] Auto-discovery succeeded: dataset={}, table={}",
-                            dataset,
-                            table
-                        );
-                        self.billing_dataset = dataset;
-                        self.billing_table = table;
-                        self.billing_project_id = project_id.clone();
-                    }
-                    Err(e) => {
-                        dure_warn!("[BILLING] Auto-discovery failed: {}", e);
-                        // Fall back to default names
-                        self.billing_dataset = "billing_export".to_string();
-                        self.billing_table =
-                            format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                        self.billing_project_id = project_id.clone();
-                        self.billing_error = Some(format!(
-                            "Auto-discovery failed: {}\n\nUsing default names. Please configure below if different.",
-                            e
-                        ));
-                        dure_error!(
-                            "[BILLING] Setting billing_loading = false (auto-discovery failed)"
-                        );
-                        self.billing_loading = false;
-                        return;
-                    }
+                // Trigger async discovery via actor
+                if let Err(e) = vm.discover_billing_table(project_id.clone(), project_id.clone()) {
+                    dure_error!("[BILLING] Failed to start billing discovery: {}", e);
+                    // Fall back to default names
+                    self.billing_dataset = "billing_export".to_string();
+                    self.billing_table =
+                        format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
+                    self.billing_project_id = project_id.clone();
+                    self.billing_error = Some(format!(
+                        "Failed to start discovery: {}\n\nUsing default names.",
+                        e
+                    ));
+                }
+                // Discovery will trigger BillingTableDiscovered event
+                // For now, use defaults and let event update later
+                if self.billing_dataset.is_empty() {
+                    self.billing_dataset = "billing_export".to_string();
+                    self.billing_table =
+                        format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
+                    self.billing_project_id = project_id.clone();
                 }
             } else {
                 dure_debug!(

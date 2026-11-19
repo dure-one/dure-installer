@@ -91,6 +91,12 @@ pub enum PlatformCommand {
         /// after VM deletion completes on GCP.
         release_ip: Option<(String, String)>,
     },
+    CheckVmStaticIp {
+        platform_name: String,
+        vm_name: String,
+        zone: String,
+        external_ip: String,
+    },
     RestartVM {
         profile_config_path: std::path::PathBuf,
         platform_name: String,
@@ -153,6 +159,10 @@ pub enum PlatformCommand {
         project_id: String,
         dataset: String,
         table: String,
+    },
+    DiscoverBillingTable {
+        platform_name: String,
+        project_id: String,
     },
 
     // Refresh Operation
