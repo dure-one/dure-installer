@@ -2964,7 +2964,7 @@ impl PlatformTab {
                                         port: 22,
                                         initialized: false,
                                         last_status: None,
-                                        platform_name: Some(platform_name.clone()),
+                                        platform_id: Some(platform_name.clone()),
                                         docker_containers: Vec::new(),
                                         ansible_roles: Vec::new(),
                                         dure_wss_config: None,

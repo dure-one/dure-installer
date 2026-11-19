@@ -232,9 +232,9 @@ pub struct SshHostConfig {
     /// Last connection status
     #[serde(skip)]
     pub last_status: Option<String>,
-    /// Platform relationship - links to CloudPlatformConfig.name
-    #[serde(default)]
-    pub platform_name: Option<String>,
+    /// Platform ID - links to platform's project ID (gcp_selected_project_id, etc.)
+    #[serde(default, alias = "platform_name")]  // backward compat: read old field name
+    pub platform_id: Option<String>,
 
     /// Docker containers installed on this host
     #[serde(default)]
@@ -281,7 +281,7 @@ impl Default for SshHostConfig {
             port: default_ssh_port(),
             initialized: false,
             last_status: None,
-            platform_name: None,
+            platform_id: None,
             docker_containers: Vec::new(),
             ansible_roles: Vec::new(),
             dure_wss_config: None,

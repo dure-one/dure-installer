@@ -529,7 +529,7 @@ impl SshTab {
                         self.rows.push(SshRow {
                             host: host_config.host.clone(),
                             port: host_config.port,
-                            platform_id: host_config.platform_name.clone(),
+                            platform_id: host_config.platform_id.clone(),
                             ssh_connected: host_config
                                 .last_ssh_check
                                 .as_ref()
@@ -1637,13 +1637,14 @@ impl SshTab {
                             platform_id
                         })
                         .and_then(|platform_id| {
-                            dure_debug!("[SSH] Looking for platform with project id: {}", platform_id);
-                            // Load config and find platform by project ID (not platform_type)
-                            profile.as_ref().map(|p| {
+                            dure_debug!("[SSH] Looking for domain with platform_id: {}", platform_id);
+                            // Load config and find domain by project ID
+                            profile.as_ref().and_then(|p| {
                                 let config = AppConfig::load_or_default(&p.config_file);
-                                dure_debug!("[SSH] Config has {} platforms", config.platforms.len());
+                                dure_debug!("[SSH] Config has {} platforms, {} dns_domains",
+                                    config.platforms.len(), config.dns_domains.len());
 
-                                // Match by actual project ID fields, not platform_type
+                                // Try 1: Check platforms[].bound_domain
                                 let found_platform = config.platforms.iter()
                                     .find(|plat| {
                                         // Check GCP project ID
@@ -1668,14 +1669,26 @@ impl SshTab {
                                     });
 
                                 if let Some(plat) = found_platform {
-                                    dure_debug!("[SSH] Found platform (type: {}), bound_domain: {:?}",
-                                        plat.platform_type, plat.bound_domain);
-                                    plat.bound_domain.clone()
-                                } else {
-                                    dure_warn!("[SSH] No platform found with project id: {}", platform_id);
-                                    None
+                                    if let Some(ref domain) = plat.bound_domain {
+                                        dure_info!("[SSH] Found domain from platform.bound_domain: {}", domain);
+                                        return Some(domain.clone());
+                                    }
                                 }
-                            }).flatten()
+
+                                // Try 2: Check dns_domains[] where platform_id matches
+                                let found_dns_domain = config.dns_domains.iter()
+                                    .find(|dns| {
+                                        dns.platform_id.as_ref() == Some(&platform_id)
+                                    });
+
+                                if let Some(dns) = found_dns_domain {
+                                    dure_info!("[SSH] Found domain from dns_domains: {}", dns.domain);
+                                    return Some(dns.domain.clone());
+                                }
+
+                                dure_warn!("[SSH] No domain found for platform_id: {} (checked platforms.bound_domain and dns_domains)", platform_id);
+                                None
+                            })
                         });
 
                     // Open new wizard dialog
@@ -1953,7 +1966,7 @@ impl SshTab {
                         port,
                         initialized: false,
                         last_status: None,
-                        platform_name: None,
+                        platform_id: None,
                         docker_containers: Vec::new(),
                         ansible_roles: Vec::new(),
                         dure_wss_config: None,
