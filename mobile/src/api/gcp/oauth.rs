@@ -29,7 +29,7 @@ const GCP_SCOPES: &[&str] = &[
     "https://www.googleapis.com/auth/cloudplatformprojects", // https://docs.cloud.google.com/resource-manager/reference/rest/v3/projects/list
     "https://www.googleapis.com/auth/cloud-billing", // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#cloudbilling
     "https://www.googleapis.com/auth/service.management", // https://developers.google.com/identity/protocols/oauth2/scopes?text=cloudplatformprojects#servicemanagement
-    "https://www.googleapis.com/auth/cloud-platform.read-only", // 🟡 BROAD - read everything
+    "https://www.googleapis.com/auth/cloud-platform", // 🟡 BROAD - full cloud platform (required for Public CA API)
     "https://www.googleapis.com/auth/ndev.clouddns.readwrite", // ✅ NEEDED - DNS management
 ];
 

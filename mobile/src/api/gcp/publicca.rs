@@ -81,6 +81,16 @@ impl GcpRestClient {
                 ));
             }
 
+            if error_text.contains("ACCESS_TOKEN_SCOPE_INSUFFICIENT")
+                || error_text.contains("insufficient authentication scopes")
+            {
+                return Err(anyhow::anyhow!(
+                    "OAuth token missing required scope. \
+                    Please re-authenticate in Platform tab to grant Public CA API access. \
+                    (Disconnect → Connect GCP)"
+                ));
+            }
+
             if error_text.contains("publicca.externalAccountKeys.create") {
                 return Err(anyhow::anyhow!(
                     "Missing IAM permission 'publicca.externalAccountKeys.create'. \

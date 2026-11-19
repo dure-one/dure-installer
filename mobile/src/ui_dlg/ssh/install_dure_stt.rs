@@ -75,6 +75,8 @@ pub struct InstallDureState {
     #[serde(skip)]
     pub fetch_eab_promise: Option<Promise<Result<(String, String), String>>>, // (keyId, hmacKey)
     #[serde(skip)]
+    pub eab_fetch_attempted: bool, // Prevent infinite retry loop
+    #[serde(skip)]
     pub gcp_project_id: Option<String>, // From platform config
     #[serde(skip)]
     pub gcp_access_token: Option<String>, // From platform config
@@ -112,6 +114,7 @@ impl InstallDureState {
             replacement_domain: None,
             acme_provider: AcmeProvider::default(),
             fetch_eab_promise: None,
+            eab_fetch_attempted: false,
             gcp_project_id: None,
             gcp_access_token: None,
             progress_log: Vec::new(),
@@ -255,9 +258,11 @@ impl InstallDureState {
 
     /// Start fetching GCP External Account Keys for ACME EAB
     pub fn start_fetch_eab_keys(&mut self, project_id: String, access_token: String) {
-        if self.fetch_eab_promise.is_some() {
+        if self.fetch_eab_promise.is_some() || self.eab_fetch_attempted {
             return;
         }
+
+        self.eab_fetch_attempted = true; // Prevent retry loop
 
         let promise = Promise::spawn_thread("fetch_eab", move || {
             smol::block_on(async move {
