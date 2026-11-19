@@ -7,6 +7,7 @@ use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
 use crate::calc::audit;
+use crate::calc::profile::ProfileContext;
 use crate::calc::ssh;
 use crate::config::{AppConfig, SshHostConfig};
 
@@ -53,9 +54,8 @@ fn get_config_path() -> Result<PathBuf> {
 }
 
 /// Execute SSH status command
-pub fn execute_ssh_status() -> Result<()> {
-    let config_path = get_config_path()?;
-    let app_config = AppConfig::load_or_default(&config_path);
+pub fn execute_ssh_status(profile: &ProfileContext) -> Result<()> {
+    let app_config = AppConfig::load_or_default_for_profile(profile);
 
     if app_config.ssh_hosts.is_empty() {
         dure_info!("No SSH hosts configured.");
@@ -110,13 +110,13 @@ pub fn execute_ssh_status() -> Result<()> {
 
 /// Execute SSH add command
 pub fn execute_ssh_add(
+    profile: &ProfileContext,
     host: String,
     pass: Option<String>,
     prvkey: Option<String>,
     port: u16,
 ) -> Result<()> {
-    let config_path = get_config_path()?;
-    let mut app_config = AppConfig::load_or_default(&config_path);
+    let mut app_config = AppConfig::load_or_default_for_profile(profile);
 
     // Check if host already exists
     if app_config.ssh_hosts.iter().any(|h| h.host == host) {
@@ -166,10 +166,10 @@ pub fn execute_ssh_add(
     app_config.ssh_hosts.push(ssh_host);
 
     // Save config
-    app_config.save(&config_path)?;
+    app_config.save_for_profile(profile)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "ssh add", &host);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ssh add", &host);
 
     dure_info!(" SSH host '{}' added successfully", host);
 
@@ -177,9 +177,8 @@ pub fn execute_ssh_add(
 }
 
 /// Execute SSH del command
-pub fn execute_ssh_del(host: String) -> Result<()> {
-    let config_path = get_config_path()?;
-    let mut app_config = AppConfig::load_or_default(&config_path);
+pub fn execute_ssh_del(profile: &ProfileContext, host: String) -> Result<()> {
+    let mut app_config = AppConfig::load_or_default_for_profile(profile);
 
     // Find and remove host
     let initial_len = app_config.ssh_hosts.len();
@@ -190,10 +189,10 @@ pub fn execute_ssh_del(host: String) -> Result<()> {
     }
 
     // Save config
-    app_config.save(&config_path)?;
+    app_config.save_for_profile(profile)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "ssh del", &host);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ssh del", &host);
 
     dure_info!(" SSH host '{}' deleted successfully", host);
 
@@ -201,9 +200,8 @@ pub fn execute_ssh_del(host: String) -> Result<()> {
 }
 
 /// Execute SSH init command
-pub fn execute_ssh_init(host: String) -> Result<()> {
-    let config_path = get_config_path()?;
-    let mut app_config = AppConfig::load_or_default(&config_path);
+pub fn execute_ssh_init(profile: &ProfileContext, host: String) -> Result<()> {
+    let mut app_config = AppConfig::load_or_default_for_profile(profile);
 
     // Find host
     let host_config = app_config
@@ -227,7 +225,7 @@ pub fn execute_ssh_init(host: String) -> Result<()> {
     host_config.initialized = true;
 
     // Save config
-    app_config.save(&config_path)?;
+    app_config.save_for_profile(profile)?;
 
     dure_info!("");
     dure_info!(" SSH host initialization completed");

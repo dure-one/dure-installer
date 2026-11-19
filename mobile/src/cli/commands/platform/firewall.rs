@@ -1,22 +1,12 @@
 //! Firewall command implementation
 
+use crate::calc::profile::ProfileContext;
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
-
-/// Get config file path
-fn get_config_path() -> Result<PathBuf> {
-    Ok(crate::get_app_config_dir()?.join("config.yml"))
-}
-
-/// Load application config
-fn load_config() -> Result<AppConfig> {
-    let config_path = get_config_path()?;
-    Ok(AppConfig::load_or_default(&config_path))
-}
 
 /// Auto-detect current IP address
 async fn get_current_ip(ip_flag: Option<String>) -> Result<String> {
@@ -65,8 +55,8 @@ pub async fn execute_firewall_inner(
 }
 
 /// Execute firewall command
-pub fn execute_firewall_command(name: String, ip: Option<String>) -> Result<()> {
-    let config = load_config()?;
+pub fn execute_firewall_command(profile: &ProfileContext, name: String, ip: Option<String>) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms

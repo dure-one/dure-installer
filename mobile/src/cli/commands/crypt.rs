@@ -8,6 +8,7 @@ use crate::calc::crypt::{
     decode_base64, decrypt, encode_base64, encrypt, generate_keypair, PUBLIC_KEY_SIZE,
 };
 use crate::calc::db;
+use crate::calc::profile::ProfileContext;
 use crate::storage::models::crypt::{
     get_current_device_keys, init_crypt_table, store_device_keys, DeviceKeys,
 };
@@ -24,7 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// * `recipient_pubkey` - Recipient's public key (base64 or hex encoded)
 /// * `data` - Data to encrypt (plain text or base64)
 /// * `output_hex` - If true, output as hex instead of base64
-pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: bool) -> Result<()> {
+pub fn execute_crypt_enc(profile: &ProfileContext, recipient_pubkey: String, data: String, output_hex: bool) -> Result<()> {
     dure_info!("Encrypting data...");
 
     // Try to decode recipient public key from base64 or hex
@@ -72,7 +73,7 @@ pub fn execute_crypt_enc(recipient_pubkey: String, data: String, output_hex: boo
 ///
 /// * `encrypted_data` - Encrypted data (base64 or hex encoded)
 /// * `output_raw` - If true, output raw bytes; otherwise interpret as UTF-8 text
-pub fn execute_crypt_dec(encrypted_data: String, output_raw: bool) -> Result<()> {
+pub fn execute_crypt_dec(profile: &ProfileContext, encrypted_data: String, output_raw: bool) -> Result<()> {
     dure_info!("Decrypting data...");
 
     // Get database connection
@@ -122,7 +123,7 @@ pub fn execute_crypt_dec(encrypted_data: String, output_raw: bool) -> Result<()>
 ///
 /// * `device_id` - Optional device ID (defaults to hostname)
 /// * `force` - If true, regenerate keys even if they exist
-pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> {
+pub fn execute_crypt_init(profile: &ProfileContext, device_id: Option<String>, force: bool) -> Result<()> {
     dure_info!("Initializing device encryption keys...");
 
     // Get database connection
@@ -192,7 +193,7 @@ pub fn execute_crypt_init(device_id: Option<String>, force: bool) -> Result<()> 
 /// Execute CRYPT status command
 ///
 /// Displays the base public key for the system.
-pub fn execute_crypt_status() -> Result<()> {
+pub fn execute_crypt_status(profile: &ProfileContext) -> Result<()> {
     // Get database connection
     let _db_path = get_db_path()?;
     let mut conn = db::establish_connection();
@@ -225,8 +226,8 @@ pub fn execute_crypt_status() -> Result<()> {
 ///
 /// Displays the current device's public key.
 #[deprecated(note = "Use execute_crypt_status instead")]
-pub fn execute_crypt_show() -> Result<()> {
-    execute_crypt_status()
+pub fn execute_crypt_show(profile: &ProfileContext) -> Result<()> {
+    execute_crypt_status(profile)
 }
 
 fn get_db_path() -> Result<std::path::PathBuf> {

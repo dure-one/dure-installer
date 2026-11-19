@@ -1,22 +1,12 @@
 //! Billing command implementation
 
+use crate::calc::profile::ProfileContext;
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::AppConfig;
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
-
-/// Get config file path
-fn get_config_path() -> Result<PathBuf> {
-    Ok(crate::get_app_config_dir()?.join("config.yml"))
-}
-
-/// Load application config
-fn load_config() -> Result<AppConfig> {
-    let config_path = get_config_path()?;
-    Ok(AppConfig::load_or_default(&config_path))
-}
 
 /// Execute billing command (inner function for testing)
 #[cfg(test)]
@@ -62,8 +52,8 @@ pub async fn execute_billing_inner(
 }
 
 /// Execute billing command
-pub fn execute_billing_command(name: String) -> Result<()> {
-    let config = load_config()?;
+pub fn execute_billing_command(profile: &ProfileContext, name: String) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms
@@ -91,7 +81,7 @@ pub fn execute_billing_command(name: String) -> Result<()> {
 
         let event = runner
             .execute_command(PlatformCommand::FetchBilling {
-                profile_config_path: get_config_path()?,
+                profile_config_path: profile.config_file.clone(),
                 platform_name: project_id.clone(),
                 project_id: project_id.clone(),
                 dataset,

@@ -1,13 +1,14 @@
 //! Site command implementation for site-to-site communication management
 
 use crate::calc::audit;
+use crate::calc::profile::ProfileContext;
 use crate::calc::site::{add_site, delete_site, list_sites};
 use anyhow::Result;
 
 /// Execute site status command
 ///
 /// Lists all configured sites and their connection status.
-pub fn execute_site_status() -> Result<()> {
+pub fn execute_site_status(profile: &ProfileContext) -> Result<()> {
     let sites = list_sites()?;
 
     if sites.is_empty() {
@@ -45,13 +46,13 @@ pub fn execute_site_status() -> Result<()> {
 /// Execute site add command
 ///
 /// Adds a new site for site-to-site communication.
-pub fn execute_site_add(domain: String, public_key: String) -> Result<()> {
+pub fn execute_site_add(profile: &ProfileContext, domain: String, public_key: String) -> Result<()> {
     println!("Adding site: {}", domain);
 
     add_site(domain.clone(), public_key)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "site add", &domain);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "site add", &domain);
 
     println!();
     println!("✓ Site added successfully");
@@ -66,13 +67,13 @@ pub fn execute_site_add(domain: String, public_key: String) -> Result<()> {
 /// Execute site delete command
 ///
 /// Removes a site from the configuration.
-pub fn execute_site_del(domain: String) -> Result<()> {
+pub fn execute_site_del(profile: &ProfileContext, domain: String) -> Result<()> {
     println!("Deleting site: {}", domain);
 
     delete_site(&domain)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "site del", &domain);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "site del", &domain);
 
     println!();
     println!("✓ Site deleted successfully");

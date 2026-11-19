@@ -24,9 +24,15 @@ pub use firewall::execute_firewall_command;
 #[cfg(feature = "gui")]
 pub use vm::{execute_addvm_command, execute_delvm_command, execute_restart_command};
 
+use crate::calc::profile::ProfileContext;
+use crate::config::AppConfig;
+use anyhow::{anyhow, Result};
+use std::path::PathBuf;
+
 // Stub implementations for non-GUI builds
 #[cfg(not(feature = "gui"))]
 pub fn execute_addvm_command(
+    _profile: &ProfileContext,
     _name: String,
     _vm_name: Option<String>,
     _zone: Option<String>,
@@ -38,52 +44,36 @@ pub fn execute_addvm_command(
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_restart_command(_name: String, _vm: Option<String>) -> Result<()> {
+pub fn execute_restart_command(_profile: &ProfileContext, _name: String, _vm: Option<String>) -> Result<()> {
     Err(anyhow!(
         "VM operations require GUI feature. Please use the GUI to restart VMs."
     ))
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_delvm_command(_name: String, _vm: Option<String>) -> Result<()> {
+pub fn execute_delvm_command(_profile: &ProfileContext, _name: String, _vm: Option<String>) -> Result<()> {
     Err(anyhow!(
         "VM operations require GUI feature. Please use the GUI to delete VMs."
     ))
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_firewall_command(_name: String, _ip: Option<String>) -> Result<()> {
+pub fn execute_firewall_command(_profile: &ProfileContext, _name: String, _ip: Option<String>) -> Result<()> {
     Err(anyhow!(
         "Firewall operations require GUI feature. Please use the GUI to update firewall rules."
     ))
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_billing_command(_name: String) -> Result<()> {
+pub fn execute_billing_command(_profile: &ProfileContext, _name: String) -> Result<()> {
     Err(anyhow!(
         "Billing operations require GUI feature. Please use the GUI to view billing information."
     ))
 }
 
-use crate::config::AppConfig;
-use anyhow::{anyhow, Result};
-use std::path::PathBuf;
-
-/// Get config file path
-fn get_config_path() -> Result<PathBuf> {
-    Ok(crate::get_app_config_dir()?.join("config.yml"))
-}
-
-/// Load application config
-fn load_config() -> Result<(AppConfig, PathBuf)> {
-    let config_path = get_config_path()?;
-    let config = AppConfig::load_or_default(&config_path);
-    Ok((config, config_path))
-}
-
 /// Execute refresh command
-pub fn execute_refresh_command(name: String) -> Result<()> {
-    let (config, _) = load_config()?;
+pub fn execute_refresh_command(profile: &ProfileContext, name: String) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms
@@ -101,8 +91,8 @@ pub fn execute_refresh_command(name: String) -> Result<()> {
 }
 
 /// Execute delete platform command
-pub fn execute_delete_command(name: String) -> Result<()> {
-    let (mut config, config_path) = load_config()?;
+pub fn execute_delete_command(profile: &ProfileContext, name: String) -> Result<()> {
+    let mut config = AppConfig::load_or_default_for_profile(profile);
 
     let platform_idx = config
         .platforms
@@ -137,7 +127,7 @@ pub fn execute_delete_command(name: String) -> Result<()> {
     config.platforms.remove(platform_idx);
 
     // Save config
-    config.save(&config_path)?;
+    config.save_for_profile(profile)?;
 
     println!("✓ Platform '{}' deleted successfully", name);
 
@@ -145,7 +135,7 @@ pub fn execute_delete_command(name: String) -> Result<()> {
 }
 
 /// Execute platform add command
-pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
+pub fn execute_platform_add(profile: &ProfileContext, name: String, platform_type: String) -> Result<()> {
     use crate::config::CloudPlatformConfig;
 
     // Reserved platform names that cannot be used
@@ -162,7 +152,7 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
         ));
     }
 
-    let (mut config, config_path) = load_config()?;
+    let mut config = AppConfig::load_or_default_for_profile(profile);
 
     // Note: Cannot check for duplicates yet as platform has no project_id until OAuth completes
     // This is a limitation of the CLI add flow - platforms should be added via GUI for full workflow
@@ -184,7 +174,7 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
     };
 
     config.platforms.push(platform);
-    config.save(&config_path)?;
+    config.save_for_profile(profile)?;
 
     println!("✓ Platform '{}' added successfully", name);
     println!("  Type: {}", platform_type.to_uppercase());
@@ -200,7 +190,7 @@ pub fn execute_platform_add(name: String, platform_type: String) -> Result<()> {
 }
 
 /// Execute platform external commands (platform <name> <action>)
-pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
+pub fn execute_platform_external(profile: &ProfileContext, args: Vec<String>) -> Result<()> {
     if args.is_empty() {
         return Err(anyhow!(
             "Platform name required. Usage: dure platform <name> <action>"
@@ -223,7 +213,7 @@ pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
     }
 
     // Verify platform exists
-    let (config, _) = load_config()?;
+    let config = AppConfig::load_or_default_for_profile(profile);
     let _platform = config.platforms.iter()
         .find(|p| p.gcp_selected_project_id.as_ref() == Some(platform_name))
         .ok_or_else(|| {
@@ -243,23 +233,23 @@ pub fn execute_platform_external(args: Vec<String>) -> Result<()> {
 
     if args.len() < 2 {
         // No action specified, show platform details
-        return list::execute_platform_show(platform_name.clone());
+        return list::execute_platform_show(profile, platform_name.clone());
     }
 
     let action = &args[1];
 
     match action.as_str() {
-        "refresh" => execute_refresh_command(platform_name.clone()),
+        "refresh" => execute_refresh_command(profile, platform_name.clone()),
         "add-vm" => {
             // Parse optional flags from remaining args
             // For now, just call with None for optional params
-            execute_addvm_command(platform_name.clone(), None, None, None)
+            execute_addvm_command(profile, platform_name.clone(), None, None, None)
         }
-        "firewall" => execute_firewall_command(platform_name.clone(), None),
-        "restart" => execute_restart_command(platform_name.clone(), None),
-        "del-vm" => execute_delvm_command(platform_name.clone(), None),
-        "billing" => execute_billing_command(platform_name.clone()),
-        "delete" => execute_delete_command(platform_name.clone()),
+        "firewall" => execute_firewall_command(profile, platform_name.clone(), None),
+        "restart" => execute_restart_command(profile, platform_name.clone(), None),
+        "del-vm" => execute_delvm_command(profile, platform_name.clone(), None),
+        "billing" => execute_billing_command(profile, platform_name.clone()),
+        "delete" => execute_delete_command(profile, platform_name.clone()),
         _ => Err(anyhow!(
             "Unknown action '{}' for platform '{}'.\n\nAvailable actions:\n  • refresh   - Refresh platform data\n  • add-vm    - Add a new VM\n  • firewall  - Update firewall rules\n  • restart   - Restart VM\n  • del-vm    - Delete VM\n  • billing   - Show billing information\n  • delete    - Delete platform",
             action,

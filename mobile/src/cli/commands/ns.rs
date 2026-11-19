@@ -1,101 +1,33 @@
 //! NS (nameserver) command implementation for DNS record management
 
-// Logging provided by standard log crate
 use crate::calc::audit;
 use crate::calc::ns::{NsConfig, RecordType};
+use crate::calc::profile::ProfileContext;
+use crate::config::AppConfig;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
-#[cfg(not(target_arch = "wasm32"))]
-use directories::ProjectDirs;
-use std::path::PathBuf;
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::calc::ns::apply_record;
 
-/// Get the path to config.yml (Desktop)
-#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
-fn get_config_path() -> Result<PathBuf> {
-    Ok(crate::get_app_config_dir()?.join("config.yml"))
+/// Load NS config for profile
+fn load_ns_config(profile: &ProfileContext) -> Result<NsConfig> {
+    let config = AppConfig::load_or_default_for_profile(profile);
+    Ok(config.ns)
 }
 
-/// Get the path to config.yml (Android)
-#[cfg(target_os = "android")]
-fn get_config_path() -> Result<PathBuf> {
-    Ok(PathBuf::from(
-        "/data/data/app.dure.installer/files/config.yml",
-    ))
-}
-
-/// Get the path to config.yml (WASM)
-#[cfg(target_arch = "wasm32")]
-fn get_config_path() -> Result<PathBuf> {
-    Ok(PathBuf::from(".dure/config.yml"))
-}
-
-/// Load NS config from YAML file
-fn load_ns_config() -> Result<NsConfig> {
-    let config_path = get_config_path()?;
-
-    if !config_path.exists() {
-        // Return empty config if file doesn't exist
-        return Ok(NsConfig::default());
-    }
-
-    let yaml = std::fs::read_to_string(&config_path).context("Failed to read config.yml")?;
-
-    // Try to parse as full config with ns section
-    #[derive(serde::Deserialize)]
-    struct FullConfig {
-        #[serde(default)]
-        ns: NsConfig,
-    }
-
-    match serde_yaml::from_str::<FullConfig>(&yaml) {
-        Ok(full_config) => Ok(full_config.ns),
-        Err(_) => {
-            // If that fails, try to parse just the ns section
-            Ok(NsConfig::default())
-        }
-    }
-}
-
-/// Save NS config to YAML file
-fn save_ns_config(ns_config: &NsConfig) -> Result<()> {
-    let config_path = get_config_path()?;
-
-    // Ensure config directory exists
-    if let Some(parent) = config_path.parent() {
-        std::fs::create_dir_all(parent).context("Failed to create config directory")?;
-    }
-
-    // Load existing config or create new one
-    let mut full_config = if config_path.exists() {
-        let yaml = std::fs::read_to_string(&config_path).context("Failed to read config.yml")?;
-        serde_yaml::from_str::<serde_yaml::Value>(&yaml)
-            .unwrap_or_else(|_| serde_yaml::Value::Mapping(Default::default()))
-    } else {
-        serde_yaml::Value::Mapping(Default::default())
-    };
-
-    // Update the ns section
-    let ns_value = serde_yaml::to_value(ns_config).context("Failed to serialize NS config")?;
-
-    if let serde_yaml::Value::Mapping(ref mut map) = full_config {
-        map.insert(serde_yaml::Value::String("ns".to_string()), ns_value);
-    }
-
-    // Write back to file
-    let yaml = serde_yaml::to_string(&full_config).context("Failed to serialize config")?;
-    std::fs::write(&config_path, yaml).context("Failed to write config.yml")?;
-
-    Ok(())
+/// Save NS config for profile
+fn save_ns_config(profile: &ProfileContext, ns_config: &NsConfig) -> Result<()> {
+    let mut config = AppConfig::load_or_default_for_profile(profile);
+    config.ns = ns_config.clone();
+    config.save_for_profile(profile)
 }
 
 /// Execute NS status command
 ///
 /// Lists all registered domains and their records
-pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
-    let config = load_ns_config()?;
+pub fn execute_ns_status(profile: &ProfileContext, domain: &Option<String>) -> Result<()> {
+    let config = load_ns_config(profile)?;
 
     if config.total_domains() == 0 {
         dure_info!("No domains registered.");
@@ -166,8 +98,8 @@ pub fn execute_ns_status(domain: &Option<String>) -> Result<()> {
 /// Execute NS add command
 ///
 /// Adds a new domain to nameserver configuration
-pub fn execute_ns_add(domain: &str, provider: &str, token: &str) -> Result<()> {
-    let mut config = load_ns_config()?;
+pub fn execute_ns_add(profile: &ProfileContext, domain: &str, provider: &str, token: &str) -> Result<()> {
+    let mut config = load_ns_config(profile)?;
 
     // Validate provider
     let valid_providers = [
@@ -199,10 +131,10 @@ pub fn execute_ns_add(domain: &str, provider: &str, token: &str) -> Result<()> {
 
     let provider_display = normalized_provider.clone();
     config.add_domain(normalized_provider, domain.to_string(), token.to_string())?;
-    save_ns_config(&config)?;
+    save_ns_config(profile, &config)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "ns add", domain);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ns add", domain);
 
     dure_info!(
         "✓ Domain '{}' added with provider '{}'",
@@ -220,8 +152,8 @@ pub fn execute_ns_add(domain: &str, provider: &str, token: &str) -> Result<()> {
 /// Execute NS del command
 ///
 /// Deletes a domain from nameserver configuration
-pub fn execute_ns_del(domain: &str) -> Result<()> {
-    let mut config = load_ns_config()?;
+pub fn execute_ns_del(profile: &ProfileContext, domain: &str) -> Result<()> {
+    let mut config = load_ns_config(profile)?;
 
     // Find which provider(s) have this domain
     let providers = config.find_providers_for_domain(domain);
@@ -240,10 +172,10 @@ pub fn execute_ns_del(domain: &str) -> Result<()> {
 
     let provider = &providers[0];
     config.remove_domain(provider, domain)?;
-    save_ns_config(&config)?;
+    save_ns_config(profile, &config)?;
 
     // Record audit event
-    let _ = audit::push_cli("system", "cli", "ns del", domain);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ns del", domain);
 
     dure_info!(" Domain '{}' removed from provider '{}'", domain, provider);
 
@@ -253,8 +185,8 @@ pub fn execute_ns_del(domain: &str) -> Result<()> {
 /// Execute NS insert command
 ///
 /// Inserts a DNS record to a domain
-pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bool) -> Result<()> {
-    let mut config = load_ns_config()?;
+pub fn execute_ns_insert(profile: &ProfileContext, record_type: &str, domain: &str, value: &str, apply: bool) -> Result<()> {
+    let mut config = load_ns_config(profile)?;
 
     // Parse record type
     let rec_type = RecordType::from_str(record_type).ok_or_else(|| {
@@ -292,11 +224,11 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
         "@".to_string(),
         value.to_string(),
     )?;
-    save_ns_config(&config)?;
+    save_ns_config(profile, &config)?;
 
     // Record audit event
     let record_desc = format!("{} @ {} {}", domain, record_type, value);
-    let _ = audit::push_cli("system", "cli", "ns insert", &record_desc);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ns insert", &record_desc);
 
     dure_info!(
         "✓ Record added: {} {} -> {}",
@@ -341,8 +273,8 @@ pub fn execute_ns_insert(record_type: &str, domain: &str, value: &str, apply: bo
 /// Execute NS remove command
 ///
 /// Removes a DNS record from a domain
-pub fn execute_ns_remove(record_type: &str, domain: &str, value: &str) -> Result<()> {
-    let mut config = load_ns_config()?;
+pub fn execute_ns_remove(profile: &ProfileContext, record_type: &str, domain: &str, value: &str) -> Result<()> {
+    let mut config = load_ns_config(profile)?;
 
     // Parse record type
     let rec_type = RecordType::from_str(record_type).ok_or_else(|| {
@@ -370,11 +302,11 @@ pub fn execute_ns_remove(record_type: &str, domain: &str, value: &str) -> Result
     let provider = &providers[0];
 
     config.remove_record(provider, domain, rec_type, value)?;
-    save_ns_config(&config)?;
+    save_ns_config(profile, &config)?;
 
     // Record audit event
     let record_desc = format!("{} {} {}", domain, record_type, value);
-    let _ = audit::push_cli("system", "cli", "ns remove", &record_desc);
+    let _ = audit::push_cli_for_profile(profile, "system", "cli", "ns remove", &record_desc);
 
     dure_info!(
         "✓ Record removed: {} {} {}",
@@ -387,16 +319,4 @@ pub fn execute_ns_remove(record_type: &str, domain: &str, value: &str) -> Result
     dure_info!("you may need to use the provider's control panel.");
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get_config_path() {
-        let path = get_config_path().unwrap();
-        assert!(path.to_string_lossy().contains("dure"));
-        assert!(path.to_string_lossy().ends_with("config.yml"));
-    }
 }

@@ -3,13 +3,14 @@
 // Logging provided by standard log crate
 use crate::calc::db;
 use crate::calc::dns::{resolve_dns, RecordType};
+use crate::calc::profile::ProfileContext;
 use crate::storage::models::dns::{cache_dns_records, get_cached_dns_records, init_dns_table};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
 use diesel::prelude::*;
 
 /// Execute DNS command
-pub fn execute_dns(record_type_str: &str, domain: &str) -> Result<()> {
+pub fn execute_dns(profile: &ProfileContext, record_type_str: &str, domain: &str) -> Result<()> {
     let record_type = match record_type_str.to_lowercase().as_str() {
         "a" => RecordType::A,
         "aaaa" => RecordType::AAAA,
@@ -70,7 +71,7 @@ fn get_db_path() -> Result<std::path::PathBuf> {
 }
 
 /// Execute DNS bastion command - add TXT record for bastion IP
-pub fn execute_dns_bastion(ip: &str) -> Result<()> {
+pub fn execute_dns_bastion(profile: &ProfileContext, ip: &str) -> Result<()> {
     // Validate IP address format
     if !is_valid_ip(ip) {
         anyhow::bail!("Invalid IP address format: {}", ip);

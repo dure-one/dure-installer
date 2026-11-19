@@ -1,5 +1,6 @@
 //! List and show commands for platforms
 
+use crate::calc::profile::ProfileContext;
 use crate::cli::commands::platform::helpers::*;
 use crate::config::AppConfig;
 use anyhow::{anyhow, Result};
@@ -10,10 +11,9 @@ fn get_config_path() -> Result<PathBuf> {
     Ok(crate::get_app_config_dir()?.join("config.yml"))
 }
 
-/// Load application config
-fn load_config() -> Result<AppConfig> {
-    let config_path = get_config_path()?;
-    Ok(AppConfig::load_or_default(&config_path))
+/// Load application config for profile
+fn load_config(profile: &ProfileContext) -> Result<AppConfig> {
+    Ok(AppConfig::load_or_default_for_profile(profile))
 }
 
 /// Format platform list for display
@@ -124,24 +124,24 @@ pub fn format_platform_show(config: &AppConfig, name: &str) -> Result<String> {
 }
 
 /// Execute platform list command
-pub fn execute_platform_list() -> Result<()> {
-    let config = load_config()?;
+pub fn execute_platform_list(profile: &ProfileContext) -> Result<()> {
+    let config = load_config(profile)?;
     let output = format_platform_list(&config);
     println!("{}", output);
     Ok(())
 }
 
 /// Execute platform show command
-pub fn execute_platform_show(name: String) -> Result<()> {
-    let config = load_config()?;
+pub fn execute_platform_show(profile: &ProfileContext, name: String) -> Result<()> {
+    let config = load_config(profile)?;
     let output = format_platform_show(&config, &name)?;
     println!("{}", output);
     Ok(())
 }
 
 /// Execute combined platform list and show (default when no subcommand)
-pub fn execute_platform_combined() -> Result<()> {
-    let config = load_config()?;
+pub fn execute_platform_combined(profile: &ProfileContext) -> Result<()> {
+    let config = load_config(profile)?;
 
     if config.platforms.is_empty() {
         println!("No platforms configured");

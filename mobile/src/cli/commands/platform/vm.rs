@@ -1,22 +1,12 @@
 //! VM operation commands
 
+use crate::calc::profile::ProfileContext;
 use crate::cli::commands::platform::helpers::*;
 use crate::cli::commands::platform::runner::PlatformCliRunner;
 use crate::config::{AppConfig, CloudPlatformConfig};
 use crate::viewmodel::platform::{PlatformCommand, PlatformEvent};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
-
-/// Get config file path
-fn get_config_path() -> Result<PathBuf> {
-    Ok(crate::get_app_config_dir()?.join("config.yml"))
-}
-
-/// Load application config
-fn load_config() -> Result<AppConfig> {
-    let config_path = get_config_path()?;
-    Ok(AppConfig::load_or_default(&config_path))
-}
 
 /// Select VM from platform (auto-select if one, error if none)
 pub fn select_vm(
@@ -93,12 +83,13 @@ pub async fn execute_addvm_inner(
 
 /// Execute addvm command
 pub fn execute_addvm_command(
+    profile: &ProfileContext,
     name: String,
     vm_name_flag: Option<String>,
     zone_flag: Option<String>,
     machine_type_flag: Option<String>,
 ) -> Result<()> {
-    let config = load_config()?;
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms
@@ -163,8 +154,8 @@ pub fn execute_addvm_command(
 }
 
 /// Execute restart command
-pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<()> {
-    let config = load_config()?;
+pub fn execute_restart_command(profile: &ProfileContext, name: String, vm_flag: Option<String>) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms
@@ -183,11 +174,9 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        // Use default config path for CLI
-        let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
         let event = runner
             .execute_command(PlatformCommand::RestartVM {
-                profile_config_path,
+                profile_config_path: profile.config_file.clone(),
                 platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),
@@ -204,8 +193,8 @@ pub fn execute_restart_command(name: String, vm_flag: Option<String>) -> Result<
 }
 
 /// Execute delvm command
-pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()> {
-    let config = load_config()?;
+pub fn execute_delvm_command(profile: &ProfileContext, name: String, vm_flag: Option<String>) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
         .platforms
@@ -236,11 +225,9 @@ pub fn execute_delvm_command(name: String, vm_flag: Option<String>) -> Result<()
     smol::block_on(async {
         let mut runner = PlatformCliRunner::new();
 
-        // Use default config path for CLI
-        let profile_config_path = crate::get_app_config_dir()?.join("config.yml");
         let event = runner
             .execute_command(PlatformCommand::DeleteVM {
-                profile_config_path,
+                profile_config_path: profile.config_file.clone(),
                 platform_name: platform.gcp_selected_project_id.as_ref().unwrap().clone(),
                 vm_name: vm_name.clone(),
                 zone: zone.clone(),

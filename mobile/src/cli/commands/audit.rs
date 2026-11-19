@@ -4,11 +4,12 @@
 //! `dure audit clear`  - wipe all audit records
 
 use crate::calc::audit;
+use crate::calc::profile::ProfileContext;
 use anyhow::Result;
 
 /// Execute `audit status` — print recent audit records to stdout.
-pub fn execute_audit_status() -> Result<()> {
-    let records = audit::show(50)?;
+pub fn execute_audit_status(profile: &ProfileContext) -> Result<()> {
+    let records = audit::show_for_profile(profile, 50)?;
 
     if records.is_empty() {
         println!("No audit records found.");
@@ -37,7 +38,7 @@ pub fn execute_audit_status() -> Result<()> {
 }
 
 /// Execute `audit clear` — delete all audit records after confirmation.
-pub fn execute_audit_clear() -> Result<()> {
+pub fn execute_audit_clear(profile: &ProfileContext) -> Result<()> {
     use std::io::{self, BufRead};
 
     print!("This will permanently delete all audit records. Type 'yes' to confirm: ");
@@ -46,7 +47,7 @@ pub fn execute_audit_clear() -> Result<()> {
     stdin.lock().read_line(&mut line)?;
 
     if line.trim().eq_ignore_ascii_case("yes") {
-        let deleted = audit::clear()?;
+        let deleted = audit::clear_for_profile(profile)?;
         println!("Cleared {} audit record(s).", deleted);
     } else {
         println!("Aborted.");

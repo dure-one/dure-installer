@@ -8,6 +8,7 @@ use crate::calc::keyring::{
     add_key, delete_key, ensure_kdbx_exists, get_default_kdbx_path, get_default_kpkey_path,
     list_keys,
 };
+use crate::calc::profile::ProfileContext;
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -19,7 +20,7 @@ use std::path::Path;
 /// # Arguments
 ///
 /// * `output_path` - Optional output path (defaults to ./exported_keys.kdbx)
-pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
+pub fn execute_key_save(profile: &ProfileContext, output_path: Option<String>) -> Result<()> {
     dure_info!("Saving keyring to KeePass database...");
 
     // Get source database path
@@ -63,7 +64,7 @@ pub fn execute_key_save(output_path: Option<String>) -> Result<()> {
 /// # Arguments
 ///
 /// * `input_path` - Path to the KeePass database file (.kdbx)
-pub fn execute_key_load(input_path: String) -> Result<()> {
+pub fn execute_key_load(profile: &ProfileContext, input_path: String) -> Result<()> {
     dure_info!("Loading keyring from KeePass database...");
 
     let input_path = Path::new(&input_path);
@@ -105,7 +106,7 @@ pub fn execute_key_load(input_path: String) -> Result<()> {
 /// Execute KEY STATUS command
 ///
 /// Lists all keys in the current keyring.
-pub fn execute_key_status() -> Result<()> {
+pub fn execute_key_status(profile: &ProfileContext) -> Result<()> {
     // Ensure database exists
     let kdbx_path = ensure_kdbx_exists()?;
     let kpkey_path = get_default_kpkey_path()?;
@@ -154,7 +155,7 @@ pub fn execute_key_status() -> Result<()> {
 /// * `domain` - Domain/URL for the key (e.g., "www.dure.app")
 /// * `username` - Username/email (e.g., "admin@dure.co")
 /// * `password` - The password/credential
-pub fn execute_key_add(domain: String, username: String, password: String) -> Result<()> {
+pub fn execute_key_add(profile: &ProfileContext, domain: String, username: String, password: String) -> Result<()> {
     dure_info!("Adding key to keyring...");
 
     // Ensure database exists
@@ -188,7 +189,7 @@ pub fn execute_key_add(domain: String, username: String, password: String) -> Re
 /// # Arguments
 ///
 /// * `domain` - Domain/URL of the key to delete
-pub fn execute_key_del(domain: String) -> Result<()> {
+pub fn execute_key_del(profile: &ProfileContext, domain: String) -> Result<()> {
     dure_info!("Deleting key from keyring...");
 
     // Ensure database exists

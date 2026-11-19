@@ -280,47 +280,52 @@ pub enum SshCommands {
 /// Run CLI mode - parse and execute CLI commands
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_cli_mode() -> anyhow::Result<()> {
+    use crate::calc::profile::ProfileContext;
+
     let cli = Cli::parse();
+
+    // Load default profile for CLI operations
+    let profile = ProfileContext::new("default")?;
 
     match cli.command {
         Commands::Audit { command } => match command {
             AuditCommands::Status => {
-                commands::audit::execute_audit_status()?;
+                commands::audit::execute_audit_status(&profile)?;
             }
             AuditCommands::Clear => {
-                commands::audit::execute_audit_clear()?;
+                commands::audit::execute_audit_clear(&profile)?;
             }
         },
         Commands::Dns { command } => match command {
             DnsCommands::A { domain } => {
-                commands::dns::execute_dns("a", &domain)?;
+                commands::dns::execute_dns(&profile, "a", &domain)?;
             }
             DnsCommands::Aaaa { domain } => {
-                commands::dns::execute_dns("aaaa", &domain)?;
+                commands::dns::execute_dns(&profile, "aaaa", &domain)?;
             }
             DnsCommands::Ns { domain } => {
-                commands::dns::execute_dns("ns", &domain)?;
+                commands::dns::execute_dns(&profile, "ns", &domain)?;
             }
             DnsCommands::Txt { domain } => {
-                commands::dns::execute_dns("txt", &domain)?;
+                commands::dns::execute_dns(&profile, "txt", &domain)?;
             }
             DnsCommands::Bastion { ip } => {
-                commands::dns::execute_dns_bastion(&ip)?;
+                commands::dns::execute_dns_bastion(&profile, &ip)?;
             }
         },
         Commands::Ns { command } => match command {
             NsCommands::Status { domain } => {
-                commands::ns::execute_ns_status(&domain)?;
+                commands::ns::execute_ns_status(&profile, &domain)?;
             }
             NsCommands::Add {
                 domain,
                 provider,
                 token,
             } => {
-                commands::ns::execute_ns_add(&domain, &provider, &token)?;
+                commands::ns::execute_ns_add(&profile, &domain, &provider, &token)?;
             }
             NsCommands::Del { domain } => {
-                commands::ns::execute_ns_del(&domain)?;
+                commands::ns::execute_ns_del(&profile, &domain)?;
             }
             NsCommands::Insert {
                 record_type,
@@ -328,43 +333,43 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 value,
                 apply,
             } => {
-                commands::ns::execute_ns_insert(&record_type, &domain, &value, apply)?;
+                commands::ns::execute_ns_insert(&profile, &record_type, &domain, &value, apply)?;
             }
             NsCommands::Remove {
                 record_type,
                 domain,
                 value,
             } => {
-                commands::ns::execute_ns_remove(&record_type, &domain, &value)?;
+                commands::ns::execute_ns_remove(&profile, &record_type, &domain, &value)?;
             }
         },
         Commands::Crypt { command } => match command {
             CryptCommands::Status => {
-                commands::crypt::execute_crypt_status()?;
+                commands::crypt::execute_crypt_status(&profile)?;
             }
             CryptCommands::Enc {
                 recipient_pubkey,
                 data,
                 hex,
             } => {
-                commands::crypt::execute_crypt_enc(recipient_pubkey, data, hex)?;
+                commands::crypt::execute_crypt_enc(&profile, recipient_pubkey, data, hex)?;
             }
             CryptCommands::Dec {
                 encrypted_data,
                 raw,
             } => {
-                commands::crypt::execute_crypt_dec(encrypted_data, raw)?;
+                commands::crypt::execute_crypt_dec(&profile, encrypted_data, raw)?;
             }
         },
         Commands::Key { command } => match command {
             KeyCommands::Save { output } => {
-                commands::keyring::execute_key_save(output.clone())?;
+                commands::keyring::execute_key_save(&profile, output.clone())?;
             }
             KeyCommands::Load { input } => {
-                commands::keyring::execute_key_load(input.clone())?;
+                commands::keyring::execute_key_load(&profile, input.clone())?;
             }
             KeyCommands::Status => {
-                commands::keyring::execute_key_status()?;
+                commands::keyring::execute_key_status(&profile)?;
             }
             KeyCommands::Add {
                 domain,
@@ -372,44 +377,45 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 password,
             } => {
                 commands::keyring::execute_key_add(
+                    &profile,
                     domain.clone(),
                     username.clone(),
                     password.clone(),
                 )?;
             }
             KeyCommands::Del { domain } => {
-                commands::keyring::execute_key_del(domain.clone())?;
+                commands::keyring::execute_key_del(&profile, domain.clone())?;
             }
         },
         Commands::Platform { command } => match command {
             None => {
                 // Default: show combined list + show for all platforms
-                commands::platform::list::execute_platform_combined()?;
+                commands::platform::list::execute_platform_combined(&profile)?;
             }
             Some(PlatformCommands::Add {
                 name,
                 platform_type,
             }) => {
-                commands::platform::execute_platform_add(name, platform_type)?;
+                commands::platform::execute_platform_add(&profile, name, platform_type)?;
             }
             Some(PlatformCommands::External(args)) => {
-                commands::platform::execute_platform_external(args)?;
+                commands::platform::execute_platform_external(&profile, args)?;
             }
         },
         Commands::Site { command } => match command {
             SiteCommands::Status => {
-                commands::site::execute_site_status()?;
+                commands::site::execute_site_status(&profile)?;
             }
             SiteCommands::Add { domain, public_key } => {
-                commands::site::execute_site_add(domain, public_key)?;
+                commands::site::execute_site_add(&profile, domain, public_key)?;
             }
             SiteCommands::Del { domain } => {
-                commands::site::execute_site_del(domain)?;
+                commands::site::execute_site_del(&profile, domain)?;
             }
         },
         Commands::Ssh { command } => match command {
             SshCommands::Status => {
-                commands::ssh::execute_ssh_status()?;
+                commands::ssh::execute_ssh_status(&profile)?;
             }
             SshCommands::Add {
                 host,
@@ -417,13 +423,13 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 prvkey,
                 port,
             } => {
-                commands::ssh::execute_ssh_add(host, pass, prvkey, port)?;
+                commands::ssh::execute_ssh_add(&profile, host, pass, prvkey, port)?;
             }
             SshCommands::Del { host } => {
-                commands::ssh::execute_ssh_del(host)?;
+                commands::ssh::execute_ssh_del(&profile, host)?;
             }
             SshCommands::Init { host } => {
-                commands::ssh::execute_ssh_init(host)?;
+                commands::ssh::execute_ssh_init(&profile, host)?;
             }
         },
         Commands::Info => {
