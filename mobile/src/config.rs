@@ -384,6 +384,57 @@ impl AppConfig {
     pub fn default_android() -> Self {
         Self::default()
     }
+
+    // ============================================================================
+    // Profile-aware config methods
+    // ============================================================================
+
+    /// Load configuration for a specific profile
+    ///
+    /// Uses the profile's config.yml path for loading.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use mobile::calc::profile::ProfileContext;
+    /// use mobile::config::AppConfig;
+    ///
+    /// let profile = ProfileContext::new("my-profile")?;
+    /// let config = AppConfig::load_for_profile(&profile)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_for_profile(profile: &crate::calc::profile::ProfileContext) -> anyhow::Result<Self> {
+        Self::load(&profile.config_file)
+    }
+
+    /// Load configuration for a profile or return default
+    ///
+    /// Profile-aware version of `load_or_default()`. Uses the profile's
+    /// config.yml path.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_or_default_for_profile(profile: &crate::calc::profile::ProfileContext) -> Self {
+        Self::load_for_profile(profile).unwrap_or_default()
+    }
+
+    /// Save configuration for a specific profile
+    ///
+    /// Uses the profile's config.yml path for saving.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use mobile::calc::profile::ProfileContext;
+    /// use mobile::config::AppConfig;
+    ///
+    /// let profile = ProfileContext::new("my-profile")?;
+    /// let mut config = AppConfig::load_or_default_for_profile(&profile);
+    /// // Modify config...
+    /// config.save_for_profile(&profile)?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn save_for_profile(&self, profile: &crate::calc::profile::ProfileContext) -> anyhow::Result<()> {
+        self.save(&profile.config_file)
+    }
 }
 
 #[cfg(test)]
