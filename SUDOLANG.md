@@ -3,7 +3,7 @@
 > Full structure and interface documentation for all mobile/src/**/*.rs files.
 > See docs/ARCH.sudolang.md for high-level architecture summary.
 
-**Total Files**: 187 Rust files  
+**Total Files**: 173 Rust files  
 **Purpose**: Code-level reference for managing and understanding implementation details
 
 ---
@@ -172,12 +172,6 @@ interface AndroidModule {
   log.rs {
     // Android logging integration
     fn android_log(level: Level, msg: &str)
-  }
-  
-  packagemanager.rs {
-    // Android PackageManager utilities
-    fn get_package_name() -> String
-    fn get_app_version() -> String
   }
   
   screensize.rs {
@@ -432,15 +426,6 @@ interface CalcModule {
     constraint: Caches results, uses multiple resolvers
   }
   
-  ns.rs {
-    // Nameserver management orchestration
-    fn register_domain(domain: &str, provider: Provider, token: &str, profile: &ProfileContext) -> Result<()>
-    fn update_records(domain: &str, records: Vec<DnsRecord>, profile: &ProfileContext) -> Result<()>
-    fn delete_domain(domain: &str, profile: &ProfileContext) -> Result<()>
-    
-    constraint: Routes to appropriate API module based on provider
-  }
-  
   ssh.rs {
     // SSH operations
     fn connect(host: &str, port: u16, auth: SshAuth) -> Result<SshSession>
@@ -465,29 +450,27 @@ interface CalcModule {
   }
   
   gcp.rs {
-    // GCP orchestration
+    // GCP Compute Engine client and operations (merged from platform_gcp + hosting_gcp)
+    // Core GCP client
     fn provision_vm(spec: VmSpec, profile: &ProfileContext) -> Result<Vm>
     fn destroy_vm(vm_id: &str, profile: &ProfileContext) -> Result<()>
     fn get_vm_status(vm_id: &str) -> Result<VmStatus>
     
+    // Module: gcp::hosting
+    mod hosting {
+      fn generate_ssh_keypair() -> Result<(String, Vec<u8>)>
+      fn delete_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String>
+      fn restart_vm(client: &GcpRestClient, vm: &VmInstance) -> Result<String>
+      fn regenerate_vm(client: &GcpRestClient, platform: &mut CloudPlatformConfig, zone: &str) -> Result<String>
+    }
+    
+    // Module: gcp::platform
+    mod platform {
+      fn compute_platform_status(platform: &CloudPlatformConfig, total_projects: usize) -> String
+      fn compute_project_status(platform: &CloudPlatformConfig, current_ip: &str, whitelisted: bool) -> String
+    }
+    
     constraint: Calls api::gcp, stores state in DB
-  }
-  
-  platform_gcp.rs {
-    // GCP platform-level operations
-    fn setup_project(name: &str, profile: &ProfileContext) -> Result<Project>
-    fn enable_apis(project: &str) -> Result<()>
-  }
-  
-  hosting_gcp.rs {
-    // GCP hosting utilities
-    fn setup_hosting(domain: &str, profile: &ProfileContext) -> Result<()>
-  }
-  
-  site.rs {
-    // Site management
-    fn register_site(domain: &str, pubkey: PublicKey, profile: &ProfileContext) -> Result<()>
-    fn list_sites(profile: &ProfileContext) -> Result<Vec<Site>>
   }
   
   mycart.rs {
@@ -570,29 +553,11 @@ interface CliModule {
       fn execute_key_load(input: &str) -> Result<()>
     }
     
-    ns.rs {
-      fn execute_ns_status(profile: &ProfileContext, domain: Option<&str>) -> Result<()>
-      fn execute_ns_add(domain: &str, provider: &str, token: &str, profile: &ProfileContext) -> Result<()>
-      fn execute_ns_del(domain: &str, profile: &ProfileContext) -> Result<()>
-      fn execute_ns_insert(type: &str, domain: &str, value: &str, apply: bool) -> Result<()>
-      fn execute_ns_remove(type: &str, domain: &str, value: &str) -> Result<()>
-    }
-    
-    site.rs {
-      fn execute_site_status(profile: &ProfileContext) -> Result<()>
-      fn execute_site_add(domain: &str, pubkey: &str, profile: &ProfileContext) -> Result<()>
-      fn execute_site_del(domain: &str, profile: &ProfileContext) -> Result<()>
-    }
-    
     ssh.rs {
       fn execute_ssh_status(profile: &ProfileContext) -> Result<()>
       fn execute_ssh_add(host: &str, auth: SshAuth, profile: &ProfileContext) -> Result<()>
       fn execute_ssh_del(host: &str, profile: &ProfileContext) -> Result<()>
       fn execute_ssh_init(host: &str, profile: &ProfileContext) -> Result<()>
-    }
-    
-    platform_vm.rs {
-      fn execute_platform_add(name: &str, platform_type: &str, profile: &ProfileContext) -> Result<()>
     }
     
     platform/ {
@@ -954,44 +919,6 @@ interface UiTabsModule {
     // STT variant
   }
   
-  ns.rs {
-    // DNS nameserver tab
-    struct NsTab { domains: Vec<Domain>, records: HashMap<String, Vec<DnsRecord>> }
-    fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
-    
-    constraint: Sends NsCommand to actor, receives NsEvent
-  }
-  
-  ns_stt.rs {
-    // STT variant
-  }
-  
-  site.rs {
-    // Site management tab
-    struct SiteTab { sites: Vec<Site>, selected: Option<String> }
-    fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
-  }
-  
-  products.rs {
-    // Product management tab (mycart)
-    struct ProductsTab { products: Vec<Product>, filter: String }
-    fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
-  }
-  
-  products_stt.rs {
-    // STT variant
-  }
-  
-  orders.rs {
-    // Order management tab (mycart)
-    struct OrdersTab { orders: Vec<Order>, status_filter: OrderStatus }
-    fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
-  }
-  
-  orders_stt.rs {
-    // STT variant
-  }
-  
   settings.rs {
     // Settings tab
     struct SettingsTab { settings: Settings }
@@ -1031,7 +958,6 @@ interface ViewModelModule {
       platform_tx: Sender<PlatformCommand>
       drawer_tx: Sender<DrawerCommand>
       ssh_tx: Sender<SshCommand>
-      ns_tx: Sender<NsCommand>
       logs_tx: Sender<LogCommand>
       event_rx: Receiver<ViewModelEvent>
       state: ViewModelState
@@ -1048,7 +974,7 @@ interface ViewModelModule {
   
   common.rs {
     // Shared types
-    enum ViewModelEvent { Platform, Drawer, Ssh, Ns, Logs }
+    enum ViewModelEvent { Platform, Drawer, Ssh, Logs }
     struct ViewModelState { active_operations, recent_errors, textures }
   }
   
@@ -1161,35 +1087,6 @@ interface ViewModelModule {
     
     tests.rs {
       // SSH actor tests
-    }
-  }
-  
-  ns/ {
-    mod.rs { /* NS actor exports */ }
-    
-    actor.rs {
-      // DNS nameserver actor
-      async fn ns_actor(
-        cmd_rx: Receiver<NsCommand>,
-        event_tx: Sender<ViewModelEvent>,
-        profile: ProfileContext
-      )
-    }
-    
-    commands.rs {
-      enum NsCommand { ListDomains, AddDomain, UpdateRecords, DeleteDomain }
-    }
-    
-    events.rs {
-      enum NsEvent { DomainsListed(Vec<Domain>), DomainAdded, RecordsUpdated }
-    }
-    
-    state.rs {
-      struct NsState { domains: Vec<Domain>, records: HashMap<String, Vec<DnsRecord>> }
-    }
-    
-    tests.rs {
-      // NS actor tests
     }
   }
   

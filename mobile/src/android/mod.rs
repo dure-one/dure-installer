@@ -18,7 +18,6 @@ pub mod inputmethod;
 pub mod log;
 
 #[cfg(target_os = "android")]
-pub mod packagemanager;
 
 #[cfg(target_os = "android")]
 pub mod screensize;

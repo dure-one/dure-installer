@@ -886,7 +886,7 @@ impl PlatformActor {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Not authenticated with GCP"))?;
                 let client = GcpRestClient::new(access_token);
-                crate::calc::hosting_gcp::regenerate_vm(&client, &mut platform, &zone, &handle)
+                crate::calc::gcp::hosting::regenerate_vm(&client, &mut platform, &zone, &handle)
             }
         })
         .await?;

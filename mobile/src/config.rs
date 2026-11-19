@@ -345,9 +345,6 @@ pub struct AppConfig {
     pub ssh_hosts: Vec<SshHostConfig>,
     #[serde(default)]
     pub mycart_sites: Vec<MycartSiteConfig>,
-    #[serde(default)]
-    #[cfg(not(target_arch = "wasm32"))]
-    pub ns: crate::calc::ns::NsConfig,
 }
 
 impl AppConfig {

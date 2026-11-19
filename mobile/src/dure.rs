@@ -132,7 +132,6 @@ pub struct DureApp {
     pub scrolling_selected: usize,
     pub tab_platform: crate::ui_tabs::platform::PlatformTab,
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
-    pub tab_ns: crate::ui_tabs::ns::NsTab, // Keep NS tab code, hidden from main tabs
     pub tab_dns: crate::ui_tabs::dns::DnsTab, // New DNS tab with Cloudflare OAuth
     pub tab_mycart: crate::ui_tabs::mycart::MycartTab, // Mycart admin management
 
@@ -266,7 +265,6 @@ impl Default for DureApp {
             scrolling_selected: 0,
             tab_platform: crate::ui_tabs::platform::PlatformTab::default(),
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
-            tab_ns: crate::ui_tabs::ns::NsTab::default(),
             tab_dns: crate::ui_tabs::dns::DnsTab::default(),
             tab_mycart: crate::ui_tabs::mycart::MycartTab::default(),
             theme_needs_reload: false,
@@ -606,9 +604,7 @@ impl DureApp {
                     }
                 }
                 Tab::Dns => {
-                    if self.tab_ns.should_reload_config(&self.current_profile) {
-                        self.tab_ns.reset_loaded();
-                    }
+                    // DNS tab uses Cloudflare OAuth, no config reload needed
                 }
                 Tab::Mycart => {} // Mycart tab doesn't use config loading pattern
             }
@@ -1524,7 +1520,6 @@ impl DureApp {
         // Reset all tabs to clear cached data
         self.tab_platform = crate::ui_tabs::platform::PlatformTab::default();
         self.tab_ssh = crate::ui_tabs::ssh::SshTab::default();
-        self.tab_ns = crate::ui_tabs::ns::NsTab::default();
         self.tab_mycart = crate::ui_tabs::mycart::MycartTab::default();
 
         // Reset ViewModel to force re-initialization with new profile data

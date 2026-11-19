@@ -18,11 +18,6 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     // ==================== Hosting Control Commands ====================
-    /// DNS nameserver record management
-    Ns {
-        #[command(subcommand)]
-        command: NsCommands,
-    },
     /// Platform management (GCP, Firebase, Supabase)
     Platform {
         #[command(subcommand)]
@@ -56,11 +51,6 @@ pub enum Commands {
     Crypt {
         #[command(subcommand)]
         command: CryptCommands,
-    },
-    /// Site management for site-to-site communication
-    Site {
-        #[command(subcommand)]
-        command: SiteCommands,
     },
     /// Show diagnostic metadata about the workspace
     Info,
@@ -109,71 +99,6 @@ pub enum DnsCommands {
     Bastion {
         /// IP address to add to bastion allow list
         ip: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum NsCommands {
-    /// List all registered domains and their records
-    Status {
-        /// Optional domain name to show records for specific domain
-        domain: Option<String>,
-    },
-    /// Add a new domain to nameserver
-    Add {
-        /// Domain name (e.g., www.example.com)
-        domain: String,
-        /// DNS provider (cloudflare, gcloud, duckdns, porkbun)
-        #[arg(long)]
-        provider: String,
-        /// API token for the DNS provider
-        #[arg(long)]
-        token: String,
-    },
-    /// Delete a domain from nameserver
-    Del {
-        /// Domain name to delete
-        domain: String,
-    },
-    /// Insert a DNS record to a domain
-    Insert {
-        /// Record type (a, aaaa, txt, ns)
-        record_type: String,
-        /// Domain name
-        domain: String,
-        /// Record value (IP address for A/AAAA, nameserver for NS, text for TXT)
-        value: String,
-        /// Apply the change to DNS provider immediately
-        #[arg(long)]
-        apply: bool,
-    },
-    /// Remove a DNS record from a domain
-    Remove {
-        /// Record type (a, aaaa, txt, ns)
-        record_type: String,
-        /// Domain name
-        domain: String,
-        /// Record value to remove
-        value: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SiteCommands {
-    /// List all configured sites
-    Status,
-    /// Add a new site for site-to-site communication
-    Add {
-        /// Domain name (e.g., example.com)
-        domain: String,
-        /// Public key for authentication
-        #[arg(long)]
-        public_key: String,
-    },
-    /// Delete a site
-    Del {
-        /// Domain name to delete
-        domain: String,
     },
 }
 
@@ -313,36 +238,6 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 commands::dns::execute_dns_bastion(&profile, &ip)?;
             }
         },
-        Commands::Ns { command } => match command {
-            NsCommands::Status { domain } => {
-                commands::ns::execute_ns_status(&profile, &domain)?;
-            }
-            NsCommands::Add {
-                domain,
-                provider,
-                token,
-            } => {
-                commands::ns::execute_ns_add(&profile, &domain, &provider, &token)?;
-            }
-            NsCommands::Del { domain } => {
-                commands::ns::execute_ns_del(&profile, &domain)?;
-            }
-            NsCommands::Insert {
-                record_type,
-                domain,
-                value,
-                apply,
-            } => {
-                commands::ns::execute_ns_insert(&profile, &record_type, &domain, &value, apply)?;
-            }
-            NsCommands::Remove {
-                record_type,
-                domain,
-                value,
-            } => {
-                commands::ns::execute_ns_remove(&profile, &record_type, &domain, &value)?;
-            }
-        },
         Commands::Crypt { command } => match command {
             CryptCommands::Status => {
                 commands::crypt::execute_crypt_status(&profile)?;
@@ -400,17 +295,6 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
             }
             Some(PlatformCommands::External(args)) => {
                 commands::platform::execute_platform_external(&profile, args)?;
-            }
-        },
-        Commands::Site { command } => match command {
-            SiteCommands::Status => {
-                commands::site::execute_site_status(&profile)?;
-            }
-            SiteCommands::Add { domain, public_key } => {
-                commands::site::execute_site_add(&profile, domain, public_key)?;
-            }
-            SiteCommands::Del { domain } => {
-                commands::site::execute_site_del(&profile, domain)?;
             }
         },
         Commands::Ssh { command } => match command {

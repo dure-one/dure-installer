@@ -4,7 +4,6 @@ pub mod common;
 pub mod io;
 pub mod logs;
 pub mod mycart;
-pub mod ns;
 pub mod platform;
 pub mod runtime;
 pub mod ssh;
@@ -25,7 +24,6 @@ pub struct ViewModel {
     platform_tx: Sender<platform::PlatformCommand>,
     drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
-    ns_tx: Sender<ns::NsCommand>,
     logs_tx: Sender<logs::LogCommand>,
 
     // Unified event receiver
@@ -86,7 +84,6 @@ impl ViewModel {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
-        let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -108,13 +105,11 @@ impl ViewModel {
                     platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
-                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
-                smol::spawn(ns_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 // Keep thread alive
@@ -126,7 +121,6 @@ impl ViewModel {
             platform_tx,
             drawer_tx,
             ssh_tx,
-            ns_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -142,7 +136,6 @@ impl ViewModel {
         let (platform_tx, platform_rx) = smol::channel::unbounded();
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
-        let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
@@ -162,12 +155,10 @@ impl ViewModel {
                     platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
-                let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
-                smol::spawn(ns_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
 
                 std::future::pending::<()>().await
@@ -178,7 +169,6 @@ impl ViewModel {
             platform_tx,
             drawer_tx,
             ssh_tx,
-            ns_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -233,7 +223,6 @@ impl ViewModel {
             platform_tx,
             drawer_tx,
             ssh_tx,
-            ns_tx,
             logs_tx,
             event_rx,
             state: ViewModelState::default(),
@@ -993,102 +982,4 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    // NS commands
-    pub fn add_dns_provider(
-        &self,
-        name: String,
-        provider_type: String,
-        api_token: String,
-    ) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::AddProvider {
-                name,
-                provider_type,
-                api_token,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn delete_dns_provider(&self, name: String) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::DeleteProvider { name })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn list_dns_providers(&self) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::ListProviders)
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn add_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::AddDomain {
-                provider_name,
-                domain,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn delete_dns_domain(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::DeleteDomain {
-                provider_name,
-                domain,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn list_dns_domains(&self, provider_name: String) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::ListDomains { provider_name })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn add_dns_record(
-        &self,
-        provider_name: String,
-        domain: String,
-        record_type: String,
-        name: String,
-        value: String,
-        ttl: u32,
-    ) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::AddRecord {
-                provider_name,
-                domain,
-                record_type,
-                name,
-                value,
-                ttl,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn delete_dns_record(
-        &self,
-        provider_name: String,
-        domain: String,
-        name: String,
-        record_type: String,
-    ) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::DeleteRecord {
-                provider_name,
-                domain,
-                name,
-                record_type,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn list_dns_records(&self, provider_name: String, domain: String) -> anyhow::Result<()> {
-        self.ns_tx
-            .send_blocking(ns::NsCommand::ListRecords {
-                provider_name,
-                domain,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
 }
