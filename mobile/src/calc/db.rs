@@ -7,6 +7,38 @@
 //! - PostgreSQL for desktop (optional)
 //!
 //! All migrations are embedded and run automatically on connection establishment.
+//!
+//! # Profile-aware Database Operations
+//!
+//! Each profile has its own isolated database at `~/.local/share/dure_installer/{profile}/dure.db`.
+//! Use `establish_connection_for_profile()` to connect to a profile's database:
+//!
+//! ```no_run
+//! use mobile::calc::profile::ProfileContext;
+//! use mobile::calc::db;
+//!
+//! let profile = ProfileContext::new("my-profile")?;
+//! let conn = db::establish_connection_for_profile(&profile);
+//! // All queries now use the profile's isolated database
+//! # Ok::<(), anyhow::Error>(())
+//! ```
+//!
+//! ## Migration Path
+//!
+//! Old code using global `establish_connection()`:
+//! ```ignore
+//! let conn = db::establish_connection();
+//! audit::push("cli", "user", "device", "action", "object", Success, "", "");
+//! ```
+//!
+//! New profile-aware code:
+//! ```ignore
+//! let conn = db::establish_connection_for_profile(&profile);
+//! audit::push_for_profile(&profile, "cli", "user", "device", "action", "object", Success, "", "");
+//! ```
+//!
+//! Global functions are kept for backward compatibility but should be migrated to
+//! profile-aware versions.
 
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use diesel::prelude::*;
@@ -73,6 +105,29 @@ pub fn clear_db_encryption_key() {
         .lock()
         .expect("DB_ENCRYPTION_KEY lock poisoned");
     *db_key = None;
+}
+
+/// Establish connection for a specific profile
+///
+/// Sets the database path from the profile context before establishing connection.
+/// This ensures all database operations use the profile's isolated database.
+///
+/// # Example
+/// ```no_run
+/// use mobile::calc::profile::ProfileContext;
+/// use mobile::calc::db;
+///
+/// let profile = ProfileContext::new("my-profile")?;
+/// let conn = db::establish_connection_for_profile(&profile);
+/// // All queries on conn now use ~/.local/share/dure_installer/my-profile/dure.db
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+#[cfg(not(target_family = "wasm"))]
+pub fn establish_connection_for_profile(
+    profile: &crate::calc::profile::ProfileContext,
+) -> SqliteConnection {
+    set_db_path(profile.db_path.to_string_lossy().to_string());
+    sqlite::establish_connection()
 }
 
 #[cfg(feature = "postgres")]

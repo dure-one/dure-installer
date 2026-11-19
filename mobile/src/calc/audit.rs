@@ -123,3 +123,99 @@ pub fn clear() -> Result<usize> {
     init_audit_table(&mut conn)?;
     clear_all(&mut conn)
 }
+
+// ============================================================================
+// Profile-aware audit functions
+// ============================================================================
+
+/// Record a user action for a specific profile.
+///
+/// Profile-aware version of `push()`. All audit records are stored in the
+/// profile's isolated database.
+#[cfg(not(target_family = "wasm"))]
+pub fn push_for_profile(
+    profile: &crate::calc::profile::ProfileContext,
+    surface: &str,
+    actor_id: &str,
+    device_id: &str,
+    action: &str,
+    object: &str,
+    outcome: AuditOutcome,
+    detail: &str,
+    ip_address: &str,
+) -> Result<i64> {
+    let mut conn = db::establish_connection_for_profile(profile);
+    init_audit_table(&mut conn)?;
+    let event = AuditEvent::new(action)
+        .surface(surface)
+        .actor(actor_id)
+        .device(device_id)
+        .object(object)
+        .outcome(outcome)
+        .detail(detail)
+        .ip(ip_address);
+    record(&mut conn, event)
+}
+
+/// Record a CLI user action for a specific profile.
+#[cfg(not(target_family = "wasm"))]
+pub fn push_cli_for_profile(
+    profile: &crate::calc::profile::ProfileContext,
+    actor_id: &str,
+    device_id: &str,
+    action: &str,
+    object: &str,
+) -> Result<i64> {
+    push_for_profile(
+        profile,
+        "cli",
+        actor_id,
+        device_id,
+        action,
+        object,
+        AuditOutcome::Success,
+        "",
+        "",
+    )
+}
+
+/// Record a GUI user action for a specific profile.
+#[cfg(not(target_family = "wasm"))]
+pub fn push_gui_for_profile(
+    profile: &crate::calc::profile::ProfileContext,
+    actor_id: &str,
+    device_id: &str,
+    action: &str,
+    object: &str,
+) -> Result<i64> {
+    push_for_profile(
+        profile,
+        "gui",
+        actor_id,
+        device_id,
+        action,
+        object,
+        AuditOutcome::Success,
+        "",
+        "",
+    )
+}
+
+/// Retrieve recent audit records for a specific profile.
+#[cfg(not(target_family = "wasm"))]
+pub fn show_for_profile(
+    profile: &crate::calc::profile::ProfileContext,
+    limit: i64,
+) -> Result<Vec<AuditRecord>> {
+    let mut conn = db::establish_connection_for_profile(profile);
+    init_audit_table(&mut conn)?;
+    list_recent(&mut conn, limit)
+}
+
+/// Wipe all audit records for a specific profile.
+#[cfg(not(target_family = "wasm"))]
+pub fn clear_for_profile(profile: &crate::calc::profile::ProfileContext) -> Result<usize> {
+    let mut conn = db::establish_connection_for_profile(profile);
+    init_audit_table(&mut conn)?;
+    clear_all(&mut conn)
+}
