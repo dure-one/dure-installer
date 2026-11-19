@@ -10,6 +10,7 @@ pub mod desktop;
 pub mod cloudflare;
 pub mod gcp;
 pub mod github;
+pub mod mycart;
 pub mod ns_duckdns;
 pub mod ns_gcp;
 pub mod ns_porkbun;

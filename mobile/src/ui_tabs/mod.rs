@@ -3,10 +3,11 @@
 // Infrastructure management tabs (active on all platforms)
 pub mod dns; // New DNS tab with Cloudflare OAuth
 pub mod dns_drawer; // DNS drawer with tabs
+pub mod mycart; // Mycart admin management
+pub mod mycart_drawer; // Mycart drawer with Status/Logs tabs
 pub mod ns; // Keep existing NS tab code, but hidden from main tabs
 pub mod platform;
 pub mod platform_drawer;
-pub mod site;
 pub mod ssh;
 pub mod ssh_drawer;
 
@@ -27,7 +28,7 @@ pub enum Tab {
     Platform,
     Ssh,
     Dns, // New DNS tab with Cloudflare OAuth workflow
-    Site,
+    Mycart, // Mycart admin management
     // Ns tab kept in code but hidden from main tab list
 }
 
@@ -38,12 +39,12 @@ impl Tab {
             Tab::Platform => "Platform",
             Tab::Ssh => "SSH",
             Tab::Dns => "DNS",
-            Tab::Site => "Site",
+            Tab::Mycart => "Mycart",
         }
     }
 
     /// Get all tabs in order (NS tab excluded - kept in code for reference)
     pub fn all() -> Vec<Tab> {
-        vec![Tab::Platform, Tab::Ssh, Tab::Dns, Tab::Site]
+        vec![Tab::Platform, Tab::Ssh, Tab::Dns, Tab::Mycart]
     }
 }

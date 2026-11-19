@@ -1,6 +1,6 @@
 //! Common types shared across ViewModel and actors
 
-use crate::viewmodel::{logs, ns, platform, ssh, wss};
+use crate::viewmodel::{logs, mycart, ns, platform, ssh, wss};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 
 /// Unified event type from all actors
@@ -12,4 +12,5 @@ pub enum ViewModelEvent {
     Ns(ns::NsEvent),
     Wss(wss::WssEvent),
     Logs(logs::LogEvent),
+    Mycart(mycart::MycartEvent),
 }

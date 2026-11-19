@@ -202,6 +202,24 @@ pub struct DnsDomainConfig {
     pub last_https_check: Option<crate::ui_tabs::dns::HttpsCheckResult>,
 }
 
+/// Mycart site configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MycartSiteConfig {
+    /// Site address (e.g., "dure.co")
+    pub site_address: String,
+    /// Admin email address
+    pub email: String,
+    /// Encrypted password (base64 encoded)
+    pub encrypted_password: String,
+    /// JWT token for API access
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jwt_token: Option<String>,
+    /// Creation timestamp
+    pub created_at: u64,
+    /// Last update timestamp
+    pub updated_at: u64,
+}
+
 /// SSH host configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SshHostConfig {
@@ -364,6 +382,8 @@ pub struct AppConfig {
     pub server: ServerConfig,
     #[serde(default)]
     pub ssh_hosts: Vec<SshHostConfig>,
+    #[serde(default)]
+    pub mycart_sites: Vec<MycartSiteConfig>,
     #[serde(default)]
     #[cfg(not(target_arch = "wasm32"))]
     pub ns: crate::calc::ns::NsConfig,

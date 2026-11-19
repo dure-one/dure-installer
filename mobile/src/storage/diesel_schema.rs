@@ -182,6 +182,17 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    mycart_sites (id) {
+        id -> Nullable<Integer>,
+        site_address -> Text,
+        admin_id -> Text,
+        encrypted_password -> Text,
+        created_at -> Integer,
+        updated_at -> Integer,
+    }
+}
+
 diesel::joinable!(wss_sessions -> wss_servers (domain));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -191,6 +202,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     crypt_keys,
     dns_cache,
     hosting,
+    mycart_sites,
     nft_whitelist,
     operation_logs,
     sessions,

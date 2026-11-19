@@ -134,7 +134,7 @@ pub struct DureApp {
     pub tab_ssh: crate::ui_tabs::ssh::SshTab,
     pub tab_ns: crate::ui_tabs::ns::NsTab, // Keep NS tab code, hidden from main tabs
     pub tab_dns: crate::ui_tabs::dns::DnsTab, // New DNS tab with Cloudflare OAuth
-    pub tab_site: crate::ui_tabs::site::SiteTab,
+    pub tab_mycart: crate::ui_tabs::mycart::MycartTab, // Mycart admin management
 
     // Theme reload flag (set when settings loaded from profile)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -268,7 +268,7 @@ impl Default for DureApp {
             tab_ssh: crate::ui_tabs::ssh::SshTab::default(),
             tab_ns: crate::ui_tabs::ns::NsTab::default(),
             tab_dns: crate::ui_tabs::dns::DnsTab::default(),
-            tab_site: crate::ui_tabs::site::SiteTab::default(),
+            tab_mycart: crate::ui_tabs::mycart::MycartTab::default(),
             theme_needs_reload: false,
         }
     }
@@ -576,8 +576,8 @@ impl DureApp {
                 .id_salt("scrolling_primary")
                 .tab(tr!("tab-platform"))
                 .tab(tr!("tab-ssh"))
-                .tab(tr!("tab-domains"))
-                .tab(tr!("tab-site")),
+                .tab(tr!("tab-domain"))
+                .tab(tr!("tab-mycart")),
         );
 
         // Sync scrolling_selected with active_tab enum
@@ -586,7 +586,7 @@ impl DureApp {
             0 => Tab::Platform,
             1 => Tab::Ssh,
             2 => Tab::Dns,
-            3 => Tab::Site,
+            3 => Tab::Mycart,
             _ => Tab::Platform,
         };
 
@@ -611,7 +611,7 @@ impl DureApp {
                         self.tab_ns.reset_loaded();
                     }
                 }
-                Tab::Site => {} // Site tab doesn't use config loading pattern
+                Tab::Mycart => {} // Mycart tab doesn't use config loading pattern
             }
             self.previous_tab = Some(self.active_tab);
         }
@@ -653,7 +653,7 @@ impl DureApp {
                         self.tab_dns.ui(ui, profile)
                     }
                 }
-                Tab::Site => self.tab_site.ui(&self.current_profile, ui),
+                Tab::Mycart => self.tab_mycart.ui(&self.current_profile, ui),
             },
         );
 
@@ -1526,7 +1526,7 @@ impl DureApp {
         self.tab_platform = crate::ui_tabs::platform::PlatformTab::default();
         self.tab_ssh = crate::ui_tabs::ssh::SshTab::default();
         self.tab_ns = crate::ui_tabs::ns::NsTab::default();
-        self.tab_site = crate::ui_tabs::site::SiteTab::default();
+        self.tab_mycart = crate::ui_tabs::mycart::MycartTab::default();
 
         // Reset ViewModel to force re-initialization with new profile data
         self.viewmodel = None;
