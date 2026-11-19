@@ -108,16 +108,16 @@ RUST_LOG=debug cargo test                 # With logging
 ## Documentation
 
 **Start here**:
-- **[ARCH.sudolang.md](./ARCH.sudolang.md)** - Architecture summary (SudoLang format)
+- **[docs/ARCH.sudolang.md](./docs/ARCH.sudolang.md)** - Architecture summary (SudoLang format)
 - **[docs/INDEX.md](./docs/INDEX.md)** - Doc index w/ status flags
 - **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** - Common issues
 
 ## For AI Assistants
 
 1. **Start with this file (CLAUDE.md)** - Full project context
-2. **Read [ARCH.sudolang.md](./ARCH.sudolang.md)** - Architecture summary (layers, actors, data flow, tech stack)
+2. **Read [docs/ARCH.sudolang.md](./docs/ARCH.sudolang.md)** - Architecture summary (layers, actors, data flow, tech stack)
 3. **Read [docs/INDEX.md](./docs/INDEX.md)** - Know valid docs vs. needs review
-4. **Ignore docs marked with ⚠️** - Reference different project (beads_rust)
+4. **Ignore docs marked with WARNING** - Reference different project (beads_rust)
 5. **Focus on `mobile/src/`** - Actual app code (despite dir name)
 6. **Check `.github/workflows/`** - Build configs and CI/CD
 7. **Remember**: Requires **Rust nightly**, prefers **musl** on Linux
