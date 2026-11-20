@@ -1388,11 +1388,7 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn load_mycart_logs(&self, site_address: String) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::LoadLogs { site_address })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
+    // Phase 5: Removed old LoadLogs - now use service-specific commands via drawer auto-refresh
 
     pub fn list_mycart_crontab(&self, site_address: String) -> anyhow::Result<()> {
         self.mycart_tx

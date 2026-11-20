@@ -192,22 +192,27 @@ pub async fn get_site_logs(
 pub async fn get_duremycart_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<HashMap<String, String>> {
+) -> Result<Vec<String>> {
     let log_names = vec!["mycart-stderr.log", "mycart-stdout.log"];
-    let mut logs = HashMap::new();
+    let mut all_lines = Vec::new();
 
     for log_name in log_names {
-        match mycart::read_log_file(host_config, log_name, 100, profile_keyring).await {
+        all_lines.push(format!("=== {} ===", log_name));
+        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
             Ok(content) => {
-                logs.insert(log_name.to_string(), content);
+                // Split by lines and add to vec
+                for line in content.lines() {
+                    all_lines.push(line.to_string());
+                }
             }
             Err(e) => {
-                logs.insert(log_name.to_string(), format!("Error reading log: {}", e));
+                all_lines.push(format!("Error reading log: {}", e));
             }
         }
+        all_lines.push(String::new()); // Empty line separator
     }
 
-    Ok(logs)
+    Ok(all_lines)
 }
 
 /// Get XmppProxy service logs only
@@ -215,22 +220,27 @@ pub async fn get_duremycart_logs(
 pub async fn get_xmppproxy_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<HashMap<String, String>> {
+) -> Result<Vec<String>> {
     let log_names = vec!["xmpp-proxy-stdout.log", "xmpp-proxy-stderr.log", "prosody.log"];
-    let mut logs = HashMap::new();
+    let mut all_lines = Vec::new();
 
     for log_name in log_names {
-        match mycart::read_log_file(host_config, log_name, 100, profile_keyring).await {
+        all_lines.push(format!("=== {} ===", log_name));
+        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
             Ok(content) => {
-                logs.insert(log_name.to_string(), content);
+                // Split by lines and add to vec
+                for line in content.lines() {
+                    all_lines.push(line.to_string());
+                }
             }
             Err(e) => {
-                logs.insert(log_name.to_string(), format!("Error reading log: {}", e));
+                all_lines.push(format!("Error reading log: {}", e));
             }
         }
+        all_lines.push(String::new()); // Empty line separator
     }
 
-    Ok(logs)
+    Ok(all_lines)
 }
 
 /// Get Fail2BanRS service logs only
@@ -238,39 +248,59 @@ pub async fn get_xmppproxy_logs(
 pub async fn get_fail2banrs_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<HashMap<String, String>> {
+) -> Result<Vec<String>> {
     let log_names = vec!["fail2ban-rs-stderr.log", "fail2ban-rs-stdout.log"];
-    let mut logs = HashMap::new();
+    let mut all_lines = Vec::new();
 
     for log_name in log_names {
-        match mycart::read_log_file(host_config, log_name, 100, profile_keyring).await {
+        all_lines.push(format!("=== {} ===", log_name));
+        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
             Ok(content) => {
-                logs.insert(log_name.to_string(), content);
+                // Split by lines and add to vec
+                for line in content.lines() {
+                    all_lines.push(line.to_string());
+                }
             }
             Err(e) => {
-                logs.insert(log_name.to_string(), format!("Error reading log: {}", e));
+                all_lines.push(format!("Error reading log: {}", e));
             }
         }
+        all_lines.push(String::new()); // Empty line separator
     }
 
-    Ok(logs)
+    Ok(all_lines)
 }
 
 /// Get crontab jobs for a mycart site (high-level wrapper with JWT loading)
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn get_site_crontab(config_path: &std::path::Path, site_address: &str) -> Result<Vec<mycart::CrontabJob>> {
+    log::debug!("get_site_crontab: config_path={:?}, site_address={}", config_path, site_address);
+
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
+    log::debug!("get_site_crontab: found {} mycart_sites in config", config.mycart_sites.len());
+    log::debug!("get_site_crontab: available sites: {:?}", config.mycart_sites.iter().map(|s| &s.site_address).collect::<Vec<_>>());
+
     let site = config
         .mycart_sites
         .iter()
         .find(|s| s.site_address == site_address)
-        .ok_or_else(|| anyhow::anyhow!("Mycart site not found"))?;
+        .ok_or_else(|| {
+            log::error!("get_site_crontab: site '{}' not found in config", site_address);
+            anyhow::anyhow!("Mycart site '{}' not found in config. Available sites: {:?}",
+                site_address,
+                config.mycart_sites.iter().map(|s| &s.site_address).collect::<Vec<_>>())
+        })?;
 
+    log::debug!("get_site_crontab: found site, checking JWT token");
     let jwt_token = site
         .jwt_token
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("No JWT token - site needs re-authentication"))?;
+        .ok_or_else(|| {
+            log::error!("get_site_crontab: no JWT token for site '{}'", site_address);
+            anyhow::anyhow!("No JWT token for site '{}' - site needs re-authentication", site_address)
+        })?;
 
+    log::debug!("get_site_crontab: calling list_crontab API");
     list_crontab(site_address, jwt_token).await
 }
 
@@ -421,6 +451,18 @@ pub async fn list_crontab(site_address: &str, jwt_token: &str) -> Result<Vec<myc
     mycart::get_crontab(site_address, jwt_token)
         .await
         .context("Failed to list crontab jobs")
+}
+
+/// Load operation logs for a mycart site
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_site_operations(site_address: &str, limit: i64) -> Result<Vec<crate::storage::models::opslog::OperationLog>> {
+    use crate::calc::db;
+    use crate::storage::models::opslog::list_by_project;
+
+    let mut conn = db::establish_connection();
+    // Query operations where project_id or relevant_id matches site_address
+    // This covers operations logged for this mycart site
+    list_by_project(&mut conn, site_address, limit)
 }
 
 /// Enable or disable a crontab job

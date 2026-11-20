@@ -1,24 +1,25 @@
 //! Drawer types for Mycart tab management
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::api::mycart::{CrontabJob, MycartStats};
 use crate::storage::models::opslog::OperationLog;
 use crate::ui_components::drawer::DrawerTabTrait;
 
-/// Active tab in the Mycart drawer
+/// Active tab in the Mycart drawer (6 tabs: status + logs + ops + 3 service logs)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DrawerTab {
     /// Status tab - Mycart statistics (orders, products, messages, seller info)
     Status,
-    /// Operations tab - Crontab management
+    /// Logs tab - Dure installer stdout logs filtered by site (like platform)
+    Logs,
+    /// Operations tab - Operation history from SQLite
     Operations,
-    /// Mycart service logs
+    /// Mycart service logs (SSH server logs)
     Mycart,
-    /// XMPPProxy service logs
+    /// XMPPProxy service logs (SSH server logs)
     XMPPProxy,
-    /// Fail2BanRS service logs
+    /// Fail2BanRS service logs (SSH server logs)
     Fail2BanRS,
 }
 
@@ -26,6 +27,7 @@ impl DrawerTab {
     pub fn as_str(&self) -> &'static str {
         match self {
             DrawerTab::Status => "Status",
+            DrawerTab::Logs => "Logs",
             DrawerTab::Operations => "Operations",
             DrawerTab::Mycart => "Mycart",
             DrawerTab::XMPPProxy => "XMPPProxy",
@@ -33,9 +35,10 @@ impl DrawerTab {
         }
     }
 
-    pub fn all() -> [DrawerTab; 5] {
+    pub fn all() -> [DrawerTab; 6] {
         [
             DrawerTab::Status,
+            DrawerTab::Logs,
             DrawerTab::Operations,
             DrawerTab::Mycart,
             DrawerTab::XMPPProxy,
@@ -46,20 +49,22 @@ impl DrawerTab {
     pub fn to_index(&self) -> usize {
         match self {
             DrawerTab::Status => 0,
-            DrawerTab::Operations => 1,
-            DrawerTab::Mycart => 2,
-            DrawerTab::XMPPProxy => 3,
-            DrawerTab::Fail2BanRS => 4,
+            DrawerTab::Logs => 1,
+            DrawerTab::Operations => 2,
+            DrawerTab::Mycart => 3,
+            DrawerTab::XMPPProxy => 4,
+            DrawerTab::Fail2BanRS => 5,
         }
     }
 
     pub fn from_index(index: usize) -> Self {
         match index {
             0 => DrawerTab::Status,
-            1 => DrawerTab::Operations,
-            2 => DrawerTab::Mycart,
-            3 => DrawerTab::XMPPProxy,
-            4 => DrawerTab::Fail2BanRS,
+            1 => DrawerTab::Logs,
+            2 => DrawerTab::Operations,
+            3 => DrawerTab::Mycart,
+            4 => DrawerTab::XMPPProxy,
+            5 => DrawerTab::Fail2BanRS,
             _ => DrawerTab::default(),
         }
     }
@@ -73,6 +78,7 @@ impl DrawerTabTrait for DrawerTab {
     fn all() -> &'static [Self] {
         &[
             Self::Status,
+            Self::Logs,
             Self::Operations,
             Self::Mycart,
             Self::XMPPProxy,
@@ -97,12 +103,15 @@ pub struct DrawerState {
     pub crontab_jobs: Vec<CrontabJob>,
     pub crontab_loading: bool,
     pub crontab_error: Option<String>,
-    // Phase 4: Service-specific logs
-    pub mycart_logs: HashMap<String, String>,
+    // Phase 5: Installer logs (stdout filtered by site, like platform)
+    pub logs: Vec<String>,
+    pub logs_loading: bool,
+    // Phase 5: SSH server logs (3 services)
+    pub mycart_logs: Vec<String>,
     pub mycart_loading: bool,
-    pub xmppproxy_logs: HashMap<String, String>,
+    pub xmppproxy_logs: Vec<String>,
     pub xmppproxy_loading: bool,
-    pub fail2banrs_logs: HashMap<String, String>,
+    pub fail2banrs_logs: Vec<String>,
     pub fail2banrs_loading: bool,
 }
 
@@ -115,11 +124,13 @@ impl Default for DrawerState {
             crontab_jobs: Vec::new(),
             crontab_loading: false,
             crontab_error: None,
-            mycart_logs: HashMap::new(),
+            logs: Vec::new(),
+            logs_loading: false,
+            mycart_logs: Vec::new(),
             mycart_loading: false,
-            xmppproxy_logs: HashMap::new(),
+            xmppproxy_logs: Vec::new(),
             xmppproxy_loading: false,
-            fail2banrs_logs: HashMap::new(),
+            fail2banrs_logs: Vec::new(),
             fail2banrs_loading: false,
         }
     }

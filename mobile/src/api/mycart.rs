@@ -323,6 +323,7 @@ pub async fn read_log_file(
 /// * `jwt_token` - JWT authentication token
 pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>> {
     let url = format!("https://{}/api/_/settings/crontab", site);
+    log::debug!("get_crontab: calling {}", url);
     let jwt = jwt_token.to_string();
 
     let response = smol::unblock(move || {
@@ -334,26 +335,77 @@ pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
 
     match response {
         Ok(resp) => {
-            if resp.status() == 200 {
-                let api_response: ApiResponse<Vec<CrontabJob>> = resp
-                    .into_json()
-                    .context("Failed to parse crontab response")?;
+            let status = resp.status();
+            log::debug!("get_crontab: received status {}", status);
 
-                if api_response.success {
-                    Ok(api_response.result.unwrap_or_default())
-                } else {
-                    Err(anyhow::anyhow!("API error: {}", api_response.message))
+            if status == 200 {
+                // Parse as generic JSON first to handle both array and map formats
+                let raw_json: serde_json::Value = resp
+                    .into_json()
+                    .context("Failed to parse crontab response as JSON")?;
+
+                log::debug!("get_crontab: raw response structure: success={}, result type={}",
+                    raw_json.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
+                    raw_json.get("result").map(|v| match v {
+                        serde_json::Value::Array(_) => "array",
+                        serde_json::Value::Object(_) => "map",
+                        _ => "other"
+                    }).unwrap_or("missing"));
+
+                // Check success flag
+                let success = raw_json.get("success")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                if !success {
+                    let message = raw_json.get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown error");
+                    log::error!("get_crontab: API returned success=false, message={}", message);
+                    return Err(anyhow::anyhow!("API error: {}", message));
                 }
-            } else if resp.status() == 401 || resp.status() == 403 {
+
+                // Parse result field - handle both array and map formats
+                let result = raw_json.get("result")
+                    .ok_or_else(|| anyhow::anyhow!("Missing result field in response"))?;
+
+                let jobs: Vec<CrontabJob> = match result {
+                    serde_json::Value::Array(_) => {
+                        // Array format: [{"job_id": "...", ...}, ...]
+                        serde_json::from_value(result.clone())
+                            .context("Failed to parse crontab jobs from array")?
+                    }
+                    serde_json::Value::Object(map) => {
+                        // Map format: {"job_id_1": {...}, "job_id_2": {...}}
+                        log::debug!("get_crontab: converting map format ({} entries) to array", map.len());
+                        map.values()
+                            .map(|v| serde_json::from_value(v.clone()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .context("Failed to parse crontab jobs from map")?
+                    }
+                    _ => {
+                        return Err(anyhow::anyhow!("Invalid crontab response format: expected array or map, got {:?}", result));
+                    }
+                };
+
+                log::debug!("get_crontab: parsed {} jobs successfully", jobs.len());
+                Ok(jobs)
+            } else if status == 401 || status == 403 {
+                log::error!("get_crontab: auth failed with status {}", status);
                 Err(anyhow::anyhow!("Unauthorized - token may be expired"))
             } else {
-                Err(anyhow::anyhow!("Unexpected status code: {}", resp.status()))
+                log::error!("get_crontab: unexpected status {}", status);
+                Err(anyhow::anyhow!("Unexpected status code: {}", status))
             }
         }
         Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+            log::error!("get_crontab: auth error (401/403)");
             Err(anyhow::anyhow!("Unauthorized - token may be expired"))
         }
-        Err(e) => Err(anyhow::anyhow!("Failed to get crontab: {}", e)),
+        Err(e) => {
+            log::error!("get_crontab: request failed with error: {}", e);
+            Err(anyhow::anyhow!("Failed to get crontab: {}", e))
+        }
     }
 }
 

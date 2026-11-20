@@ -9,8 +9,32 @@ pub enum MycartCommand {
         site_address: String,
     },
 
+    // Phase 5: Installer logs (stdout filtered by site)
     LoadLogs {
         site_address: String,
+        limit: usize,
+    },
+
+    // Phase 5: Operations loading command
+    LoadOperations {
+        site_address: String,
+        limit: i64,
+    },
+
+    // Phase 5: SSH server logs (3 services)
+    LoadMycartLogs {
+        site_address: String,
+        limit: usize,
+    },
+
+    LoadXMPPProxyLogs {
+        site_address: String,
+        limit: usize,
+    },
+
+    LoadFail2BanRSLogs {
+        site_address: String,
+        limit: usize,
     },
 
     // Phase 4: Crontab management commands

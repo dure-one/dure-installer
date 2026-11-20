@@ -1,7 +1,5 @@
 //! Mycart actor events
-//! Phase 4: Cleaned up - only crontab and UI events
-
-use std::collections::HashMap;
+//! Phase 5: Added service-specific log events and operations events
 
 #[derive(Debug, Clone)]
 pub enum MycartEvent {
@@ -11,9 +9,32 @@ pub enum MycartEvent {
         stats: Option<crate::api::mycart::MycartStats>,
     },
 
+    // Phase 5: Installer logs event (stdout)
     LogsLoaded {
         site_address: String,
-        logs: HashMap<String, String>,
+        logs: Vec<String>,
+    },
+
+    // Phase 5: SSH server log events
+    MycartLogsLoaded {
+        site_address: String,
+        logs: Vec<String>,
+    },
+
+    XMPPProxyLogsLoaded {
+        site_address: String,
+        logs: Vec<String>,
+    },
+
+    Fail2BanRSLogsLoaded {
+        site_address: String,
+        logs: Vec<String>,
+    },
+
+    // Phase 5: Operations event
+    OperationsLoaded {
+        site_address: String,
+        operations: Vec<crate::storage::models::opslog::OperationLog>,
     },
 
     // Phase 4: Crontab management events

@@ -50,8 +50,24 @@ impl MycartActor {
                 self.load_stats(site_address).await
             }
 
-            MycartCommand::LoadLogs { site_address } => {
-                self.load_logs(site_address).await
+            MycartCommand::LoadLogs { site_address, limit } => {
+                self.load_logs(site_address, limit).await
+            }
+
+            MycartCommand::LoadOperations { site_address, limit } => {
+                self.load_operations(site_address, limit).await
+            }
+
+            MycartCommand::LoadMycartLogs { site_address, limit } => {
+                self.load_mycart_logs(site_address, limit).await
+            }
+
+            MycartCommand::LoadXMPPProxyLogs { site_address, limit } => {
+                self.load_xmppproxy_logs(site_address, limit).await
+            }
+
+            MycartCommand::LoadFail2BanRSLogs { site_address, limit } => {
+                self.load_fail2banrs_logs(site_address, limit).await
             }
 
             MycartCommand::ListCrontab { site_address } => {
@@ -88,15 +104,72 @@ impl MycartActor {
         Ok(())
     }
 
-    async fn load_logs(&mut self, site_address: String) -> anyhow::Result<()> {
-        // ponytail: placeholder - actual implementation needs SSH connection
-        dure_debug!("[MycartActor] Would load logs for {}", site_address);
+    // Phase 5: Installer logs handler (stdout filtered by site)
+    async fn load_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+        dure_info!("[MycartActor] Loading installer logs for {}", site_address);
+        // ponytail: needs LogActor integration - placeholder returns empty
         self.send_event(MycartEvent::LogsLoaded {
             site_address,
-            logs: std::collections::HashMap::new(),
+            logs: Vec::new(),
         })
         .await;
         Ok(())
+    }
+
+    // Phase 5: SSH server log handlers
+    async fn load_mycart_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+        dure_info!("[MycartActor] Loading Mycart logs for {}", site_address);
+        // ponytail: needs SSH host config and keyring - placeholder returns empty
+        // Actual: get host_config from config, call mycart::get_duremycart_logs
+        self.send_event(MycartEvent::MycartLogsLoaded {
+            site_address,
+            logs: Vec::new(),
+        })
+        .await;
+        Ok(())
+    }
+
+    async fn load_xmppproxy_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+        dure_info!("[MycartActor] Loading XMPPProxy logs for {}", site_address);
+        // ponytail: needs SSH host config and keyring - placeholder returns empty
+        self.send_event(MycartEvent::XMPPProxyLogsLoaded {
+            site_address,
+            logs: Vec::new(),
+        })
+        .await;
+        Ok(())
+    }
+
+    async fn load_fail2banrs_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+        dure_info!("[MycartActor] Loading Fail2BanRS logs for {}", site_address);
+        // ponytail: needs SSH host config and keyring - placeholder returns empty
+        self.send_event(MycartEvent::Fail2BanRSLogsLoaded {
+            site_address,
+            logs: Vec::new(),
+        })
+        .await;
+        Ok(())
+    }
+
+    // Phase 5: Operations handler (SQLite-based)
+    async fn load_operations(&mut self, site_address: String, limit: i64) -> anyhow::Result<()> {
+        dure_info!("[MycartActor] Loading operations for {}", site_address);
+
+        match mycart::load_site_operations(&site_address, limit) {
+            Ok(operations) => {
+                dure_info!("[MycartActor] Loaded {} operations", operations.len());
+                self.send_event(MycartEvent::OperationsLoaded {
+                    site_address,
+                    operations,
+                })
+                .await;
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!("[MycartActor] Failed to load operations: {}", e);
+                Err(e)
+            }
+        }
     }
 
     // Phase 4: Crontab management handlers

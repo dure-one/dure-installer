@@ -12,6 +12,8 @@ pub mod env_parser;
 pub mod gcp;
 pub mod keyring;
 pub mod mycart;
+#[cfg(test)]
+mod mycart_tests;
 pub mod profile;
 pub mod session;
 pub mod site;

@@ -2,8 +2,7 @@
 
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::tabs_secondary;
-use std::collections::HashMap;
+use egui_material3::tabs_primary;
 
 use crate::api::mycart::{CrontabJob, MycartStats, SellerInfo};
 use crate::ui_components::drawer::StatusLine;
@@ -16,7 +15,7 @@ pub enum DrawerAction {
     SetCronjobInterval { job_id: String, interval: String },
 }
 
-/// Render the Mycart drawer with tabs (Phase 4: service-specific tabs)
+/// Render the Mycart drawer with tabs (Phase 5: 6 tabs)
 pub fn render_drawer(
     ui: &mut egui::Ui,
     site: &str,
@@ -24,24 +23,25 @@ pub fn render_drawer(
     seller: &Option<SellerInfo>,
     active_tab: &DrawerTab,
     on_tab_switch: &mut Option<DrawerTab>,
-    crontab_jobs: &[CrontabJob],
-    crontab_loading: bool,
-    crontab_error: &Option<String>,
-    on_action: &mut Option<DrawerAction>,
-    mycart_logs: &HashMap<String, String>,
+    logs: &Vec<String>,
+    logs_loading: bool,
+    operations: &[crate::storage::models::opslog::OperationLog],
+    operations_loading: bool,
+    mycart_logs: &Vec<String>,
     mycart_loading: bool,
-    xmppproxy_logs: &HashMap<String, String>,
+    xmppproxy_logs: &Vec<String>,
     xmppproxy_loading: bool,
-    fail2banrs_logs: &HashMap<String, String>,
+    fail2banrs_logs: &Vec<String>,
     fail2banrs_loading: bool,
 ) {
-    // Tab bar (Phase 4: 5 tabs)
+    // Tab bar (Phase 5: 6 tabs)
     let mut temp_selected = active_tab.to_index();
     ui.add(
-        tabs_secondary(&mut temp_selected)
+        tabs_primary(&mut temp_selected)
             .id_salt("mycart_drawer_tabs")
             .height(32.0)
             .tab("Status")
+            .tab("Logs")
             .tab("Operations")
             .tab("Mycart")
             .tab("XMPPProxy")
@@ -58,10 +58,74 @@ pub fn render_drawer(
         .max_height(500.0)
         .show(ui, |ui| match active_tab {
             DrawerTab::Status => render_status_tab(ui, site, stats, seller),
-            DrawerTab::Operations => render_operations_tab(ui, crontab_jobs, crontab_loading, crontab_error, on_action),
+            DrawerTab::Logs => render_logs_tab(ui, logs, logs_loading),
+            DrawerTab::Operations => render_operations_tab(ui, operations, operations_loading),
             DrawerTab::Mycart => render_mycart_tab(ui, mycart_logs, mycart_loading),
             DrawerTab::XMPPProxy => render_xmppproxy_tab(ui, xmppproxy_logs, xmppproxy_loading),
             DrawerTab::Fail2BanRS => render_fail2banrs_tab(ui, fail2banrs_logs, fail2banrs_loading),
+        });
+}
+
+/// Render Logs tab (installer stdout logs filtered by site, mirroring platform)
+fn render_logs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
+    ui.horizontal(|ui| {
+        ui.heading("Installer Logs");
+        ui.add_space(8.0);
+
+        // Log level filter
+        ui.label("Level:");
+        let filter_id = egui::Id::new("installer_log_level_filter");
+        let mut log_level_filter = ui
+            .data(|d| d.get_temp::<String>(filter_id))
+            .unwrap_or_else(|| "All".to_string());
+
+        egui::ComboBox::from_label("")
+            .selected_text(&log_level_filter)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+            });
+
+        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
+    });
+
+    ui.add_space(8.0);
+
+    if loading {
+        ui.spinner();
+        ui.label("Loading logs...");
+        return;
+    }
+
+    if logs.is_empty() {
+        ui.label("No logs available.");
+        return;
+    }
+
+    // Filter logs by level
+    let log_level_filter = ui
+        .data(|d| d.get_temp::<String>(egui::Id::new("installer_log_level_filter")))
+        .unwrap_or_else(|| "All".to_string());
+
+    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
+        logs.iter().collect()
+    } else {
+        logs.iter()
+            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
+            .collect()
+    };
+
+    // Scrollable log view
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            for line in filtered_logs {
+                ui.label(egui::RichText::new(line).monospace().small());
+            }
         });
 }
 
@@ -98,13 +162,37 @@ fn render_status_tab(
     }
 }
 
-/// Render Mycart tab
-fn render_mycart_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, loading: bool) {
+/// Render Mycart tab (line-by-line logs with filter, mirroring platform pattern)
+fn render_mycart_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
+    ui.horizontal(|ui| {
+        ui.heading("Mycart Logs");
+        ui.add_space(8.0);
+
+        // Log level filter
+        ui.label("Level:");
+        let filter_id = egui::Id::new("mycart_log_level_filter");
+        let mut log_level_filter = ui
+            .data(|d| d.get_temp::<String>(filter_id))
+            .unwrap_or_else(|| "All".to_string());
+
+        egui::ComboBox::from_label("")
+            .selected_text(&log_level_filter)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+            });
+
+        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
+    });
+
     ui.add_space(8.0);
 
     if loading {
-        ui.label("Loading mycart logs...");
         ui.spinner();
+        ui.label("Loading logs...");
         return;
     }
 
@@ -113,29 +201,60 @@ fn render_mycart_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, loading:
         return;
     }
 
-    for log_name in ["mycart-stderr.log", "mycart-stdout.log"] {
-        ui.collapsing(log_name, |ui| {
-            if let Some(content) = logs.get(log_name) {
-                ui.add(
-                    egui::TextEdit::multiline(&mut content.as_str())
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(20),
-                );
-            } else {
-                ui.label("Log not found or failed to load");
+    // Filter logs by level
+    let log_level_filter = ui
+        .data(|d| d.get_temp::<String>(egui::Id::new("mycart_log_level_filter")))
+        .unwrap_or_else(|| "All".to_string());
+
+    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
+        logs.iter().collect()
+    } else {
+        logs.iter()
+            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
+            .collect()
+    };
+
+    // Scrollable log view
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            for line in filtered_logs {
+                ui.label(egui::RichText::new(line).monospace().small());
             }
         });
-    }
 }
 
-/// Render XMPPProxy tab
-fn render_xmppproxy_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, loading: bool) {
+/// Render XMPPProxy tab (line-by-line logs with filter)
+fn render_xmppproxy_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
+    ui.horizontal(|ui| {
+        ui.heading("XMPPProxy Logs");
+        ui.add_space(8.0);
+
+        ui.label("Level:");
+        let filter_id = egui::Id::new("xmppproxy_log_level_filter");
+        let mut log_level_filter = ui
+            .data(|d| d.get_temp::<String>(filter_id))
+            .unwrap_or_else(|| "All".to_string());
+
+        egui::ComboBox::from_label("")
+            .selected_text(&log_level_filter)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+            });
+
+        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
+    });
+
     ui.add_space(8.0);
 
     if loading {
-        ui.label("Loading xmppproxy logs...");
         ui.spinner();
+        ui.label("Loading logs...");
         return;
     }
 
@@ -144,29 +263,58 @@ fn render_xmppproxy_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, loadi
         return;
     }
 
-    for log_name in ["xmpp-proxy-stdout.log", "xmpp-proxy-stderr.log"] {
-        ui.collapsing(log_name, |ui| {
-            if let Some(content) = logs.get(log_name) {
-                ui.add(
-                    egui::TextEdit::multiline(&mut content.as_str())
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(20),
-                );
-            } else {
-                ui.label("Log not found or failed to load");
+    let log_level_filter = ui
+        .data(|d| d.get_temp::<String>(egui::Id::new("xmppproxy_log_level_filter")))
+        .unwrap_or_else(|| "All".to_string());
+
+    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
+        logs.iter().collect()
+    } else {
+        logs.iter()
+            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
+            .collect()
+    };
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            for line in filtered_logs {
+                ui.label(egui::RichText::new(line).monospace().small());
             }
         });
-    }
 }
 
-/// Render Fail2BanRS tab
-fn render_fail2banrs_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, loading: bool) {
+/// Render Fail2BanRS tab (line-by-line logs with filter)
+fn render_fail2banrs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
+    ui.horizontal(|ui| {
+        ui.heading("Fail2BanRS Logs");
+        ui.add_space(8.0);
+
+        ui.label("Level:");
+        let filter_id = egui::Id::new("fail2banrs_log_level_filter");
+        let mut log_level_filter = ui
+            .data(|d| d.get_temp::<String>(filter_id))
+            .unwrap_or_else(|| "All".to_string());
+
+        egui::ComboBox::from_label("")
+            .selected_text(&log_level_filter)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
+                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
+                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
+                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
+                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
+            });
+
+        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
+    });
+
     ui.add_space(8.0);
 
     if loading {
-        ui.label("Loading fail2banrs logs...");
         ui.spinner();
+        ui.label("Loading logs...");
         return;
     }
 
@@ -175,108 +323,45 @@ fn render_fail2banrs_tab(ui: &mut egui::Ui, logs: &HashMap<String, String>, load
         return;
     }
 
-    for log_name in ["fail2ban-rs-stderr.log", "fail2ban-rs-stdout.log"] {
-        ui.collapsing(log_name, |ui| {
-            if let Some(content) = logs.get(log_name) {
-                ui.add(
-                    egui::TextEdit::multiline(&mut content.as_str())
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(20),
-                );
-            } else {
-                ui.label("Log not found or failed to load");
+    let log_level_filter = ui
+        .data(|d| d.get_temp::<String>(egui::Id::new("fail2banrs_log_level_filter")))
+        .unwrap_or_else(|| "All".to_string());
+
+    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
+        logs.iter().collect()
+    } else {
+        logs.iter()
+            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
+            .collect()
+    };
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(500.0)
+        .show(ui, |ui| {
+            for line in filtered_logs {
+                ui.label(egui::RichText::new(line).monospace().small());
             }
         });
-    }
 }
 
-/// Render Operations tab with crontab management (Phase 5: interactive controls)
+/// Render Operations tab showing operation history (Phase 5: mirroring platform pattern)
 fn render_operations_tab(
     ui: &mut egui::Ui,
-    crontab_jobs: &[CrontabJob],
-    crontab_loading: bool,
-    crontab_error: &Option<String>,
-    on_action: &mut Option<DrawerAction>,
+    operations: &[crate::storage::models::opslog::OperationLog],
+    loading: bool,
 ) {
     ui.add_space(8.0);
 
-    ui.heading("Crontab Jobs");
-    ui.add_space(4.0);
-
-    // Show error if present
-    if let Some(error) = crontab_error {
-        ui.colored_label(egui::Color32::from_rgb(255, 0, 0), format!("⚠ Error: {}", error));
-        ui.add_space(4.0);
-    }
-
-    // Show loading state
-    if crontab_loading {
-        ui.label("Loading crontab jobs...");
-        ui.add_space(4.0);
+    if loading {
         ui.spinner();
+        ui.label("Loading operations...");
         return;
     }
 
-    // Show empty state or jobs list
-    if crontab_jobs.is_empty() {
-        ui.label("No crontab jobs available. Click refresh to load.");
-    } else {
-        ui.label(format!("{} crontab jobs found", crontab_jobs.len()));
-        ui.add_space(8.0);
+    ui.heading("Operation History");
+    ui.add_space(8.0);
 
-        // Job list with interactive controls
-        for job in crontab_jobs {
-            ui.group(|ui| {
-                ui.label(egui::RichText::new(&job.name).strong());
-                ui.label(format!("ID: {}", job.job_id));
-
-                // Enabled checkbox
-                ui.horizontal(|ui| {
-                    let mut enabled = job.enabled;
-                    if ui.checkbox(&mut enabled, "Enabled").changed() {
-                        *on_action = Some(DrawerAction::ToggleCronjob {
-                            job_id: job.job_id.clone(),
-                            enabled,
-                        });
-                    }
-                });
-
-                // Interval editor with persistent state
-                ui.horizontal(|ui| {
-                    ui.label("Interval:");
-
-                    // Use ui.data_mut to persist the interval buffer across frames
-                    let interval_id = ui.make_persistent_id(format!("interval_{}", job.job_id));
-                    let mut interval_buffer = ui.data_mut(|d| {
-                        d.get_persisted::<String>(interval_id)
-                            .unwrap_or_else(|| job.interval.clone())
-                    });
-
-                    ui.text_edit_singleline(&mut interval_buffer);
-
-                    // Store the buffer back
-                    ui.data_mut(|d| d.insert_persisted(interval_id, interval_buffer.clone()));
-
-                    // Apply button to submit changes
-                    if ui.button("Apply").clicked() && interval_buffer != job.interval {
-                        *on_action = Some(DrawerAction::SetCronjobInterval {
-                            job_id: job.job_id.clone(),
-                            interval: interval_buffer,
-                        });
-                    }
-                });
-
-                // Last run timestamp
-                if let Some(last_run) = job.last_run {
-                    use chrono::{DateTime, Utc};
-                    let dt = DateTime::<Utc>::from_timestamp(last_run, 0).unwrap_or_default();
-                    ui.label(format!("Last run: {}", dt.format("%Y-%m-%d %H:%M")));
-                } else {
-                    ui.label("Last run: never");
-                }
-            });
-            ui.add_space(4.0);
-        }
-    }
+    let renderer = crate::ui_components::drawer::OperationsRenderer::new().max_height(500.0);
+    renderer.show(ui, operations);
 }
