@@ -186,7 +186,8 @@ fn main() -> Result<()> {
     let silent_install = args.iter().any(|arg| arg == "--silent");
     let uninstall = args.iter().any(|arg| arg == "--uninstall");
 
-    // Check if CLI arguments are provided (dns, info, init, etc.)
+    // Check if CLI arguments are provided (profile, platform, dns, ssh, etc.)
+    // Note: Use --gui to launch graphical interface
     let has_cli_command =
         args.len() > 1 && !force_gui && !force_tray && !silent_install && !uninstall;
 

@@ -8,7 +8,10 @@ pub mod commands;
 #[command(name = "dure")]
 #[command(
     about = "Dure - Distributed E-commerce Platform",
-    long_about = "Dure - Distributed E-commerce Platform\n\nUse 'dure info' to see commands organized by category"
+    long_about = "Dure - Distributed E-commerce Platform\n\n\
+                  Use 'dure --gui' to launch graphical interface\n\
+                  Use 'dure profile login <name>' to load a profile\n\
+                  Use 'dure help' to see all commands"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -17,11 +20,25 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    // ==================== Profile Management ====================
+    /// Profile management (create, delete, login, list)
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
+
     // ==================== Hosting Control Commands ====================
     /// Platform management (GCP, Firebase, Supabase)
     Platform {
         #[command(subcommand)]
         command: Option<PlatformCommands>,
+    },
+
+    // ==================== Store Management ====================
+    /// Mycart site management (requires loaded profile)
+    Mycart {
+        #[command(subcommand)]
+        command: MycartCommands,
     },
 
     // ==================== Client Commands ====================
@@ -45,24 +62,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: AuditCommands,
     },
-
-    // ==================== Common/Utility Commands ====================
-    /// Cryptographic operations (encrypt/decrypt)
-    Crypt {
-        #[command(subcommand)]
-        command: CryptCommands,
-    },
-    /// Show diagnostic metadata about the workspace
-    Info,
-    /// Initialize a workspace
-    Init {
-        /// Issue ID prefix (e.g., "bd")
-        #[arg(long)]
-        prefix: Option<String>,
-        /// Overwrite existing DB
-        #[arg(long)]
-        force: bool,
-    },
 }
 
 #[derive(Subcommand)]
@@ -71,6 +70,72 @@ pub enum AuditCommands {
     Status,
     /// Wipe all audit records (requires confirmation)
     Clear,
+}
+
+#[derive(Subcommand)]
+pub enum ProfileCommands {
+    /// List all available profiles
+    List,
+    /// Create a new profile
+    Create {
+        /// Profile name
+        name: String,
+        /// Profile password
+        password: String,
+    },
+    /// Delete a profile
+    Delete {
+        /// Profile name to delete
+        name: String,
+    },
+    /// Login to a profile (loads it for subsequent commands)
+    Login {
+        /// Profile name
+        name: String,
+        /// Profile password
+        password: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum MycartCommands {
+    /// Add a new mycart site
+    Add {
+        /// Site address (domain)
+        address: String,
+        /// Admin email
+        email: String,
+        /// Admin password
+        password: String,
+        /// Platform ID (optional)
+        #[arg(long)]
+        platform: Option<String>,
+        /// SSH host (optional)
+        #[arg(long)]
+        ssh_host: Option<String>,
+    },
+    /// Delete a mycart site
+    Del {
+        /// Site address to delete
+        address: String,
+    },
+    /// List all mycart sites
+    List,
+    /// Get site statistics
+    Stats {
+        /// Site address
+        address: String,
+    },
+    /// Get site logs (requires SSH)
+    Logs {
+        /// Site address
+        address: String,
+    },
+    /// Get site crontab
+    Crontab {
+        /// Site address
+        address: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -99,30 +164,6 @@ pub enum DnsCommands {
     Bastion {
         /// IP address to add to bastion allow list
         ip: String,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum CryptCommands {
-    /// Show base pubkey for system
-    Status,
-    /// Encrypt data for a recipient
-    Enc {
-        /// Recipient's public key (base64 or hex)
-        recipient_pubkey: String,
-        /// Data to encrypt
-        data: String,
-        /// Output as hex instead of base64
-        #[arg(long)]
-        hex: bool,
-    },
-    /// Decrypt data
-    Dec {
-        /// Encrypted data (base64 or hex)
-        encrypted_data: String,
-        /// Output raw bytes instead of UTF-8 text
-        #[arg(long)]
-        raw: bool,
     },
 }
 
@@ -202,18 +243,65 @@ pub enum SshCommands {
     },
 }
 
+/// Load active profile from environment or .active file
+#[cfg(not(target_arch = "wasm32"))]
+fn load_active_profile() -> anyhow::Result<crate::calc::profile::ProfileContext> {
+    use crate::calc::profile::ProfileManager;
+
+    // Check environment variable first
+    if let Ok(profile_name) = std::env::var("DURE_PROFILE") {
+        return crate::calc::profile::ProfileContext::new(profile_name);
+    }
+
+    // Check .active file
+    if let Some(profile_name) = ProfileManager::get_active_profile()? {
+        return crate::calc::profile::ProfileContext::new(profile_name);
+    }
+
+    // No profile loaded
+    anyhow::bail!(
+        "No profile loaded. Please run 'dure profile login <name>' first.\n\
+         Or set DURE_PROFILE environment variable."
+    )
+}
+
 /// Run CLI mode - parse and execute CLI commands
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_cli_mode() -> anyhow::Result<()> {
-    use crate::calc::profile::ProfileContext;
+    use crate::calc::profile::{ProfileContext, ProfileManager};
 
     let cli = Cli::parse();
 
-    // Load default profile for CLI operations
-    let profile = ProfileContext::new("default")?;
-
     match cli.command {
-        Commands::Audit { command } => match command {
+        // Profile commands don't need loaded profile
+        Commands::Profile { command } => match command {
+            ProfileCommands::List => {
+                commands::profile::execute_profile_list()?;
+            }
+            ProfileCommands::Create { name, password } => {
+                commands::profile::execute_profile_create(name.clone(), password)?;
+            }
+            ProfileCommands::Delete { name } => {
+                commands::profile::execute_profile_delete(name)?;
+            }
+            ProfileCommands::Login { name, password } => {
+                let profile = commands::profile::execute_profile_login(name.clone(), password)?;
+                ProfileManager::set_active_profile(&profile.name)?;
+                println!("✓ Profile '{}' loaded", profile.name);
+                println!();
+                println!("You can now run commands like:");
+                println!("  dure ssh status");
+                println!("  dure platform");
+                println!("  dure mycart list");
+            }
+        },
+
+        // All other commands require loaded profile
+        cmd => {
+            let profile = load_active_profile()?;
+            match cmd {
+                Commands::Profile { .. } => unreachable!(),
+                Commands::Audit { command } => match command {
             AuditCommands::Status => {
                 commands::audit::execute_audit_status(&profile)?;
             }
@@ -238,24 +326,34 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 commands::dns::execute_dns_bastion(&profile, &ip)?;
             }
         },
-        Commands::Crypt { command } => match command {
-            CryptCommands::Status => {
-                commands::crypt::execute_crypt_status(&profile)?;
-            }
-            CryptCommands::Enc {
-                recipient_pubkey,
-                data,
-                hex,
-            } => {
-                commands::crypt::execute_crypt_enc(&profile, recipient_pubkey, data, hex)?;
-            }
-            CryptCommands::Dec {
-                encrypted_data,
-                raw,
-            } => {
-                commands::crypt::execute_crypt_dec(&profile, encrypted_data, raw)?;
-            }
-        },
+                Commands::Mycart { command } => match command {
+                    MycartCommands::Add {
+                        address,
+                        email,
+                        password,
+                        platform,
+                        ssh_host,
+                    } => {
+                        smol::block_on(commands::mycart::add_mycart_site(
+                            &profile, address, email, password, platform, ssh_host,
+                        ))?;
+                    }
+                    MycartCommands::Del { address } => {
+                        commands::mycart::delete_mycart_site(&profile, address)?;
+                    }
+                    MycartCommands::List => {
+                        commands::mycart::list_mycart_sites(&profile)?;
+                    }
+                    MycartCommands::Stats { address } => {
+                        smol::block_on(commands::mycart::get_site_stats(&profile, address))?;
+                    }
+                    MycartCommands::Logs { address } => {
+                        smol::block_on(commands::mycart::get_site_logs(&profile, address))?;
+                    }
+                    MycartCommands::Crontab { address } => {
+                        smol::block_on(commands::mycart::get_site_crontab(&profile, address))?;
+                    }
+                },
         Commands::Key { command } => match command {
             KeyCommands::Save { output } => {
                 commands::keyring::execute_key_save(&profile, output.clone())?;
@@ -316,59 +414,7 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 commands::ssh::execute_ssh_init(&profile, host)?;
             }
         },
-        Commands::Info => {
-            use clap::CommandFactory;
-
-            println!("Dure CLI Info:");
-            println!("  Version: {}", env!("CARGO_PKG_VERSION"));
-            println!("  Mode: CLI");
-            println!();
-
-            // Define command categories
-            let categories = vec![
-                ("Hosting Control Commands", vec!["ns", "platform"]),
-                ("Client Commands", vec!["dns", "key", "ssh", "audit"]),
-                (
-                    "Common/Utility Commands",
-                    vec!["crypt", "site", "info", "init"],
-                ),
-            ];
-
-            let mut cmd = Cli::command();
-
-            for (category, command_names) in categories {
-                println!("{}:", category);
-                for name in command_names {
-                    if let Some(subcmd) = cmd.find_subcommand_mut(name) {
-                        let about = subcmd
-                            .get_about()
-                            .map(|s| s.to_string())
-                            .unwrap_or_default();
-                        println!("  {:<8} - {}", name, about);
-
-                        // Print subcommands if any
-                        for sub in subcmd.get_subcommands() {
-                            if sub.get_name() == "help" {
-                                continue;
-                            }
-                            let sub_about =
-                                sub.get_about().map(|s| s.to_string()).unwrap_or_default();
-                            println!("    {:<10} - {}", sub.get_name(), sub_about);
-                        }
-                    }
-                }
-                println!();
             }
-        }
-        Commands::Init { prefix, force } => {
-            println!("Initializing Dure workspace...");
-            if let Some(p) = prefix {
-                println!("  Prefix: {}", p);
-            }
-            if force {
-                println!("  Force: true");
-            }
-            println!("Note: Full initialization not yet implemented in CLI mode");
         }
     }
 
