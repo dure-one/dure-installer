@@ -5,6 +5,7 @@ use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{dialog, MaterialButton};
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use crate::config::{AppConfig, SshHostConfig};
@@ -366,6 +367,9 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     load_error: Option<String>,
 
+    #[cfg_attr(feature = "serde", serde(skip))]
+    show_error_dialog: bool,
+
     /// Config file last modified time (to detect changes)
     #[cfg_attr(feature = "serde", serde(skip))]
     config_last_modified: Option<std::time::SystemTime>,
@@ -455,6 +459,7 @@ impl Default for SshTab {
             rows: Vec::new(),
             loaded: false,
             load_error: None,
+            show_error_dialog: false,
             config_last_modified: None,
             show_add_dialog: false,
             add_host: String::new(),
@@ -564,6 +569,8 @@ impl SshTab {
                 }
                 Err(e) => {
                     self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.show_error_dialog = true;
+                    self.loaded = true;
                 }
             }
         }
@@ -571,6 +578,7 @@ impl SshTab {
         #[cfg(target_arch = "wasm32")]
         {
             self.load_error = Some(tr!("ssh-error-wasm"));
+            self.show_error_dialog = true;
             self.loaded = true;
         }
     }
@@ -1367,27 +1375,8 @@ impl SshTab {
         }
 
         // Error dialog
-        if let Some(ref error) = self.load_error {
-            let error_msg = error.clone();
-            let mut show_error = true;
-            let window_width = ui.ctx().viewport_rect().width();
-            let window_height = ui.ctx().viewport_rect().height();
-
-            dialog("ssh_error_dialog", "Error", &mut show_error)
-                .min_width(350.0)
-                .max_width(window_width - 40.0)
-                .max_height(window_height - 40.0)
-                .scrollable(true)
-                .content(|ui, _open| {
-                    ui.label(&error_msg);
-                })
-                .primary_action("OK", || {})
-                .show(ui.ctx());
-
-            if !show_error {
-                self.load_error = None;
-                return;
-            }
+        if self.show_error_dialog {
+            self.render_error_dialog(ui.ctx());
         }
         if self.load_error.is_some() {
             return;
@@ -1945,6 +1934,7 @@ impl SshTab {
                     self.load_error = Some(
                         tr!("ssh-error-invalid-port", {port: self.add_port.clone(), error: e.to_string()}),
                     );
+                    self.show_error_dialog = true;
                     return;
                 }
             };
@@ -2001,6 +1991,7 @@ impl SshTab {
                 }
                 Err(e) => {
                     self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.show_error_dialog = true;
                 }
             }
         }
@@ -2042,6 +2033,7 @@ impl SshTab {
                 }
                 Err(e) => {
                     self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.show_error_dialog = true;
                 }
             }
         }
@@ -2154,6 +2146,7 @@ impl SshTab {
                     self.load_error = Some(
                         tr!("ssh-error-invalid-port", {port: self.edit_port.clone(), error: e.to_string()}),
                     );
+                    self.show_error_dialog = true;
                     return;
                 }
             };
@@ -2192,6 +2185,7 @@ impl SshTab {
                 }
                 Err(e) => {
                     self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.show_error_dialog = true;
                 }
             }
         }
@@ -2248,6 +2242,7 @@ impl SshTab {
                 }
                 Err(e) => {
                     self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.show_error_dialog = true;
                 }
             }
         }
@@ -2414,6 +2409,7 @@ impl SshTab {
         if install_requested.get() {
             if self.install_dure_domain.is_empty() {
                 self.load_error = Some("Domain is required".to_string());
+                self.show_error_dialog = true;
                 return;
             }
 
@@ -2461,6 +2457,34 @@ impl SshTab {
         self.install_dure_host = String::new();
         self.install_dure_domain = String::new();
         self.install_dure_image_tag = "latest".to_string();
+    }
+
+    fn render_error_dialog(&mut self, ctx: &egui::Context) {
+        if let Some(error) = self.load_error.clone() {
+            let ok_clicked = Cell::new(false);
+            let window_width = ctx.viewport_rect().width();
+            let window_height = ctx.viewport_rect().height();
+
+            dialog("ssh_error_dialog", "Error", &mut self.show_error_dialog)
+                .min_width(350.0)
+                .max_width(window_width - 40.0)
+                .max_height(window_height - 40.0)
+                .scrollable(true)
+                .content(|ui, _open| {
+                    ui.add_space(8.0);
+                    ui.colored_label(egui_material3::theme::get_global_color("error"), &error);
+                    ui.add_space(12.0);
+                })
+                .primary_action("OK", || {
+                    ok_clicked.set(true);
+                })
+                .show(ctx);
+
+            if ok_clicked.get() || !self.show_error_dialog {
+                self.show_error_dialog = false;
+                self.load_error = None;
+            }
+        }
     }
 }
 

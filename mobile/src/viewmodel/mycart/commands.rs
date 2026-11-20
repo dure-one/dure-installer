@@ -1,88 +1,36 @@
 //! Mycart actor commands
+//!
+//! Phase 4: Cleaned up - only crontab and existing UI commands
 
 #[derive(Debug, Clone)]
 pub enum MycartCommand {
-    // Store Health
-    CheckStoreHealth {
-        store_id: String,
+    // Existing UI commands (keep for current functionality)
+    LoadStats {
+        site_address: String,
     },
 
-    // Product Operations
-    ListProducts {
-        store_id: String,
-        limit: Option<usize>,
-        offset: Option<usize>,
+    LoadLogs {
+        site_address: String,
     },
 
-    GetProduct {
-        product_id: String,
+    // Phase 4: Crontab management commands
+    ListCrontab {
+        site_address: String,
     },
 
-    CreateProduct {
-        store_id: String,
-        name: String,
-        price: i64,
-        description: Option<String>,
+    EnableCronjob {
+        site_address: String,
+        job_id: String,
     },
 
-    UpdateProduct {
-        product_id: String,
-        name: Option<String>,
-        price: Option<i64>,
+    DisableCronjob {
+        site_address: String,
+        job_id: String,
     },
 
-    DeleteProduct {
-        product_id: String,
+    SetInterval {
+        site_address: String,
+        job_id: String,
+        interval: String,
     },
-
-    // Order Operations
-    ListOrders {
-        store_id: String,
-        status: Option<String>,
-        limit: Option<usize>,
-    },
-
-    GetOrder {
-        order_id: String,
-    },
-
-    UpdateOrderStatus {
-        order_id: String,
-        status: String,
-    },
-
-    // SSH Log Operations
-    FetchLogs {
-        store_id: String,
-        vm_name: String,
-        log_type: LogType,
-        lines: usize,
-    },
-
-    StreamLogs {
-        store_id: String,
-        vm_name: String,
-        log_type: LogType,
-    },
-
-    StopLogStream {
-        store_id: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogType {
-    Application,
-    Nginx,
-    System,
-}
-
-impl LogType {
-    pub fn log_path(&self) -> &'static str {
-        match self {
-            LogType::Application => "/var/log/mycart/app.log",
-            LogType::Nginx => "/var/log/nginx/access.log",
-            LogType::System => "/var/log/syslog",
-        }
-    }
 }

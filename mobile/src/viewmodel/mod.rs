@@ -1381,138 +1381,49 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    // Mycart commands
-    pub fn check_store_health(&self, store_id: String) -> anyhow::Result<()> {
+    // Phase 4: Mycart commands (cleaned up)
+    pub fn load_mycart_stats(&self, site_address: String) -> anyhow::Result<()> {
         self.mycart_tx
-            .send_blocking(mycart::MycartCommand::CheckStoreHealth { store_id })
+            .send_blocking(mycart::MycartCommand::LoadStats { site_address })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn list_mycart_products(
+    pub fn load_mycart_logs(&self, site_address: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadLogs { site_address })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_mycart_crontab(&self, site_address: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::ListCrontab { site_address })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn enable_mycart_cronjob(&self, site_address: String, job_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::EnableCronjob { site_address, job_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn disable_mycart_cronjob(&self, site_address: String, job_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::DisableCronjob { site_address, job_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn set_mycart_cronjob_interval(
         &self,
-        store_id: String,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        site_address: String,
+        job_id: String,
+        interval: String,
     ) -> anyhow::Result<()> {
         self.mycart_tx
-            .send_blocking(mycart::MycartCommand::ListProducts {
-                store_id,
-                limit,
-                offset,
+            .send_blocking(mycart::MycartCommand::SetInterval {
+                site_address,
+                job_id,
+                interval,
             })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn get_mycart_product(&self, product_id: String) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::GetProduct { product_id })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn create_mycart_product(
-        &self,
-        store_id: String,
-        name: String,
-        price: i64,
-        description: Option<String>,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::CreateProduct {
-                store_id,
-                name,
-                price,
-                description,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn update_mycart_product(
-        &self,
-        product_id: String,
-        name: Option<String>,
-        price: Option<i64>,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::UpdateProduct {
-                product_id,
-                name,
-                price,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn delete_mycart_product(&self, product_id: String) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::DeleteProduct { product_id })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn list_mycart_orders(
-        &self,
-        store_id: String,
-        status: Option<String>,
-        limit: Option<usize>,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::ListOrders {
-                store_id,
-                status,
-                limit,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn get_mycart_order(&self, order_id: String) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::GetOrder { order_id })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn update_mycart_order_status(
-        &self,
-        order_id: String,
-        status: String,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::UpdateOrderStatus { order_id, status })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn fetch_mycart_logs(
-        &self,
-        store_id: String,
-        vm_name: String,
-        log_type: mycart::LogType,
-        lines: usize,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::FetchLogs {
-                store_id,
-                vm_name,
-                log_type,
-                lines,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn stream_mycart_logs(
-        &self,
-        store_id: String,
-        vm_name: String,
-        log_type: mycart::LogType,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::StreamLogs {
-                store_id,
-                vm_name,
-                log_type,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-
-    pub fn stop_mycart_log_stream(&self, store_id: String) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::StopLogStream { store_id })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 

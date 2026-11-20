@@ -2,9 +2,15 @@
 
 > Full structure and interface documentation for all mobile/src/**/*.rs files.
 > See docs/ARCH.sudolang.md for high-level architecture summary.
+> See docs/ACTOR_IMPLEMENTATION_PLAN.md for actor implementation details.
 
-**Total Files**: 173 Rust files  
+**Total Files**: 179 Rust files  
 **Purpose**: Code-level reference for managing and understanding implementation details
+
+**Architecture**: Layered with actor-based ViewModel  
+- UI → ViewModel (actors) → Calc/Api  
+- Actors: Platform (✓), SSH (✓), Logs (✓), Mycart (planned), DNS (planned)  
+- No direct UI → Calc/Api calls (enforced by actor layer)
 
 ---
 
@@ -943,22 +949,26 @@ interface UiTabsModule {
 
 ---
 
-## ViewModel Module (29 files)
+## ViewModel Module (35 files, 3 actors implemented)
 
 Actor-based MVVM layer coordinating business logic and UI.
+
+**Status**: Platform ✓, SSH ✓, Logs ✓ | Mycart (planned), DNS (planned)
 
 ```sudo
 interface ViewModelModule {
   constraint: Actor-based with smol async runtime
   constraint: Profile-scoped operations
+  constraint: UI → ViewModel (actors) → Calc/Api (no direct UI → Calc/Api calls)
   
   mod.rs {
     // ViewModel coordinator
     struct ViewModel {
       platform_tx: Sender<PlatformCommand>
-      drawer_tx: Sender<DrawerCommand>
       ssh_tx: Sender<SshCommand>
-      logs_tx: Sender<LogCommand>
+      logs_tx: Sender<LogsCommand>
+      mycart_tx: Sender<MycartCommand>  // planned
+      dns_tx: Sender<DnsCommand>        // planned
       event_rx: Receiver<ViewModelEvent>
       state: ViewModelState
       profile: Option<ProfileContext>
@@ -974,7 +984,7 @@ interface ViewModelModule {
   
   common.rs {
     // Shared types
-    enum ViewModelEvent { Platform, Drawer, Ssh, Logs }
+    enum ViewModelEvent { Platform, Ssh, Logs, Mycart, Dns }
     struct ViewModelState { active_operations, recent_errors, textures }
   }
   
@@ -994,52 +1004,90 @@ interface ViewModelModule {
     // ViewModel tests
   }
   
-  // Actor modules
+  // ===== IMPLEMENTED ACTORS =====
+  
   platform/ {
-    mod.rs { /* platform actor exports */ }
+    // Platform actor: GCP VM management + billing drawer
+    constraint: Drawer UI pattern (operations + logs tabs)
+    
+    mod.rs {
+      pub use actor::PlatformActor;
+      pub use commands::{DeleteOptions, FirewallRuleData, PlatformCommand};
+      pub use drawer_actor::DrawerActor;
+      pub use drawer_repository::DrawerRepository;
+      pub use drawer_types::{DrawerCommand, DrawerEvent, DrawerState, DrawerTab};
+      pub use events::{
+        FirewallRuleInfo, FirewallStatus, FullFirewallRule, PlatformEvent,
+        SshStatus, VmInfo, VmStatus
+      };
+    }
     
     actor.rs {
-      // Platform actor (GCP VM management)
-      async fn platform_actor(
-        cmd_rx: Receiver<PlatformCommand>,
-        event_tx: Sender<ViewModelEvent>,
+      struct PlatformActor {
+        cmd_rx: Receiver<PlatformCommand>
+        event_tx: Sender<PlatformEvent>
         profile: ProfileContext
-      ) {
-        loop {
-          match cmd_rx.recv().await {
-            PlatformCommand::ListVms => {
-              let vms = calc::gcp::list_vms(&profile).await;
-              event_tx.send(PlatformEvent::VmsListed(vms));
-            }
-            PlatformCommand::CreateVm(spec) => {
-              let vm = calc::gcp::provision_vm(spec, &profile).await;
-              event_tx.send(PlatformEvent::VmCreated(vm));
-            }
-            // ... more commands
-          }
-        }
       }
+      
+      fn spawn() -> (Sender<PlatformCommand>, Receiver<PlatformEvent>)
+      
+      // Commands: ListVms, CreateVm, DeleteVm, StartVm, StopVm, RestartVm,
+      //           GetFirewallRules, UpdateFirewallRule, GetSshStatus
+      
+      constraint: Calls api::gcp::* (compute, billing, dns)
+      constraint: Stores state in calc::db
     }
     
     commands.rs {
-      enum PlatformCommand { ListVms, CreateVm(VmSpec), DeleteVm(String) }
+      enum PlatformCommand {
+        ListVms, CreateVm(VmSpec), DeleteVm { name, options: DeleteOptions },
+        StartVm(String), StopVm(String), RestartVm(String),
+        GetFirewallRules, UpdateFirewallRule(FirewallRuleData),
+        GetSshStatus, CheckProjectSetup
+      }
+      
+      struct DeleteOptions { delete_disk, delete_ip }
+      struct FirewallRuleData { name, allowed_ips }
     }
     
     events.rs {
-      enum PlatformEvent { VmsListed(Vec<Vm>), VmCreated(Vm), VmDeleted(String) }
+      enum PlatformEvent {
+        VmInfo(VmInfo), VmCreated(VmInfo), VmDeleted(String),
+        VmStarted(String), VmStopped(String), VmRestarted(String),
+        FirewallRules(Vec<FullFirewallRule>),
+        FirewallUpdated(FirewallRuleInfo),
+        SshStatus(SshStatus), Error(String), Progress(String)
+      }
+      
+      struct VmInfo { name, status: VmStatus, zone, ip, machine_type }
+      struct FullFirewallRule { name, status: FirewallStatus, allowed, target_tags }
+      struct SshStatus { reachable, last_check, error }
     }
     
     drawer_actor.rs {
-      // Billing drawer actor
-      async fn drawer_actor(
-        cmd_rx: Receiver<DrawerCommand>,
-        event_tx: Sender<ViewModelEvent>,
-        profile: ProfileContext
-      )
+      // Drawer UI actor (billing/logs viewer)
+      struct DrawerActor {
+        cmd_rx: Receiver<DrawerCommand>
+        event_tx: Sender<DrawerEvent>
+        repo: DrawerRepository
+      }
+      
+      fn spawn() -> (Sender<DrawerCommand>, Receiver<DrawerEvent>)
     }
     
-    state.rs {
-      struct PlatformState { vms: Vec<Vm>, selected: Option<String> }
+    drawer_repository.rs {
+      // Data access for drawer
+      struct DrawerRepository { profile: ProfileContext }
+      
+      fn get_billing_data() -> Result<BillingData>
+      fn get_logs(limit: usize) -> Result<Vec<OperationLog>>
+    }
+    
+    drawer_types.rs {
+      enum DrawerTab { Operations, Logs }
+      enum DrawerCommand { SwitchTab(DrawerTab), RefreshLogs, RefreshBilling }
+      enum DrawerEvent { LogsUpdated(Vec<OperationLog>), BillingUpdated(BillingData) }
+      struct DrawerState { active_tab, logs, billing }
     }
     
     tests.rs {
@@ -1048,41 +1096,72 @@ interface ViewModelModule {
   }
   
   ssh/ {
-    mod.rs { /* SSH actor exports */ }
+    // SSH actor: host/container management + operations drawer
+    constraint: Drawer UI pattern (operations + logs tabs)
+    
+    mod.rs {
+      pub use actor::SshActor;
+      pub use commands::SshCommand;
+      pub use drawer_types::{
+        ContainerInfo, DockerStatus, DrawerCommand, DrawerEvent,
+        DrawerState, DrawerTab, DureStatus, HostInfo
+      };
+      pub use events::{DockerContainer, OperationLog, SshEvent, SshHostInfo};
+    }
     
     actor.rs {
-      // SSH actor (host management, connections)
-      async fn ssh_actor(
-        cmd_rx: Receiver<SshCommand>,
-        event_tx: Sender<ViewModelEvent>,
+      struct SshActor {
+        cmd_rx: Receiver<SshCommand>
+        event_tx: Sender<SshEvent>
         profile: ProfileContext
-      ) {
-        loop {
-          match cmd_rx.recv().await {
-            SshCommand::ListHosts => {
-              let hosts = calc::ssh::list_hosts(&profile).await;
-              event_tx.send(SshEvent::HostsListed(hosts));
-            }
-            SshCommand::Connect(host) => {
-              let session = calc::ssh::connect(&host).await;
-              event_tx.send(SshEvent::Connected(session));
-            }
-            // ... more commands
-          }
-        }
       }
+      
+      fn spawn() -> (Sender<SshCommand>, Receiver<SshEvent>)
+      
+      // Commands: ListHosts, AddHost, RemoveHost, TestConnection,
+      //           ExecuteCommand, DeployContainer, ListContainers,
+      //           StartContainer, StopContainer, GetLogs
+      
+      constraint: Calls calc::ssh::* (connect, execute, upload)
+      constraint: Calls calc::docker::* (deploy, list, control)
     }
     
     commands.rs {
-      enum SshCommand { ListHosts, Connect(String), Disconnect, Execute(String) }
+      enum SshCommand {
+        ListHosts, AddHost(SshHostInfo), RemoveHost(String),
+        TestConnection(String), ExecuteCommand { host, command },
+        DeployContainer { host, image, name }, ListContainers(String),
+        StartContainer { host, container_id }, StopContainer { host, container_id },
+        GetLogs { host, container_id, lines }
+      }
     }
     
     events.rs {
-      enum SshEvent { HostsListed(Vec<SshHost>), Connected(SshSession), Output(String) }
+      enum SshEvent {
+        HostsListed(Vec<SshHostInfo>), HostAdded(SshHostInfo), HostRemoved(String),
+        ConnectionTest { host, success, error },
+        CommandOutput { host, output, error },
+        ContainerDeployed { host, container_id },
+        ContainersListed { host, containers: Vec<DockerContainer> },
+        ContainerStarted { host, container_id }, ContainerStopped { host, container_id },
+        Logs { host, container_id, logs: String },
+        Error(String), Progress(String)
+      }
+      
+      struct SshHostInfo { name, host, port, username, key_path }
+      struct DockerContainer { id, name, image, status: DockerStatus, ports }
     }
     
-    state.rs {
-      struct SshState { hosts: Vec<SshHost>, sessions: HashMap<String, SshSession> }
+    drawer_types.rs {
+      enum DrawerTab { Operations, Logs }
+      enum DrawerCommand { SwitchTab(DrawerTab), RefreshLogs, RefreshHosts }
+      enum DrawerEvent { LogsUpdated(Vec<OperationLog>), HostsUpdated(Vec<HostInfo>) }
+      struct DrawerState { active_tab, logs, hosts }
+      
+      struct HostInfo { name, host, status: DureStatus }
+      struct ContainerInfo { id, name, image, status: DockerStatus }
+      enum DureStatus { Running, Stopped, Error }
+      enum DockerStatus { Running, Stopped, Restarting }
     }
     
     tests.rs {
@@ -1091,52 +1170,114 @@ interface ViewModelModule {
   }
   
   logs/ {
-    mod.rs { /* logs actor exports */ }
+    // Logs actor: unified operation logging for all tabs
+    constraint: Used by platform, ssh, mycart, dns for operation tracking
+    
+    mod.rs {
+      pub use actor::{LogsActor, LogsCommand, LogsEvent};
+      pub use opslog_actor::OpsLogActor;
+      pub use opslog_commands::OpsLogCommand;
+      pub use opslog_events::OpsLogEvent;
+      pub use types::{LogLevel, LogRecord, OperationLog};
+    }
     
     actor.rs {
-      // Logs aggregation actor
-      async fn logs_actor(
-        cmd_rx: Receiver<LogCommand>,
-        event_tx: Sender<ViewModelEvent>
-      )
+      // Main logs aggregation actor
+      struct LogsActor {
+        cmd_rx: Receiver<LogsCommand>
+        event_tx: Sender<LogsEvent>
+      }
+      
+      fn spawn() -> (Sender<LogsCommand>, Receiver<LogsEvent>)
+      
+      enum LogsCommand { Subscribe(String), GetRecent(usize), Clear }
+      enum LogsEvent { NewLog(LogRecord), HistoryLoaded(Vec<LogRecord>) }
     }
     
-    commands.rs {
-      enum LogCommand { Subscribe, GetRecent, Clear }
+    opslog_actor.rs {
+      // Operation-specific logging actor
+      struct OpsLogActor {
+        cmd_rx: Receiver<OpsLogCommand>
+        event_tx: Sender<OpsLogEvent>
+        buffer: VecDeque<OperationLog>
+      }
+      
+      fn spawn() -> (Sender<OpsLogCommand>, Receiver<OpsLogEvent>)
+      
+      constraint: Per-tab operation logging (platform, ssh, mycart, dns)
     }
     
-    events.rs {
-      enum LogEvent { NewLog(LogRecord), HistoryLoaded(Vec<LogRecord>) }
+    opslog_commands.rs {
+      enum OpsLogCommand {
+        LogOperation { tab: String, operation: String, status: String },
+        GetLogs { tab: Option<String>, limit: usize },
+        ClearLogs(String)
+      }
     }
     
-    state.rs {
-      struct LogsState { buffer: VecDeque<LogRecord> }
+    opslog_events.rs {
+      enum OpsLogEvent {
+        OperationLogged(OperationLog),
+        LogsRetrieved(Vec<OperationLog>),
+        LogsCleared(String)
+      }
+    }
+    
+    types.rs {
+      struct LogRecord { timestamp, level: LogLevel, message, source }
+      struct OperationLog { id, tab, operation, status, timestamp, details }
+      enum LogLevel { Debug, Info, Warn, Error }
     }
   }
   
+  // ===== PLANNED ACTORS (see docs/ACTOR_IMPLEMENTATION_PLAN.md) =====
+  
   mycart/ {
-    mod.rs { /* mycart actor exports */ }
+    // Mycart actor: remote backend API + SSH log fetching
+    // Status: PLANNED (not implemented)
+    constraint: Drawer UI pattern (operations + logs tabs)
+    constraint: Dual mode - REST API + SSH logs
     
-    actor.rs {
-      // Mycart integration actor
-      async fn mycart_actor(
-        cmd_rx: Receiver<MycartCommand>,
-        event_tx: Sender<ViewModelEvent>,
-        profile: ProfileContext
-      )
+    mod.rs {
+      // pub use actor::MycartActor;
+      // pub use commands::{LogType, MycartCommand};
+      // pub use drawer_types::{DrawerCommand, DrawerEvent, DrawerState, DrawerTab};
+      // pub use events::{MycartEvent, Order, Product, StoreHealth};
     }
     
-    commands.rs {
-      enum MycartCommand { SyncProducts, CreateProduct, UpdateOrder }
+    // Commands: CheckStoreHealth, ListProducts, GetProduct, CreateProduct,
+    //           UpdateProduct, DeleteProduct, ListOrders, GetOrder,
+    //           UpdateOrderStatus, FetchLogs, StreamLogs, StopLogStream
+    
+    // Events: StoreHealthChecked(StoreHealth), ProductsListed(Vec<Product>),
+    //         ProductCreated(Product), OrdersListed(Vec<Order>),
+    //         LogsFetched(String), LogsStreaming(String)
+    
+    constraint: REST API - https://mycart.dure.app/api/_/*
+    constraint: SSH logs - /var/log/mycart/app.log, nginx, syslog
+  }
+  
+  dns/ {
+    // DNS actor: Cloudflare DNS management
+    // Status: PLANNED (not implemented)
+    constraint: Drawer UI pattern (operations + logs tabs)
+    constraint: Cloudflare API only (extracted from ui_tabs/ssh)
+    
+    mod.rs {
+      // pub use actor::DnsActor;
+      // pub use commands::DnsCommand;
+      // pub use drawer_types::{DrawerCommand, DrawerEvent, DrawerState, DrawerTab};
+      // pub use events::{DnsEvent, DnsRecord, DnsZone};
     }
     
-    events.rs {
-      enum MycartEvent { ProductsSynced(Vec<Product>), OrderUpdated(Order) }
-    }
+    // Commands: ListZones, GetZone, ListRecords, CreateRecord,
+    //           UpdateRecord, DeleteRecord, BulkUpdateRecords
     
-    state.rs {
-      struct MycartState { products: Vec<Product>, orders: Vec<Order> }
-    }
+    // Events: ZonesListed(Vec<DnsZone>), RecordsListed(Vec<DnsRecord>),
+    //         RecordCreated(DnsRecord), RecordUpdated(DnsRecord),
+    //         RecordDeleted(String)
+    
+    constraint: Uses api::cloudflare::dns (zone mgmt, record CRUD)
   }
 }
 ```

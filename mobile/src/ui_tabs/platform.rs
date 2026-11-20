@@ -4223,7 +4223,7 @@ impl PlatformTab {
             let window_width = ctx.viewport_rect().width();
             let window_height = ctx.viewport_rect().height();
 
-            dialog("error_dialog", "⚠️ Error", &mut self.show_error_dialog)
+            dialog("error_dialog", "Error", &mut self.show_error_dialog)
                 .min_width(350.0)
                 .max_width(window_width - 40.0)
                 .max_height(window_height - 40.0)
