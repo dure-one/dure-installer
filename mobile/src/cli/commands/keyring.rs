@@ -23,8 +23,8 @@ use std::path::Path;
 pub fn execute_key_save(profile: &ProfileContext, output_path: Option<String>) -> Result<()> {
     dure_info!("Saving keyring to KeePass database...");
 
-    // Get source database path
-    let source_path = get_default_kdbx_path()?;
+    // Use profile's kdbx path
+    let source_path = &profile.kdbx_path;
     if !source_path.exists() {
         anyhow::bail!("No keyring found. Run 'dure key add' to create keys first.");
     }
@@ -41,7 +41,7 @@ pub fn execute_key_save(profile: &ProfileContext, output_path: Option<String>) -
     }
 
     // Copy the database file
-    std::fs::copy(&source_path, output_path)
+    std::fs::copy(source_path, output_path)
         .with_context(|| format!("Failed to save keyring to {}", output_path.display()))?;
 
     dure_info!("");
@@ -51,7 +51,7 @@ pub fn execute_key_save(profile: &ProfileContext, output_path: Option<String>) -
     dure_warn!(" Keep this file secure! It contains your credentials.");
     dure_info!(
         "  The file is protected by your KPKey: {}",
-        get_default_kpkey_path()?.display()
+        profile.kpkey_path.display()
     );
 
     Ok(())
@@ -74,8 +74,8 @@ pub fn execute_key_load(profile: &ProfileContext, input_path: String) -> Result<
         anyhow::bail!("KeePass file not found: {}", input_path.display());
     }
 
-    // Get destination path
-    let dest_path = get_default_kdbx_path()?;
+    // Use profile's kdbx path as destination
+    let dest_path = &profile.kdbx_path;
 
     // Warn if replacing existing keyring
     if dest_path.exists() {
@@ -90,7 +90,7 @@ pub fn execute_key_load(profile: &ProfileContext, input_path: String) -> Result<
     }
 
     // Copy the file
-    std::fs::copy(input_path, &dest_path)
+    std::fs::copy(input_path, dest_path)
         .with_context(|| format!("Failed to load keyring from {}", input_path.display()))?;
 
     dure_info!("");
@@ -107,12 +107,20 @@ pub fn execute_key_load(profile: &ProfileContext, input_path: String) -> Result<
 ///
 /// Lists all keys in the current keyring.
 pub fn execute_key_status(profile: &ProfileContext) -> Result<()> {
-    // Ensure database exists
-    let kdbx_path = ensure_kdbx_exists()?;
-    let kpkey_path = get_default_kpkey_path()?;
+    // Use profile's keyring paths
+    let kdbx_path = &profile.kdbx_path;
+    let kpkey_path = &profile.kpkey_path;
+
+    // Check if keyring exists
+    if !kdbx_path.exists() {
+        dure_info!("No keyring found for profile '{}'.", profile.name);
+        dure_info!("");
+        dure_info!("Use 'dure key add <domain> <username> <password>' to add keys.");
+        return Ok(());
+    }
 
     // List all keys
-    let keys = list_keys(&kdbx_path, Some(&kpkey_path), None)?;
+    let keys = list_keys(kdbx_path, Some(kpkey_path), None)?;
 
     if keys.is_empty() {
         dure_info!("No keys found in keyring.");
@@ -158,14 +166,22 @@ pub fn execute_key_status(profile: &ProfileContext) -> Result<()> {
 pub fn execute_key_add(profile: &ProfileContext, domain: String, username: String, password: String) -> Result<()> {
     dure_info!("Adding key to keyring...");
 
-    // Ensure database exists
-    let kdbx_path = ensure_kdbx_exists()?;
-    let kpkey_path = get_default_kpkey_path()?;
+    // Use profile's keyring paths
+    let kdbx_path = &profile.kdbx_path;
+    let kpkey_path = &profile.kpkey_path;
+
+    // Ensure keyring exists (created during profile creation, but double-check)
+    if !kdbx_path.exists() {
+        anyhow::bail!(
+            "Keyring not found for profile '{}'. Profile may be corrupted.",
+            profile.name
+        );
+    }
 
     // Add the key
     add_key(
-        &kdbx_path,
-        Some(&kpkey_path),
+        kdbx_path,
+        Some(kpkey_path),
         &domain,
         &username,
         &password,
@@ -192,9 +208,14 @@ pub fn execute_key_add(profile: &ProfileContext, domain: String, username: Strin
 pub fn execute_key_del(profile: &ProfileContext, domain: String) -> Result<()> {
     dure_info!("Deleting key from keyring...");
 
-    // Ensure database exists
-    let kdbx_path = ensure_kdbx_exists()?;
-    let kpkey_path = get_default_kpkey_path()?;
+    // Use profile's keyring paths
+    let kdbx_path = &profile.kdbx_path;
+    let kpkey_path = &profile.kpkey_path;
+
+    // Check if keyring exists
+    if !kdbx_path.exists() {
+        anyhow::bail!("No keyring found for profile '{}'.", profile.name);
+    }
 
     // Delete the key
     let deleted = delete_key(&kdbx_path, Some(&kpkey_path), &domain, None)?;

@@ -64,6 +64,23 @@ pub fn execute_ssh_status(profile: &ProfileContext) -> Result<()> {
         return Ok(());
     }
 
+    // Load profile keyring for SSH authentication
+    use crate::calc::keyring::DatabaseHandle;
+    use std::sync::Arc;
+
+    let keyring = match DatabaseHandle::open(
+        profile.kdbx_path.clone(),
+        profile.kpkey_path.clone(),
+        None, // No password - using keyfile only
+    ) {
+        Ok(handle) => Some(Arc::new(handle)),
+        Err(e) => {
+            dure_warn!("Failed to load keyring: {}", e);
+            dure_warn!("SSH authentication may fail for hosts requiring keyring credentials.");
+            None
+        }
+    };
+
     dure_info!("SSH Hosts:");
     dure_info!("");
 
@@ -87,9 +104,9 @@ pub fn execute_ssh_status(profile: &ProfileContext) -> Result<()> {
             if host.initialized { "Yes" } else { "No" }
         );
 
-        // Test connection (russh uses tokio, wrap with async-compat)
+        // Test connection with keyring
         eprint!("   Status: ");
-        match smol::block_on(async { ssh::test_connection(host, None).await }) {
+        match smol::block_on(async { ssh::test_connection(host, keyring.as_ref()).await }) {
             Ok(result) => {
                 if result.success {
                     dure_info!(" Connected");

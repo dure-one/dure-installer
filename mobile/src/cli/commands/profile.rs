@@ -69,6 +69,20 @@ pub fn execute_profile_login(name: String, password: String) -> Result<ProfileCo
     Ok(profile)
 }
 
+/// Logout from current profile
+pub fn logout_profile() -> Result<()> {
+    ProfileManager::clear_active_profile()
+}
+
+/// Execute profile logout command
+pub fn execute_profile_logout() -> Result<()> {
+    logout_profile()?;
+    println!("✓ Logged out successfully");
+    println!();
+    println!("Run 'dure profile login <name>' to login again");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

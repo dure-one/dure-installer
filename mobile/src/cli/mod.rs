@@ -45,7 +45,7 @@ pub enum Commands {
     /// DNS lookup with caching (A, AAAA, TXT records)
     Dns {
         #[command(subcommand)]
-        command: DnsCommands,
+        command: Option<DnsCommands>,
     },
     /// Key management (password manager with KeePass)
     Key {
@@ -95,6 +95,8 @@ pub enum ProfileCommands {
         /// Profile password
         password: String,
     },
+    /// Logout from current profile
+    Logout,
 }
 
 #[derive(Subcommand)]
@@ -294,6 +296,9 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 println!("  dure platform");
                 println!("  dure mycart list");
             }
+            ProfileCommands::Logout => {
+                commands::profile::execute_profile_logout()?;
+            }
         },
 
         // All other commands require loaded profile
@@ -309,23 +314,27 @@ pub fn run_cli_mode() -> anyhow::Result<()> {
                 commands::audit::execute_audit_clear(&profile)?;
             }
         },
-        Commands::Dns { command } => match command {
-            DnsCommands::A { domain } => {
-                commands::dns::execute_dns(&profile, "a", &domain)?;
-            }
-            DnsCommands::Aaaa { domain } => {
-                commands::dns::execute_dns(&profile, "aaaa", &domain)?;
-            }
-            DnsCommands::Ns { domain } => {
-                commands::dns::execute_dns(&profile, "ns", &domain)?;
-            }
-            DnsCommands::Txt { domain } => {
-                commands::dns::execute_dns(&profile, "txt", &domain)?;
-            }
-            DnsCommands::Bastion { ip } => {
-                commands::dns::execute_dns_bastion(&profile, &ip)?;
-            }
-        },
+                Commands::Dns { command } => match command {
+                    None => {
+                        // Default: list DNS zones (like SSH/Platform)
+                        commands::dns::execute_dns_list(&profile)?;
+                    }
+                    Some(DnsCommands::A { domain }) => {
+                        commands::dns::execute_dns(&profile, "a", &domain)?;
+                    }
+                    Some(DnsCommands::Aaaa { domain }) => {
+                        commands::dns::execute_dns(&profile, "aaaa", &domain)?;
+                    }
+                    Some(DnsCommands::Ns { domain }) => {
+                        commands::dns::execute_dns(&profile, "ns", &domain)?;
+                    }
+                    Some(DnsCommands::Txt { domain }) => {
+                        commands::dns::execute_dns(&profile, "txt", &domain)?;
+                    }
+                    Some(DnsCommands::Bastion { ip }) => {
+                        commands::dns::execute_dns_bastion(&profile, &ip)?;
+                    }
+                },
                 Commands::Mycart { command } => match command {
                     MycartCommands::Add {
                         address,

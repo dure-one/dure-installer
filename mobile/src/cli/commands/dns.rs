@@ -4,6 +4,7 @@
 use crate::calc::db;
 use crate::calc::dns::{resolve_dns, RecordType};
 use crate::calc::profile::ProfileContext;
+use crate::config::AppConfig;
 use crate::storage::models::dns::{cache_dns_records, get_cached_dns_records, init_dns_table};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use anyhow::Result;
@@ -106,4 +107,31 @@ pub fn execute_dns_bastion(profile: &ProfileContext, ip: &str) -> Result<()> {
 fn is_valid_ip(ip: &str) -> bool {
     // Simple validation - check for IPv4 or IPv6 format
     ip.parse::<std::net::IpAddr>().is_ok()
+}
+
+/// Execute DNS list command (shows configured DNS providers/domains)
+pub fn execute_dns_list(profile: &ProfileContext) -> Result<()> {
+    let config = AppConfig::load_or_default_for_profile(profile);
+
+    if config.dns_domains.is_empty() {
+        println!("No DNS domains configured.");
+        println!();
+        println!("DNS domains are configured via the GUI (--gui mode).");
+        println!("Use 'dure dns <subcommand>' to query DNS records.");
+        return Ok(());
+    }
+
+    println!("DNS Domains ({}):", config.dns_domains.len());
+    println!();
+
+    for (idx, domain) in config.dns_domains.iter().enumerate() {
+        println!("{}. {}", idx + 1, domain.domain);
+        println!("   Provider: {}", domain.provider);
+        if let Some(zone_id) = &domain.zone_id {
+            println!("   Zone ID: {}", zone_id);
+        }
+        println!();
+    }
+
+    Ok(())
 }
