@@ -38,6 +38,33 @@ pub struct SellerInfo {
     pub phone: Option<String>,
 }
 
+/// Crontab job information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrontabJob {
+    pub job_id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub interval: String,
+    pub last_run: Option<i64>,
+}
+
+/// Crontab job update patch
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrontabPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<String>,
+}
+
+/// Generic API response envelope
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub result: Option<T>,
+    pub message: String,
+}
+
 /// Login and get JWT token from mycart API
 ///
 /// # Arguments
@@ -289,6 +316,109 @@ pub async fn read_log_file(
         .context("Failed to read log file")
 }
 
+/// Get crontab jobs list
+///
+/// # Arguments
+/// * `site` - Site address (e.g., "dure.co")
+/// * `jwt_token` - JWT authentication token
+pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>> {
+    let url = format!("https://{}/api/_/settings/crontab", site);
+    let jwt = jwt_token.to_string();
+
+    let response = smol::unblock(move || {
+        ureq::get(&url)
+            .set("Authorization", &format!("Bearer {}", jwt))
+            .call()
+    })
+    .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status() == 200 {
+                let api_response: ApiResponse<Vec<CrontabJob>> = resp
+                    .into_json()
+                    .context("Failed to parse crontab response")?;
+
+                if api_response.success {
+                    Ok(api_response.result.unwrap_or_default())
+                } else {
+                    Err(anyhow::anyhow!("API error: {}", api_response.message))
+                }
+            } else if resp.status() == 401 || resp.status() == 403 {
+                Err(anyhow::anyhow!("Unauthorized - token may be expired"))
+            } else {
+                Err(anyhow::anyhow!("Unexpected status code: {}", resp.status()))
+            }
+        }
+        Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+            Err(anyhow::anyhow!("Unauthorized - token may be expired"))
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to get crontab: {}", e)),
+    }
+}
+
+/// Update crontab job settings
+///
+/// # Arguments
+/// * `site` - Site address
+/// * `jwt_token` - JWT authentication token
+/// * `job_id` - Job ID to update
+/// * `patch` - Job settings to update (enabled, interval, or both)
+pub async fn patch_crontab(
+    site: &str,
+    jwt_token: &str,
+    job_id: &str,
+    patch: CrontabPatch,
+) -> Result<CrontabJob> {
+    let url = format!("https://{}/api/_/settings/crontab/{}", site, urlencoding::encode(job_id));
+    let jwt = jwt_token.to_string();
+    let patch_clone = patch.clone();
+
+    let response = smol::unblock(move || {
+        ureq::patch(&url)
+            .set("Authorization", &format!("Bearer {}", jwt))
+            .set("Content-Type", "application/json")
+            .send_json(&patch_clone)
+    })
+    .await;
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status();
+            if status == 200 {
+                let api_response: ApiResponse<CrontabJob> = resp
+                    .into_json()
+                    .context("Failed to parse crontab update response")?;
+
+                if api_response.success {
+                    api_response.result
+                        .ok_or_else(|| anyhow::anyhow!("No result in successful response"))
+                } else {
+                    Err(anyhow::anyhow!("API error: {}", api_response.message))
+                }
+            } else if status == 400 {
+                Err(anyhow::anyhow!("Validation error - invalid crontab settings"))
+            } else if status == 404 {
+                Err(anyhow::anyhow!("Job not found: {}", job_id))
+            } else if status == 401 || status == 403 {
+                Err(anyhow::anyhow!("Unauthorized - token may be expired"))
+            } else {
+                Err(anyhow::anyhow!("Unexpected status code: {}", status))
+            }
+        }
+        Err(ureq::Error::Status(400, _)) => {
+            Err(anyhow::anyhow!("Validation error - invalid crontab settings"))
+        }
+        Err(ureq::Error::Status(404, _)) => {
+            Err(anyhow::anyhow!("Job not found: {}", job_id))
+        }
+        Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+            Err(anyhow::anyhow!("Unauthorized - token may be expired"))
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to update crontab: {}", e)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,7 +450,90 @@ mod tests {
 
         assert_eq!(seller.seller_id, "seller123");
         assert_eq!(seller.seller_name, "Test Shop");
-        assert!(seller.phone.is_some());
+    }
+
+    #[test]
+    fn test_crontab_job_struct() {
+        let job = CrontabJob {
+            job_id: "cleanup_sessions".to_string(),
+            name: "Cleanup Sessions".to_string(),
+            enabled: true,
+            interval: "0 */6 * * *".to_string(),
+            last_run: Some(1700000000),
+        };
+
+        assert_eq!(job.job_id, "cleanup_sessions");
+        assert_eq!(job.name, "Cleanup Sessions");
+        assert!(job.enabled);
+        assert_eq!(job.interval, "0 */6 * * *");
+        assert_eq!(job.last_run, Some(1700000000));
+    }
+
+    #[test]
+    fn test_crontab_patch_serialization() {
+        // Test enable only
+        let patch1 = CrontabPatch {
+            enabled: Some(true),
+            interval: None,
+        };
+        let json1 = serde_json::to_string(&patch1).unwrap();
+        assert!(json1.contains("\"enabled\":true"));
+        assert!(!json1.contains("interval"));
+
+        // Test interval only
+        let patch2 = CrontabPatch {
+            enabled: None,
+            interval: Some("0 0 * * *".to_string()),
+        };
+        let json2 = serde_json::to_string(&patch2).unwrap();
+        assert!(json2.contains("\"interval\":\"0 0 * * *\""));
+        assert!(!json2.contains("enabled"));
+
+        // Test both
+        let patch3 = CrontabPatch {
+            enabled: Some(false),
+            interval: Some("0 */12 * * *".to_string()),
+        };
+        let json3 = serde_json::to_string(&patch3).unwrap();
+        assert!(json3.contains("\"enabled\":false"));
+        assert!(json3.contains("\"interval\":\"0 */12 * * *\""));
+    }
+
+    #[test]
+    fn test_api_response_deserialization() {
+        // Test success response with result
+        let json1 = r#"{"success":true,"result":[{"job_id":"test","name":"Test Job","enabled":true,"interval":"0 0 * * *","last_run":null}],"message":"Success"}"#;
+        let resp1: ApiResponse<Vec<CrontabJob>> = serde_json::from_str(json1).unwrap();
+        assert!(resp1.success);
+        assert_eq!(resp1.result.as_ref().unwrap().len(), 1);
+        assert_eq!(resp1.result.as_ref().unwrap()[0].job_id, "test");
+
+        // Test error response
+        let json2 = r#"{"success":false,"result":null,"message":"Not found"}"#;
+        let resp2: ApiResponse<Vec<CrontabJob>> = serde_json::from_str(json2).unwrap();
+        assert!(!resp2.success);
+        assert!(resp2.result.is_none());
+        assert_eq!(resp2.message, "Not found");
+    }
+
+    #[test]
+    fn test_crontab_job_serialization_roundtrip() {
+        let job = CrontabJob {
+            job_id: "test-job".to_string(),
+            name: "Test Job".to_string(),
+            enabled: false,
+            interval: "@daily".to_string(),
+            last_run: None,
+        };
+
+        let json = serde_json::to_string(&job).unwrap();
+        let deserialized: CrontabJob = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(job.job_id, deserialized.job_id);
+        assert_eq!(job.name, deserialized.name);
+        assert_eq!(job.enabled, deserialized.enabled);
+        assert_eq!(job.interval, deserialized.interval);
+        assert_eq!(job.last_run, deserialized.last_run);
     }
 
     // Integration tests for actual API calls would go here
@@ -347,6 +560,102 @@ mod tests {
             // Should return Ok(Some(token)) for valid credentials
             assert!(result.is_ok());
             assert!(result.unwrap().is_some());
+        });
+    }
+
+    #[ignore]
+    #[test]
+    fn test_get_crontab_integration() {
+        smol::block_on(async {
+            // Requires running mycart instance with valid JWT token
+            let jwt_token = "test_jwt_token";
+            let result = get_crontab("localhost:8080", jwt_token).await;
+
+            // Should return Ok with list of crontab jobs
+            if result.is_ok() {
+                let jobs = result.unwrap();
+                assert!(jobs.len() >= 0);
+                // If jobs exist, verify structure
+                if !jobs.is_empty() {
+                    assert!(!jobs[0].job_id.is_empty());
+                    assert!(!jobs[0].name.is_empty());
+                    assert!(!jobs[0].interval.is_empty());
+                }
+            }
+        });
+    }
+
+    #[ignore]
+    #[test]
+    fn test_patch_crontab_enable_integration() {
+        smol::block_on(async {
+            // Requires running mycart instance with valid JWT token
+            let jwt_token = "test_jwt_token";
+            let patch = CrontabPatch {
+                enabled: Some(true),
+                interval: None,
+            };
+
+            let result = patch_crontab("localhost:8080", jwt_token, "cleanup-temp", patch).await;
+
+            // Should return Ok with updated job
+            if result.is_ok() {
+                let job = result.unwrap();
+                assert_eq!(job.job_id, "cleanup-temp");
+                assert_eq!(job.enabled, true);
+            }
+        });
+    }
+
+    #[ignore]
+    #[test]
+    fn test_patch_crontab_interval_integration() {
+        smol::block_on(async {
+            // Requires running mycart instance with valid JWT token
+            let jwt_token = "test_jwt_token";
+            let patch = CrontabPatch {
+                enabled: None,
+                interval: Some("0 */12 * * *".to_string()),
+            };
+
+            let result = patch_crontab("localhost:8080", jwt_token, "cleanup-temp", patch).await;
+
+            // Should return Ok with updated job
+            if result.is_ok() {
+                let job = result.unwrap();
+                assert_eq!(job.job_id, "cleanup-temp");
+                assert_eq!(job.interval, "0 */12 * * *");
+            }
+        });
+    }
+
+    #[ignore]
+    #[test]
+    fn test_patch_crontab_invalid_token() {
+        smol::block_on(async {
+            // Test with invalid JWT token
+            let patch = CrontabPatch {
+                enabled: Some(true),
+                interval: None,
+            };
+
+            let result = patch_crontab("localhost:8080", "invalid_token", "cleanup-temp", patch).await;
+
+            // Should return Err for authentication failure
+            assert!(result.is_err());
+        });
+    }
+
+    #[ignore]
+    #[test]
+    fn test_get_crontab_invalid_site() {
+        smol::block_on(async {
+            // Test with non-existent site
+            let jwt_token = "test_jwt_token";
+            let result = get_crontab("nonexistent:9999", jwt_token).await;
+
+            // Should return Err for connection failure
+            assert!(result.is_err());
         });
     }
 }

@@ -218,6 +218,12 @@ pub struct MycartSiteConfig {
     pub created_at: u64,
     /// Last update timestamp
     pub updated_at: u64,
+    /// Linked platform ID (GCP project ID)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_id: Option<String>,
+    /// Linked SSH host (IP or hostname)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_host: Option<String>,
 }
 
 /// SSH host configuration
