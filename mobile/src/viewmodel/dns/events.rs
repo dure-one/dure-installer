@@ -32,9 +32,41 @@ pub struct SrvRecord {
 }
 
 #[derive(Debug, Clone)]
+pub struct DomainInfo {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub nameservers: Vec<String>,
+    pub created_at: Option<String>,
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum DnsEvent {
     // OAuth
     AccessTokenSet,
+
+    // Domain Registration Events
+    DomainsListed {
+        domains: Vec<DomainInfo>,
+    },
+
+    DomainInfo {
+        domain: DomainInfo,
+    },
+
+    DomainAvailability {
+        domain: String,
+        available: bool,
+    },
+
+    DomainRegistered {
+        domain: DomainInfo,
+    },
+
+    NameserversUpdated {
+        domain: String,
+    },
 
     // Zone Events
     ZonesListed {

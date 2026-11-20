@@ -8,6 +8,33 @@ pub enum DnsCommand {
         refresh_token: Option<String>,
     },
 
+    // Domain Registration Operations
+    ListDomains {
+        account_id: String,
+    },
+
+    GetDomain {
+        account_id: String,
+        domain: String,
+    },
+
+    CheckAvailability {
+        account_id: String,
+        domain: String,
+    },
+
+    RegisterDomain {
+        account_id: String,
+        domain: String,
+        years: u32,
+    },
+
+    UpdateNameservers {
+        account_id: String,
+        domain: String,
+        nameservers: Vec<String>,
+    },
+
     // Zone Operations
     ListZones,
 

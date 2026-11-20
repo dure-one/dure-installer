@@ -50,6 +50,32 @@ impl DnsActor {
                 refresh_token,
             } => self.set_access_token(access_token, refresh_token).await,
 
+            // Domain Registration Commands
+            DnsCommand::ListDomains { account_id } => self.list_domains(account_id).await,
+
+            DnsCommand::GetDomain { account_id, domain } => {
+                self.get_domain(account_id, domain).await
+            }
+
+            DnsCommand::CheckAvailability { account_id, domain } => {
+                self.check_availability(account_id, domain).await
+            }
+
+            DnsCommand::RegisterDomain {
+                account_id,
+                domain,
+                years,
+            } => self.register_domain(account_id, domain, years).await,
+
+            DnsCommand::UpdateNameservers {
+                account_id,
+                domain,
+                nameservers,
+            } => {
+                self.update_nameservers(account_id, domain, nameservers)
+                    .await
+            }
+
             DnsCommand::ListZones => self.list_zones().await,
 
             DnsCommand::FindZone { domain } => self.find_zone(domain).await,
@@ -172,6 +198,138 @@ impl DnsActor {
         Ok(())
     }
 
+    // Domain Registration Methods
+
+    async fn list_domains(&mut self, account_id: String) -> anyhow::Result<()> {
+        let token = self.require_token()?;
+
+        let domains =
+            runtime::unblock(move || -> anyhow::Result<Vec<super::events::DomainInfo>> {
+                use crate::api::cloudflare::registrar::CloudflareRegistrarClient;
+                let client = CloudflareRegistrarClient::new(token);
+                let cf_domains = client.list_domains(&account_id)?;
+
+                Ok(cf_domains
+                    .into_iter()
+                    .map(|d| super::events::DomainInfo {
+                        id: d.id,
+                        name: d.name,
+                        status: d.status,
+                        nameservers: d.nameservers,
+                        created_at: d.created_at,
+                        expires_at: d.expires_at,
+                    })
+                    .collect())
+            })
+            .await?;
+
+        self.send_event(DnsEvent::DomainsListed { domains }).await;
+        Ok(())
+    }
+
+    async fn get_domain(&mut self, account_id: String, domain: String) -> anyhow::Result<()> {
+        let token = self.require_token()?;
+
+        let domain_info = runtime::unblock(move || -> anyhow::Result<super::events::DomainInfo> {
+            use crate::api::cloudflare::registrar::CloudflareRegistrarClient;
+            let client = CloudflareRegistrarClient::new(token);
+            let d = client.get_domain(&account_id, &domain)?;
+
+            Ok(super::events::DomainInfo {
+                id: d.id,
+                name: d.name,
+                status: d.status,
+                nameservers: d.nameservers,
+                created_at: d.created_at,
+                expires_at: d.expires_at,
+            })
+        })
+        .await?;
+
+        self.send_event(DnsEvent::DomainInfo {
+            domain: domain_info,
+        })
+        .await;
+        Ok(())
+    }
+
+    async fn check_availability(
+        &mut self,
+        account_id: String,
+        domain: String,
+    ) -> anyhow::Result<()> {
+        let token = self.require_token()?;
+        let domain_clone = domain.clone();
+
+        let available = runtime::unblock(move || -> anyhow::Result<bool> {
+            use crate::api::cloudflare::registrar::CloudflareRegistrarClient;
+            let client = CloudflareRegistrarClient::new(token);
+            client.check_availability(&account_id, &domain)
+        })
+        .await?;
+
+        self.send_event(DnsEvent::DomainAvailability {
+            domain: domain_clone,
+            available,
+        })
+        .await;
+        Ok(())
+    }
+
+    async fn register_domain(
+        &mut self,
+        account_id: String,
+        domain: String,
+        years: u32,
+    ) -> anyhow::Result<()> {
+        let token = self.require_token()?;
+
+        let domain_info = runtime::unblock(move || -> anyhow::Result<super::events::DomainInfo> {
+            use crate::api::cloudflare::registrar::CloudflareRegistrarClient;
+            let client = CloudflareRegistrarClient::new(token);
+            let d = client.register_domain(&account_id, &domain, years)?;
+
+            Ok(super::events::DomainInfo {
+                id: d.id,
+                name: d.name,
+                status: d.status,
+                nameservers: d.nameservers,
+                created_at: d.created_at,
+                expires_at: d.expires_at,
+            })
+        })
+        .await?;
+
+        self.send_event(DnsEvent::DomainRegistered {
+            domain: domain_info,
+        })
+        .await;
+        Ok(())
+    }
+
+    async fn update_nameservers(
+        &mut self,
+        account_id: String,
+        domain: String,
+        nameservers: Vec<String>,
+    ) -> anyhow::Result<()> {
+        let token = self.require_token()?;
+        let domain_clone = domain.clone();
+
+        runtime::unblock(move || -> anyhow::Result<()> {
+            use crate::api::cloudflare::registrar::CloudflareRegistrarClient;
+            let client = CloudflareRegistrarClient::new(token);
+            client.update_nameservers(&account_id, &domain, &nameservers)
+        })
+        .await?;
+
+        self.send_event(DnsEvent::NameserversUpdated {
+            domain: domain_clone,
+        })
+        .await;
+        Ok(())
+    }
+
     async fn list_zones(&mut self) -> anyhow::Result<()> {
         let token = self.require_token()?;
 
@@ -264,11 +422,8 @@ impl DnsActor {
         })
         .await?;
 
-        self.send_event(DnsEvent::RecordsListed {
-            zone_id,
-            records,
-        })
-        .await;
+        self.send_event(DnsEvent::RecordsListed { zone_id, records })
+            .await;
         Ok(())
     }
 
@@ -298,11 +453,8 @@ impl DnsActor {
         })
         .await?;
 
-        self.send_event(DnsEvent::RecordFound {
-            zone_id,
-            record,
-        })
-        .await;
+        self.send_event(DnsEvent::RecordFound { zone_id, record })
+            .await;
         Ok(())
     }
 
@@ -324,7 +476,14 @@ impl DnsActor {
         runtime::unblock(move || -> anyhow::Result<()> {
             use crate::api::cloudflare::dns::CloudflareClient;
             let client = CloudflareClient::new(token);
-            client.create_record(&zone_id_clone, &name_clone, &record_type_clone, &content, ttl, proxied)?;
+            client.create_record(
+                &zone_id_clone,
+                &name_clone,
+                &record_type_clone,
+                &content,
+                ttl,
+                proxied,
+            )?;
             Ok(())
         })
         .await?;
@@ -356,16 +515,21 @@ impl DnsActor {
         runtime::unblock(move || -> anyhow::Result<()> {
             use crate::api::cloudflare::dns::CloudflareClient;
             let client = CloudflareClient::new(token);
-            client.update_record(&zone_id_clone, &record_id_clone, &name, &record_type_str, &content, ttl, proxied)?;
+            client.update_record(
+                &zone_id_clone,
+                &record_id_clone,
+                &name,
+                &record_type_str,
+                &content,
+                ttl,
+                proxied,
+            )?;
             Ok(())
         })
         .await?;
 
-        self.send_event(DnsEvent::RecordUpdated {
-            zone_id,
-            record_id,
-        })
-        .await;
+        self.send_event(DnsEvent::RecordUpdated { zone_id, record_id })
+            .await;
         Ok(())
     }
 
@@ -382,11 +546,8 @@ impl DnsActor {
         })
         .await?;
 
-        self.send_event(DnsEvent::RecordDeleted {
-            zone_id,
-            record_id,
-        })
-        .await;
+        self.send_event(DnsEvent::RecordDeleted { zone_id, record_id })
+            .await;
         Ok(())
     }
 
@@ -408,7 +569,14 @@ impl DnsActor {
         runtime::unblock(move || -> anyhow::Result<()> {
             use crate::api::cloudflare::dns::CloudflareClient;
             let client = CloudflareClient::new(token);
-            client.upsert_record(&zone_id_clone, &name_clone, &record_type_clone, &content, ttl, proxied)?;
+            client.upsert_record(
+                &zone_id_clone,
+                &name_clone,
+                &record_type_clone,
+                &content,
+                ttl,
+                proxied,
+            )?;
             Ok(())
         })
         .await?;
@@ -438,16 +606,20 @@ impl DnsActor {
         runtime::unblock(move || -> anyhow::Result<()> {
             use crate::api::cloudflare::dns::CloudflareClient;
             let client = CloudflareClient::new(token);
-            client.create_srv_record(&zone_id_clone, &name_clone, priority, weight, port, &target)?;
+            client.create_srv_record(
+                &zone_id_clone,
+                &name_clone,
+                priority,
+                weight,
+                port,
+                &target,
+            )?;
             Ok(())
         })
         .await?;
 
-        self.send_event(DnsEvent::SrvRecordCreated {
-            zone_id,
-            name,
-        })
-        .await;
+        self.send_event(DnsEvent::SrvRecordCreated { zone_id, name })
+            .await;
         Ok(())
     }
 
@@ -467,16 +639,20 @@ impl DnsActor {
         runtime::unblock(move || -> anyhow::Result<()> {
             use crate::api::cloudflare::dns::CloudflareClient;
             let client = CloudflareClient::new(token);
-            client.upsert_srv_record(&zone_id_clone, &name_clone, priority, weight, port, &target)?;
+            client.upsert_srv_record(
+                &zone_id_clone,
+                &name_clone,
+                priority,
+                weight,
+                port,
+                &target,
+            )?;
             Ok(())
         })
         .await?;
 
-        self.send_event(DnsEvent::SrvRecordUpserted {
-            zone_id,
-            name,
-        })
-        .await;
+        self.send_event(DnsEvent::SrvRecordUpserted { zone_id, name })
+            .await;
         Ok(())
     }
 
