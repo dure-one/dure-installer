@@ -1,11 +1,14 @@
-# Actor Implementation Plan
+# Actor Implementation Plan (Revised)
 
 ## Overview
 
-Implement 3 new actors following the established pattern used by platform and ssh actors:
-1. **MycartActor**: E-commerce store management (products, orders, shipments)
-2. **LogsActor**: Operation logging and audit trails
-3. **DnsActor**: DNS and domain management
+Implement 3 actors following platform/ssh pattern. All tabs (platform, ssh, mycart, dns) use LogsActor for unified operation logging.
+
+**Key Changes:**
+- LogsActor used by all 4 tabs (platform, ssh, mycart, dns)
+- DnsActor only uses Cloudflare API (api/cloudflare/*), extract from ui_tabs/ssh
+- MycartActor uses remote API (https://mycart.dure.app/api/_/*) + SSH log fetching
+- All tabs get drawer UI like platform (logs + operations tabs)
 
 ## Architecture Pattern
 
@@ -16,14 +19,20 @@ mobile/src/viewmodel/{actor_name}/
 ├── actor.rs         # Main actor implementation
 ├── commands.rs      # Command enum (UI → Actor)
 ├── events.rs        # Event enum (Actor → UI)
-├── mod.rs          # Public exports
-└── drawer_types.rs  # Optional: Drawer UI state (if needed)
+├── drawer_types.rs  # Drawer UI state (DrawerTab, DrawerState)
+└── mod.rs          # Public exports
 ```
+
+**All actors** (platform, ssh, mycart, dns) include `drawer_types.rs` for unified drawer UI pattern.
 
 ## Actor 1: MycartActor
 
 ### Purpose
-Manage e-commerce operations: products, orders, promotions, shipments, customers.
+Manage remote mycart backend (https://mycart.dure.app/api/_/*) + fetch logs via SSH.
+
+**Dual Mode**:
+1. **Remote API**: CRUD operations via REST API (swagger.json)
+2. **SSH Logs**: Fetch application logs from remote VM (like ssh actor)
 
 ### Module Structure
 ```
@@ -31,6 +40,7 @@ mobile/src/viewmodel/mycart/
 ├── actor.rs
 ├── commands.rs
 ├── events.rs
+├── drawer_types.rs  # DrawerTab, DrawerState (operations + logs)
 └── mod.rs
 ```
 
@@ -39,115 +49,71 @@ mobile/src/viewmodel/mycart/
 ```rust
 #[derive(Debug, Clone)]
 pub enum MycartCommand {
-    // Product Operations
+    // Store Health
+    CheckStoreHealth {
+        store_id: String,
+    },
+    
+    // Product Operations (GET /api/_/products)
     ListProducts {
         store_id: String,
-        limit: usize,
-        offset: usize,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    },
+    GetProduct {
+        product_id: String,
     },
     CreateProduct {
         store_id: String,
         name: String,
         price: i64,
         description: Option<String>,
-        category: Option<String>,
-        stock: i32,
     },
     UpdateProduct {
         product_id: String,
         name: Option<String>,
         price: Option<i64>,
-        description: Option<String>,
-        stock: Option<i32>,
     },
     DeleteProduct {
         product_id: String,
     },
     
-    // Order Operations
+    // Order Operations (GET /api/_/orders)
     ListOrders {
         store_id: String,
-        status: Option<OrderStatus>,
-        limit: usize,
-        offset: usize,
+        status: Option<String>,
+        limit: Option<usize>,
     },
     GetOrder {
         order_id: String,
     },
     UpdateOrderStatus {
         order_id: String,
-        status: OrderStatus,
-    },
-    CancelOrder {
-        order_id: String,
-        reason: String,
+        status: String, // "pending", "confirmed", "shipped", "delivered"
     },
     
-    // Shipment Operations
-    CreateShipment {
-        order_id: String,
-        tracking_number: String,
-        carrier: String,
-    },
-    UpdateShipment {
-        shipment_id: String,
-        status: ShipmentStatus,
-        tracking_number: Option<String>,
-    },
-    
-    // Promotion Operations
-    ListPromotions {
+    // SSH Log Operations (like ssh actor)
+    FetchLogs {
         store_id: String,
-        active_only: bool,
+        vm_name: String,
+        log_type: LogType, // Application, Nginx, System
+        lines: usize,
     },
-    CreatePromotion {
+    StreamLogs {
         store_id: String,
-        code: String,
-        discount_percent: f32,
-        valid_from: i64,
-        valid_until: i64,
+        vm_name: String,
+        log_type: LogType,
     },
-    
-    // Customer Operations
-    ListCustomers {
+    StopLogStream {
         store_id: String,
-        limit: usize,
-    },
-    GetCustomerOrders {
-        customer_id: String,
-        limit: usize,
-    },
-    
-    // Statistics
-    GetStoreStats {
-        store_id: String,
-        period: StatsPeriod, // Today, Week, Month, Year
     },
 }
 
 #[derive(Debug, Clone)]
-pub enum OrderStatus {
-    Pending,
-    Confirmed,
-    Shipped,
-    Delivered,
-    Cancelled,
-}
-
-#[derive(Debug, Clone)]
-pub enum ShipmentStatus {
-    Preparing,
-    Shipped,
-    InTransit,
-    Delivered,
-}
-
-#[derive(Debug, Clone)]
-pub enum StatsPeriod {
-    Today,
-    Week,
-    Month,
-    Year,
+pub enum LogType {
+    Application,  // /var/log/mycart/app.log
+    Nginx,        // /var/log/nginx/access.log
+    System,       // /var/log/syslog
 }
 ```
 
@@ -155,14 +121,20 @@ pub enum StatsPeriod {
 
 ```rust
 #[derive(Debug, Clone)]
+pub struct StoreHealth {
+    pub store_id: String,
+    pub status: String, // "healthy", "degraded", "down"
+    pub uptime_seconds: u64,
+    pub version: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Product {
     pub id: String,
     pub store_id: String,
     pub name: String,
     pub price: i64,
     pub description: Option<String>,
-    pub category: Option<String>,
-    pub stock: i32,
     pub created_at: i64,
 }
 
@@ -170,44 +142,34 @@ pub struct Product {
 pub struct Order {
     pub id: String,
     pub store_id: String,
-    pub customer_id: String,
     pub customer_name: String,
-    pub status: OrderStatus,
+    pub status: String,
     pub total_amount: i64,
-    pub items: Vec<OrderItem>,
     pub created_at: i64,
 }
 
 #[derive(Debug, Clone)]
-pub struct OrderItem {
-    pub product_id: String,
-    pub product_name: String,
-    pub quantity: i32,
-    pub price: i64,
-}
-
-#[derive(Debug, Clone)]
-pub struct StoreStats {
-    pub total_orders: i64,
-    pub total_revenue: i64,
-    pub pending_orders: i64,
-    pub total_products: i64,
-    pub low_stock_products: i64,
-}
-
-#[derive(Debug, Clone)]
 pub enum MycartEvent {
+    // Health
+    StoreHealthChecked {
+        store_id: String,
+        health: StoreHealth,
+    },
+    
     // Product Events
     ProductsListed {
         store_id: String,
         products: Vec<Product>,
         total: usize,
     },
+    ProductRetrieved {
+        product: Product,
+    },
     ProductCreated {
         product: Product,
     },
     ProductUpdated {
-        product: Product,
+        product_id: String,
     },
     ProductDeleted {
         product_id: String,
@@ -224,30 +186,24 @@ pub enum MycartEvent {
     },
     OrderStatusUpdated {
         order_id: String,
-        status: OrderStatus,
-    },
-    OrderCancelled {
-        order_id: String,
+        status: String,
     },
     
-    // Shipment Events
-    ShipmentCreated {
-        shipment_id: String,
-        order_id: String,
-        tracking_number: String,
-    },
-    ShipmentUpdated {
-        shipment_id: String,
-        status: ShipmentStatus,
-    },
-    
-    // Statistics Events
-    StoreStatsRetrieved {
+    // Log Events (like ssh actor)
+    LogsFetched {
         store_id: String,
-        stats: StoreStats,
+        log_type: LogType,
+        lines: Vec<String>,
+    },
+    LogLine {
+        store_id: String,
+        line: String,
+    },
+    LogStreamStopped {
+        store_id: String,
     },
     
-    // Error Events
+    // Errors
     Error {
         operation: String,
         error: String,
@@ -255,200 +211,73 @@ pub enum MycartEvent {
 }
 ```
 
-### Actor Implementation (actor.rs)
+### Actor Implementation Notes
 
+**Remote API Client**:
+- Use `ureq` for HTTP requests (already in dependencies)
+- Base URL: `https://dure.co/api/_/` (user baseurl)
+- Auth: Bearer token from platform config
+- Endpoints defined in swagger.json (reference only)
+- Use `runtime::unblock` for HTTP calls
+
+**SSH Log Fetching** (like ssh actor):
+- Reuse SSH connection logic from `crate::calc::ssh`
+- Commands: `tail -n 100 /var/log/mycart/app.log`
+- Stream: `tail -f /var/log/mycart/app.log`
+- Parse structured logs (JSON format expected)
+
+**Example Implementation**:
 ```rust
-pub struct MycartActor {
-    command_rx: Receiver<MycartCommand>,
-    event_tx: Sender<ViewModelEvent>,
+async fn list_products(&mut self, store_id: String, limit: Option<usize>) -> anyhow::Result<()> {
+    let products = runtime::unblock(move || -> anyhow::Result<Vec<Product>> {
+        let url = format!("https://mycart.dure.app/api/_/products?store_id={}", store_id);
+        let response: ApiResponse<Vec<Product>> = ureq::get(&url)
+            .call()?
+            .into_json()?;
+        Ok(response.data)
+    }).await?;
+    
+    self.send_event(MycartEvent::ProductsListed {
+        store_id,
+        total: products.len(),
+        products,
+    }).await;
+    
+    Ok(())
 }
 
-impl MycartActor {
-    pub fn new(
-        command_rx: Receiver<MycartCommand>,
-        event_tx: Sender<ViewModelEvent>,
-    ) -> Self {
-        Self { command_rx, event_tx }
-    }
-    
-    pub async fn run(mut self) {
-        dure_info!("MycartActor started");
+async fn fetch_logs(&mut self, store_id: String, vm_name: String, log_type: LogType) -> anyhow::Result<()> {
+    let lines = runtime::unblock(move || -> anyhow::Result<Vec<String>> {
+        use crate::calc::ssh;
+        let log_path = match log_type {
+            LogType::Application => "/var/log/mycart/app.log",
+            LogType::Nginx => "/var/log/nginx/access.log",
+            LogType::System => "/var/log/syslog",
+        };
         
-        loop {
-            match self.command_rx.recv().await {
-                Ok(cmd) => {
-                    if let Err(e) = self.handle_command(cmd).await {
-                        dure_error!("MycartActor command error: {}", e);
-                    }
-                }
-                Err(_) => {
-                    dure_info!("MycartActor channel closed, shutting down");
-                    break;
-                }
-            }
-        }
-    }
+        let cmd = format!("tail -n 100 {}", log_path);
+        let output = ssh::execute_remote(&vm_name, &cmd)?;
+        Ok(output.lines().map(|s| s.to_string()).collect())
+    }).await?;
     
-    async fn handle_command(&mut self, cmd: MycartCommand) -> anyhow::Result<()> {
-        match cmd {
-            MycartCommand::ListProducts { store_id, limit, offset } => {
-                self.list_products(store_id, limit, offset).await
-            }
-            MycartCommand::CreateProduct { store_id, name, price, description, category, stock } => {
-                self.create_product(store_id, name, price, description, category, stock).await
-            }
-            // ... other commands
-        }
-    }
+    self.send_event(MycartEvent::LogsFetched {
+        store_id,
+        log_type,
+        lines,
+    }).await;
     
-    async fn list_products(
-        &mut self,
-        store_id: String,
-        limit: usize,
-        offset: usize,
-    ) -> anyhow::Result<()> {
-        // Use runtime::unblock for database access
-        let (products, total) = runtime::unblock({
-            move || -> anyhow::Result<(Vec<Product>, usize)> {
-                use crate::calc::db;
-                let mut conn = db::establish_connection();
-                
-                // Query products from database
-                let products = crate::storage::models::product::list_products(
-                    &mut conn,
-                    &store_id,
-                    limit,
-                    offset,
-                )?;
-                
-                let total = crate::storage::models::product::count_products(
-                    &mut conn,
-                    &store_id,
-                )?;
-                
-                Ok((products, total))
-            }
-        })
-        .await?;
-        
-        self.send_event(MycartEvent::ProductsListed {
-            store_id,
-            products,
-            total,
-        })
-        .await;
-        
-        Ok(())
-    }
-    
-    async fn send_event(&self, event: MycartEvent) {
-        let _ = self.event_tx.send(ViewModelEvent::Mycart(event)).await;
-    }
-}
-```
-
-### ViewModel Integration (viewmodel/mod.rs)
-
-```rust
-pub struct ViewModel {
-    // ... existing fields
-    mycart_tx: Sender<mycart::MycartCommand>,
-}
-
-impl ViewModel {
-    pub fn new() -> Self {
-        // ... existing code
-        
-        let (mycart_tx, mycart_rx) = async_channel::unbounded();
-        let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
-        
-        smol::spawn(mycart_actor.run()).detach();
-        
-        Self {
-            // ... existing fields
-            mycart_tx,
-        }
-    }
-    
-    // Public API
-    pub fn list_products(
-        &self,
-        store_id: String,
-        limit: usize,
-        offset: usize,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::ListProducts {
-                store_id,
-                limit,
-                offset,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-    
-    pub fn create_product(
-        &self,
-        store_id: String,
-        name: String,
-        price: i64,
-        description: Option<String>,
-        category: Option<String>,
-        stock: i32,
-    ) -> anyhow::Result<()> {
-        self.mycart_tx
-            .send_blocking(mycart::MycartCommand::CreateProduct {
-                store_id,
-                name,
-                price,
-                description,
-                category,
-                stock,
-            })
-            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
-    }
-}
-```
-
-### UI Integration (ui_tabs/products.rs or similar)
-
-```rust
-// In event handling loop
-match event {
-    ViewModelEvent::Mycart(mycart_event) => {
-        match mycart_event {
-            MycartEvent::ProductsListed { products, total, .. } => {
-                self.products = products;
-                self.total_products = total;
-                self.loading = false;
-            }
-            MycartEvent::ProductCreated { product } => {
-                self.products.push(product);
-                self.show_create_dialog = false;
-            }
-            // ... other events
-        }
-    }
-}
-
-// In UI render
-if ui.button("Load Products").clicked() {
-    if let Some(vm) = vm {
-        let _ = vm.list_products(
-            self.current_store_id.clone(),
-            50,  // limit
-            0,   // offset
-        );
-        self.loading = true;
-    }
+    Ok(())
 }
 ```
 
 ---
 
-## Actor 2: LogsActor
+## Actor 2: LogsActor (Shared by All Tabs)
 
 ### Purpose
-Centralized operation logging, audit trails, and log querying.
+Centralized operation logging used by **all 4 tabs** (platform, ssh, mycart, dns). Provides audit trails and log querying.
+
+**Usage**: Every actor logs operations via LogsActor. Each tab displays its own logs via shared LogsActor instance.
 
 ### Module Structure
 ```
@@ -587,10 +416,12 @@ pub enum LogsEvent {
 
 ---
 
-## Actor 3: DnsActor
+## Actor 3: DnsActor (Cloudflare Only)
 
 ### Purpose
-DNS and domain management across multiple providers (Cloudflare, GCP DNS, DuckDNS, Porkbun).
+Cloudflare DNS management. Extract existing commands from `ui_dlg/dns_wizard.rs`.
+
+**Source**: Operations from DNS wizard + `api/cloudflare/dns.rs` client.
 
 ### Module Structure
 ```
@@ -598,79 +429,99 @@ mobile/src/viewmodel/dns/
 ├── actor.rs
 ├── commands.rs
 ├── events.rs
+├── drawer_types.rs  # DrawerTab, DrawerState (operations + logs)
 └── mod.rs
 ```
 
-### Commands (commands.rs)
+### Commands (Extract from ui_dlg/dns_wizard.rs)
 
 ```rust
 #[derive(Debug, Clone)]
 pub enum DnsCommand {
-    // Domain Operations
-    ListDomains {
-        provider: DnsProvider,
-    },
+    // Zone (Domain) Operations
+    ListZones,
     
-    AddDomain {
-        provider: DnsProvider,
+    FindZone {
         domain: String,
     },
     
-    DeleteDomain {
-        provider: DnsProvider,
+    CreateZone {
         domain: String,
     },
     
-    // Record Operations
+    // DNS Record Operations
     ListRecords {
-        provider: DnsProvider,
-        domain: String,
+        zone_id: String,
+    },
+    
+    FindRecord {
+        zone_id: String,
+        record_type: RecordType,
+        name: String,
     },
     
     CreateRecord {
-        provider: DnsProvider,
-        domain: String,
+        zone_id: String,
         record_type: RecordType,
         name: String,
         content: String,
-        ttl: u32,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
     },
     
     UpdateRecord {
-        provider: DnsProvider,
-        domain: String,
+        zone_id: String,
         record_id: String,
         content: String,
         ttl: Option<u32>,
+        proxied: Option<bool>,
     },
     
     DeleteRecord {
-        provider: DnsProvider,
-        domain: String,
+        zone_id: String,
         record_id: String,
     },
     
-    // Verification
-    VerifyDomain {
-        provider: DnsProvider,
-        domain: String,
-    },
-    
-    // TXT Record (for challenges)
-    CreateTxtRecord {
-        provider: DnsProvider,
-        domain: String,
+    UpsertRecord {
+        zone_id: String,
+        record_type: RecordType,
         name: String,
         content: String,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
     },
-}
-
-#[derive(Debug, Clone)]
-pub enum DnsProvider {
-    Cloudflare { api_token: String },
-    GcpDns { project_id: String },
-    DuckDns { token: String },
-    Porkbun { api_key: String, secret: String },
+    
+    // SRV Record Operations
+    CreateSrvRecord {
+        zone_id: String,
+        name: String,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: String,
+    },
+    
+    UpsertSrvRecord {
+        zone_id: String,
+        name: String,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: String,
+    },
+    
+    // Preset Operations (from wizard)
+    CreateDefaultXmppRecords {
+        zone_id: String,
+        domain: String,
+        vm_ip: String,
+    },
+    
+    VerifyDefaultXmppRecords {
+        zone_id: String,
+        domain: String,
+        vm_ip: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -681,6 +532,7 @@ pub enum RecordType {
     MX,
     TXT,
     NS,
+    SRV,
 }
 ```
 
@@ -688,73 +540,101 @@ pub enum RecordType {
 
 ```rust
 #[derive(Debug, Clone)]
-pub struct Domain {
+pub struct Zone {
+    pub id: String,
     pub name: String,
-    pub provider: String,
-    pub status: String,
-    pub created_at: Option<i64>,
+    pub name_servers: Vec<String>,
+    pub account_id: String,
+    pub account_name: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct DnsRecord {
     pub id: String,
-    pub domain: String,
-    pub record_type: String,
     pub name: String,
+    pub record_type: String,
     pub content: String,
     pub ttl: u32,
-    pub proxied: Option<bool>, // Cloudflare specific
+    pub proxied: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SrvRecord {
+    pub id: String,
+    pub name: String,
+    pub priority: u16,
+    pub weight: u16,
+    pub port: u16,
+    pub target: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum DnsEvent {
-    // Domain Events
-    DomainsListed {
-        provider: String,
-        domains: Vec<Domain>,
+    // Zone Events
+    ZonesListed {
+        zones: Vec<Zone>,
     },
     
-    DomainAdded {
-        provider: String,
-        domain: String,
+    ZoneFound {
+        zone: Option<Zone>,
     },
     
-    DomainDeleted {
-        provider: String,
-        domain: String,
-    },
-    
-    DomainVerified {
-        domain: String,
-        verified: bool,
+    ZoneCreated {
+        zone: Zone,
     },
     
     // Record Events
     RecordsListed {
-        domain: String,
+        zone_id: String,
         records: Vec<DnsRecord>,
     },
     
+    RecordFound {
+        zone_id: String,
+        record: Option<DnsRecord>,
+    },
+    
     RecordCreated {
-        domain: String,
+        zone_id: String,
         record: DnsRecord,
     },
     
     RecordUpdated {
-        domain: String,
+        zone_id: String,
         record_id: String,
     },
     
     RecordDeleted {
-        domain: String,
+        zone_id: String,
         record_id: String,
     },
     
-    // TXT Record (for challenges)
-    TxtRecordCreated {
+    RecordUpserted {
+        zone_id: String,
+        record: DnsRecord,
+    },
+    
+    // SRV Record Events
+    SrvRecordCreated {
+        zone_id: String,
+        record: SrvRecord,
+    },
+    
+    SrvRecordUpserted {
+        zone_id: String,
+        record: SrvRecord,
+    },
+    
+    // Preset Operations
+    DefaultXmppRecordsCreated {
+        zone_id: String,
         domain: String,
-        name: String,
-        content: String,
+    },
+    
+    DefaultXmppRecordsVerified {
+        zone_id: String,
+        domain: String,
+        verified: bool,
     },
     
     Error {
@@ -766,63 +646,277 @@ pub enum DnsEvent {
 
 ### Actor Implementation Notes
 
-- Abstract provider-specific APIs behind common interface
-- Use `crate::api::dns::*` modules for provider implementations
-- Support async DNS verification
-- Handle provider-specific features (Cloudflare proxy, etc.)
-- Cache domain lists for performance
+**Source Extraction**:
+- Extract from `ui_dlg/dns_wizard.rs` (OAuth, zones, records)
+- Use `api/cloudflare/dns.rs` client (CloudflareClient)
+- No multi-provider abstraction needed (Cloudflare-only)
+
+**Operations**:
+- Use `runtime::unblock` for all API calls
+- Support Cloudflare-specific features (proxied flag, SRV records)
+- Preset operations for XMPP default records
+- OAuth token management (access + refresh tokens)
+
+**Example Implementation**:
+```rust
+async fn list_zones(&mut self) -> anyhow::Result<()> {
+    let token = self.cloudflare_token.clone();
+    let zones = runtime::unblock(move || -> anyhow::Result<Vec<Zone>> {
+        use crate::api::cloudflare::CloudflareClient;
+        let client = CloudflareClient::new(token);
+        let cf_zones = client.list_zones()?;
+        
+        // Convert to event Zone type
+        Ok(cf_zones.into_iter().map(|z| Zone {
+            id: z.id,
+            name: z.name,
+            name_servers: z.name_servers,
+            account_id: z.account.id,
+            account_name: z.account.name,
+        }).collect())
+    }).await?;
+    
+    self.send_event(DnsEvent::ZonesListed { zones }).await;
+    Ok(())
+}
+
+async fn create_default_xmpp_records(&mut self, zone_id: String, domain: String, vm_ip: String) -> anyhow::Result<()> {
+    let token = self.cloudflare_token.clone();
+    runtime::unblock(move || -> anyhow::Result<()> {
+        use crate::api::cloudflare::CloudflareClient;
+        let client = CloudflareClient::new(token);
+        client.create_default_xmpp_records(&zone_id, &domain, &vm_ip)
+    }).await?;
+    
+    self.send_event(DnsEvent::DefaultXmppRecordsCreated { zone_id, domain }).await;
+    Ok(())
+}
+```
+
+**OAuth Integration**:
+- Store access_token and refresh_token
+- Handle token expiration (401/403 errors)
+- Trigger re-auth when token expires
+- Use `api/cloudflare/oauth.rs` for OAuth flow
+
+---
+
+## Drawer UI Pattern (All Tabs)
+
+### Purpose
+Unified drawer UI like platform tab. All tabs (platform, ssh, mycart, dns) show operations + logs.
+
+**Platform tab already has this**: See `ui_tabs/platform.rs` for reference.
+
+### Structure
+
+Each tab UI has:
+1. **Main content**: Tab-specific operations (VM list, SSH hosts, products, domains)
+2. **Drawer panel**: Operations tab + Logs tab
+3. **Drawer state**: Track open/closed, active tab
+
+### Drawer Types (drawer_types.rs)
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawerTab {
+    Operations,
+    Logs,
+}
+
+#[derive(Debug, Clone)]
+pub struct DrawerState {
+    pub open: bool,
+    pub active_tab: DrawerTab,
+    pub width: f32,
+}
+
+impl Default for DrawerState {
+    fn default() -> Self {
+        Self {
+            open: false,
+            active_tab: DrawerTab::Operations,
+            width: 400.0,
+        }
+    }
+}
+```
+
+### UI Integration
+
+**Example** (ssh tab, similar for mycart/dns):
+
+```rust
+// ui_tabs/ssh.rs
+pub struct SshTab {
+    // Existing fields
+    drawer_state: DrawerState,
+    logs: Vec<String>,
+}
+
+impl SshTab {
+    pub fn render(&mut self, ui: &mut egui::Ui, vm: Option<&ViewModel>) {
+        egui::SidePanel::right("ssh_drawer")
+            .show_separator_line(true)
+            .resizable(true)
+            .default_width(self.drawer_state.width)
+            .show_animated(ui.ctx(), self.drawer_state.open, |ui| {
+                self.render_drawer(ui, vm);
+            });
+        
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            self.render_main_content(ui, vm);
+        });
+    }
+    
+    fn render_drawer(&mut self, ui: &mut egui::Ui, vm: Option<&ViewModel>) {
+        ui.horizontal(|ui| {
+            if ui.selectable_label(self.drawer_state.active_tab == DrawerTab::Operations, "Operations").clicked() {
+                self.drawer_state.active_tab = DrawerTab::Operations;
+            }
+            if ui.selectable_label(self.drawer_state.active_tab == DrawerTab::Logs, "Logs").clicked() {
+                self.drawer_state.active_tab = DrawerTab::Logs;
+            }
+        });
+        
+        ui.separator();
+        
+        match self.drawer_state.active_tab {
+            DrawerTab::Operations => self.render_operations_tab(ui, vm),
+            DrawerTab::Logs => self.render_logs_tab(ui, vm),
+        }
+    }
+    
+    fn render_operations_tab(&mut self, ui: &mut egui::Ui, vm: Option<&ViewModel>) {
+        // Tab-specific operations (SSH: host mgmt, connections)
+    }
+    
+    fn render_logs_tab(&mut self, ui: &mut egui::Ui, vm: Option<&ViewModel>) {
+        // Show logs from LogsActor
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for log_line in &self.logs {
+                ui.label(log_line);
+            }
+        });
+    }
+}
+```
+
+### Event Handling
+
+Each tab listens to both actor events and LogsActor events:
+
+```rust
+// In event loop
+match event {
+    ViewModelEvent::Ssh(ssh_event) => {
+        // Handle SSH-specific events
+    }
+    ViewModelEvent::Logs(logs_event) => {
+        // Handle logs (shared by all tabs)
+        match logs_event {
+            LogsEvent::LogsListed { logs, .. } => {
+                self.logs = logs.iter().map(|l| format!("{}: {}", l.operation_type, l.status)).collect();
+            }
+        }
+    }
+}
+```
+
+### Tab-Specific Implementations
+
+| Tab | Operations Tab Shows | Logs Tab Shows |
+|-----|---------------------|----------------|
+| **Platform** | VM operations, firewall updates, billing | Platform operation logs (via LogsActor) |
+| **SSH** | Host list, connections, file transfers | SSH operation logs (via LogsActor) |
+| **Mycart** | Products, orders, store health | Mycart operation logs + remote logs (via LogsActor + SSH) |
+| **DNS** | Domains, records, TXT challenges | DNS operation logs (via LogsActor) |
 
 ---
 
 ## Implementation Order
 
-### Phase 1: LogsActor (Simplest)
-**Effort**: 1-2 days
+### Phase 1: LogsActor (Shared Foundation)
+**Effort**: 2-3 days
 
 **Why first**: 
-- Simplest actor (only database operations)
+- Used by all 4 tabs (platform, ssh, mycart, dns)
+- Only database operations (simplest)
 - No external API dependencies
-- Useful for other actors' logging
+- Foundation for other actors
 
 **Steps**:
-1. Create module structure
+1. Create module structure (`viewmodel/logs/`)
 2. Define commands and events
 3. Implement actor with database operations
 4. Add ViewModel integration
-5. Update UI to use logs actor (replace direct DB calls)
+5. Update platform tab to use LogsActor (replace direct DB calls)
+6. Add drawer UI to platform tab (operations + logs tabs)
 
-### Phase 2: DnsActor (Medium)
+**Success**: Platform tab fully uses LogsActor, drawer UI working.
+
+### Phase 2: DnsActor (Cloudflare Only)
 **Effort**: 2-3 days
 
 **Why second**:
-- Existing `calc::dns` and `api::dns` code to refactor
-- Multiple provider support adds complexity
+- Extract existing DNS logic from `ui_dlg/dns_wizard.rs`
+- Cloudflare-only (no multi-provider complexity)
 - Independent from mycart
+- Uses LogsActor for logging
 
 **Steps**:
-1. Create module structure
+1. Create module structure (`viewmodel/dns/`)
 2. Define commands and events
-3. Implement actor with provider abstraction
-4. Refactor existing DNS UI to use actor
-5. Test with each provider (Cloudflare, GCP, DuckDNS, Porkbun)
+3. Extract DNS operations from `ui_dlg/dns_wizard.rs`:
+   - OAuth flow (via `api/cloudflare/oauth.rs`)
+   - Zone management (list, create, find)
+   - Record management (CRUD, upsert)
+   - Preset operations (XMPP defaults)
+4. Implement actor using `api/cloudflare/dns.rs` client
+5. Create new DNS tab with drawer UI
+6. Integrate LogsActor for DNS operation logging
+7. Migrate wizard UI to use DnsActor (optional refactor)
 
-### Phase 3: MycartActor (Complex)
+**Success**: DNS tab working with Cloudflare API, logs via LogsActor.
+
+### Phase 3: MycartActor (Remote API + SSH Logs)
 **Effort**: 3-4 days
 
-**Why last**:
-- Most complex domain logic (products, orders, shipments)
-- Multiple related entities
-- May need new database models
-- Largest UI integration
+**Why third**:
+- Dual mode (remote API + SSH logs)
+- Remote API client needed (ureq)
+- SSH log fetching like ssh actor
+- Uses LogsActor for operation logging
 
 **Steps**:
-1. Create module structure
+1. Create module structure (`viewmodel/mycart/`)
 2. Define commands and events
-3. Implement actor with all e-commerce operations
-4. Create/update database models if needed
-5. Update store management UI
-6. Add order processing UI
-7. Add shipment tracking UI
+3. Implement remote API client (https://mycart.dure.app/api/_/*)
+4. Implement SSH log fetching
+5. Create mycart tab with drawer UI
+6. Integrate LogsActor for operation logging
+7. Add operations tab (products, orders, health)
+8. Add logs tab (remote logs via SSH)
+
+**Success**: Mycart tab working with remote API, logs via SSH + LogsActor.
+
+### Phase 4: SSH Tab Refactoring
+**Effort**: 1-2 days
+
+**Why last**:
+- SSH actor already exists
+- Add drawer UI like other tabs
+- Use LogsActor for SSH operation logging
+- Maintain existing SSH functionality
+
+**Steps**:
+1. Add `drawer_types.rs` to `viewmodel/ssh/`
+2. Refactor ssh tab UI to use drawer pattern
+3. Add operations tab (host mgmt, connections)
+4. Add logs tab (SSH operation logs via LogsActor)
+5. Integrate LogsActor for SSH logging
+
+**Success**: SSH tab matches platform/dns/mycart pattern with drawer UI.
 
 ---
 
@@ -1051,54 +1145,82 @@ match event {
 
 ## Estimated Timeline
 
-- **LogsActor**: 1-2 days
-- **DnsActor**: 2-3 days  
-- **MycartActor**: 3-4 days
-- **Total**: 6-9 days (1.5-2 weeks)
+- **Phase 1 (LogsActor)**: 2-3 days
+- **Phase 2 (DnsActor)**: 2-3 days  
+- **Phase 3 (MycartActor)**: 3-4 days
+- **Phase 4 (SSH Tab Refactor)**: 1-2 days
+- **Total**: 8-12 days (2-2.5 weeks)
 
 ---
 
 ## Additional Notes
 
-### Why Not Merge LogsActor with PlatformActor?
+### Why LogsActor is Shared
 
-- **Separation of concerns**: Logs are cross-cutting (used by all actors)
-- **Reusability**: Other actors can log operations
-- **Simplicity**: Smaller, focused actors are easier to maintain
+- **Cross-cutting concern**: All tabs (platform, ssh, mycart, dns) need operation logging
+- **Reusability**: Single LogsActor instance used by all actors
+- **Simplicity**: One source of truth for logs
+- **UI consistency**: All tabs show logs in same format
 
-### Provider Abstraction (DnsActor)
+### Why Drawer UI Pattern
 
-Create trait for DNS providers:
+- **Consistency**: All tabs look similar (platform already has this)
+- **Context switching**: Operations + logs in one place
+- **Efficiency**: No tab switching to view logs
+- **Platform tab as reference**: See `ui_tabs/platform.rs` for implementation
 
-```rust
-#[async_trait]
-pub trait DnsProvider {
-    async fn list_domains(&self) -> anyhow::Result<Vec<Domain>>;
-    async fn create_record(&self, domain: &str, record: RecordParams) -> anyhow::Result<DnsRecord>;
-    // ... other operations
-}
+### DnsActor Simplification
 
-pub struct CloudflareProvider { api_token: String }
-pub struct GcpDnsProvider { project_id: String, access_token: String }
-pub struct DuckDnsProvider { token: String }
-pub struct PorkbunProvider { api_key: String, secret: String }
+**Cloudflare-only approach**:
+- No multi-provider abstraction needed
+- Extract existing logic from `ui_dlg/dns_wizard.rs`
+- Use `api/cloudflare/dns.rs` client directly
+- Simpler implementation, faster development
+- Operations already proven in wizard (OAuth, zones, records, XMPP presets)
 
-// Implement trait for each provider
-```
+### MycartActor Dual Mode
+
+**Remote API**:
+- Backend at https://mycart.dure.app
+- Use swagger.json for API reference
+- Only `/api/_/*` endpoints (admin API)
+
+**SSH Logs**:
+- Fetch logs from remote VM like ssh actor
+- Reuse existing SSH connection logic
+- Support streaming logs
 
 ### Database Models
-
-Ensure these exist or create them:
 
 **For LogsActor** (already exists):
 - `storage/models/opslog.rs`
 
-**For MycartActor** (may need creation):
-- `storage/models/product.rs`
-- `storage/models/order.rs`
-- `storage/models/shipment.rs`
-- `storage/models/promotion.rs`
-- `storage/models/customer.rs`
+**For DnsActor**:
+- Uses Cloudflare API directly (no local DB models needed)
+- May cache domain list in memory
 
-**For DnsActor** (may need creation):
-- `storage/models/dns.rs` (domain and record configs)
+**For MycartActor**:
+- Uses remote API (no local DB models needed)
+- Logs stored via LogsActor
+
+---
+
+## Quick Reference
+
+| Actor | Purpose | Key Technology | Tab UI |
+|-------|---------|---------------|--------|
+| **LogsActor** | Operation logging for all tabs | SQLite via runtime::unblock | Used by all 4 tabs |
+| **DnsActor** | Cloudflare DNS management | api/cloudflare/* | DNS tab with drawer |
+| **MycartActor** | Remote API + SSH logs | ureq (HTTP) + russh (SSH) | Mycart tab with drawer |
+| **SshActor** | Existing, add drawer UI | russh | SSH tab with drawer |
+
+**Drawer UI Pattern** (all tabs):
+- Operations tab: Tab-specific operations
+- Logs tab: LogsActor logs for this tab
+- Reference: `ui_tabs/platform.rs`
+
+**Implementation Priority**:
+1. LogsActor → Foundation for all tabs
+2. DnsActor → Extract from ssh tab, Cloudflare-only
+3. MycartActor → Remote API + SSH logs
+4. SSH Tab → Add drawer UI pattern

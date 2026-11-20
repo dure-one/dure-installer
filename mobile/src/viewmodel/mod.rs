@@ -1,6 +1,7 @@
 //! ViewModel layer for actor-based MVVM architecture
 
 pub mod common;
+pub mod dns;
 pub mod io;
 pub mod logs;
 pub mod mycart;
@@ -25,6 +26,9 @@ pub struct ViewModel {
     drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
     logs_tx: Sender<logs::LogCommand>,
+    opslog_tx: Sender<logs::LogsCommand>,
+    dns_tx: Sender<dns::DnsCommand>,
+    mycart_tx: Sender<mycart::MycartCommand>,
 
     // Unified event receiver
     event_rx: Receiver<ViewModelEvent>,
@@ -85,6 +89,9 @@ impl ViewModel {
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
+        let (opslog_tx, opslog_rx) = smol::channel::unbounded();
+        let (dns_tx, dns_rx) = smol::channel::unbounded();
+        let (mycart_tx, mycart_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
@@ -105,12 +112,18 @@ impl ViewModel {
                     platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
+                let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
+                let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
+                let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
+                smol::spawn(opslog_actor.run()).detach();
+                smol::spawn(dns_actor.run()).detach();
+                smol::spawn(mycart_actor.run()).detach();
 
                 // Keep thread alive
                 std::future::pending::<()>().await
@@ -122,6 +135,9 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            opslog_tx,
+            dns_tx,
+            mycart_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -137,6 +153,9 @@ impl ViewModel {
         let (drawer_tx, drawer_rx) = smol::channel::unbounded();
         let (ssh_tx, ssh_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
+        let (opslog_tx, opslog_rx) = smol::channel::unbounded();
+        let (dns_tx, dns_rx) = smol::channel::unbounded();
+        let (mycart_tx, mycart_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
@@ -155,11 +174,17 @@ impl ViewModel {
                     platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
+                let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
+                let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
+                let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
                 smol::spawn(ssh_actor.run()).detach();
                 smol::spawn(logs::log_actor_loop(logs_rx, event_tx.clone())).detach();
+                smol::spawn(opslog_actor.run()).detach();
+                smol::spawn(dns_actor.run()).detach();
+                smol::spawn(mycart_actor.run()).detach();
 
                 std::future::pending::<()>().await
             })
@@ -170,6 +195,9 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            opslog_tx,
+            dns_tx,
+            mycart_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: Some(RuntimeHandle::Native(runtime_handle)),
@@ -189,6 +217,9 @@ impl ViewModel {
         let (ssh_tx, _ssh_rx) = smol::channel::unbounded(); // Unused in WASM
         let (ns_tx, ns_rx) = smol::channel::unbounded();
         let (logs_tx, logs_rx) = smol::channel::unbounded();
+        let (opslog_tx, opslog_rx) = smol::channel::unbounded();
+        let (dns_tx, dns_rx) = smol::channel::unbounded();
+        let (mycart_tx, mycart_rx) = smol::channel::unbounded();
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
@@ -206,6 +237,9 @@ impl ViewModel {
             let drawer_actor =
                 platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
+            let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
+            let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
+            let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
@@ -216,6 +250,9 @@ impl ViewModel {
                 drawer_actor.run(),
                 ns_actor.run(),
                 logs_actor,
+                opslog_actor.run(),
+                dns_actor.run(),
+                mycart_actor.run(),
             );
         });
 
@@ -224,6 +261,9 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            opslog_tx,
+            dns_tx,
+            mycart_tx,
             event_rx,
             state: ViewModelState::default(),
             runtime_handle: None,
@@ -1061,6 +1101,418 @@ impl ViewModel {
     pub fn get_operation_logs(&self, host: String, limit: usize) -> anyhow::Result<()> {
         self.ssh_tx
             .send_blocking(ssh::SshCommand::GetOperationLogs { host, limit })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // OpsLog commands
+    pub fn create_opslog_entry(
+        &self,
+        project_id: String,
+        operation_type: String,
+        operation_subtype: String,
+        status: logs::LogStatus,
+        metadata: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::CreateLog {
+                project_id,
+                operation_type,
+                operation_subtype,
+                status,
+                metadata,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_opslog_entry(
+        &self,
+        log_id: i64,
+        status: logs::LogStatus,
+        error_message: Option<String>,
+        metadata: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::UpdateLog {
+                log_id,
+                status,
+                error_message,
+                metadata,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_opslog_entries(
+        &self,
+        project_id: Option<String>,
+        operation_type: Option<String>,
+        status: Option<logs::LogStatus>,
+        limit: usize,
+        offset: usize,
+    ) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::ListLogs {
+                project_id,
+                operation_type,
+                status,
+                limit,
+                offset,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_opslog_entry(&self, log_id: i64) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::GetLog { log_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_opslog_stats(
+        &self,
+        project_id: String,
+        period: logs::StatsPeriod,
+    ) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::GetLogStats {
+                project_id,
+                period,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn purge_opslog_entries(&self, older_than_days: i64) -> anyhow::Result<()> {
+        self.opslog_tx
+            .send_blocking(logs::LogsCommand::PurgeLogs { older_than_days })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // DNS commands
+    pub fn set_dns_access_token(
+        &self,
+        access_token: String,
+        refresh_token: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::SetAccessToken {
+                access_token,
+                refresh_token,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_dns_zones(&self) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::ListZones)
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn find_dns_zone(&self, domain: String) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::FindZone { domain })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_dns_zone(&self, domain: String, account_id: String) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::CreateZone { domain, account_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_dns_records(&self, zone_id: String) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::ListRecords { zone_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn find_dns_record(
+        &self,
+        zone_id: String,
+        record_type: dns::RecordType,
+        name: String,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::FindRecord {
+                zone_id,
+                record_type,
+                name,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_dns_record(
+        &self,
+        zone_id: String,
+        record_type: dns::RecordType,
+        name: String,
+        content: String,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::CreateRecord {
+                zone_id,
+                record_type,
+                name,
+                content,
+                ttl,
+                proxied,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_dns_record(
+        &self,
+        zone_id: String,
+        record_id: String,
+        name: String,
+        record_type: dns::RecordType,
+        content: String,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::UpdateRecord {
+                zone_id,
+                record_id,
+                name,
+                record_type,
+                content,
+                ttl,
+                proxied,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn delete_dns_record(&self, zone_id: String, record_id: String) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::DeleteRecord { zone_id, record_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn upsert_dns_record(
+        &self,
+        zone_id: String,
+        record_type: dns::RecordType,
+        name: String,
+        content: String,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::UpsertRecord {
+                zone_id,
+                record_type,
+                name,
+                content,
+                ttl,
+                proxied,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_dns_srv_record(
+        &self,
+        zone_id: String,
+        name: String,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: String,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::CreateSrvRecord {
+                zone_id,
+                name,
+                priority,
+                weight,
+                port,
+                target,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn upsert_dns_srv_record(
+        &self,
+        zone_id: String,
+        name: String,
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: String,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::UpsertSrvRecord {
+                zone_id,
+                name,
+                priority,
+                weight,
+                port,
+                target,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_default_xmpp_records(
+        &self,
+        zone_id: String,
+        domain: String,
+        vm_ip: String,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::CreateDefaultXmppRecords {
+                zone_id,
+                domain,
+                vm_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn verify_default_xmpp_records(
+        &self,
+        zone_id: String,
+        domain: String,
+        vm_ip: String,
+    ) -> anyhow::Result<()> {
+        self.dns_tx
+            .send_blocking(dns::DnsCommand::VerifyDefaultXmppRecords {
+                zone_id,
+                domain,
+                vm_ip,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    // Mycart commands
+    pub fn check_store_health(&self, store_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::CheckStoreHealth { store_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_mycart_products(
+        &self,
+        store_id: String,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::ListProducts {
+                store_id,
+                limit,
+                offset,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_mycart_product(&self, product_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::GetProduct { product_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn create_mycart_product(
+        &self,
+        store_id: String,
+        name: String,
+        price: i64,
+        description: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::CreateProduct {
+                store_id,
+                name,
+                price,
+                description,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_mycart_product(
+        &self,
+        product_id: String,
+        name: Option<String>,
+        price: Option<i64>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::UpdateProduct {
+                product_id,
+                name,
+                price,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn delete_mycart_product(&self, product_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::DeleteProduct { product_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_mycart_orders(
+        &self,
+        store_id: String,
+        status: Option<String>,
+        limit: Option<usize>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::ListOrders {
+                store_id,
+                status,
+                limit,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn get_mycart_order(&self, order_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::GetOrder { order_id })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn update_mycart_order_status(
+        &self,
+        order_id: String,
+        status: String,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::UpdateOrderStatus { order_id, status })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn fetch_mycart_logs(
+        &self,
+        store_id: String,
+        vm_name: String,
+        log_type: mycart::LogType,
+        lines: usize,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::FetchLogs {
+                store_id,
+                vm_name,
+                log_type,
+                lines,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn stream_mycart_logs(
+        &self,
+        store_id: String,
+        vm_name: String,
+        log_type: mycart::LogType,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::StreamLogs {
+                store_id,
+                vm_name,
+                log_type,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn stop_mycart_log_stream(&self, store_id: String) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::StopLogStream { store_id })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
