@@ -9,8 +9,77 @@
 
 **Architecture**: Layered with actor-based ViewModel  
 - UI → ViewModel (actors) → Calc/Api  
-- Actors: Platform (✓), SSH (✓), Logs (✓), Mycart (planned), DNS (planned)  
+- Actors: Platform (✓), SSH (✓), Logs (✓), Mycart (✓), DNS (planned)  
 - No direct UI → Calc/Api calls (enforced by actor layer)
+
+---
+
+## Recent Changes (2026-11-21)
+
+```sudo
+RecentFixes {
+  ssh_host_resolution {
+    issue: "Service checks failed: 'no SSH host found for site=dure.co'"
+    root_cause: "ui_tabs/mycart.rs used naive substring matching"
+    
+    before {
+      // Simple contains() check - fails when formats don't match
+      let ssh_host = config.ssh_hosts.iter()
+        .find(|h| h.host.contains(&site));
+    }
+    
+    after {
+      // Proper resolution with explicit binding + fallback
+      let site_config = config.mycart_sites.iter()
+        .find(|s| s.site_address == site);
+      let ssh_host = site_config
+        .and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
+    }
+    
+    affected_operations: [CheckDureMycart, CheckXmppProxy, CheckFail2BanRS]
+    files_changed: [ui_tabs/mycart.rs (3 locations)]
+    added: Debug logging for resolution failures
+  }
+  
+  crontab_json_parsing {
+    issue: "LoadCrontab failed: 'invalid type: map, expected a sequence'"
+    root_cause: "API returns map format, code expected array"
+    
+    before {
+      // Expected array format only
+      let api_response: ApiResponse<Vec<CrontabJob>> = resp.into_json()?;
+    }
+    
+    after {
+      // Flexible parsing supports both formats
+      let raw_json: serde_json::Value = resp.into_json()?;
+      let jobs = match result {
+        Array => serde_json::from_value(result),
+        Map => map.values().map(from_value).collect(),
+        _ => error
+      };
+    }
+    
+    location: api/mycart.rs::get_crontab()
+    backward_compatible: true
+    added: Format detection logging
+  }
+  
+  tests_added {
+    file: mobile/src/calc/mycart_tests.rs (NEW)
+    tests: [
+      test_resolve_ssh_host_explicit_binding,
+      test_resolve_ssh_host_fallback_domain_match,
+      test_resolve_ssh_host_fallback_ip_match,
+      test_resolve_ssh_host_no_match,
+      test_resolve_ssh_host_explicit_takes_precedence,
+      test_crontab_response_array_format,
+      test_crontab_response_map_format
+    ]
+    coverage: SSH resolution + API response parsing
+  }
+}
+```
 
 ---
 
@@ -220,8 +289,18 @@ interface ApiModule {
   
   mycart.rs {
     // Mycart backend API client
-    fn create_store(name: &str) -> Result<Store>
-    fn list_products() -> Result<Vec<Product>>
+    fn login_and_get_token(site: &str, email: &str, password: &str) -> Result<Option<String>>
+    fn verify_admin_access(site: &str, email: &str, password: &str) -> Result<Option<String>>
+    fn get_mycart_stats(site: &str, jwt_token: &str) -> Result<MycartStats>
+    fn get_seller_info(site: &str, jwt_token: &str) -> Result<SellerInfo>
+    fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
+    fn patch_crontab(site: &str, jwt_token: &str, job_id: &str, patch: CrontabPatch) -> Result<CrontabJob>
+    fn read_log_file(host_config: &SshHostConfig, log_name: &str, tail_lines: usize) -> Result<String>
+    
+    // Recent fix (2026-11-21): Flexible JSON parsing
+    constraint: get_crontab() handles both array and map response formats
+    constraint: Backward compatible with multiple API versions
+    constraint: Logs response format (array/map/other) for debugging
   }
   
   // DNS provider APIs
@@ -480,9 +559,39 @@ interface CalcModule {
   }
   
   mycart.rs {
-    // Mycart integration
-    fn create_store(name: &str, profile: &ProfileContext) -> Result<Store>
-    fn sync_products(profile: &ProfileContext) -> Result<()>
+    // Mycart business logic layer
+    fn add_mycart_site(config_path: &Path, site_address: &str, email: &str, password: &str) -> Result<()>
+    fn list_mycart_sites(config_path: &Path) -> Result<Vec<MycartSiteConfig>>
+    fn delete_mycart_site(config_path: &Path, site_address: &str) -> Result<()>
+    fn get_site_stats(config_path: &Path, site_address: &str) -> Result<MycartStats>
+    fn get_seller_info(config_path: &Path, site_address: &str) -> Result<SellerInfo>
+    fn get_site_crontab(config_path: &Path, site_address: &str) -> Result<Vec<CrontabJob>>
+    fn list_crontab(site_address: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
+    fn set_crontab_enabled(site_address: &str, jwt_token: &str, job_id: &str, enabled: bool) -> Result<CrontabJob>
+    fn set_crontab_interval(site_address: &str, jwt_token: &str, job_id: &str, interval: &str) -> Result<CrontabJob>
+    fn get_duremycart_logs(host_config: &SshHostConfig, profile_keyring: Option<&Arc<DatabaseHandle>>) -> Result<Vec<String>>
+    fn get_xmppproxy_logs(host_config: &SshHostConfig, profile_keyring: Option<&Arc<DatabaseHandle>>) -> Result<Vec<String>>
+    fn get_fail2banrs_logs(host_config: &SshHostConfig, profile_keyring: Option<&Arc<DatabaseHandle>>) -> Result<Vec<String>>
+    fn resolve_platform_for_site(config: &AppConfig, site: &MycartSiteConfig) -> Option<&CloudPlatformConfig>
+    fn resolve_ssh_host_for_site(config: &AppConfig, site: &MycartSiteConfig) -> Option<&SshHostConfig>
+    fn load_site_operations(site_address: &str, limit: i64) -> Result<Vec<OperationLog>>
+    
+    // Recent fix (2026-11-21): SSH host resolution
+    constraint: resolve_ssh_host_for_site() supports explicit binding + domain/IP fallback
+    constraint: Used by CheckDureMycart, CheckXmppProxy, CheckFail2BanRS in ui_tabs/mycart.rs
+  }
+  
+  mycart_tests.rs {
+    // Unit tests for mycart business logic (NEW 2026-11-21)
+    test_resolve_ssh_host_explicit_binding()
+    test_resolve_ssh_host_fallback_domain_match()
+    test_resolve_ssh_host_fallback_ip_match()
+    test_resolve_ssh_host_no_match()
+    test_resolve_ssh_host_explicit_takes_precedence()
+    test_crontab_response_array_format()
+    test_crontab_response_map_format()
+    
+    constraint: Tests SSH resolution logic and API response parsing
   }
   
   dure_mycart.rs {
