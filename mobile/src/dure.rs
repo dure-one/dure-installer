@@ -561,6 +561,15 @@ impl DureApp {
                             dure_info!("Settings clicked");
                             self.dlg_settings.open();
                         }
+
+                        // Add "About" button
+                        if ui
+                            .add(egui_material3::MaterialButton::outlined(tr!("about")).small())
+                            .clicked()
+                        {
+                            dure_info!("About clicked");
+                            ABOUT_TOGGLE.store(true, Ordering::Relaxed);
+                        }
                     }
                 });
             });
@@ -648,7 +657,9 @@ impl DureApp {
                         self.tab_dns.ui(ui, profile)
                     }
                 }
-                Tab::Mycart => self.tab_mycart.ui(&self.current_profile, ui),
+                Tab::Mycart => self
+                    .tab_mycart
+                    .ui(&self.current_profile, ui, self.viewmodel.as_mut()),
             },
         );
 

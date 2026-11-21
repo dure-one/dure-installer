@@ -2,7 +2,7 @@
 
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::tabs_primary;
+use egui_material3::{tabs_primary, tabs_secondary};
 
 use crate::api::mycart::{CrontabJob, MycartStats, SellerInfo};
 use crate::ui_components::drawer::StatusLine;
@@ -27,11 +27,11 @@ pub fn render_drawer(
     logs_loading: bool,
     operations: &[crate::storage::models::opslog::OperationLog],
     operations_loading: bool,
-    mycart_logs: &Vec<String>,
+    mycart_logs: &std::collections::HashMap<String, Vec<String>>,
     mycart_loading: bool,
-    xmppproxy_logs: &Vec<String>,
+    xmppproxy_logs: &std::collections::HashMap<String, Vec<String>>,
     xmppproxy_loading: bool,
-    fail2banrs_logs: &Vec<String>,
+    fail2banrs_logs: &std::collections::HashMap<String, Vec<String>>,
     fail2banrs_loading: bool,
 ) {
     // Tab bar (Phase 5: 6 tabs)
@@ -162,33 +162,13 @@ fn render_status_tab(
     }
 }
 
-/// Render Mycart tab (line-by-line logs with filter, mirroring platform pattern)
-fn render_mycart_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
-    ui.horizontal(|ui| {
-        ui.heading("Mycart Logs");
-        ui.add_space(8.0);
-
-        // Log level filter
-        ui.label("Level:");
-        let filter_id = egui::Id::new("mycart_log_level_filter");
-        let mut log_level_filter = ui
-            .data(|d| d.get_temp::<String>(filter_id))
-            .unwrap_or_else(|| "All".to_string());
-
-        egui::ComboBox::from_label("")
-            .selected_text(&log_level_filter)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
-                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
-                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
-                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
-                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
-            });
-
-        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
-    });
-
-    ui.add_space(8.0);
+/// Render Mycart tab with sub-tabs for each log file
+fn render_mycart_tab(
+    ui: &mut egui::Ui,
+    logs: &std::collections::HashMap<String, Vec<String>>,
+    loading: bool,
+) {
+    ui.heading("Mycart Logs");
 
     if loading {
         ui.spinner();
@@ -201,56 +181,50 @@ fn render_mycart_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
         return;
     }
 
-    // Filter logs by level
-    let log_level_filter = ui
-        .data(|d| d.get_temp::<String>(egui::Id::new("mycart_log_level_filter")))
-        .unwrap_or_else(|| "All".to_string());
+    // Sub-tabs: stderr | stdout
+    let mut active_subtab = ui
+        .data(|d| d.get_temp::<usize>(egui::Id::new("mycart_log_subtab")))
+        .unwrap_or(0);
 
-    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
-        logs.iter().collect()
-    } else {
-        logs.iter()
-            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
-            .collect()
+    ui.add(
+        tabs_secondary(&mut active_subtab)
+            .id_salt("mycart_log_subtabs")
+            .height(32.0)
+            .tab("stderr")
+            .tab("stdout"),
+    );
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("mycart_log_subtab"), active_subtab));
+
+    ui.separator();
+
+    // Show selected file based on tab index
+    let selected_file = match active_subtab {
+        0 => "stderr",
+        1 => "stdout",
+        _ => "stderr",
     };
 
-    // Scrollable log view
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            for line in filtered_logs {
-                ui.label(egui::RichText::new(line).monospace().small());
-            }
-        });
+    if let Some(lines) = logs.get(selected_file) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(500.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).monospace().small());
+                }
+            });
+    } else {
+        ui.label(format!("No logs for {}", selected_file));
+    }
 }
 
-/// Render XMPPProxy tab (line-by-line logs with filter)
-fn render_xmppproxy_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
-    ui.horizontal(|ui| {
-        ui.heading("XMPPProxy Logs");
-        ui.add_space(8.0);
-
-        ui.label("Level:");
-        let filter_id = egui::Id::new("xmppproxy_log_level_filter");
-        let mut log_level_filter = ui
-            .data(|d| d.get_temp::<String>(filter_id))
-            .unwrap_or_else(|| "All".to_string());
-
-        egui::ComboBox::from_label("")
-            .selected_text(&log_level_filter)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
-                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
-                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
-                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
-                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
-            });
-
-        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
-    });
-
-    ui.add_space(8.0);
+/// Render XMPPProxy tab with sub-tabs for each log file
+fn render_xmppproxy_tab(
+    ui: &mut egui::Ui,
+    logs: &std::collections::HashMap<String, Vec<String>>,
+    loading: bool,
+) {
+    ui.heading("XMPPProxy Logs");
 
     if loading {
         ui.spinner();
@@ -263,54 +237,52 @@ fn render_xmppproxy_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
         return;
     }
 
-    let log_level_filter = ui
-        .data(|d| d.get_temp::<String>(egui::Id::new("xmppproxy_log_level_filter")))
-        .unwrap_or_else(|| "All".to_string());
+    // Sub-tabs: stdout | stderr | prosody
+    let mut active_subtab = ui
+        .data(|d| d.get_temp::<usize>(egui::Id::new("xmppproxy_log_subtab")))
+        .unwrap_or(0);
 
-    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
-        logs.iter().collect()
-    } else {
-        logs.iter()
-            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
-            .collect()
+    ui.add(
+        tabs_secondary(&mut active_subtab)
+            .id_salt("xmppproxy_log_subtabs")
+            .height(32.0)
+            .tab("stdout")
+            .tab("stderr")
+            .tab("prosody"),
+    );
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("xmppproxy_log_subtab"), active_subtab));
+
+    ui.separator();
+
+    // Show selected file based on tab index
+    let selected_file = match active_subtab {
+        0 => "stdout",
+        1 => "stderr",
+        2 => "prosody",
+        _ => "stdout",
     };
 
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            for line in filtered_logs {
-                ui.label(egui::RichText::new(line).monospace().small());
-            }
-        });
+    if let Some(lines) = logs.get(selected_file) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(500.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).monospace().small());
+                }
+            });
+    } else {
+        ui.label(format!("No logs for {}", selected_file));
+    }
 }
 
-/// Render Fail2BanRS tab (line-by-line logs with filter)
-fn render_fail2banrs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
-    ui.horizontal(|ui| {
-        ui.heading("Fail2BanRS Logs");
-        ui.add_space(8.0);
-
-        ui.label("Level:");
-        let filter_id = egui::Id::new("fail2banrs_log_level_filter");
-        let mut log_level_filter = ui
-            .data(|d| d.get_temp::<String>(filter_id))
-            .unwrap_or_else(|| "All".to_string());
-
-        egui::ComboBox::from_label("")
-            .selected_text(&log_level_filter)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut log_level_filter, "All".to_string(), "All");
-                ui.selectable_value(&mut log_level_filter, "DEBUG".to_string(), "DEBUG");
-                ui.selectable_value(&mut log_level_filter, "INFO".to_string(), "INFO");
-                ui.selectable_value(&mut log_level_filter, "WARN".to_string(), "WARN");
-                ui.selectable_value(&mut log_level_filter, "ERROR".to_string(), "ERROR");
-            });
-
-        ui.data_mut(|d| d.insert_temp(filter_id, log_level_filter.clone()));
-    });
-
-    ui.add_space(8.0);
+/// Render Fail2BanRS tab with sub-tabs for each log file
+fn render_fail2banrs_tab(
+    ui: &mut egui::Ui,
+    logs: &std::collections::HashMap<String, Vec<String>>,
+    loading: bool,
+) {
+    ui.heading("Fail2BanRS Logs");
 
     if loading {
         ui.spinner();
@@ -323,26 +295,41 @@ fn render_fail2banrs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
         return;
     }
 
-    let log_level_filter = ui
-        .data(|d| d.get_temp::<String>(egui::Id::new("fail2banrs_log_level_filter")))
-        .unwrap_or_else(|| "All".to_string());
+    // Sub-tabs: stderr | stdout
+    let mut active_subtab = ui
+        .data(|d| d.get_temp::<usize>(egui::Id::new("fail2banrs_log_subtab")))
+        .unwrap_or(0);
 
-    let filtered_logs: Vec<&String> = if log_level_filter == "All" {
-        logs.iter().collect()
-    } else {
-        logs.iter()
-            .filter(|line| line.contains(&format!("[{}]", log_level_filter)))
-            .collect()
+    ui.add(
+        tabs_secondary(&mut active_subtab)
+            .id_salt("fail2banrs_log_subtabs")
+            .height(32.0)
+            .tab("stderr")
+            .tab("stdout"),
+    );
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("fail2banrs_log_subtab"), active_subtab));
+
+    ui.separator();
+
+    // Show selected file based on tab index
+    let selected_file = match active_subtab {
+        0 => "stderr",
+        1 => "stdout",
+        _ => "stderr",
     };
 
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .max_height(500.0)
-        .show(ui, |ui| {
-            for line in filtered_logs {
-                ui.label(egui::RichText::new(line).monospace().small());
-            }
-        });
+    if let Some(lines) = logs.get(selected_file) {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(500.0)
+            .show(ui, |ui| {
+                for line in lines {
+                    ui.label(egui::RichText::new(line).monospace().small());
+                }
+            });
+    } else {
+        ui.label(format!("No logs for {}", selected_file));
+    }
 }
 
 /// Render Operations tab showing operation history (Phase 5: mirroring platform pattern)

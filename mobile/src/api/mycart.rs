@@ -41,46 +41,16 @@ pub struct SellerInfo {
 /// Crontab job information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrontabJob {
+    #[serde(rename = "id")]
     pub job_id: String,
+    #[serde(rename = "job_type")]
     pub name: String,
     pub enabled: bool,
-    /// Interval can be either a string or an object with a "cron" or similar field
-    #[serde(deserialize_with = "deserialize_interval")]
     pub interval: String,
     pub last_run: Option<i64>,
 }
 
 /// Custom deserializer for interval field - handles both string and object formats
-fn deserialize_interval<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::Error;
-    use serde_json::Value;
-
-    let value = Value::deserialize(deserializer)?;
-    match value {
-        Value::String(s) => Ok(s),
-        Value::Object(map) => {
-            // Try common field names for interval/cron expressions
-            if let Some(cron) = map.get("cron").and_then(|v| v.as_str()) {
-                Ok(cron.to_string())
-            } else if let Some(interval) = map.get("interval").and_then(|v| v.as_str()) {
-                Ok(interval.to_string())
-            } else if let Some(schedule) = map.get("schedule").and_then(|v| v.as_str()) {
-                Ok(schedule.to_string())
-            } else {
-                // Fallback: serialize the whole object as JSON string
-                Ok(serde_json::to_string(&map).map_err(D::Error::custom)?)
-            }
-        }
-        _ => Err(D::Error::custom(format!(
-            "expected string or object for interval, got {:?}",
-            value
-        ))),
-    }
-}
-
 /// Crontab job update patch
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrontabPatch {
@@ -95,6 +65,13 @@ pub struct CrontabPatch {
 pub struct ApiResponse<T> {
     pub success: bool,
     pub result: Option<T>,
+    pub message: String,
+}
+
+/// Simple API response without result data (for PATCH/DELETE operations)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimpleApiResponse {
+    pub success: bool,
     pub message: String,
 }
 
@@ -346,9 +323,32 @@ pub async fn read_log_file(
         tail_lines, log_path
     );
 
-    ssh::execute_command(host_config, &cmd, profile_keyring)
-        .await
-        .context("Failed to read log file")
+    log::debug!(
+        "read_log_file: host={}, cmd={}",
+        host_config.host,
+        cmd
+    );
+
+    let result = ssh::execute_command(host_config, &cmd, profile_keyring).await;
+
+    match &result {
+        Ok(output) => {
+            log::debug!(
+                "read_log_file: success, output length={} bytes",
+                output.len()
+            );
+        }
+        Err(e) => {
+            log::error!(
+                "read_log_file: SSH command failed for host={}, log={}, error={}",
+                host_config.host,
+                log_name,
+                e
+            );
+        }
+    }
+
+    result.context(format!("Failed to read {} from {}", log_path, host_config.host))
 }
 
 /// Get crontab jobs list
@@ -413,35 +413,15 @@ pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
                     return Err(anyhow::anyhow!("API error: {}", message));
                 }
 
-                // Parse result field - handle both array and map formats
-                let result = raw_json
-                    .get("result")
-                    .ok_or_else(|| anyhow::anyhow!("Missing result field in response"))?;
-
-                let jobs: Vec<CrontabJob> = match result {
-                    serde_json::Value::Array(_) => {
-                        // Array format: [{"job_id": "...", ...}, ...]
-                        serde_json::from_value(result.clone())
-                            .context("Failed to parse crontab jobs from array")?
-                    }
-                    serde_json::Value::Object(map) => {
-                        // Map format: {"job_id_1": {...}, "job_id_2": {...}}
-                        log::debug!(
-                            "get_crontab: converting map format ({} entries) to array",
-                            map.len()
-                        );
-                        map.values()
-                            .map(|v| serde_json::from_value(v.clone()))
-                            .collect::<Result<Vec<_>, _>>()
-                            .context("Failed to parse crontab jobs from map")?
-                    }
-                    _ => {
-                        return Err(anyhow::anyhow!(
-                            "Invalid crontab response format: expected array or map, got {:?}",
-                            result
-                        ));
-                    }
-                };
+                // Parse result.jobs array
+                let jobs: Vec<CrontabJob> = serde_json::from_value(
+                    raw_json
+                        .get("result")
+                        .and_then(|r| r.get("jobs"))
+                        .ok_or_else(|| anyhow::anyhow!("Missing result.jobs in response"))?
+                        .clone(),
+                )
+                .context("Failed to parse crontab jobs")?;
 
                 log::debug!("get_crontab: parsed {} jobs successfully", jobs.len());
                 Ok(jobs)
@@ -476,7 +456,7 @@ pub async fn patch_crontab(
     jwt_token: &str,
     job_id: &str,
     patch: CrontabPatch,
-) -> Result<CrontabJob> {
+) -> Result<()> {
     let url = format!(
         "https://{}/api/_/settings/crontab/{}",
         site,
@@ -484,6 +464,8 @@ pub async fn patch_crontab(
     );
     let jwt = jwt_token.to_string();
     let patch_clone = patch.clone();
+
+    log::debug!("PATCH {}", url);
 
     let response = smol::unblock(move || {
         ureq::patch(&url)
@@ -497,14 +479,14 @@ pub async fn patch_crontab(
         Ok(resp) => {
             let status = resp.status();
             if status == 200 {
-                let api_response: ApiResponse<CrontabJob> = resp
+                let api_response: SimpleApiResponse = resp
                     .into_json()
                     .context("Failed to parse crontab update response")?;
 
+                log::debug!("PATCH response: success={}, message={}", api_response.success, api_response.message);
+
                 if api_response.success {
-                    api_response
-                        .result
-                        .ok_or_else(|| anyhow::anyhow!("No result in successful response"))
+                    Ok(())
                 } else {
                     Err(anyhow::anyhow!("API error: {}", api_response.message))
                 }
@@ -549,6 +531,21 @@ mod tests {
         assert_eq!(stats.orders_count, 42);
         assert_eq!(stats.products_count, 100);
         assert_eq!(stats.messages_count, 5);
+    }
+
+    #[test]
+    fn test_simple_api_response_parsing() {
+        // Test successful response
+        let json = r#"{"success":true,"message":"Crontab job updated"}"#;
+        let response: SimpleApiResponse = serde_json::from_str(json).unwrap();
+        assert!(response.success);
+        assert_eq!(response.message, "Crontab job updated");
+
+        // Test error response
+        let json_err = r#"{"success":false,"message":"Job not found"}"#;
+        let response_err: SimpleApiResponse = serde_json::from_str(json_err).unwrap();
+        assert!(!response_err.success);
+        assert_eq!(response_err.message, "Job not found");
     }
 
     #[test]

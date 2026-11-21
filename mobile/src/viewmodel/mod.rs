@@ -121,7 +121,11 @@ impl ViewModel {
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
                 let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
                 let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
-                let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
+                let mycart_actor = mycart::MycartActor::new(
+                    mycart_rx,
+                    event_tx.clone(),
+                    profile_for_actor.clone(),
+                );
 
                 // Run all actors concurrently
                 smol::spawn(platform_actor.run()).detach();
@@ -191,7 +195,11 @@ impl ViewModel {
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
                 let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
                 let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
-                let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
+                let mycart_actor = mycart::MycartActor::new(
+                    mycart_rx,
+                    event_tx.clone(),
+                    profile_for_actor.clone(),
+                );
 
                 smol::spawn(platform_actor.run()).detach();
                 smol::spawn(drawer_actor.run()).detach();
@@ -262,7 +270,8 @@ impl ViewModel {
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
             let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
             let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
-            let mycart_actor = mycart::MycartActor::new(mycart_rx, event_tx.clone());
+            let mycart_actor =
+                mycart::MycartActor::new(mycart_rx, event_tx.clone(), profile_for_actor.clone());
 
             // SSH disabled in WASM (no native SSH in browser) - gated at compile time
 
@@ -1436,6 +1445,33 @@ impl ViewModel {
     }
 
     // Phase 5: Removed old LoadLogs - now use service-specific commands via drawer auto-refresh
+
+    pub fn load_mycart_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadMycartLogs {
+                site_address,
+                limit,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn load_xmppproxy_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadXMPPProxyLogs {
+                site_address,
+                limit,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn load_fail2banrs_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadFail2BanRSLogs {
+                site_address,
+                limit,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
 
     pub fn list_mycart_crontab(&self, site_address: String) -> anyhow::Result<()> {
         self.mycart_tx

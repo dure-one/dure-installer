@@ -4,6 +4,8 @@
 use super::commands::MycartCommand;
 use super::events::MycartEvent;
 use crate::calc::mycart;
+use crate::calc::profile::ProfileContext;
+use crate::config::AppConfig;
 use crate::viewmodel::common::ViewModelEvent;
 use crate::{dure_debug, dure_error, dure_info};
 use smol::channel::{Receiver, Sender};
@@ -13,16 +15,29 @@ pub struct MycartActor {
     event_tx: Sender<ViewModelEvent>,
     base_url: String,
     auth_token: Option<String>,
+    profile: Option<ProfileContext>,
 }
 
 impl MycartActor {
-    pub fn new(command_rx: Receiver<MycartCommand>, event_tx: Sender<ViewModelEvent>) -> Self {
+    pub fn new(
+        command_rx: Receiver<MycartCommand>,
+        event_tx: Sender<ViewModelEvent>,
+        profile: Option<ProfileContext>,
+    ) -> Self {
         Self {
             command_rx,
             event_tx,
             base_url: "https://mycart.dure.app/api/_".to_string(), // ponytail: placeholder URL
             auth_token: None,
+            profile,
         }
+    }
+
+    fn get_config_path(&self) -> anyhow::Result<std::path::PathBuf> {
+        self.profile
+            .as_ref()
+            .map(|p| p.config_file.clone())
+            .ok_or_else(|| anyhow::anyhow!("No profile context"))
     }
 
     pub async fn run(mut self) {
@@ -128,13 +143,36 @@ impl MycartActor {
         _limit: usize,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Mycart logs for {}", site_address);
-        // ponytail: needs SSH host config and keyring - placeholder returns empty
-        // Actual: get host_config from config, call mycart::get_duremycart_logs
-        self.send_event(MycartEvent::MycartLogsLoaded {
-            site_address,
-            logs: Vec::new(),
-        })
-        .await;
+
+        let config_path = self.get_config_path()?;
+        let config = AppConfig::load_or_default(&config_path);
+
+        let site = config
+            .mycart_sites
+            .iter()
+            .find(|s| s.site_address == site_address)
+            .ok_or_else(|| anyhow::anyhow!("Site not found: {}", site_address))?;
+
+        dure_debug!(
+            "[MycartActor] Site found: ssh_host={:?}, platform_id={:?}",
+            site.ssh_host,
+            site.platform_id
+        );
+
+        let host_config = mycart::resolve_ssh_host_for_site(&config, site)
+            .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
+
+        dure_info!(
+            "[MycartActor] Using SSH host: {}",
+            host_config.host
+        );
+
+        // ponytail: keyring loading - pass None for now, SSH uses password from config
+        let logs = mycart::get_duremycart_logs(host_config, None).await?;
+
+        self.send_event(MycartEvent::MycartLogsLoaded { site_address, logs })
+            .await;
+
         Ok(())
     }
 
@@ -144,12 +182,30 @@ impl MycartActor {
         _limit: usize,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading XMPPProxy logs for {}", site_address);
-        // ponytail: needs SSH host config and keyring - placeholder returns empty
-        self.send_event(MycartEvent::XMPPProxyLogsLoaded {
-            site_address,
-            logs: Vec::new(),
-        })
-        .await;
+
+        let config_path = self.get_config_path()?;
+        let config = AppConfig::load_or_default(&config_path);
+
+        let site = config
+            .mycart_sites
+            .iter()
+            .find(|s| s.site_address == site_address)
+            .ok_or_else(|| anyhow::anyhow!("Site not found: {}", site_address))?;
+
+        let host_config = mycart::resolve_ssh_host_for_site(&config, site)
+            .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
+
+        dure_info!(
+            "[MycartActor] Using SSH host: {}",
+            host_config.host
+        );
+
+        // ponytail: keyring loading - pass None for now, SSH uses password from config
+        let logs = mycart::get_xmppproxy_logs(host_config, None).await?;
+
+        self.send_event(MycartEvent::XMPPProxyLogsLoaded { site_address, logs })
+            .await;
+
         Ok(())
     }
 
@@ -159,12 +215,30 @@ impl MycartActor {
         _limit: usize,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Fail2BanRS logs for {}", site_address);
-        // ponytail: needs SSH host config and keyring - placeholder returns empty
-        self.send_event(MycartEvent::Fail2BanRSLogsLoaded {
-            site_address,
-            logs: Vec::new(),
-        })
-        .await;
+
+        let config_path = self.get_config_path()?;
+        let config = AppConfig::load_or_default(&config_path);
+
+        let site = config
+            .mycart_sites
+            .iter()
+            .find(|s| s.site_address == site_address)
+            .ok_or_else(|| anyhow::anyhow!("Site not found: {}", site_address))?;
+
+        let host_config = mycart::resolve_ssh_host_for_site(&config, site)
+            .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
+
+        dure_info!(
+            "[MycartActor] Using SSH host: {}",
+            host_config.host
+        );
+
+        // ponytail: keyring loading - pass None for now, SSH uses password from config
+        let logs = mycart::get_fail2banrs_logs(host_config, None).await?;
+
+        self.send_event(MycartEvent::Fail2BanRSLogsLoaded { site_address, logs })
+            .await;
+
         Ok(())
     }
 
@@ -227,10 +301,9 @@ impl MycartActor {
             .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_enabled(&site_address, jwt_token, &job_id, true).await {
-            Ok(job) => {
+            Ok(()) => {
                 dure_info!("[MycartActor] Enabled cronjob {}", job_id);
-                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
-                    .await;
+                // Job list will be reloaded by caller
                 Ok(())
             }
             Err(e) => {
@@ -257,10 +330,9 @@ impl MycartActor {
             .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_enabled(&site_address, jwt_token, &job_id, false).await {
-            Ok(job) => {
+            Ok(()) => {
                 dure_info!("[MycartActor] Disabled cronjob {}", job_id);
-                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
-                    .await;
+                // Job list will be reloaded by caller
                 Ok(())
             }
             Err(e) => {
@@ -289,10 +361,9 @@ impl MycartActor {
             .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_interval(&site_address, jwt_token, &job_id, &interval).await {
-            Ok(job) => {
+            Ok(()) => {
                 dure_info!("[MycartActor] Updated cronjob {} interval", job_id);
-                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
-                    .await;
+                // Job list will be reloaded by caller
                 Ok(())
             }
             Err(e) => {

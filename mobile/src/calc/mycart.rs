@@ -10,6 +10,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::{dure_error, dure_info};
+
 #[cfg(not(target_arch = "wasm32"))]
 use crate::api::mycart;
 #[cfg(not(target_arch = "wasm32"))]
@@ -199,27 +201,46 @@ pub async fn get_site_logs(
 pub async fn get_duremycart_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<Vec<String>> {
-    let log_names = vec!["mycart-stderr.log", "mycart-stdout.log"];
-    let mut all_lines = Vec::new();
+) -> Result<std::collections::HashMap<String, Vec<String>>> {
+    let mut logs_map = std::collections::HashMap::new();
 
-    for log_name in log_names {
-        all_lines.push(format!("=== {} ===", log_name));
-        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
-            Ok(content) => {
-                // Split by lines and add to vec
-                for line in content.lines() {
-                    all_lines.push(line.to_string());
-                }
-            }
-            Err(e) => {
-                all_lines.push(format!("Error reading log: {}", e));
-            }
+    // stderr
+    match mycart::read_log_file(host_config, "mycart-stderr.log", 1000, profile_keyring).await {
+        Ok(content) => {
+            dure_info!("Mycart stderr log read: {} bytes", content.len());
+            logs_map.insert(
+                "stderr".to_string(),
+                content.lines().map(|s| s.to_string()).collect(),
+            );
         }
-        all_lines.push(String::new()); // Empty line separator
+        Err(e) => {
+            dure_error!("Failed to read mycart-stderr.log: {}", e);
+            logs_map.insert(
+                "stderr".to_string(),
+                vec![format!("Failed to read /srv/data/logs/mycart-stderr.log: {}", e)],
+            );
+        }
     }
 
-    Ok(all_lines)
+    // stdout
+    match mycart::read_log_file(host_config, "mycart-stdout.log", 1000, profile_keyring).await {
+        Ok(content) => {
+            dure_info!("Mycart stdout log read: {} bytes", content.len());
+            logs_map.insert(
+                "stdout".to_string(),
+                content.lines().map(|s| s.to_string()).collect(),
+            );
+        }
+        Err(e) => {
+            dure_error!("Failed to read mycart-stdout.log: {}", e);
+            logs_map.insert(
+                "stdout".to_string(),
+                vec![format!("Failed to read /srv/data/logs/mycart-stdout.log: {}", e)],
+            );
+        }
+    }
+
+    Ok(logs_map)
 }
 
 /// Get XmppProxy service logs only
@@ -227,31 +248,34 @@ pub async fn get_duremycart_logs(
 pub async fn get_xmppproxy_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<Vec<String>> {
-    let log_names = vec![
-        "xmpp-proxy-stdout.log",
-        "xmpp-proxy-stderr.log",
-        "prosody.log",
-    ];
-    let mut all_lines = Vec::new();
+) -> Result<std::collections::HashMap<String, Vec<String>>> {
+    let mut logs_map = std::collections::HashMap::new();
 
-    for log_name in log_names {
-        all_lines.push(format!("=== {} ===", log_name));
-        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
+    // stdout, stderr, prosody (3 files)
+    for (key, filename) in [
+        ("stdout", "xmpp-proxy-stdout.log"),
+        ("stderr", "xmpp-proxy-stderr.log"),
+        ("prosody", "prosody.log"),
+    ] {
+        match mycart::read_log_file(host_config, filename, 1000, profile_keyring).await {
             Ok(content) => {
-                // Split by lines and add to vec
-                for line in content.lines() {
-                    all_lines.push(line.to_string());
-                }
+                dure_info!("XMPPProxy {} log read: {} bytes", key, content.len());
+                logs_map.insert(
+                    key.to_string(),
+                    content.lines().map(|s| s.to_string()).collect(),
+                );
             }
             Err(e) => {
-                all_lines.push(format!("Error reading log: {}", e));
+                dure_error!("Failed to read {}: {}", filename, e);
+                logs_map.insert(
+                    key.to_string(),
+                    vec![format!("Failed to read /srv/data/logs/{}: {}", filename, e)],
+                );
             }
         }
-        all_lines.push(String::new()); // Empty line separator
     }
 
-    Ok(all_lines)
+    Ok(logs_map)
 }
 
 /// Get Fail2BanRS service logs only
@@ -259,27 +283,33 @@ pub async fn get_xmppproxy_logs(
 pub async fn get_fail2banrs_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
-) -> Result<Vec<String>> {
-    let log_names = vec!["fail2ban-rs-stderr.log", "fail2ban-rs-stdout.log"];
-    let mut all_lines = Vec::new();
+) -> Result<std::collections::HashMap<String, Vec<String>>> {
+    let mut logs_map = std::collections::HashMap::new();
 
-    for log_name in log_names {
-        all_lines.push(format!("=== {} ===", log_name));
-        match mycart::read_log_file(host_config, log_name, 1000, profile_keyring).await {
+    // stderr, stdout
+    for (key, filename) in [
+        ("stderr", "fail2ban-rs-stderr.log"),
+        ("stdout", "fail2ban-rs-stdout.log"),
+    ] {
+        match mycart::read_log_file(host_config, filename, 1000, profile_keyring).await {
             Ok(content) => {
-                // Split by lines and add to vec
-                for line in content.lines() {
-                    all_lines.push(line.to_string());
-                }
+                dure_info!("Fail2BanRS {} log read: {} bytes", key, content.len());
+                logs_map.insert(
+                    key.to_string(),
+                    content.lines().map(|s| s.to_string()).collect(),
+                );
             }
             Err(e) => {
-                all_lines.push(format!("Error reading log: {}", e));
+                dure_error!("Failed to read {}: {}", filename, e);
+                logs_map.insert(
+                    key.to_string(),
+                    vec![format!("Failed to read /srv/data/logs/{}: {}", filename, e)],
+                );
             }
         }
-        all_lines.push(String::new()); // Empty line separator
     }
 
-    Ok(all_lines)
+    Ok(logs_map)
 }
 
 /// Get crontab jobs for a mycart site (high-level wrapper with JWT loading)
@@ -348,7 +378,7 @@ pub async fn update_site_cronjob_enabled(
     site_address: &str,
     job_id: &str,
     enabled: bool,
-) -> Result<mycart::CrontabJob> {
+) -> Result<()> {
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
     let site = config
         .mycart_sites
@@ -371,7 +401,7 @@ pub async fn update_site_cronjob_interval(
     site_address: &str,
     job_id: &str,
     interval: &str,
-) -> Result<mycart::CrontabJob> {
+) -> Result<()> {
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
     let site = config
         .mycart_sites
@@ -385,6 +415,36 @@ pub async fn update_site_cronjob_interval(
         .ok_or_else(|| anyhow::anyhow!("No JWT token - site needs re-authentication"))?;
 
     set_crontab_interval(site_address, jwt_token, job_id, interval).await
+}
+
+/// Update crontab job with generic patch
+pub async fn update_site_cronjob(
+    config_path: &std::path::Path,
+    site_address: &str,
+    job_id: &str,
+    patch: mycart::CrontabPatch,
+) -> Result<()> {
+    log::info!(
+        "update_site_cronjob: site={}, job_id={}, enabled={:?}, interval={:?}",
+        site_address,
+        job_id,
+        patch.enabled,
+        patch.interval
+    );
+
+    let config = AppConfig::load_or_default(&config_path.to_path_buf());
+    let site = config
+        .mycart_sites
+        .iter()
+        .find(|s| s.site_address == site_address)
+        .ok_or_else(|| anyhow::anyhow!("Mycart site not found"))?;
+
+    let jwt_token = site
+        .jwt_token
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No JWT token - site needs re-authentication"))?;
+
+    patch_crontab_job(site_address, jwt_token, job_id, patch).await
 }
 
 /// Resolve platform for a mycart site
@@ -532,7 +592,7 @@ pub async fn set_crontab_enabled(
     jwt_token: &str,
     job_id: &str,
     enabled: bool,
-) -> Result<mycart::CrontabJob> {
+) -> Result<()> {
     let patch = mycart::CrontabPatch {
         enabled: Some(enabled),
         interval: None,
@@ -550,7 +610,7 @@ pub async fn set_crontab_interval(
     jwt_token: &str,
     job_id: &str,
     interval: &str,
-) -> Result<mycart::CrontabJob> {
+) -> Result<()> {
     // Validate cron expression client-side first
     validate_cron(interval).context("Invalid cron expression format")?;
 
@@ -562,6 +622,36 @@ pub async fn set_crontab_interval(
     mycart::patch_crontab(site_address, jwt_token, job_id, patch)
         .await
         .context("Failed to update crontab job interval")
+}
+
+/// Update crontab job with generic patch (enabled and/or interval)
+pub async fn patch_crontab_job(
+    site_address: &str,
+    jwt_token: &str,
+    job_id: &str,
+    patch: mycart::CrontabPatch,
+) -> Result<()> {
+    log::info!(
+        "patch_crontab_job: Calling PATCH API for site={}, job_id={}",
+        site_address,
+        job_id
+    );
+
+    // Validate cron expression if provided
+    if let Some(ref interval) = patch.interval {
+        validate_cron(interval).context("Invalid cron expression format")?;
+    }
+
+    let result = mycart::patch_crontab(site_address, jwt_token, job_id, patch)
+        .await
+        .context("Failed to update crontab job");
+
+    match &result {
+        Ok(()) => log::info!("patch_crontab_job: PATCH succeeded"),
+        Err(e) => log::error!("patch_crontab_job: PATCH failed - {}", e),
+    }
+
+    result
 }
 
 #[cfg(test)]
