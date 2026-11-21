@@ -122,14 +122,15 @@ impl FirewallDialog {
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 8.0;
 
-                                if ui.small_button("Edit").clicked() {
+                                if ui.add(MaterialButton::filled("Edit").small()).clicked() {
                                     if let Ok(mut edit) = edit_idx_clone.lock() {
                                         *edit = Some(idx);
                                     }
                                 }
 
-                                if ui.small_button("Delete").clicked() {
-                                    if let Ok(mut delete) = delete_idx_clone.lock() {
+                                let delete_idx_clone2 = Arc::clone(&delete_idx_clone);
+                                if ui.add(MaterialButton::filled("Delete").small()).clicked() {
+                                    if let Ok(mut delete) = delete_idx_clone2.lock() {
                                         *delete = Some(idx);
                                     }
                                 }

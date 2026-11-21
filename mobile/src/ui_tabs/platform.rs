@@ -2138,7 +2138,8 @@ impl PlatformTab {
                     .add(MaterialButton::filled(tr!("platform-button-add")))
                     .clicked()
                 {
-                    self.add_platform_dialog.open = true;
+                    self.wizard_dialog_open = true;
+                    self.wizard_current_step = 0;
                     self.add_platform_dialog.platform_type = "gcp".to_string();
                 }
                 ui.add_space(8.0);
@@ -2210,30 +2211,11 @@ impl PlatformTab {
             }
 
             // Re-authenticate action (when OAuth token refresh fails)
-            if let Some(platform_name) =
+            // TODO: Implement reauth via wizard
+            if let Some(_platform_name) =
                 ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_reauth")))
             {
-                // Open Add Platform dialog in re-auth mode
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
-                        if let Some(platform) = app_config
-                            .platforms
-                            .iter()
-                            .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
-                        {
-                            self.add_platform_dialog.reauth_mode = true;
-                            self.add_platform_dialog.existing_project_id = platform_name.clone();
-                            self.add_platform_dialog.platform_type = "gcp".to_string();
-                            self.add_platform_dialog.open = true;
-                            dure_info!(
-                                "Opening re-authentication dialog for project: {}",
-                                platform_name
-                            );
-                        }
-                    }
-                }
-
+                dure_warn!("Re-authentication not yet implemented via wizard");
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("platform_action_reauth")));
             }
 
@@ -2505,25 +2487,6 @@ impl PlatformTab {
                 }
             }
 
-            match self.add_platform_dialog.show(ui.ctx()) {
-                crate::ui_dlg::platform::AddPlatformAction::Connect => {
-                    self.start_add_platform_oauth();
-                }
-                crate::ui_dlg::platform::AddPlatformAction::Add {
-                    platform_type,
-                    project_id,
-                    oauth_result,
-                } => {
-                    self.handle_add_platform(
-                        current_profile,
-                        platform_type,
-                        project_id,
-                        oauth_result,
-                        vm.as_deref_mut(),
-                    );
-                }
-                _ => {}
-            }
         }
 
         // Add Platform Wizard
