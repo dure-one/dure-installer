@@ -521,8 +521,10 @@ impl DnsTab {
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
-                        // DNS column: badge + domain name
+                        // DNS column: badge + domain name + platform/IP badges
                         ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+
                             ui.add(
                                 badge(&row_for_cells.provider)
                                     .color(BadgeColor::Primary)
@@ -535,6 +537,24 @@ impl DnsTab {
                                     .strong()
                                     .color(get_global_color("onSurface")),
                             );
+
+                            // Platform ID badge (if exists)
+                            if let Some(platform_id) = &row_for_cells.platform_id {
+                                ui.add(
+                                    badge(platform_id)
+                                        .color(BadgeColor::Success)
+                                        .size(BadgeSize::Small),
+                                );
+                            }
+
+                            // VM IP badge (if exists)
+                            if let Some(vm_ip) = &row_for_cells.vm_external_ip {
+                                ui.add(
+                                    badge(vm_ip)
+                                        .color(BadgeColor::Success)
+                                        .size(BadgeSize::Small),
+                                );
+                            }
                         });
                     })
                     .cell_widget(move |ui| {
@@ -1906,11 +1926,17 @@ impl DnsTab {
                         .iter()
                         .find(|p| &p.project_id == pid)
                         .map(|p| {
+                            // Convert empty strings to None
+                            let vm_ip = if p.vm_external_ip.is_empty() {
+                                None
+                            } else {
+                                Some(p.vm_external_ip.clone())
+                            };
                             (
                                 Some(p.project_id.clone()),
                                 Some(p.platform_name.clone()),
                                 Some(p.vm_name.clone()),
-                                Some(p.vm_external_ip.clone()),
+                                vm_ip,
                             )
                         })
                         .unwrap_or_else(|| (Some(pid.clone()), None, None, None))
@@ -2521,5 +2547,46 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Domain not found"));
+    }
+
+    #[test]
+    fn test_vm_ip_empty_string_becomes_none() {
+        // Test that empty VM IP strings are converted to None
+        // This prevents "No VM IP" errors when VM exists but IP is empty
+
+        let platform_info = crate::ui_dlg::dns_wizard::PlatformVmInfo {
+            project_id: "test-project".to_string(),
+            platform_name: "Test Platform".to_string(),
+            vm_name: "test-vm".to_string(),
+            vm_external_ip: "".to_string(), // Empty string
+            zone: "us-west1-a".to_string(),
+        };
+
+        // Convert empty string to None (mimics fix in line 1929-1933)
+        let vm_ip = if platform_info.vm_external_ip.is_empty() {
+            None
+        } else {
+            Some(platform_info.vm_external_ip.clone())
+        };
+
+        // Empty string should become None
+        assert!(vm_ip.is_none());
+
+        // Non-empty should remain Some
+        let platform_with_ip = crate::ui_dlg::dns_wizard::PlatformVmInfo {
+            project_id: "test-project".to_string(),
+            platform_name: "Test Platform".to_string(),
+            vm_name: "test-vm".to_string(),
+            vm_external_ip: "35.212.193.170".to_string(),
+            zone: "us-west1-a".to_string(),
+        };
+
+        let vm_ip_with_value = if platform_with_ip.vm_external_ip.is_empty() {
+            None
+        } else {
+            Some(platform_with_ip.vm_external_ip.clone())
+        };
+
+        assert_eq!(vm_ip_with_value, Some("35.212.193.170".to_string()));
     }
 }

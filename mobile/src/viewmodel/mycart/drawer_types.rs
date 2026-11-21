@@ -106,12 +106,12 @@ pub struct DrawerState {
     // Phase 5: Installer logs (stdout filtered by site, like platform)
     pub logs: Vec<String>,
     pub logs_loading: bool,
-    // Phase 5: SSH server logs (3 services)
-    pub mycart_logs: Vec<String>,
+    // Phase 5: SSH server logs (3 services) - per-file storage
+    pub mycart_logs: std::collections::HashMap<String, Vec<String>>,
     pub mycart_loading: bool,
-    pub xmppproxy_logs: Vec<String>,
+    pub xmppproxy_logs: std::collections::HashMap<String, Vec<String>>,
     pub xmppproxy_loading: bool,
-    pub fail2banrs_logs: Vec<String>,
+    pub fail2banrs_logs: std::collections::HashMap<String, Vec<String>>,
     pub fail2banrs_loading: bool,
 }
 
@@ -126,11 +126,11 @@ impl Default for DrawerState {
             crontab_error: None,
             logs: Vec::new(),
             logs_loading: false,
-            mycart_logs: Vec::new(),
+            mycart_logs: std::collections::HashMap::new(),
             mycart_loading: false,
-            xmppproxy_logs: Vec::new(),
+            xmppproxy_logs: std::collections::HashMap::new(),
             xmppproxy_loading: false,
-            fail2banrs_logs: Vec::new(),
+            fail2banrs_logs: std::collections::HashMap::new(),
             fail2banrs_loading: false,
         }
     }
@@ -143,15 +143,17 @@ mod tests {
     #[test]
     fn test_drawer_tab_enum() {
         assert_eq!(DrawerTab::Status.to_index(), 0);
-        assert_eq!(DrawerTab::Operations.to_index(), 1);
-        assert_eq!(DrawerTab::Mycart.to_index(), 2);
-        assert_eq!(DrawerTab::XMPPProxy.to_index(), 3);
-        assert_eq!(DrawerTab::Fail2BanRS.to_index(), 4);
+        assert_eq!(DrawerTab::Logs.to_index(), 1);
+        assert_eq!(DrawerTab::Operations.to_index(), 2);
+        assert_eq!(DrawerTab::Mycart.to_index(), 3);
+        assert_eq!(DrawerTab::XMPPProxy.to_index(), 4);
+        assert_eq!(DrawerTab::Fail2BanRS.to_index(), 5);
         assert_eq!(DrawerTab::from_index(0), DrawerTab::Status);
-        assert_eq!(DrawerTab::from_index(1), DrawerTab::Operations);
-        assert_eq!(DrawerTab::from_index(2), DrawerTab::Mycart);
-        assert_eq!(DrawerTab::from_index(3), DrawerTab::XMPPProxy);
-        assert_eq!(DrawerTab::from_index(4), DrawerTab::Fail2BanRS);
+        assert_eq!(DrawerTab::from_index(1), DrawerTab::Logs);
+        assert_eq!(DrawerTab::from_index(2), DrawerTab::Operations);
+        assert_eq!(DrawerTab::from_index(3), DrawerTab::Mycart);
+        assert_eq!(DrawerTab::from_index(4), DrawerTab::XMPPProxy);
+        assert_eq!(DrawerTab::from_index(5), DrawerTab::Fail2BanRS);
         assert_eq!(DrawerTab::from_index(99), DrawerTab::Status); // Default
     }
 
@@ -164,6 +166,8 @@ mod tests {
         assert!(state.crontab_jobs.is_empty());
         assert!(!state.crontab_loading);
         assert!(state.crontab_error.is_none());
+        assert!(state.logs.is_empty());
+        assert!(!state.logs_loading);
         assert!(state.mycart_logs.is_empty());
         assert!(!state.mycart_loading);
         assert!(state.xmppproxy_logs.is_empty());
@@ -175,11 +179,12 @@ mod tests {
     #[test]
     fn test_drawer_tab_all() {
         let tabs = DrawerTab::all();
-        assert_eq!(tabs.len(), 5);
+        assert_eq!(tabs.len(), 6);
         assert_eq!(tabs[0], DrawerTab::Status);
-        assert_eq!(tabs[1], DrawerTab::Operations);
-        assert_eq!(tabs[2], DrawerTab::Mycart);
-        assert_eq!(tabs[3], DrawerTab::XMPPProxy);
-        assert_eq!(tabs[4], DrawerTab::Fail2BanRS);
+        assert_eq!(tabs[1], DrawerTab::Logs);
+        assert_eq!(tabs[2], DrawerTab::Operations);
+        assert_eq!(tabs[3], DrawerTab::Mycart);
+        assert_eq!(tabs[4], DrawerTab::XMPPProxy);
+        assert_eq!(tabs[5], DrawerTab::Fail2BanRS);
     }
 }

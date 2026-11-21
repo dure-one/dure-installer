@@ -491,31 +491,11 @@ impl SshActor {
             SshCommand::CheckDocker { host, profile_kdbx } => {
                 self.handle_check_docker(host, profile_kdbx).await
             }
-            SshCommand::InstallDockerDaemon {
-                host,
-                profile_kdbx: _,
-            } => {
-                self.send_event(SshEvent::DockerInstallCompleted {
-                    host: host.clone(),
-                    success: false,
-                    error: Some("Not implemented".to_string()),
-                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Docker),
-                })
-                .await;
-                Ok(())
+            SshCommand::InstallDockerDaemon { host, profile_kdbx } => {
+                self.handle_install_docker_daemon(host, profile_kdbx).await
             }
-            SshCommand::RemoveDocker {
-                host,
-                profile_kdbx: _,
-            } => {
-                self.send_event(SshEvent::DockerRemoveCompleted {
-                    host: host.clone(),
-                    success: false,
-                    error: Some("Not implemented".to_string()),
-                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
-                })
-                .await;
-                Ok(())
+            SshCommand::RemoveDocker { host, profile_kdbx } => {
+                self.handle_remove_docker(host, profile_kdbx).await
             }
             SshCommand::CheckDure { host, profile_kdbx } => {
                 self.handle_check_dure(host, profile_kdbx).await
@@ -1388,7 +1368,7 @@ impl SshActor {
                 })
                 .await;
 
-                match docker::install_docker_daemon(&host_config).await {
+                match docker::install_docker_daemon(&host_config, None).await {
                     Ok(_) => {
                         self.send_event(SshEvent::DockerDaemonInstalled {
                             host_name: host_name.clone(),
@@ -2400,6 +2380,203 @@ impl SshActor {
             }
         }
 
+        Ok(())
+    }
+
+    async fn handle_remove_docker(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        dure_info!("[SSH::Actor] Starting handle_remove_docker for {}", host);
+
+        let log_id = self
+            .start_operation("remove_docker", &host, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "🔧 Starting Docker removal process...",
+        );
+
+        let host_config = match self.load_host_config(&host) {
+            Ok(cfg) => {
+                dure_info!("[SSH::Actor] Host config loaded for {}", host);
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Info,
+                    "✅ Host configuration loaded",
+                );
+                cfg
+            }
+            Err(e) => {
+                dure_error!("[SSH::Actor] Failed to load host config: {}", e);
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Error,
+                    &format!("❌ Failed to load host config: {}", e),
+                );
+                let _ = self
+                    .end_operation_failed("remove_docker", &host, log_id, &e)
+                    .await;
+                self.send_event(SshEvent::DockerRemoveCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+                return Ok(());
+            }
+        };
+
+        dure_info!("[SSH::Actor] Calling remove_docker_daemon for {}", host);
+        match crate::calc::docker::remove_docker_daemon(&host_config, profile_kdbx.as_ref()).await {
+            Ok(progress) => {
+                dure_info!(
+                    "[SSH::Actor] remove_docker_daemon succeeded with {} progress messages",
+                    progress.len()
+                );
+                // Log each progress message
+                for msg in &progress {
+                    dure_info!("[SSH::Actor] Progress: {}", msg);
+                    self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, msg);
+                }
+
+                let _ = self
+                    .end_operation_success("remove_docker", &host, log_id)
+                    .await;
+                self.send_event(SshEvent::DockerRemoveCompleted {
+                    host: host.clone(),
+                    success: true,
+                    error: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+            }
+            Err(e) => {
+                dure_error!("[SSH::Actor] remove_docker_daemon failed: {}", e);
+                // Log the detailed error
+                let error_msg = format!("❌ Docker removal failed: {}", e);
+                self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, &error_msg);
+
+                let _ = self
+                    .end_operation_failed("remove_docker", &host, log_id, &e)
+                    .await;
+                self.send_event(SshEvent::DockerRemoveCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+            }
+        }
+
+        dure_info!("[SSH::Actor] handle_remove_docker completed for {}", host);
+        Ok(())
+    }
+
+    async fn handle_install_docker_daemon(
+        &mut self,
+        host: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        dure_info!(
+            "[SSH::Actor] Starting handle_install_docker_daemon for {}",
+            host
+        );
+
+        let log_id = self
+            .start_operation("install_docker", &host, true)
+            .await
+            .unwrap_or(None);
+        self.log_to_tab(
+            &host,
+            crate::viewmodel::logs::LogLevel::Info,
+            "🔧 Starting Docker installation process...",
+        );
+
+        let host_config = match self.load_host_config(&host) {
+            Ok(cfg) => {
+                dure_info!("[SSH::Actor] Host config loaded for {}", host);
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Info,
+                    "✅ Host configuration loaded",
+                );
+                cfg
+            }
+            Err(e) => {
+                dure_error!("[SSH::Actor] Failed to load host config: {}", e);
+                self.log_to_tab(
+                    &host,
+                    crate::viewmodel::logs::LogLevel::Error,
+                    &format!("❌ Failed to load host config: {}", e),
+                );
+                let _ = self
+                    .end_operation_failed("install_docker", &host, log_id, &e)
+                    .await;
+                self.send_event(SshEvent::DockerInstallCompleted {
+                    host,
+                    success: false,
+                    error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+                return Ok(());
+            }
+        };
+
+        dure_info!("[SSH::Actor] Calling install_docker_daemon for {}", host);
+        match crate::calc::docker::install_docker_daemon(&host_config, profile_kdbx.as_ref()).await
+        {
+            Ok(progress) => {
+                dure_info!(
+                    "[SSH::Actor] install_docker_daemon succeeded with {} progress messages",
+                    progress.len()
+                );
+                // Log each progress message
+                for msg in &progress {
+                    dure_info!("[SSH::Actor] Progress: {}", msg);
+                    self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Info, msg);
+                }
+
+                let _ = self
+                    .end_operation_success("install_docker", &host, log_id)
+                    .await;
+                self.send_event(SshEvent::DockerInstallCompleted {
+                    host: host.clone(),
+                    success: true,
+                    error: None,
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+            }
+            Err(e) => {
+                dure_error!("[SSH::Actor] install_docker_daemon failed: {}", e);
+                // Log the detailed error
+                let error_msg = format!("❌ Docker installation failed: {}", e);
+                self.log_to_tab(&host, crate::viewmodel::logs::LogLevel::Error, &error_msg);
+
+                let _ = self
+                    .end_operation_failed("install_docker", &host, log_id, &e)
+                    .await;
+                self.send_event(SshEvent::DockerInstallCompleted {
+                    host: host.clone(),
+                    success: false,
+                    error: Some(e.to_string()),
+                    focus_tab: Some(crate::viewmodel::ssh::DrawerTab::Logs),
+                })
+                .await;
+            }
+        }
+
+        dure_info!(
+            "[SSH::Actor] handle_install_docker_daemon completed for {}",
+            host
+        );
         Ok(())
     }
 

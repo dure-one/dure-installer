@@ -1796,6 +1796,8 @@ impl PlatformTab {
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
                         ui.vertical(|ui| {
+                            ui.spacing_mut().item_spacing.y = 2.0;
+
                             ui.add(
                                 badge(&row_for_cells.platform_type)
                                     .color(BadgeColor::Primary)
@@ -1809,11 +1811,10 @@ impl PlatformTab {
                                     .color(get_global_color("onSurface")),
                             );
 
-                            // Display domain badge if bound
-                            if let Some(domain) = &row_for_cells.bound_domain {
-                                ui.add_space(4.0);
+                            // Display VM IP badge if bound
+                            if let Some(vm_ip) = &row_for_cells.vm_external_ip {
                                 ui.add(
-                                    badge(domain)
+                                    badge(vm_ip)
                                         .color(BadgeColor::Success)
                                         .size(BadgeSize::Small),
                                 );

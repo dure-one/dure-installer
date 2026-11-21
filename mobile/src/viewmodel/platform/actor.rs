@@ -134,8 +134,14 @@ impl PlatformActor {
                 zone,
                 external_ip,
             } => {
-                self.check_vm_static_ip(profile_config_path, platform_name, vm_name, zone, external_ip)
-                    .await
+                self.check_vm_static_ip(
+                    profile_config_path,
+                    platform_name,
+                    vm_name,
+                    zone,
+                    external_ip,
+                )
+                .await
             }
             PlatformCommand::RestartVM {
                 profile_config_path,
@@ -2093,7 +2099,12 @@ impl PlatformActor {
                 .await;
 
             // Get valid access token (refreshes if expired) from profile config
-            match Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await {
+            match Self::get_valid_access_token_from_config(
+                &platform_name,
+                profile_config_path.clone(),
+            )
+            .await
+            {
                 Ok((token, _)) => Some(token),
                 Err(e) => {
                     // If token refresh fails (e.g., expired refresh token), we can still

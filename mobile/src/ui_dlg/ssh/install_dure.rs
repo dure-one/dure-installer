@@ -7,6 +7,7 @@ use crate::{dure_debug, dure_error, dure_info};
 use eframe::egui;
 use egui_i18n::tr;
 use egui_material3::{dialog, select, MaterialButton, MaterialInput, SelectVariant};
+use std::cell::Cell;
 
 /// Install Dure wizard dialog
 pub struct InstallDure {
@@ -192,7 +193,15 @@ impl InstallDure {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("install_dure_dialog", &title, &mut open)
+        // Button state tracking
+        let close_clicked = Cell::new(false);
+        let reset_clicked = Cell::new(false);
+        let install_clicked = Cell::new(false);
+
+        // Clone step before closure to avoid borrow issues
+        let current_step = self.state.step.clone();
+
+        let mut builder = dialog("install_dure_dialog", &title, &mut open)
             .min_width(350.0)
             .max_width(window_width - 120.0)
             .max_height(window_height - 120.0)
@@ -208,12 +217,51 @@ impl InstallDure {
                     InstallStep::Complete => self.render_complete(ui),
                     InstallStep::Error(e) => self.render_error(ui, &e),
                 }
-                ui.add_space(16.0);
-                self.render_buttons(ui);
-            })
-            .show(ctx);
+            });
+
+        // Conditional buttons based on state
+        if matches!(current_step, InstallStep::ConfigEdit) {
+            builder = builder.action(tr!("install"), || {
+                install_clicked.set(true);
+            });
+        }
+
+        if matches!(
+            current_step,
+            InstallStep::Complete | InstallStep::Error(_)
+        ) {
+            builder = builder.action("Reset", || {
+                reset_clicked.set(true);
+            });
+        }
+
+        builder = builder.primary_action(tr!("close"), || {
+            close_clicked.set(true);
+        });
+
+        builder.show(ctx);
 
         self.state.should_close = !open;
+
+        // Handle button clicks
+        if close_clicked.get() {
+            self.state.should_close = true;
+            ctx.request_repaint();
+        }
+
+        if reset_clicked.get() {
+            self.state.reset();
+            self.state.start_fetch_tags();
+            ctx.request_repaint();
+        }
+
+        if install_clicked.get() {
+            // Sync form to editor before install
+            if self.state.active_tab == 0 {
+                self.state.sync_form_to_editor();
+            }
+            self.state.pending_install = true;
+        }
 
         // Handle deferred install action (after dialog to avoid closure borrow issues)
         if self.state.pending_install {
@@ -490,50 +538,6 @@ impl InstallDure {
         });
     }
 
-    fn render_buttons(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // Close button (always available, always works)
-                if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
-                    self.state.should_close = true;
-                    ui.ctx().request_repaint();
-                }
-
-                // Done button (prominent in Complete state)
-                if matches!(self.state.step, InstallStep::Complete) {
-                    if ui.add(MaterialButton::filled("Done")).clicked() {
-                        self.state.should_close = true;
-                        ui.ctx().request_repaint();
-                    }
-                }
-
-                // Reset button
-                if matches!(
-                    self.state.step,
-                    InstallStep::Complete | InstallStep::Error(_)
-                ) {
-                    if ui.add(MaterialButton::filled("Reset")).clicked() {
-                        self.state.reset();
-                        self.state.start_fetch_tags();
-                        ui.ctx().request_repaint();
-                    }
-                }
-
-                // Install button (only in ConfigEdit step)
-                if matches!(self.state.step, InstallStep::ConfigEdit) {
-                    if ui.add(MaterialButton::filled(tr!("install"))).clicked() {
-                        // Sync form to editor before install
-                        if self.state.active_tab == 0 {
-                            self.state.sync_form_to_editor();
-                        }
-
-                        // Set flag to trigger install after dialog (avoids closure borrow issues)
-                        self.state.pending_install = true;
-                    }
-                }
-            });
-        });
-    }
 
     /// Update env fields when ACME provider changes
     fn update_env_fields_for_provider(&mut self) {

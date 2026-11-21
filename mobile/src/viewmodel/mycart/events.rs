@@ -15,20 +15,20 @@ pub enum MycartEvent {
         logs: Vec<String>,
     },
 
-    // Phase 5: SSH server log events
+    // Phase 5: SSH server log events (per-file storage)
     MycartLogsLoaded {
         site_address: String,
-        logs: Vec<String>,
+        logs: std::collections::HashMap<String, Vec<String>>,
     },
 
     XMPPProxyLogsLoaded {
         site_address: String,
-        logs: Vec<String>,
+        logs: std::collections::HashMap<String, Vec<String>>,
     },
 
     Fail2BanRSLogsLoaded {
         site_address: String,
-        logs: Vec<String>,
+        logs: std::collections::HashMap<String, Vec<String>>,
     },
 
     // Phase 5: Operations event

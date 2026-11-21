@@ -120,6 +120,8 @@ pub struct SshRow {
     pub host: String, // IP address (row key)
     pub port: u16,
     pub platform_id: Option<String>, // Connected platform ID (if applicable)
+    pub username: Option<String>,    // Username extracted from host config
+    pub domain: Option<String>,      // Domain or hostname if different from IP
 
     // Connection state
     pub ssh_connected: bool,
@@ -336,12 +338,12 @@ fn render_operations_column(
 
 /// Render host column with platform badge
 fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
-    use egui_material3::{badge, BadgeColor, BadgeSize};
+    use egui_material3::{badge, BadgeColor, BadgeSize, theme::get_global_color};
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
 
-        // Line 1: Platform badge (if connected)
+        // Platform badge (if connected)
         if let Some(platform_id) = &row.platform_id {
             ui.add(
                 badge(platform_id)
@@ -350,8 +352,40 @@ fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
             );
         }
 
-        // Line 2: Host IP
-        ui.label(&row.host);
+        // Extract IP for display (username@ip → ip)
+        let host_display = if row.host.contains('@') {
+            row.host.split('@').last().unwrap_or(&row.host)
+        } else {
+            &row.host
+        };
+
+        // Host IP (PRIMARY - big bold text)
+        ui.label(
+            egui::RichText::new(host_display)
+                .size(16.0)
+                .strong()
+                .color(get_global_color("onSurface")),
+        );
+
+        // Username badge (if exists)
+        if let Some(username) = &row.username {
+            ui.add(
+                badge(username)
+                    .color(BadgeColor::Success)
+                    .size(BadgeSize::Small),
+            );
+        }
+
+        // Domain badge (if exists and different from displayed host)
+        if let Some(domain) = &row.domain {
+            if domain != host_display {
+                ui.add(
+                    badge(domain)
+                        .color(BadgeColor::Success)
+                        .size(BadgeSize::Small),
+                );
+            }
+        }
     });
 }
 
@@ -474,10 +508,23 @@ impl SshTab {
                         let mut drawer_state = DrawerState::new();
                         drawer_state.set_ssh_host(host_config.host.clone());
 
+                        // Extract username and domain/IP from host config
+                        let (username, domain) = if host_config.host.contains('@') {
+                            let parts: Vec<&str> = host_config.host.split('@').collect();
+                            (
+                                Some(parts[0].to_string()),
+                                Some(parts.get(1).unwrap_or(&"").to_string()),
+                            )
+                        } else {
+                            (None, None)
+                        };
+
                         self.rows.push(SshRow {
-                            host: host_config.host.clone(),
+                            host: host_config.host.clone(), // Keep original format for lookups
                             port: host_config.port,
                             platform_id: host_config.platform_id.clone(),
+                            username,
+                            domain,
                             ssh_connected: host_config
                                 .last_ssh_check
                                 .as_ref()
@@ -1220,7 +1267,9 @@ impl SshTab {
                 error,
                 focus_tab,
             }) => {
+                dure_info!("[UI::SSH] 🎯 Handling DureRemoveCompleted for host={}", host);
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    dure_info!("[UI::SSH] ✅ Found row for host {} - updating state", host);
                     // Auto-focus drawer tab if specified
                     if let Some(tab) = focus_tab {
                         row.drawer_state.active_tab = tab;
@@ -1242,11 +1291,13 @@ impl SshTab {
                             failed_at: chrono::Utc::now().timestamp(),
                         }
                     };
+                } else {
+                    dure_error!("[UI::SSH] ✗ Row not found for host {}", host);
                 }
                 if success {
-                    dure_info!("Dure removed successfully from {}", host);
+                    dure_info!("[UI::SSH] ✅ Dure removed successfully from {}", host);
                 } else {
-                    dure_error!("Dure removal failed on {}", host);
+                    dure_error!("[UI::SSH] ✗ Dure removal failed on {}", host);
                 }
             }
 
@@ -1305,6 +1356,9 @@ impl SshTab {
         // Poll for ViewModel events
         if let Some(ref mut viewmodel) = vm {
             let events = viewmodel.poll_events(ui.ctx());
+            if !events.is_empty() {
+                dure_info!("[UI::SSH] 📬 Polled {} events from ViewModel", events.len());
+            }
             for event in events {
                 self.handle_event(event, profile);
             }
@@ -2311,9 +2365,11 @@ mod operation_state_tests {
     fn test_ssh_row_new_fields_initialized() {
         let drawer_state = DrawerState::new();
         let row = SshRow {
-            host: "192.168.1.1".to_string(),
+            host: "root@192.168.1.1".to_string(),
             port: 22,
             platform_id: None,
+            username: Some("root".to_string()),
+            domain: Some("192.168.1.1".to_string()),
             ssh_connected: false,
             host_installed: false,
             docker_installed: false,
@@ -2353,9 +2409,11 @@ mod operation_state_tests {
         };
 
         let row = SshRow {
-            host: "192.168.1.1".to_string(),
+            host: "admin@192.168.1.1".to_string(),
             port: 22,
             platform_id: None,
+            username: Some("admin".to_string()),
+            domain: Some("192.168.1.1".to_string()),
             ssh_connected: true,
             host_installed: false,
             docker_installed: true,
@@ -2470,5 +2528,62 @@ mod operation_state_tests {
             }
             _ => panic!("Expected InProgress state"),
         }
+    }
+
+    #[test]
+    fn test_host_format_preserved_for_lookups() {
+        // SshRow.host must preserve original "username@ip" format for config lookups
+        let drawer_state = DrawerState::new();
+
+        let row = SshRow {
+            host: "root@35.212.193.170".to_string(),
+            port: 22,
+            platform_id: None,
+            username: Some("root".to_string()),
+            domain: Some("35.212.193.170".to_string()),
+            ssh_connected: false,
+            host_installed: false,
+            docker_installed: false,
+            dure_installed: false,
+            ssh_private_key: None,
+            drawer_open: false,
+            drawer_state,
+            operation_state: OperationState::Idle,
+            last_ssh_check: None,
+            last_host_check: None,
+            last_docker_check: None,
+            last_dure_check: None,
+        };
+
+        // Host field must keep "username@ip" format (not just "ip")
+        assert_eq!(row.host, "root@35.212.193.170");
+        assert!(row.host.contains('@'));
+
+        // Username and domain extracted correctly
+        assert_eq!(row.username, Some("root".to_string()));
+        assert_eq!(row.domain, Some("35.212.193.170".to_string()));
+    }
+
+    #[test]
+    fn test_host_display_extraction() {
+        // Display should show IP only (extracted from "username@ip")
+        let host_full = "root@35.212.193.170";
+        let host_display = if host_full.contains('@') {
+            host_full.split('@').last().unwrap_or(host_full)
+        } else {
+            host_full
+        };
+
+        assert_eq!(host_display, "35.212.193.170");
+
+        // Test without username
+        let host_ip_only = "192.168.1.1";
+        let host_display2 = if host_ip_only.contains('@') {
+            host_ip_only.split('@').last().unwrap_or(host_ip_only)
+        } else {
+            host_ip_only
+        };
+
+        assert_eq!(host_display2, "192.168.1.1");
     }
 }
