@@ -16,7 +16,7 @@ use crate::config::{AppConfig, CloudPlatformConfig};
 use crate::ui_dlg::platform::{
     AddFirewallDialog, AddPlatformDialog, BillingDialog, BindVmDialog, DeleteFirewallConfirmDialog,
     DeletePlatformConfirmDialog, DeleteVmDialog, FirewallDialog, PlatformErrorDialog,
-    SelectProjectDialog,
+    RestartVmConfirmDialog, SelectProjectDialog,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -307,6 +307,10 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     delete_firewall_confirm_dialog: DeleteFirewallConfirmDialog,
 
+    /// Restart VM confirm dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    restart_vm_confirm_dialog: RestartVmConfirmDialog,
+
     // SSH connection test state (per platform)
     #[cfg_attr(feature = "serde", serde(skip))]
     ssh_test_promises: std::collections::HashMap<
@@ -364,6 +368,7 @@ impl Default for PlatformTab {
             firewall_dialog: FirewallDialog::new(),
             add_firewall_dialog: AddFirewallDialog::new(),
             delete_firewall_confirm_dialog: DeleteFirewallConfirmDialog::new(),
+            restart_vm_confirm_dialog: RestartVmConfirmDialog::new(),
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
@@ -2384,16 +2389,7 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_restart_vm")))
                 {
-                    // Optimistic update
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform_name)
-                    {
-                        row.operation_state = OperationState::InProgress {
-                            operation: "Restarting VM".to_string(),
-                            started_at: chrono::Utc::now().timestamp(),
-                        };
-                    }
-
-                    // Find platform and get vm_name and zone
+                    // Find platform and get vm_name to show confirmation
                     if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
                         if let Some(platform) = app_config
                             .platforms
@@ -2401,12 +2397,10 @@ impl PlatformTab {
                             .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                         {
                             if let Some(vm_config) = platform.vms.first() {
-                                self.restart_vm(
-                                    current_profile,
-                                    platform_name.clone(),
+                                dure_info!("Restart VM button clicked for '{}' - showing confirmation", vm_config.name);
+                                self.restart_vm_confirm_dialog.open(
                                     vm_config.name.clone(),
-                                    vm_config.zone.clone(),
-                                    vm.as_deref_mut(),
+                                    platform_name.clone(),
                                 );
                             }
                         }
@@ -2553,8 +2547,8 @@ impl PlatformTab {
             _ => {}
         }
 
-        // Firewall dialog (skip if Add/Edit is open to maintain z-order)
-        if self.firewall_dialog.open && !self.add_firewall_dialog.open {
+        // Firewall dialog (skip if Add/Edit or Delete confirmation is open to maintain z-order)
+        if self.firewall_dialog.open && !self.add_firewall_dialog.open && !self.delete_firewall_confirm_dialog.open {
             match self.firewall_dialog.show(ui.ctx()) {
                 crate::ui_dlg::platform::FirewallAction::AddIp => {
                     self.handle_firewall_add_ip(current_profile, vm.as_deref_mut());
@@ -2611,6 +2605,44 @@ impl PlatformTab {
                     rule_idx,
                     vm.as_deref_mut(),
                 );
+            }
+            _ => {}
+        }
+
+        // Restart VM confirmation dialog
+        match self.restart_vm_confirm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::RestartVmConfirmAction::Restart {
+                vm_name,
+                platform,
+            } => {
+                dure_info!("Restart confirmed for VM '{}' on platform '{}'", vm_name, platform);
+
+                // Optimistic update
+                if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform) {
+                    row.operation_state = OperationState::InProgress {
+                        operation: "Restarting VM".to_string(),
+                        started_at: chrono::Utc::now().timestamp(),
+                    };
+                }
+
+                // Get zone and restart
+                if let Ok((app_config, _)) = load_config(&Some(current_profile.clone())) {
+                    if let Some(plat) = app_config
+                        .platforms
+                        .iter()
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform))
+                    {
+                        if let Some(vm_config) = plat.vms.first() {
+                            self.restart_vm(
+                                current_profile,
+                                platform,
+                                vm_name,
+                                vm_config.zone.clone(),
+                                vm.as_deref_mut(),
+                            );
+                        }
+                    }
+                }
             }
             _ => {}
         }

@@ -10,6 +10,9 @@ pub mod delete_firewall_confirm;
 pub mod delete_platform_confirm_stt;
 pub mod delete_platform_confirm;
 
+pub mod restart_vm_confirm_stt;
+pub mod restart_vm_confirm;
+
 pub mod select_project_dialog_stt;
 pub mod select_project_dialog;
 
@@ -37,6 +40,8 @@ pub use delete_firewall_confirm::*;
 pub use delete_firewall_confirm_stt::*;
 pub use delete_platform_confirm::*;
 pub use delete_platform_confirm_stt::*;
+pub use restart_vm_confirm::*;
+pub use restart_vm_confirm_stt::*;
 pub use select_project_dialog::*;
 pub use select_project_dialog_stt::*;
 pub use bind_vm_dialog::*;

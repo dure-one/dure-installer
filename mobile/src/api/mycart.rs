@@ -44,8 +44,41 @@ pub struct CrontabJob {
     pub job_id: String,
     pub name: String,
     pub enabled: bool,
+    /// Interval can be either a string or an object with a "cron" or similar field
+    #[serde(deserialize_with = "deserialize_interval")]
     pub interval: String,
     pub last_run: Option<i64>,
+}
+
+/// Custom deserializer for interval field - handles both string and object formats
+fn deserialize_interval<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    use serde_json::Value;
+
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::String(s) => Ok(s),
+        Value::Object(map) => {
+            // Try common field names for interval/cron expressions
+            if let Some(cron) = map.get("cron").and_then(|v| v.as_str()) {
+                Ok(cron.to_string())
+            } else if let Some(interval) = map.get("interval").and_then(|v| v.as_str()) {
+                Ok(interval.to_string())
+            } else if let Some(schedule) = map.get("schedule").and_then(|v| v.as_str()) {
+                Ok(schedule.to_string())
+            } else {
+                // Fallback: serialize the whole object as JSON string
+                Ok(serde_json::to_string(&map).map_err(D::Error::custom)?)
+            }
+        }
+        _ => Err(D::Error::custom(format!(
+            "expected string or object for interval, got {:?}",
+            value
+        ))),
+    }
 }
 
 /// Crontab job update patch

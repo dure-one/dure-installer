@@ -143,6 +143,9 @@ impl FirewallDialog {
                 ui.add(list);
             }
         })
+        .primary_action("Close", || {
+            // Dialog will close automatically
+        })
         .show(ctx);
 
         // Handle actions

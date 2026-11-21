@@ -398,6 +398,10 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     remove_dure_dialog: RemoveDureDialog,
 
+    /// Remove Docker confirm dialog
+    #[cfg_attr(feature = "serde", serde(skip))]
+    remove_docker_confirm_dialog: crate::ui_dlg::ssh::RemoveDockerConfirmDialog,
+
     /// Automatic refresh deadline for log updates after operations
     #[cfg_attr(feature = "serde", serde(skip))]
     refresh_until: Option<Instant>,
@@ -421,6 +425,7 @@ impl Default for SshTab {
             install_dure_domain: String::new(),
             install_dure_image_tag: "latest".to_string(),
             remove_dure_dialog: RemoveDureDialog::new(),
+            remove_docker_confirm_dialog: crate::ui_dlg::ssh::RemoveDockerConfirmDialog::new(),
             refresh_until: None,
             install_dure_dialog: None,
         }
@@ -1536,15 +1541,8 @@ impl SshTab {
                     }
                 }
                 SshAction::RemoveDocker(host) => {
-                    // Set operation state to InProgress before starting
-                    if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
-                        row.operation_state =
-                            OperationState::start(tr!("ssh-operation-remove-docker"));
-                    }
-                    if let Some(ref vm) = vm {
-                        let _ = vm.remove_docker(host.clone(), (*current_profile_kdbx).clone());
-                        dure_info!(project_id = host, "Docker removal triggered for {}", host);
-                    }
+                    dure_info!("Remove Docker button clicked for '{}' - showing confirmation", host);
+                    self.remove_docker_confirm_dialog.open(host);
                 }
                 SshAction::CheckDure(host) => {
                     // Set operation state to InProgress before starting
@@ -1714,6 +1712,25 @@ impl SshTab {
             if let Some(ref vm) = vm {
                 let _ = vm.remove_dure(host, delete_data, (*current_profile_kdbx).clone());
             }
+        }
+
+        // Remove Docker confirmation dialog
+        match self.remove_docker_confirm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::ssh::RemoveDockerConfirmAction::Remove { host } => {
+                dure_info!("Remove Docker confirmed for host '{}'", host);
+
+                // Set operation state to InProgress
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.operation_state = OperationState::start(tr!("ssh-operation-remove-docker"));
+                }
+
+                // Execute docker removal
+                if let Some(ref vm) = vm {
+                    let _ = vm.remove_docker(host.clone(), (*current_profile_kdbx).clone());
+                    dure_info!(project_id = host, "Docker removal triggered for {}", host);
+                }
+            }
+            _ => {}
         }
 
         // Handle drawer tab switch
