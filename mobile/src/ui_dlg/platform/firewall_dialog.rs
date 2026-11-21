@@ -3,8 +3,9 @@ use crate::ui_tabs::platform::FirewallRule;
 use crate::viewmodel::platform::FullFirewallRule;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{dialog, MaterialButton};
+use egui_material3::{dialog, list::ListItem, list::MaterialList, MaterialButton};
 use std::cell::Cell;
+use std::sync::{Arc, Mutex};
 
 impl FirewallDialog {
     pub fn new() -> Self {
@@ -49,8 +50,8 @@ impl FirewallDialog {
 
         let add_requested = Cell::new(false);
         let reset_requested = Cell::new(false);
-        let edit_idx = Cell::new(None::<usize>);
-        let delete_idx = Cell::new(None::<usize>);
+        let edit_idx = Arc::new(Mutex::new(None::<usize>));
+        let delete_idx = Arc::new(Mutex::new(None::<usize>));
 
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
@@ -93,50 +94,52 @@ impl FirewallDialog {
                 ui.label(format!("{} firewall rules", self.rule_list.len()));
                 ui.add_space(4.0);
 
-                // Simple scrollable list of rules
-                egui::ScrollArea::vertical()
-                    .max_height(400.0)
-                    .show(ui, |ui| {
-                        for (idx, rule) in self.rule_list.iter().enumerate() {
-                            ui.group(|ui| {
-                                ui.horizontal(|ui| {
-                                    ui.strong(&rule.name);
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        let delete_idx_clone = delete_idx.clone();
-                                        if ui.small_button("Delete").clicked() {
-                                            delete_idx_clone.set(Some(idx));
-                                        }
-                                        let edit_idx_clone = edit_idx.clone();
-                                        if ui.small_button("Edit").clicked() {
-                                            edit_idx_clone.set(Some(idx));
-                                        }
-                                    });
-                                });
+                let mut list = MaterialList::new().id("firewall_rules_list");
 
-                                ui.horizontal(|ui| {
-                                    ui.label("Direction:");
-                                    ui.label(&rule.direction);
-                                    ui.separator();
-                                    ui.label("Priority:");
-                                    ui.label(rule.priority.to_string());
-                                });
+                for (idx, rule) in self.rule_list.iter().enumerate() {
+                    // Build secondary text with rule details
+                    let mut secondary_parts = vec![
+                        format!("Direction: {} | Priority: {}", rule.direction, rule.priority)
+                    ];
 
-                                if !rule.source_ranges.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.label("Source Ranges:");
-                                        ui.label(rule.source_ranges.join(", "));
-                                    });
+                    if !rule.source_ranges.is_empty() {
+                        secondary_parts.push(format!("Sources: {}", rule.source_ranges.join(", ")));
+                    }
+
+                    if !rule.allowed.is_empty() {
+                        secondary_parts.push(format!("Allowed: {}", rule.allowed.join(", ")));
+                    }
+
+                    let secondary_text = secondary_parts.join("\n");
+
+                    // Clone Arc for use in closure
+                    let edit_idx_clone = Arc::clone(&edit_idx);
+                    let delete_idx_clone = Arc::clone(&delete_idx);
+
+                    let item = ListItem::new(&rule.name)
+                        .secondary_text(&secondary_text)
+                        .trailing_widget(move |ui| {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 8.0;
+
+                                if ui.small_button("Edit").clicked() {
+                                    if let Ok(mut edit) = edit_idx_clone.lock() {
+                                        *edit = Some(idx);
+                                    }
                                 }
 
-                                if !rule.allowed.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.label("Allowed:");
-                                        ui.label(rule.allowed.join(", "));
-                                    });
+                                if ui.small_button("Delete").clicked() {
+                                    if let Ok(mut delete) = delete_idx_clone.lock() {
+                                        *delete = Some(idx);
+                                    }
                                 }
                             });
-                        }
-                    });
+                        });
+
+                    list = list.item(item);
+                }
+
+                ui.add(list);
             }
         })
         .show(ctx);
@@ -146,41 +149,48 @@ impl FirewallDialog {
             FirewallAction::AddRule
         } else if reset_requested.get() {
             FirewallAction::Reset
-        } else if let Some(idx) = edit_idx.get() {
-            if let Some(rule) = self.rule_list.get(idx) {
-                // Convert FullFirewallRule to FirewallRule
-                let rule_data = FirewallRule {
-                    name: rule.name.clone(),
-                    network: rule.network.clone(),
-                    direction: rule.direction.clone(),
-                    priority: rule.priority,
-                    source_ranges: rule.source_ranges.clone(),
-                    dest_ranges: rule.dest_ranges.clone(),
-                    allowed: rule.allowed.clone(),
-                    denied: rule.denied.clone(),
-                    source_tags: rule.source_tags.clone(),
-                    source_service_accounts: rule.source_service_accounts.clone(),
-                    target_tags: rule.target_tags.clone(),
-                    target_service_accounts: rule.target_service_accounts.clone(),
-                };
-                FirewallAction::EditRule { rule_data, rule_idx: idx }
-            } else {
-                FirewallAction::None
-            }
-        } else if let Some(idx) = delete_idx.get() {
-            if let Some(rule) = self.rule_list.get(idx) {
-                FirewallAction::DeleteRule {
-                    rule_name: rule.name.clone(),
-                    rule_idx: Some(idx),
-                }
-            } else {
-                FirewallAction::None
-            }
-        } else if !self.open {
-            self.close();
-            FirewallAction::Close
         } else {
-            FirewallAction::None
+            // Check edit action
+            let edit_action = edit_idx.lock().ok().and_then(|mut e| e.take());
+            if let Some(idx) = edit_action {
+                if let Some(rule) = self.rule_list.get(idx) {
+                    // Convert FullFirewallRule to FirewallRule
+                    let rule_data = FirewallRule {
+                        name: rule.name.clone(),
+                        network: rule.network.clone(),
+                        direction: rule.direction.clone(),
+                        priority: rule.priority,
+                        source_ranges: rule.source_ranges.clone(),
+                        dest_ranges: rule.dest_ranges.clone(),
+                        allowed: rule.allowed.clone(),
+                        denied: rule.denied.clone(),
+                        source_tags: rule.source_tags.clone(),
+                        source_service_accounts: rule.source_service_accounts.clone(),
+                        target_tags: rule.target_tags.clone(),
+                        target_service_accounts: rule.target_service_accounts.clone(),
+                    };
+                    return FirewallAction::EditRule { rule_data, rule_idx: idx };
+                }
+            }
+
+            // Check delete action
+            let delete_action = delete_idx.lock().ok().and_then(|mut d| d.take());
+            if let Some(idx) = delete_action {
+                if let Some(rule) = self.rule_list.get(idx) {
+                    return FirewallAction::DeleteRule {
+                        rule_name: rule.name.clone(),
+                        rule_idx: Some(idx),
+                    };
+                }
+            }
+
+            // Check close
+            if !self.open {
+                self.close();
+                FirewallAction::Close
+            } else {
+                FirewallAction::None
+            }
         }
     }
 }

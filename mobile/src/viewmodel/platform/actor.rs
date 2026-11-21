@@ -74,6 +74,7 @@ impl PlatformActor {
             PlatformCommand::FetchBilling { .. } => "fetch_billing",
             PlatformCommand::DiscoverBillingTable { .. } => "discover_billing_table",
             PlatformCommand::ListProjects { .. } => "list_projects",
+            PlatformCommand::ListProjectsWithToken { .. } => "list_projects_with_token",
             PlatformCommand::SelectProject { .. } => "select_project",
             PlatformCommand::StartOAuth { .. } => "start_oauth",
             PlatformCommand::CompleteOAuth { .. } => "complete_oauth",
@@ -127,12 +128,13 @@ impl PlatformActor {
                 .await
             }
             PlatformCommand::CheckVmStaticIp {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
                 external_ip,
             } => {
-                self.check_vm_static_ip(platform_name, vm_name, zone, external_ip)
+                self.check_vm_static_ip(profile_config_path, platform_name, vm_name, zone, external_ip)
                     .await
             }
             PlatformCommand::RestartVM {
@@ -161,9 +163,13 @@ impl PlatformActor {
                 .await
             }
             PlatformCommand::UpdateFirewall {
+                profile_config_path,
                 platform_name,
                 allow_ip,
-            } => self.update_firewall(platform_name, allow_ip).await,
+            } => {
+                self.update_firewall(profile_config_path, platform_name, allow_ip)
+                    .await
+            }
             PlatformCommand::FetchFirewallRules {
                 profile_config_path,
                 platform_name,
@@ -242,11 +248,23 @@ impl PlatformActor {
                 .await
             }
             PlatformCommand::DiscoverBillingTable {
+                profile_config_path,
                 platform_name,
                 project_id,
-            } => self.discover_billing_table(platform_name, project_id).await,
-            PlatformCommand::ListProjects { platform_name } => {
-                self.list_projects(platform_name).await
+            } => {
+                self.discover_billing_table(profile_config_path, platform_name, project_id)
+                    .await
+            }
+            PlatformCommand::ListProjects {
+                profile_config_path,
+                platform_name,
+            } => self.list_projects(profile_config_path, platform_name).await,
+            PlatformCommand::ListProjectsWithToken {
+                access_token,
+                temp_platform_id,
+            } => {
+                self.list_projects_with_token(access_token, temp_platform_id)
+                    .await
             }
             PlatformCommand::SelectProject {
                 profile_config_path,
@@ -890,13 +908,15 @@ impl PlatformActor {
 
     async fn check_vm_static_ip(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
         external_ip: String,
     ) -> anyhow::Result<()> {
-        // Get access token
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        // Get access token from profile config
+        let (access_token, _) =
+            Self::get_valid_access_token_from_config(&platform_name, profile_config_path).await?;
 
         // Extract region from zone (e.g., "us-central1-a" -> "us-central1")
         let region = zone.rsplitn(2, '-').nth(1).unwrap_or(&zone).to_string();
@@ -987,6 +1007,7 @@ impl PlatformActor {
 
     async fn update_firewall(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         allow_ip: String,
     ) -> anyhow::Result<()> {
@@ -999,7 +1020,9 @@ impl PlatformActor {
             .await;
 
         // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        let (access_token, _) =
+            Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone())
+                .await?;
 
         self.send_progress("update_firewall", 0.5, "Updating firewall rules...")
             .await;
@@ -1709,11 +1732,13 @@ impl PlatformActor {
 
     async fn discover_billing_table(
         &mut self,
+        profile_config_path: PathBuf,
         platform_name: String,
         project_id: String,
     ) -> anyhow::Result<()> {
-        // Get access token from in-memory state (already validated during OAuth)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        // Get access token from profile config (already validated during OAuth)
+        let (access_token, _) =
+            Self::get_valid_access_token_from_config(&platform_name, profile_config_path).await?;
 
         // Discover billing table
         let (dataset, table) = runtime::unblock({
@@ -1734,12 +1759,17 @@ impl PlatformActor {
         Ok(())
     }
 
-    async fn list_projects(&mut self, platform_name: String) -> anyhow::Result<()> {
+    async fn list_projects(
+        &mut self,
+        profile_config_path: PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
         self.send_progress("list_projects", 0.2, "Checking authentication...")
             .await;
 
         // Get valid access token (refreshes if expired)
-        let (access_token, _) = Self::get_valid_access_token(&platform_name).await?;
+        let (access_token, _) =
+            Self::get_valid_access_token_from_config(&platform_name, profile_config_path).await?;
 
         self.send_progress("list_projects", 0.4, "Fetching GCP projects...")
             .await;
@@ -1768,6 +1798,42 @@ impl PlatformActor {
 
         self.send_event(PlatformEvent::ProjectsListed {
             platform_name,
+            projects,
+        })
+        .await;
+
+        Ok(())
+    }
+
+    async fn list_projects_with_token(
+        &mut self,
+        access_token: String,
+        temp_platform_id: String,
+    ) -> anyhow::Result<()> {
+        self.send_progress("list_projects", 0.4, "Fetching GCP projects...")
+            .await;
+
+        // Fetch projects from GCP using provided token (no config lookup)
+        let project_list = runtime::unblock({
+            move || {
+                let client = GcpRestClient::new(access_token);
+                client.list_projects(None)
+            }
+        })
+        .await?;
+
+        // Convert to (id, name) tuples
+        let projects: Vec<(String, String)> = project_list
+            .projects
+            .into_iter()
+            .map(|p| {
+                let name = p.display_name().to_string();
+                (p.id().to_string(), name)
+            })
+            .collect();
+
+        self.send_event(PlatformEvent::ProjectsListed {
+            platform_name: temp_platform_id,
             projects,
         })
         .await;
@@ -2026,8 +2092,8 @@ impl PlatformActor {
             self.send_progress("delete_platform", 0.2, "Checking authentication...")
                 .await;
 
-            // Get valid access token (refreshes if expired)
-            match Self::get_valid_access_token(&platform_name).await {
+            // Get valid access token (refreshes if expired) from profile config
+            match Self::get_valid_access_token_from_config(&platform_name, profile_config_path.clone()).await {
                 Ok((token, _)) => Some(token),
                 Err(e) => {
                     // If token refresh fails (e.g., expired refresh token), we can still

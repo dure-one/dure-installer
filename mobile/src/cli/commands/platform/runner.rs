@@ -86,11 +86,15 @@ impl PlatformCliRunner {
                 )?;
             }
             PlatformCommand::UpdateFirewall {
+                profile_config_path,
                 platform_name,
                 allow_ip,
             } => {
-                self.vm
-                    .update_firewall(platform_name.clone(), allow_ip.clone())?;
+                self.vm.update_firewall(
+                    profile_config_path.clone(),
+                    platform_name.clone(),
+                    allow_ip.clone(),
+                )?;
             }
             PlatformCommand::FetchBilling {
                 profile_config_path,
@@ -107,8 +111,12 @@ impl PlatformCliRunner {
                     table.clone(),
                 )?;
             }
-            PlatformCommand::ListProjects { platform_name } => {
-                self.vm.list_projects(platform_name.clone())?;
+            PlatformCommand::ListProjects {
+                profile_config_path,
+                platform_name,
+            } => {
+                self.vm
+                    .list_projects(profile_config_path.clone(), platform_name.clone())?;
             }
             PlatformCommand::ListVMs {
                 profile_config_path,

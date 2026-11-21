@@ -38,8 +38,10 @@ pub async fn execute_firewall_inner(
         .gcp_selected_project_id
         .as_ref()
         .ok_or_else(|| anyhow!("No GCP project selected"))?;
+    // Note: This is test code - profile_config_path not available in mock
     let event = runner
         .execute_command(PlatformCommand::UpdateFirewall {
+            profile_config_path: PathBuf::from("test_config.yml"),
             platform_name: project_id.clone(),
             allow_ip: allow_ip.clone(),
         })
@@ -83,6 +85,7 @@ pub fn execute_firewall_command(
             .ok_or_else(|| anyhow!("No GCP project selected"))?;
         let event = runner
             .execute_command(PlatformCommand::UpdateFirewall {
+                profile_config_path: profile.config_file.clone(),
                 platform_name: project_id.clone(),
                 allow_ip: allow_ip.clone(),
             })

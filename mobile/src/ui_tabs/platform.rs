@@ -1325,15 +1325,14 @@ impl PlatformTab {
                             projects.len()
                         );
 
-                        // Also populate add platform wizard list if active
+                        // Populate project lists for any open dialogs
                         if self.add_platform_dialog.open || self.wizard_dialog_open {
                             self.add_platform_dialog.project_list = projects.clone();
                         }
-
-                        // Open select project dialog with the loaded projects
-                        if !self.select_project_dialog.open {
-                            self.select_project_dialog.open(platform_name, projects);
+                        if self.select_project_dialog.open {
+                            self.select_project_dialog.project_list = projects;
                         }
+                        // Note: Don't auto-open Select Project dialog - user opens it explicitly when needed
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMsListed { platform_name, vms }) => {
                         dure_debug!("✅ VMs listed for {}: {} VMs", platform_name, vms.len());
@@ -2464,12 +2463,17 @@ impl PlatformTab {
             }
 
             // Fetch projects if OAuth succeeded and list is empty
-            if self.add_platform_dialog.connected_email.is_some()
-                && !self.add_platform_dialog.reauth_mode
-                && self.add_platform_dialog.project_list.is_empty()
-            {
-                if let Some(ref vm) = vm {
-                    let _ = vm.list_projects("temp-platform".to_string());
+            if let Some(ref oauth_result) = self.add_platform_dialog.oauth_result {
+                if self.add_platform_dialog.connected_email.is_some()
+                    && !self.add_platform_dialog.reauth_mode
+                    && self.add_platform_dialog.project_list.is_empty()
+                {
+                    if let Some(ref vm) = vm {
+                        let _ = vm.list_projects_with_token(
+                            oauth_result.access_token.clone(),
+                            "temp-platform".to_string(),
+                        );
+                    }
                 }
             }
 
@@ -3189,17 +3193,20 @@ impl PlatformTab {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok(oauth_result) => {
+                        // Clone token before clearing promise (borrow checker)
+                        let access_token = oauth_result.access_token.clone();
+
                         self.add_platform_dialog.oauth_result = Some(oauth_result.clone());
-                        // Set default connected account label (email fetch removed)
                         self.add_platform_dialog.connected_email = Some("Connected Account".to_string());
                         self.add_platform_dialog.oauth_promise = None;
 
-                        // Fetch projects
+                        // Fetch projects using OAuth token directly
                         if self.add_platform_dialog.project_list.is_empty() {
                             if let Some(ref vm) = vm {
-                                // Use temporary platform name for OAuth wizard
-                                let _ = vm.list_projects("temp-platform".to_string());
-                                // Projects will be populated via ProjectsListed event
+                                let _ = vm.list_projects_with_token(
+                                    access_token,
+                                    "temp-platform".to_string(),
+                                );
                             }
                         }
                     }
@@ -3567,6 +3574,7 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn update_firewall(
         &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -3590,7 +3598,8 @@ impl PlatformTab {
             };
 
             // Send command to ViewModel
-            if let Err(e) = vm.update_firewall(platform_name.clone(), current_ip.clone()) {
+            let config_path = get_config_path(&Some(current_profile.clone())).unwrap_or_default();
+            if let Err(e) = vm.update_firewall(config_path, platform_name.clone(), current_ip.clone()) {
                 dure_error!("Failed to send firewall update command: {}", e);
                 self.error_dialog.open(format!("Failed to start firewall update: {}", e));
             } else {
@@ -3628,6 +3637,7 @@ impl PlatformTab {
     #[cfg(not(target_arch = "wasm32"))]
     fn show_select_project_dialog(
         &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
@@ -3638,7 +3648,8 @@ impl PlatformTab {
 
         // Trigger ViewModel to fetch projects
         if let Some(vm) = vm {
-            if let Err(e) = vm.list_projects(platform_name.clone()) {
+            let config_path = get_config_path(&Some(current_profile.clone())).unwrap_or_default();
+            if let Err(e) = vm.list_projects(config_path, platform_name.clone()) {
                 self.error_dialog.open(format!("Failed to start project listing: {}", e));
                 self.select_project_dialog.loading = false;
             }
@@ -3690,7 +3701,9 @@ impl PlatformTab {
                                 dure_info!("✓ VM has external_ip: {}", external_ip);
                                 // Trigger async static IP check via actor
                                 if let Some(vm) = vm {
+                                    let config_path = get_config_path(profile).unwrap_or_default();
                                     let _ = vm.check_vm_static_ip(
+                                        config_path,
                                         platform_name.clone(),
                                         vm_name.clone(),
                                         zone.clone(),
@@ -4237,7 +4250,8 @@ impl PlatformTab {
                     project_id
                 );
                 // Trigger async discovery via actor
-                if let Err(e) = vm.discover_billing_table(project_id.clone(), project_id.clone()) {
+                let config_path = get_config_path(&Some(profile.clone())).unwrap_or_default();
+                if let Err(e) = vm.discover_billing_table(config_path, project_id.clone(), project_id.clone()) {
                     dure_error!("[BILLING] Failed to start billing discovery: {}", e);
                     // Fall back to default names
                     self.billing_dialog.dataset = "billing_export".to_string();

@@ -58,7 +58,12 @@ pub enum PlatformCommand {
 
     // Project Operations
     ListProjects {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
+    },
+    ListProjectsWithToken {
+        access_token: String,
+        temp_platform_id: String,
     },
     SelectProject {
         profile_config_path: std::path::PathBuf,
@@ -92,6 +97,7 @@ pub enum PlatformCommand {
         release_ip: Option<(String, String)>,
     },
     CheckVmStaticIp {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -113,6 +119,7 @@ pub enum PlatformCommand {
 
     // Firewall Operations
     UpdateFirewall {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         allow_ip: String,
     },
@@ -161,6 +168,7 @@ pub enum PlatformCommand {
         table: String,
     },
     DiscoverBillingTable {
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
     },

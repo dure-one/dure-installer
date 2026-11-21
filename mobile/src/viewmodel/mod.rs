@@ -426,6 +426,7 @@ impl ViewModel {
 
     pub fn check_vm_static_ip(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         vm_name: String,
         zone: String,
@@ -433,6 +434,7 @@ impl ViewModel {
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::CheckVmStaticIp {
+                profile_config_path,
                 platform_name,
                 vm_name,
                 zone,
@@ -477,9 +479,15 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn update_firewall(&self, platform_name: String, allow_ip: String) -> anyhow::Result<()> {
+    pub fn update_firewall(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+        allow_ip: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::UpdateFirewall {
+                profile_config_path,
                 platform_name,
                 allow_ip,
             })
@@ -612,11 +620,13 @@ impl ViewModel {
 
     pub fn discover_billing_table(
         &self,
+        profile_config_path: std::path::PathBuf,
         platform_name: String,
         project_id: String,
     ) -> anyhow::Result<()> {
         self.platform_tx
             .send_blocking(platform::PlatformCommand::DiscoverBillingTable {
+                profile_config_path,
                 platform_name,
                 project_id,
             })
@@ -638,9 +648,29 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn list_projects(&self, platform_name: String) -> anyhow::Result<()> {
+    pub fn list_projects(
+        &self,
+        profile_config_path: std::path::PathBuf,
+        platform_name: String,
+    ) -> anyhow::Result<()> {
         self.platform_tx
-            .send_blocking(platform::PlatformCommand::ListProjects { platform_name })
+            .send_blocking(platform::PlatformCommand::ListProjects {
+                profile_config_path,
+                platform_name,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn list_projects_with_token(
+        &self,
+        access_token: String,
+        temp_platform_id: String,
+    ) -> anyhow::Result<()> {
+        self.platform_tx
+            .send_blocking(platform::PlatformCommand::ListProjectsWithToken {
+                access_token,
+                temp_platform_id,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
