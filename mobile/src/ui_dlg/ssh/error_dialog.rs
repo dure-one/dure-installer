@@ -1,5 +1,6 @@
 pub use super::error_dialog_stt::*;
 use eframe::egui;
+use egui_i18n::tr;
 use std::cell::Cell;
 
 impl SshErrorDialog {
@@ -40,7 +41,7 @@ impl SshErrorDialog {
                 );
                 ui.add_space(12.0);
             })
-            .primary_action("OK", || {
+            .primary_action(&tr!("ok"), || {
                 ok_clicked.set(true);
             })
             .show(ctx);

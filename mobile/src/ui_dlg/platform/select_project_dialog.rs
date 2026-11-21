@@ -84,7 +84,7 @@ impl SelectProjectDialog {
 
             ui.add_space(12.0);
         })
-        .action("Cancel", || {
+        .action(&tr!("cancel"), || {
             cancel_clicked.set(true);
         })
         .primary_action(&tr!("platform-select-project-button"), || {

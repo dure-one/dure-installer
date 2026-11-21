@@ -59,7 +59,7 @@ impl RemoveDureDialog {
         .action(tr!("button-cancel"), || {
             cancel_requested.set(true);
         })
-        .primary_action("Remove", || {
+        .primary_action(&tr!("remove"), || {
             remove_requested.set(true);
         })
         .show(ctx);

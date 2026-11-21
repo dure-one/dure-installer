@@ -97,4 +97,59 @@ fn main() {
             }
         }
     }
+
+    // Validate translation keys at compile time
+    validate_translations();
+}
+
+fn validate_translations() {
+    use std::collections::HashSet;
+
+    println!("cargo:rerun-if-changed=assets/languages/fluent");
+    println!("cargo:rerun-if-changed=src");
+
+    // Parse all translation keys from .ftl files
+    let mut keys = HashSet::new();
+    for locale in &["en-US", "ko-KR"] {
+        let path = format!("assets/languages/fluent/{}.ftl", locale);
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            for line in content.lines() {
+                if let Some(key) = line.split('=').next() {
+                    let key = key.trim();
+                    if !key.is_empty() && !key.starts_with('#') {
+                        keys.insert(key.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Scan source files for tr!() calls
+    let mut missing_keys = Vec::new();
+    if let Ok(entries) = glob::glob("src/**/*.rs") {
+        for entry in entries.flatten() {
+            if let Ok(content) = std::fs::read_to_string(&entry) {
+                // Match tr!("key") and tr!("key", ...) - must start with "tr!"
+                let re = regex::Regex::new(r#"\btr!\s*\(\s*"([^"]+)""#).unwrap();
+                for cap in re.captures_iter(&content) {
+                    let key = &cap[1];
+                    // Skip file paths (contain / or .)
+                    if key.contains('/') || key.contains('.') {
+                        continue;
+                    }
+                    if !keys.contains(key) {
+                        missing_keys.push((entry.display().to_string(), key.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    if !missing_keys.is_empty() {
+        eprintln!("\n❌ Missing translation keys:");
+        for (file, key) in &missing_keys {
+            eprintln!("  {} → \"{}\"", file, key);
+        }
+        panic!("Build failed: {} missing translation keys", missing_keys.len());
+    }
 }

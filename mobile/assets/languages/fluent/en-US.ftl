@@ -310,6 +310,7 @@ create = Create
 delete-platform-title = Delete Platform
 delete-platform-heading = Confirm Platform Deletion
 delete = Delete
+remove = Remove
 
 # Add Platform Dialog
 add-platform-title = Add Platform
@@ -349,6 +350,7 @@ dns-dialog-ns-found = Found { $count } NS record(s)
 dns-dialog-ns-not-found = ✗ No NS records found
 dns-error-parse-response = Failed to parse DNS response: { $error }
 dns-error-query-failed = DNS query failed: { $error }
+dns-error-unknown = Unknown error
 
 # DNS Settings Dialog
 dns-dialog-settings-title = DNS Settings Check
@@ -540,6 +542,8 @@ ssh-error-host-exists = Host { $host } already exists
 ssh-error-invalid-port = Invalid port '{ $port }': { $error }
 ssh-error-no-profile = No active profile - please select or create a profile first
 ssh-error-wasm-not-supported = SSH management not available on WASM
+ssh-error-wasm = SSH management not available on WASM
+ssh-error-unknown = Unknown error
 
 # Common Dialog Buttons (reuse existing where possible)
 button-add = Add
@@ -906,3 +910,45 @@ firewall-field-source-tags = Source Tags
 firewall-field-source-svc-acct = Source Service Accounts
 firewall-field-target-tags = Target Tags
 firewall-field-target-svc-acct = Target Service Accounts
+
+# Common Navigation Buttons
+later = Later
+next = Next
+previous = Previous
+finish = Finish
+
+# Profile Management
+no-profile-selected = No profile selected
+profile-delete-title = Delete Profile
+profile-delete-heading = Confirm Profile Deletion
+profile-delete-message = Are you sure you want to delete this profile?
+profile-delete-warning = This action cannot be undone
+
+# Platform Wizard
+platform-wizard-title = Add Platform Wizard
+platform-wizard-oauth-title = Connect to Google Cloud
+platform-wizard-oauth-desc = Authorize access to your Google Cloud account
+platform-wizard-project-title = Select Project
+platform-wizard-project-desc = Choose an existing project or create a new one
+platform-add-project-existing = Use Existing Project
+platform-add-project-new = Create New Project
+platform-wizard-confirm-title = Confirm Details
+platform-wizard-confirm-desc = Review your platform configuration
+platform-wizard-success-title = Platform Added
+platform-wizard-success-desc = Your platform has been successfully added
+
+# Platform Operations
+platform-billing-refresh = Refresh Billing
+platform-drawer-status-not-connected = Not Connected
+
+# DNS Operations
+dns-operation-check-ns = Check NS Records
+dns-operation-check-settings = Check Settings
+dns-operation-check-https = Check HTTPS
+dns-oauth-starting = Starting OAuth...
+dns-oauth-success = OAuth Successful
+dns-create-starting = Creating domain...
+dns-create-success = Domain Created Successfully
+
+# SSH Operations
+ssh-operation-base-check = Base Check

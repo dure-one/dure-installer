@@ -310,6 +310,7 @@ create = 생성
 delete-platform-title = 플랫폼 삭제
 delete-platform-heading = 플랫폼 삭제 확인
 delete = 삭제
+remove = 제거
 
 # Add Platform Dialog
 add-platform-title = 플랫폼 추가
@@ -349,6 +350,7 @@ dns-dialog-ns-found = { $count }개 NS 레코드 발견
 dns-dialog-ns-not-found = ✗ NS 레코드를 찾을 수 없음
 dns-error-parse-response = DNS 응답 파싱 실패: { $error }
 dns-error-query-failed = DNS 쿼리 실패: { $error }
+dns-error-unknown = 알 수 없는 오류
 
 # DNS Settings Dialog
 dns-dialog-settings-title = DNS 설정 확인
@@ -540,6 +542,8 @@ ssh-error-host-exists = 호스트 { $host }이(가) 이미 존재합니다
 ssh-error-invalid-port = 유효하지 않은 포트 '{ $port }': { $error }
 ssh-error-no-profile = 활성 프로필이 없습니다 - 먼저 프로필을 선택하거나 생성하세요
 ssh-error-wasm-not-supported = WASM에서는 SSH 관리를 사용할 수 없습니다
+ssh-error-wasm = WASM에서는 SSH 관리를 사용할 수 없습니다
+ssh-error-unknown = 알 수 없는 오류
 
 # Common Dialog Buttons (reuse existing where possible)
 button-add = 추가
@@ -902,3 +906,45 @@ firewall-field-source-tags = 소스 태그
 firewall-field-source-svc-acct = 소스 서비스 계정
 firewall-field-target-tags = 대상 태그
 firewall-field-target-svc-acct = 대상 서비스 계정
+
+# Common Navigation Buttons
+later = 나중에
+next = 다음
+previous = 이전
+finish = 완료
+
+# Profile Management
+no-profile-selected = 프로필이 선택되지 않음
+profile-delete-title = 프로필 삭제
+profile-delete-heading = 프로필 삭제 확인
+profile-delete-message = 이 프로필을 삭제하시겠습니까?
+profile-delete-warning = 이 작업은 취소할 수 없습니다
+
+# Platform Wizard
+platform-wizard-title = 플랫폼 추가 마법사
+platform-wizard-oauth-title = Google Cloud 연결
+platform-wizard-oauth-desc = Google Cloud 계정에 대한 액세스 권한 부여
+platform-wizard-project-title = 프로젝트 선택
+platform-wizard-project-desc = 기존 프로젝트를 선택하거나 새 프로젝트를 생성하세요
+platform-add-project-existing = 기존 프로젝트 사용
+platform-add-project-new = 새 프로젝트 생성
+platform-wizard-confirm-title = 세부 정보 확인
+platform-wizard-confirm-desc = 플랫폼 구성을 검토하세요
+platform-wizard-success-title = 플랫폼 추가됨
+platform-wizard-success-desc = 플랫폼이 성공적으로 추가되었습니다
+
+# Platform Operations
+platform-billing-refresh = 청구 새로고침
+platform-drawer-status-not-connected = 연결되지 않음
+
+# DNS Operations
+dns-operation-check-ns = NS 레코드 확인
+dns-operation-check-settings = 설정 확인
+dns-operation-check-https = HTTPS 확인
+dns-oauth-starting = OAuth 시작 중...
+dns-oauth-success = OAuth 성공
+dns-create-starting = 도메인 생성 중...
+dns-create-success = 도메인이 성공적으로 생성됨
+
+# SSH Operations
+ssh-operation-base-check = 기본 확인

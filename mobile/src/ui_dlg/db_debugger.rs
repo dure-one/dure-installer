@@ -4,6 +4,7 @@ pub use super::db_debugger_stt::*;
 use diesel::prelude::*;
 use diesel::sql_types::Text;
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::dialog;
 use std::cell::Cell;
 
@@ -400,7 +401,7 @@ impl DlgDbDebugger {
 
             ui.separator();
         })
-        .primary_action("Close", || {
+        .primary_action(&tr!("close"), || {
             close_clicked.set(true);
         })
         .show(ctx);
