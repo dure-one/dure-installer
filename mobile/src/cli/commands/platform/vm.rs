@@ -154,7 +154,11 @@ pub fn execute_addvm_command(
 }
 
 /// Execute restart command
-pub fn execute_restart_command(profile: &ProfileContext, name: String, vm_flag: Option<String>) -> Result<()> {
+pub fn execute_restart_command(
+    profile: &ProfileContext,
+    name: String,
+    vm_flag: Option<String>,
+) -> Result<()> {
     let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config
@@ -193,7 +197,11 @@ pub fn execute_restart_command(profile: &ProfileContext, name: String, vm_flag: 
 }
 
 /// Execute delvm command
-pub fn execute_delvm_command(profile: &ProfileContext, name: String, vm_flag: Option<String>) -> Result<()> {
+pub fn execute_delvm_command(
+    profile: &ProfileContext,
+    name: String,
+    vm_flag: Option<String>,
+) -> Result<()> {
     let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config

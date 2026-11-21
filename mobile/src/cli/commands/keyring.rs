@@ -163,7 +163,12 @@ pub fn execute_key_status(profile: &ProfileContext) -> Result<()> {
 /// * `domain` - Domain/URL for the key (e.g., "www.dure.app")
 /// * `username` - Username/email (e.g., "admin@dure.co")
 /// * `password` - The password/credential
-pub fn execute_key_add(profile: &ProfileContext, domain: String, username: String, password: String) -> Result<()> {
+pub fn execute_key_add(
+    profile: &ProfileContext,
+    domain: String,
+    username: String,
+    password: String,
+) -> Result<()> {
     dure_info!("Adding key to keyring...");
 
     // Use profile's keyring paths

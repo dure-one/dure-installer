@@ -46,45 +46,50 @@ impl MycartActor {
 
     async fn handle_command(&mut self, command: MycartCommand) -> anyhow::Result<()> {
         match command {
-            MycartCommand::LoadStats { site_address } => {
-                self.load_stats(site_address).await
-            }
+            MycartCommand::LoadStats { site_address } => self.load_stats(site_address).await,
 
-            MycartCommand::LoadLogs { site_address, limit } => {
-                self.load_logs(site_address, limit).await
-            }
+            MycartCommand::LoadLogs {
+                site_address,
+                limit,
+            } => self.load_logs(site_address, limit).await,
 
-            MycartCommand::LoadOperations { site_address, limit } => {
-                self.load_operations(site_address, limit).await
-            }
+            MycartCommand::LoadOperations {
+                site_address,
+                limit,
+            } => self.load_operations(site_address, limit).await,
 
-            MycartCommand::LoadMycartLogs { site_address, limit } => {
-                self.load_mycart_logs(site_address, limit).await
-            }
+            MycartCommand::LoadMycartLogs {
+                site_address,
+                limit,
+            } => self.load_mycart_logs(site_address, limit).await,
 
-            MycartCommand::LoadXMPPProxyLogs { site_address, limit } => {
-                self.load_xmppproxy_logs(site_address, limit).await
-            }
+            MycartCommand::LoadXMPPProxyLogs {
+                site_address,
+                limit,
+            } => self.load_xmppproxy_logs(site_address, limit).await,
 
-            MycartCommand::LoadFail2BanRSLogs { site_address, limit } => {
-                self.load_fail2banrs_logs(site_address, limit).await
-            }
+            MycartCommand::LoadFail2BanRSLogs {
+                site_address,
+                limit,
+            } => self.load_fail2banrs_logs(site_address, limit).await,
 
-            MycartCommand::ListCrontab { site_address } => {
-                self.list_crontab(site_address).await
-            }
+            MycartCommand::ListCrontab { site_address } => self.list_crontab(site_address).await,
 
-            MycartCommand::EnableCronjob { site_address, job_id } => {
-                self.enable_cronjob(site_address, job_id).await
-            }
+            MycartCommand::EnableCronjob {
+                site_address,
+                job_id,
+            } => self.enable_cronjob(site_address, job_id).await,
 
-            MycartCommand::DisableCronjob { site_address, job_id } => {
-                self.disable_cronjob(site_address, job_id).await
-            }
+            MycartCommand::DisableCronjob {
+                site_address,
+                job_id,
+            } => self.disable_cronjob(site_address, job_id).await,
 
-            MycartCommand::SetInterval { site_address, job_id, interval } => {
-                self.set_interval(site_address, job_id, interval).await
-            }
+            MycartCommand::SetInterval {
+                site_address,
+                job_id,
+                interval,
+            } => self.set_interval(site_address, job_id, interval).await,
         }
     }
 
@@ -117,7 +122,11 @@ impl MycartActor {
     }
 
     // Phase 5: SSH server log handlers
-    async fn load_mycart_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+    async fn load_mycart_logs(
+        &mut self,
+        site_address: String,
+        _limit: usize,
+    ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Mycart logs for {}", site_address);
         // ponytail: needs SSH host config and keyring - placeholder returns empty
         // Actual: get host_config from config, call mycart::get_duremycart_logs
@@ -129,7 +138,11 @@ impl MycartActor {
         Ok(())
     }
 
-    async fn load_xmppproxy_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+    async fn load_xmppproxy_logs(
+        &mut self,
+        site_address: String,
+        _limit: usize,
+    ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading XMPPProxy logs for {}", site_address);
         // ponytail: needs SSH host config and keyring - placeholder returns empty
         self.send_event(MycartEvent::XMPPProxyLogsLoaded {
@@ -140,7 +153,11 @@ impl MycartActor {
         Ok(())
     }
 
-    async fn load_fail2banrs_logs(&mut self, site_address: String, _limit: usize) -> anyhow::Result<()> {
+    async fn load_fail2banrs_logs(
+        &mut self,
+        site_address: String,
+        _limit: usize,
+    ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Fail2BanRS logs for {}", site_address);
         // ponytail: needs SSH host config and keyring - placeholder returns empty
         self.send_event(MycartEvent::Fail2BanRSLogsLoaded {
@@ -178,18 +195,16 @@ impl MycartActor {
 
         // ponytail: needs JWT token from config - placeholder for now
         // Actual: get token from config, call mycart::list_crontab
-        let jwt_token = self.auth_token.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No auth token - site needs re-authentication")
-        })?;
+        let jwt_token = self
+            .auth_token
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No auth token - site needs re-authentication"))?;
 
         match mycart::list_crontab(&site_address, jwt_token).await {
             Ok(jobs) => {
                 dure_info!("[MycartActor] Loaded {} crontab jobs", jobs.len());
-                self.send_event(MycartEvent::CrontabLoaded {
-                    site_address,
-                    jobs,
-                })
-                .await;
+                self.send_event(MycartEvent::CrontabLoaded { site_address, jobs })
+                    .await;
                 Ok(())
             }
             Err(e) => {
@@ -200,20 +215,22 @@ impl MycartActor {
     }
 
     async fn enable_cronjob(&mut self, site_address: String, job_id: String) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Enabling cronjob {} for {}", job_id, site_address);
+        dure_info!(
+            "[MycartActor] Enabling cronjob {} for {}",
+            job_id,
+            site_address
+        );
 
-        let jwt_token = self.auth_token.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No auth token")
-        })?;
+        let jwt_token = self
+            .auth_token
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_enabled(&site_address, jwt_token, &job_id, true).await {
             Ok(job) => {
                 dure_info!("[MycartActor] Enabled cronjob {}", job_id);
-                self.send_event(MycartEvent::CronjobUpdated {
-                    site_address,
-                    job,
-                })
-                .await;
+                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
+                    .await;
                 Ok(())
             }
             Err(e) => {
@@ -223,21 +240,27 @@ impl MycartActor {
         }
     }
 
-    async fn disable_cronjob(&mut self, site_address: String, job_id: String) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Disabling cronjob {} for {}", job_id, site_address);
+    async fn disable_cronjob(
+        &mut self,
+        site_address: String,
+        job_id: String,
+    ) -> anyhow::Result<()> {
+        dure_info!(
+            "[MycartActor] Disabling cronjob {} for {}",
+            job_id,
+            site_address
+        );
 
-        let jwt_token = self.auth_token.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No auth token")
-        })?;
+        let jwt_token = self
+            .auth_token
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_enabled(&site_address, jwt_token, &job_id, false).await {
             Ok(job) => {
                 dure_info!("[MycartActor] Disabled cronjob {}", job_id);
-                self.send_event(MycartEvent::CronjobUpdated {
-                    site_address,
-                    job,
-                })
-                .await;
+                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
+                    .await;
                 Ok(())
             }
             Err(e) => {
@@ -247,21 +270,29 @@ impl MycartActor {
         }
     }
 
-    async fn set_interval(&mut self, site_address: String, job_id: String, interval: String) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Setting cronjob {} interval to '{}' for {}", job_id, interval, site_address);
+    async fn set_interval(
+        &mut self,
+        site_address: String,
+        job_id: String,
+        interval: String,
+    ) -> anyhow::Result<()> {
+        dure_info!(
+            "[MycartActor] Setting cronjob {} interval to '{}' for {}",
+            job_id,
+            interval,
+            site_address
+        );
 
-        let jwt_token = self.auth_token.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No auth token")
-        })?;
+        let jwt_token = self
+            .auth_token
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No auth token"))?;
 
         match mycart::set_crontab_interval(&site_address, jwt_token, &job_id, &interval).await {
             Ok(job) => {
                 dure_info!("[MycartActor] Updated cronjob {} interval", job_id);
-                self.send_event(MycartEvent::CronjobUpdated {
-                    site_address,
-                    job,
-                })
-                .await;
+                self.send_event(MycartEvent::CronjobUpdated { site_address, job })
+                    .await;
                 Ok(())
             }
             Err(e) => {

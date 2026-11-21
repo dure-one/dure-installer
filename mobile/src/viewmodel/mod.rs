@@ -80,7 +80,6 @@ pub struct ErrorRecord {
     pub actor: String,
 }
 
-
 impl ViewModel {
     /// Create ViewModel for GUI mode (Desktop/Android)
     #[cfg(all(feature = "gui", not(target_arch = "wasm32")))]
@@ -107,9 +106,17 @@ impl ViewModel {
                 dure_info!("ViewModel runtime started");
 
                 // Create actors
-                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
-                let drawer_actor =
-                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
+                let platform_actor = platform::PlatformActor::new(
+                    platform_rx,
+                    event_tx.clone(),
+                    profile_for_actor.clone(),
+                );
+                let drawer_actor = platform::DrawerActor::new(
+                    drawer_rx,
+                    event_tx.clone(),
+                    logs_tx_for_drawer,
+                    profile_for_actor.clone(),
+                );
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
                 let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
@@ -169,9 +176,17 @@ impl ViewModel {
             smol::block_on(async {
                 dure_info!("ViewModel runtime started (headless)");
 
-                let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
-                let drawer_actor =
-                    platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
+                let platform_actor = platform::PlatformActor::new(
+                    platform_rx,
+                    event_tx.clone(),
+                    profile_for_actor.clone(),
+                );
+                let drawer_actor = platform::DrawerActor::new(
+                    drawer_rx,
+                    event_tx.clone(),
+                    logs_tx_for_drawer,
+                    profile_for_actor.clone(),
+                );
                 let ssh_actor =
                     ssh::SshActor::new(ssh_rx, event_tx.clone(), profile_for_actor.clone());
                 let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
@@ -233,9 +248,17 @@ impl ViewModel {
         spawn_local(async move {
             dure_info!("ViewModel runtime started (WASM)");
 
-            let platform_actor = platform::PlatformActor::new(platform_rx, event_tx.clone(), profile_for_actor.clone());
-            let drawer_actor =
-                platform::DrawerActor::new(drawer_rx, event_tx.clone(), logs_tx_for_drawer, profile_for_actor.clone());
+            let platform_actor = platform::PlatformActor::new(
+                platform_rx,
+                event_tx.clone(),
+                profile_for_actor.clone(),
+            );
+            let drawer_actor = platform::DrawerActor::new(
+                drawer_rx,
+                event_tx.clone(),
+                logs_tx_for_drawer,
+                profile_for_actor.clone(),
+            );
             let ns_actor = ns::NsActor::new(ns_rx, event_tx.clone(), profile_for_actor.clone());
             let opslog_actor = logs::OpsLogActor::new(opslog_rx, event_tx.clone());
             let dns_actor = dns::DnsActor::new(dns_rx, event_tx.clone());
@@ -840,7 +863,6 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-
     // Service management commands
     pub fn get_linux_status(&self, host: String) -> anyhow::Result<()> {
         self.ssh_tx
@@ -868,7 +890,6 @@ impl ViewModel {
             .send_blocking(ssh::SshCommand::UninstallDocker { name: host })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
-
 
     /// Check if SSH host is reachable (TCP port check with timeout)
     pub fn check_host_health(&self, name: String, timeout_secs: u8) -> anyhow::Result<()> {
@@ -951,7 +972,6 @@ impl ViewModel {
             .ssh_tx
             .send_blocking(ssh::SshCommand::ListDockerContainers { host_name: host });
     }
-
 
     // Legacy compatibility stubs for old UI code (will be removed in Tasks 5-7)
     #[deprecated(note = "Use install_dure_wss with full parameters")]
@@ -1172,10 +1192,7 @@ impl ViewModel {
         period: logs::StatsPeriod,
     ) -> anyhow::Result<()> {
         self.opslog_tx
-            .send_blocking(logs::LogsCommand::GetLogStats {
-                project_id,
-                period,
-            })
+            .send_blocking(logs::LogsCommand::GetLogStats { project_id, period })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -1396,15 +1413,29 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn enable_mycart_cronjob(&self, site_address: String, job_id: String) -> anyhow::Result<()> {
+    pub fn enable_mycart_cronjob(
+        &self,
+        site_address: String,
+        job_id: String,
+    ) -> anyhow::Result<()> {
         self.mycart_tx
-            .send_blocking(mycart::MycartCommand::EnableCronjob { site_address, job_id })
+            .send_blocking(mycart::MycartCommand::EnableCronjob {
+                site_address,
+                job_id,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn disable_mycart_cronjob(&self, site_address: String, job_id: String) -> anyhow::Result<()> {
+    pub fn disable_mycart_cronjob(
+        &self,
+        site_address: String,
+        job_id: String,
+    ) -> anyhow::Result<()> {
         self.mycart_tx
-            .send_blocking(mycart::MycartCommand::DisableCronjob { site_address, job_id })
+            .send_blocking(mycart::MycartCommand::DisableCronjob {
+                site_address,
+                job_id,
+            })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
@@ -1422,5 +1453,4 @@ impl ViewModel {
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
-
 }

@@ -25,7 +25,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// * `recipient_pubkey` - Recipient's public key (base64 or hex encoded)
 /// * `data` - Data to encrypt (plain text or base64)
 /// * `output_hex` - If true, output as hex instead of base64
-pub fn execute_crypt_enc(profile: &ProfileContext, recipient_pubkey: String, data: String, output_hex: bool) -> Result<()> {
+pub fn execute_crypt_enc(
+    profile: &ProfileContext,
+    recipient_pubkey: String,
+    data: String,
+    output_hex: bool,
+) -> Result<()> {
     dure_info!("Encrypting data...");
 
     // Try to decode recipient public key from base64 or hex
@@ -73,7 +78,11 @@ pub fn execute_crypt_enc(profile: &ProfileContext, recipient_pubkey: String, dat
 ///
 /// * `encrypted_data` - Encrypted data (base64 or hex encoded)
 /// * `output_raw` - If true, output raw bytes; otherwise interpret as UTF-8 text
-pub fn execute_crypt_dec(profile: &ProfileContext, encrypted_data: String, output_raw: bool) -> Result<()> {
+pub fn execute_crypt_dec(
+    profile: &ProfileContext,
+    encrypted_data: String,
+    output_raw: bool,
+) -> Result<()> {
     dure_info!("Decrypting data...");
 
     // Get database connection
@@ -123,7 +132,11 @@ pub fn execute_crypt_dec(profile: &ProfileContext, encrypted_data: String, outpu
 ///
 /// * `device_id` - Optional device ID (defaults to hostname)
 /// * `force` - If true, regenerate keys even if they exist
-pub fn execute_crypt_init(profile: &ProfileContext, device_id: Option<String>, force: bool) -> Result<()> {
+pub fn execute_crypt_init(
+    profile: &ProfileContext,
+    device_id: Option<String>,
+    force: bool,
+) -> Result<()> {
     dure_info!("Initializing device encryption keys...");
 
     // Get database connection

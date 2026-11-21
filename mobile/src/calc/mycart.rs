@@ -83,7 +83,8 @@ pub async fn add_mycart_site(
 
     let mut config = AppConfig::load_or_default(&config_path.to_path_buf());
     config.mycart_sites.push(site_config);
-    config.save(&config_path.to_path_buf())
+    config
+        .save(&config_path.to_path_buf())
         .context("Failed to save config")?;
 
     log::info!("Mycart site added successfully: {}", site_address);
@@ -101,15 +102,21 @@ pub fn list_mycart_sites(config_path: &std::path::Path) -> Result<Vec<MycartSite
 #[cfg(not(target_arch = "wasm32"))]
 pub fn delete_mycart_site(config_path: &std::path::Path, site_address: &str) -> Result<()> {
     let mut config = AppConfig::load_or_default(&config_path.to_path_buf());
-    config.mycart_sites.retain(|s| s.site_address != site_address);
-    config.save(&config_path.to_path_buf())
+    config
+        .mycart_sites
+        .retain(|s| s.site_address != site_address);
+    config
+        .save(&config_path.to_path_buf())
         .context("Failed to save config")?;
     Ok(())
 }
 
 /// Get site statistics (orders, products, messages counts)
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn get_site_stats(config_path: &std::path::Path, site_address: &str) -> Result<mycart::MycartStats> {
+pub async fn get_site_stats(
+    config_path: &std::path::Path,
+    site_address: &str,
+) -> Result<mycart::MycartStats> {
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
     let site = config
         .mycart_sites
@@ -129,7 +136,10 @@ pub async fn get_site_stats(config_path: &std::path::Path, site_address: &str) -
 
 /// Get seller info for a mycart site
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn get_seller_info(config_path: &std::path::Path, site_address: &str) -> Result<mycart::SellerInfo> {
+pub async fn get_seller_info(
+    config_path: &std::path::Path,
+    site_address: &str,
+) -> Result<mycart::SellerInfo> {
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
     let site = config
         .mycart_sites
@@ -176,10 +186,7 @@ pub async fn get_site_logs(
             }
             Err(e) => {
                 // Log not found or error reading - insert error message
-                logs.insert(
-                    log_name.to_string(),
-                    format!("Error reading log: {}", e),
-                );
+                logs.insert(log_name.to_string(), format!("Error reading log: {}", e));
             }
         }
     }
@@ -221,7 +228,11 @@ pub async fn get_xmppproxy_logs(
     host_config: &SshHostConfig,
     profile_keyring: Option<&Arc<DatabaseHandle>>,
 ) -> Result<Vec<String>> {
-    let log_names = vec!["xmpp-proxy-stdout.log", "xmpp-proxy-stderr.log", "prosody.log"];
+    let log_names = vec![
+        "xmpp-proxy-stdout.log",
+        "xmpp-proxy-stderr.log",
+        "prosody.log",
+    ];
     let mut all_lines = Vec::new();
 
     for log_name in log_names {
@@ -273,32 +284,58 @@ pub async fn get_fail2banrs_logs(
 
 /// Get crontab jobs for a mycart site (high-level wrapper with JWT loading)
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn get_site_crontab(config_path: &std::path::Path, site_address: &str) -> Result<Vec<mycart::CrontabJob>> {
-    log::debug!("get_site_crontab: config_path={:?}, site_address={}", config_path, site_address);
+pub async fn get_site_crontab(
+    config_path: &std::path::Path,
+    site_address: &str,
+) -> Result<Vec<mycart::CrontabJob>> {
+    log::debug!(
+        "get_site_crontab: config_path={:?}, site_address={}",
+        config_path,
+        site_address
+    );
 
     let config = AppConfig::load_or_default(&config_path.to_path_buf());
-    log::debug!("get_site_crontab: found {} mycart_sites in config", config.mycart_sites.len());
-    log::debug!("get_site_crontab: available sites: {:?}", config.mycart_sites.iter().map(|s| &s.site_address).collect::<Vec<_>>());
+    log::debug!(
+        "get_site_crontab: found {} mycart_sites in config",
+        config.mycart_sites.len()
+    );
+    log::debug!(
+        "get_site_crontab: available sites: {:?}",
+        config
+            .mycart_sites
+            .iter()
+            .map(|s| &s.site_address)
+            .collect::<Vec<_>>()
+    );
 
     let site = config
         .mycart_sites
         .iter()
         .find(|s| s.site_address == site_address)
         .ok_or_else(|| {
-            log::error!("get_site_crontab: site '{}' not found in config", site_address);
-            anyhow::anyhow!("Mycart site '{}' not found in config. Available sites: {:?}",
+            log::error!(
+                "get_site_crontab: site '{}' not found in config",
+                site_address
+            );
+            anyhow::anyhow!(
+                "Mycart site '{}' not found in config. Available sites: {:?}",
                 site_address,
-                config.mycart_sites.iter().map(|s| &s.site_address).collect::<Vec<_>>())
+                config
+                    .mycart_sites
+                    .iter()
+                    .map(|s| &s.site_address)
+                    .collect::<Vec<_>>()
+            )
         })?;
 
     log::debug!("get_site_crontab: found site, checking JWT token");
-    let jwt_token = site
-        .jwt_token
-        .as_ref()
-        .ok_or_else(|| {
-            log::error!("get_site_crontab: no JWT token for site '{}'", site_address);
-            anyhow::anyhow!("No JWT token for site '{}' - site needs re-authentication", site_address)
-        })?;
+    let jwt_token = site.jwt_token.as_ref().ok_or_else(|| {
+        log::error!("get_site_crontab: no JWT token for site '{}'", site_address);
+        anyhow::anyhow!(
+            "No JWT token for site '{}' - site needs re-authentication",
+            site_address
+        )
+    })?;
 
     log::debug!("get_site_crontab: calling list_crontab API");
     list_crontab(site_address, jwt_token).await
@@ -360,20 +397,27 @@ pub fn resolve_platform_for_site<'a>(
 ) -> Option<&'a crate::config::CloudPlatformConfig> {
     // Prefer explicit platform_id
     if let Some(ref platform_id) = site.platform_id {
-        if let Some(platform) = config.platforms.iter().find(|p| {
-            p.gcp_selected_project_id.as_ref() == Some(platform_id)
-        }) {
+        if let Some(platform) = config
+            .platforms
+            .iter()
+            .find(|p| p.gcp_selected_project_id.as_ref() == Some(platform_id))
+        {
             return Some(platform);
         }
     }
 
     // Fallback: match site domain to VM external IP
-    let site_host = site.site_address.split(':').next().unwrap_or(&site.site_address);
+    let site_host = site
+        .site_address
+        .split(':')
+        .next()
+        .unwrap_or(&site.site_address);
 
     config.platforms.iter().find(|platform| {
-        platform.vms.iter().any(|vm| {
-            vm.external_ip.as_ref().map_or(false, |ip| ip == site_host)
-        })
+        platform
+            .vms
+            .iter()
+            .any(|vm| vm.external_ip.as_ref().map_or(false, |ip| ip == site_host))
     })
 }
 
@@ -387,18 +431,28 @@ pub fn resolve_ssh_host_for_site<'a>(
 ) -> Option<&'a SshHostConfig> {
     // Prefer explicit ssh_host
     if let Some(ref ssh_host_id) = site.ssh_host {
-        if let Some(host) = config.ssh_hosts.iter().find(|h| {
-            h.host.contains(ssh_host_id) || ssh_host_id.contains(&h.host)
-        }) {
+        if let Some(host) = config
+            .ssh_hosts
+            .iter()
+            .find(|h| h.host.contains(ssh_host_id) || ssh_host_id.contains(&h.host))
+        {
             return Some(host);
         }
     }
 
     // Fallback: match site domain to SSH host
-    let site_host = site.site_address.split(':').next().unwrap_or(&site.site_address);
+    let site_host = site
+        .site_address
+        .split(':')
+        .next()
+        .unwrap_or(&site.site_address);
 
     config.ssh_hosts.iter().find(|host_config| {
-        let host_part = host_config.host.split('@').last().unwrap_or(&host_config.host);
+        let host_part = host_config
+            .host
+            .split('@')
+            .last()
+            .unwrap_or(&host_config.host);
         host_part == site_host || site_host.contains(host_part)
     })
 }
@@ -427,7 +481,10 @@ pub fn validate_cron(expr: &str) -> Result<()> {
     // Basic field validation: each field should contain only valid cron chars
     for (idx, field) in fields.iter().enumerate() {
         if field.is_empty() {
-            return Err(anyhow::anyhow!("Invalid cron field {}: empty field", idx + 1));
+            return Err(anyhow::anyhow!(
+                "Invalid cron field {}: empty field",
+                idx + 1
+            ));
         }
 
         for ch in field.chars() {
@@ -455,7 +512,10 @@ pub async fn list_crontab(site_address: &str, jwt_token: &str) -> Result<Vec<myc
 
 /// Load operation logs for a mycart site
 #[cfg(not(target_arch = "wasm32"))]
-pub fn load_site_operations(site_address: &str, limit: i64) -> Result<Vec<crate::storage::models::opslog::OperationLog>> {
+pub fn load_site_operations(
+    site_address: &str,
+    limit: i64,
+) -> Result<Vec<crate::storage::models::opslog::OperationLog>> {
     use crate::calc::db;
     use crate::storage::models::opslog::list_by_project;
 
@@ -492,8 +552,7 @@ pub async fn set_crontab_interval(
     interval: &str,
 ) -> Result<mycart::CrontabJob> {
     // Validate cron expression client-side first
-    validate_cron(interval)
-        .context("Invalid cron expression format")?;
+    validate_cron(interval).context("Invalid cron expression format")?;
 
     let patch = mycart::CrontabPatch {
         enabled: None,
@@ -563,7 +622,10 @@ mod tests {
 
         let platform = resolve_platform_for_site(&config, &site);
         assert!(platform.is_some());
-        assert_eq!(platform.unwrap().gcp_selected_project_id, Some("project-123".to_string()));
+        assert_eq!(
+            platform.unwrap().gcp_selected_project_id,
+            Some("project-123".to_string())
+        );
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -606,7 +668,10 @@ mod tests {
 
         let platform = resolve_platform_for_site(&config, &site);
         assert!(platform.is_some());
-        assert_eq!(platform.unwrap().gcp_selected_project_id, Some("project-456".to_string()));
+        assert_eq!(
+            platform.unwrap().gcp_selected_project_id,
+            Some("project-456".to_string())
+        );
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -786,12 +851,9 @@ mod tests {
 
         smol::block_on(async {
             let config_path = PathBuf::from("/tmp/nonexistent_config.toml");
-            let result = update_site_cronjob_enabled(
-                &config_path,
-                "unknown.example.com",
-                "job-123",
-                true,
-            ).await;
+            let result =
+                update_site_cronjob_enabled(&config_path, "unknown.example.com", "job-123", true)
+                    .await;
 
             // Should fail because site doesn't exist in config
             assert!(result.is_err());
@@ -811,7 +873,8 @@ mod tests {
                 "unknown.example.com",
                 "job-123",
                 "0 */6 * * *",
-            ).await;
+            )
+            .await;
 
             // Should fail because site doesn't exist in config
             assert!(result.is_err());
@@ -833,7 +896,8 @@ mod tests {
                 "shop.example.com",
                 "job-123",
                 "invalid cron",
-            ).await;
+            )
+            .await;
 
             // Should fail validation
             assert!(result.is_err());
@@ -939,12 +1003,9 @@ mod tests {
 
         smol::block_on(async {
             let config_path = PathBuf::from("/tmp/test_config.toml");
-            let result = update_site_cronjob_enabled(
-                &config_path,
-                "localhost:8080",
-                "cleanup-temp",
-                true,
-            ).await;
+            let result =
+                update_site_cronjob_enabled(&config_path, "localhost:8080", "cleanup-temp", true)
+                    .await;
 
             // Test behavior depends on setup
             if result.is_ok() {
@@ -967,7 +1028,8 @@ mod tests {
                 "localhost:8080",
                 "cleanup-temp",
                 "0 */12 * * *",
-            ).await;
+            )
+            .await;
 
             // Test behavior depends on setup
             if result.is_ok() {
@@ -1015,7 +1077,10 @@ mod tests {
         let ssh_host = resolve_ssh_host_for_site(&config, &site);
 
         assert!(platform.is_some());
-        assert_eq!(platform.unwrap().gcp_selected_project_id, Some("my-project".to_string()));
+        assert_eq!(
+            platform.unwrap().gcp_selected_project_id,
+            Some("my-project".to_string())
+        );
 
         assert!(ssh_host.is_some());
         assert!(ssh_host.unwrap().host.contains("203.0.113.50"));

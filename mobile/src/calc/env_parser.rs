@@ -123,7 +123,8 @@ pub fn generate_env_file(fields: &[EnvField]) -> String {
         // .env format: quotes optional, most parsers handle spaces/special chars correctly
         // Only quote if value has leading/trailing whitespace or starts with quote
         let value = &field.value;
-        let needs_quotes = value != value.trim() || value.starts_with('"') || value.starts_with('\'');
+        let needs_quotes =
+            value != value.trim() || value.starts_with('"') || value.starts_with('\'');
 
         if needs_quotes {
             output.push_str(&format!("{}=\"{}\"\n", field.key, value));

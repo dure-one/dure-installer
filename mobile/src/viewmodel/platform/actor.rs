@@ -174,7 +174,10 @@ impl PlatformActor {
             PlatformCommand::CheckIpWhitelist {
                 profile_config_path,
                 platform_name,
-            } => self.check_ip_whitelist(profile_config_path, platform_name).await,
+            } => {
+                self.check_ip_whitelist(profile_config_path, platform_name)
+                    .await
+            }
             PlatformCommand::UpdateFirewallRule {
                 profile_config_path,
                 platform_name,
@@ -2927,7 +2930,11 @@ impl PlatformActor {
             use crate::storage::models::opslog::NewOperationLog;
 
             let mut conn = db::establish_connection();
-            let log = NewOperationLog::new(&platform_name_clone, &operation_type_clone, &operation_subtype);
+            let log = NewOperationLog::new(
+                &platform_name_clone,
+                &operation_type_clone,
+                &operation_subtype,
+            );
             let log_id = crate::storage::models::opslog::create_log(&mut conn, log)?;
 
             Ok(log_id)

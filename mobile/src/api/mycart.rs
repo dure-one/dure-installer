@@ -115,7 +115,10 @@ pub async fn login_and_get_token(
                     Ok(data) => {
                         if data.success {
                             if let Some(token) = data.result {
-                                log::info!("JWT token extracted from response (length: {})", token.len());
+                                log::info!(
+                                    "JWT token extracted from response (length: {})",
+                                    token.len()
+                                );
                                 return Ok(Some(token));
                             } else {
                                 log::error!("Login successful but no token in response");
@@ -136,13 +139,12 @@ pub async fn login_and_get_token(
                 Ok(None)
             } else {
                 log::error!("Login failed with unexpected status: {}", status);
-                Err(anyhow::anyhow!(
-                    "Unexpected status code: {}",
-                    status
-                ))
+                Err(anyhow::anyhow!("Unexpected status code: {}", status))
             }
         }
-        Err(ureq::Error::Status(400, _)) | Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
+        Err(ureq::Error::Status(400, _))
+        | Err(ureq::Error::Status(401, _))
+        | Err(ureq::Error::Status(403, _)) => {
             log::warn!("Login failed: invalid credentials");
             Ok(None)
         }
@@ -265,10 +267,7 @@ pub async fn get_seller_info(site: &str, jwt_token: &str) -> Result<SellerInfo> 
             } else if resp.status() == 401 || resp.status() == 403 {
                 Err(anyhow::anyhow!("Unauthorized - token may be expired"))
             } else {
-                Err(anyhow::anyhow!(
-                    "Unexpected status code: {}",
-                    resp.status()
-                ))
+                Err(anyhow::anyhow!("Unexpected status code: {}", resp.status()))
             }
         }
         Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
@@ -309,7 +308,10 @@ pub async fn read_log_file(
     profile_keyring: Option<&Arc<DatabaseHandle>>,
 ) -> Result<String> {
     let log_path = format!("/srv/data/logs/{}", log_name);
-    let cmd = format!("tail -n {} {} 2>&1 || echo 'File not found'", tail_lines, log_path);
+    let cmd = format!(
+        "tail -n {} {} 2>&1 || echo 'File not found'",
+        tail_lines, log_path
+    );
 
     ssh::execute_command(host_config, &cmd, profile_keyring)
         .await
@@ -344,29 +346,43 @@ pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
                     .into_json()
                     .context("Failed to parse crontab response as JSON")?;
 
-                log::debug!("get_crontab: raw response structure: success={}, result type={}",
-                    raw_json.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
-                    raw_json.get("result").map(|v| match v {
-                        serde_json::Value::Array(_) => "array",
-                        serde_json::Value::Object(_) => "map",
-                        _ => "other"
-                    }).unwrap_or("missing"));
+                log::debug!(
+                    "get_crontab: raw response structure: success={}, result type={}",
+                    raw_json
+                        .get("success")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    raw_json
+                        .get("result")
+                        .map(|v| match v {
+                            serde_json::Value::Array(_) => "array",
+                            serde_json::Value::Object(_) => "map",
+                            _ => "other",
+                        })
+                        .unwrap_or("missing")
+                );
 
                 // Check success flag
-                let success = raw_json.get("success")
+                let success = raw_json
+                    .get("success")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
                 if !success {
-                    let message = raw_json.get("message")
+                    let message = raw_json
+                        .get("message")
                         .and_then(|v| v.as_str())
                         .unwrap_or("Unknown error");
-                    log::error!("get_crontab: API returned success=false, message={}", message);
+                    log::error!(
+                        "get_crontab: API returned success=false, message={}",
+                        message
+                    );
                     return Err(anyhow::anyhow!("API error: {}", message));
                 }
 
                 // Parse result field - handle both array and map formats
-                let result = raw_json.get("result")
+                let result = raw_json
+                    .get("result")
                     .ok_or_else(|| anyhow::anyhow!("Missing result field in response"))?;
 
                 let jobs: Vec<CrontabJob> = match result {
@@ -377,14 +393,20 @@ pub async fn get_crontab(site: &str, jwt_token: &str) -> Result<Vec<CrontabJob>>
                     }
                     serde_json::Value::Object(map) => {
                         // Map format: {"job_id_1": {...}, "job_id_2": {...}}
-                        log::debug!("get_crontab: converting map format ({} entries) to array", map.len());
+                        log::debug!(
+                            "get_crontab: converting map format ({} entries) to array",
+                            map.len()
+                        );
                         map.values()
                             .map(|v| serde_json::from_value(v.clone()))
                             .collect::<Result<Vec<_>, _>>()
                             .context("Failed to parse crontab jobs from map")?
                     }
                     _ => {
-                        return Err(anyhow::anyhow!("Invalid crontab response format: expected array or map, got {:?}", result));
+                        return Err(anyhow::anyhow!(
+                            "Invalid crontab response format: expected array or map, got {:?}",
+                            result
+                        ));
                     }
                 };
 
@@ -422,7 +444,11 @@ pub async fn patch_crontab(
     job_id: &str,
     patch: CrontabPatch,
 ) -> Result<CrontabJob> {
-    let url = format!("https://{}/api/_/settings/crontab/{}", site, urlencoding::encode(job_id));
+    let url = format!(
+        "https://{}/api/_/settings/crontab/{}",
+        site,
+        urlencoding::encode(job_id)
+    );
     let jwt = jwt_token.to_string();
     let patch_clone = patch.clone();
 
@@ -443,13 +469,16 @@ pub async fn patch_crontab(
                     .context("Failed to parse crontab update response")?;
 
                 if api_response.success {
-                    api_response.result
+                    api_response
+                        .result
                         .ok_or_else(|| anyhow::anyhow!("No result in successful response"))
                 } else {
                     Err(anyhow::anyhow!("API error: {}", api_response.message))
                 }
             } else if status == 400 {
-                Err(anyhow::anyhow!("Validation error - invalid crontab settings"))
+                Err(anyhow::anyhow!(
+                    "Validation error - invalid crontab settings"
+                ))
             } else if status == 404 {
                 Err(anyhow::anyhow!("Job not found: {}", job_id))
             } else if status == 401 || status == 403 {
@@ -458,12 +487,10 @@ pub async fn patch_crontab(
                 Err(anyhow::anyhow!("Unexpected status code: {}", status))
             }
         }
-        Err(ureq::Error::Status(400, _)) => {
-            Err(anyhow::anyhow!("Validation error - invalid crontab settings"))
-        }
-        Err(ureq::Error::Status(404, _)) => {
-            Err(anyhow::anyhow!("Job not found: {}", job_id))
-        }
+        Err(ureq::Error::Status(400, _)) => Err(anyhow::anyhow!(
+            "Validation error - invalid crontab settings"
+        )),
+        Err(ureq::Error::Status(404, _)) => Err(anyhow::anyhow!("Job not found: {}", job_id)),
         Err(ureq::Error::Status(401, _)) | Err(ureq::Error::Status(403, _)) => {
             Err(anyhow::anyhow!("Unauthorized - token may be expired"))
         }
@@ -691,7 +718,8 @@ mod tests {
                 interval: None,
             };
 
-            let result = patch_crontab("localhost:8080", "invalid_token", "cleanup-temp", patch).await;
+            let result =
+                patch_crontab("localhost:8080", "invalid_token", "cleanup-temp", patch).await;
 
             // Should return Err for authentication failure
             assert!(result.is_err());

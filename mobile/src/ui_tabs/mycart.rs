@@ -1,7 +1,7 @@
 //! Mycart tab - Mycart admin settings management with data_table + drawer
 
+use crate::ui_dlg::mycart_crontab::{CrontabAction, CrontabDialog};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
-use crate::ui_dlg::mycart_crontab::{CrontabDialog, CrontabAction};
 use eframe::egui;
 use egui_material3::{data_table, dialog, MaterialButton};
 use std::cell::Cell;
@@ -21,9 +21,19 @@ const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationState {
     Idle,
-    InProgress { operation: String, started_at: i64 },
-    Completed { operation: String, completed_at: i64 },
-    Failed { operation: String, error: String, failed_at: i64 },
+    InProgress {
+        operation: String,
+        started_at: i64,
+    },
+    Completed {
+        operation: String,
+        completed_at: i64,
+    },
+    Failed {
+        operation: String,
+        error: String,
+        failed_at: i64,
+    },
 }
 
 impl Default for OperationState {
@@ -51,20 +61,28 @@ pub struct MycartRow {
 /// Actions from mycart table rows
 #[derive(Debug, Clone)]
 enum MycartAction {
-    OpenDrawer(String),     // site_address
-    Delete(String),         // site_address
-    LoadStats(String),      // site_address
-    LoadLogs(String),       // site_address
+    OpenDrawer(String), // site_address
+    Delete(String),     // site_address
+    LoadStats(String),  // site_address
+    LoadLogs(String),   // site_address
     // Phase 5: Crontab operations
-    LoadCrontab(String),    // site_address
-    ToggleCronjob { site_address: String, job_id: String, enabled: bool },
-    SetCronjobInterval { site_address: String, job_id: String, interval: String },
+    LoadCrontab(String), // site_address
+    ToggleCronjob {
+        site_address: String,
+        job_id: String,
+        enabled: bool,
+    },
+    SetCronjobInterval {
+        site_address: String,
+        job_id: String,
+        interval: String,
+    },
     // Phase 6: Service checks
-    CheckDureMycart(String),    // site_address
-    CheckXmppProxy(String),     // site_address
-    CheckFail2BanRS(String),    // site_address
+    CheckDureMycart(String), // site_address
+    CheckXmppProxy(String),  // site_address
+    CheckFail2BanRS(String), // site_address
     // Phase 2: Crontab dialog
-    OpenCrontabDialog(String),  // site_address
+    OpenCrontabDialog(String), // site_address
 }
 
 /// Format Unix timestamp to readable date
@@ -86,7 +104,11 @@ fn render_site_column(ui: &mut egui::Ui, row: &MycartRow) {
         ui.label(egui::RichText::new(format!("platform: {}", &row.platform_id_display)).small());
 
         // Line 3: SSH host:port (small, grey)
-        ui.label(egui::RichText::new(format!("ssh: {}", &row.ssh_display)).small().color(egui::Color32::from_rgb(128, 128, 128)));
+        ui.label(
+            egui::RichText::new(format!("ssh: {}", &row.ssh_display))
+                .small()
+                .color(egui::Color32::from_rgb(128, 128, 128)),
+        );
     });
 }
 
@@ -102,7 +124,10 @@ fn render_operations_column(
 
         // Row 1: Crontab and Delete
         ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Crontab").small()).clicked() {
+            if ui
+                .add(MaterialButton::outlined("Crontab").small())
+                .clicked()
+            {
                 *action_trigger = Some(MycartAction::OpenCrontabDialog(row.site_address.clone()));
             }
 
@@ -113,15 +138,24 @@ fn render_operations_column(
 
         // Row 2: Service check buttons
         ui.horizontal(|ui| {
-            if ui.add(MaterialButton::outlined("Check Mycart").small()).clicked() {
+            if ui
+                .add(MaterialButton::outlined("Check Mycart").small())
+                .clicked()
+            {
                 *action_trigger = Some(MycartAction::CheckDureMycart(row.site_address.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Check XMPPProxy").small()).clicked() {
+            if ui
+                .add(MaterialButton::outlined("Check XMPPProxy").small())
+                .clicked()
+            {
                 *action_trigger = Some(MycartAction::CheckXmppProxy(row.site_address.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Check Fail2BanRS").small()).clicked() {
+            if ui
+                .add(MaterialButton::outlined("Check Fail2BanRS").small())
+                .clicked()
+            {
                 *action_trigger = Some(MycartAction::CheckFail2BanRS(row.site_address.clone()));
             }
         });
@@ -355,10 +389,7 @@ impl MycartTab {
                             },
                         );
                         // Reload crontab to show updated state
-                        self.handle_action(
-                            current_profile,
-                            MycartAction::OpenCrontabDialog(site),
-                        );
+                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site));
                     }
                     CrontabAction::SetInterval { job_id, interval } => {
                         self.handle_action(
@@ -370,10 +401,7 @@ impl MycartTab {
                             },
                         );
                         // Reload crontab to show updated state
-                        self.handle_action(
-                            current_profile,
-                            MycartAction::OpenCrontabDialog(site),
-                        );
+                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site));
                     }
                 }
             }
@@ -396,11 +424,18 @@ impl MycartTab {
                             .into_iter()
                             .map(|site| {
                                 // Resolve platform and SSH host
-                                let platform = mycart::resolve_platform_for_site(&app_config, &site);
-                                let ssh_host = mycart::resolve_ssh_host_for_site(&app_config, &site);
+                                let platform =
+                                    mycart::resolve_platform_for_site(&app_config, &site);
+                                let ssh_host =
+                                    mycart::resolve_ssh_host_for_site(&app_config, &site);
 
                                 // Extract domain from site_address
-                                let domain = site.site_address.split(':').next().unwrap_or(&site.site_address).to_string();
+                                let domain = site
+                                    .site_address
+                                    .split(':')
+                                    .next()
+                                    .unwrap_or(&site.site_address)
+                                    .to_string();
 
                                 // Format platform_id display
                                 let platform_id_display = platform
@@ -444,7 +479,12 @@ impl MycartTab {
         }
     }
 
-    fn render_table(&mut self, current_profile: &Option<ProfileContext>, ui: &mut egui::Ui, _height: f32) {
+    fn render_table(
+        &mut self,
+        current_profile: &Option<ProfileContext>,
+        ui: &mut egui::Ui,
+        _height: f32,
+    ) {
         // Calculate responsive column widths
         let available_width = ui.available_width() - 40.0;
         let base_width = 740.0; // Base width for columns
@@ -495,7 +535,9 @@ impl MycartTab {
         table.show(ui);
 
         // Handle pending actions
-        if let Some(action) = ui.data(|d| d.get_temp::<MycartAction>(egui::Id::new("mycart_pending_action"))) {
+        if let Some(action) =
+            ui.data(|d| d.get_temp::<MycartAction>(egui::Id::new("mycart_pending_action")))
+        {
             ui.data_mut(|d| d.remove::<MycartAction>(egui::Id::new("mycart_pending_action")));
             self.handle_action(current_profile, action);
         }
@@ -516,102 +558,107 @@ impl MycartTab {
             Vec::new()
         };
 
-        dialog("add_mycart_dialog", "Add Mycart Site", &mut self.show_add_dialog)
-            .min_width(400.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.label("Add a new mycart site with admin credentials:");
-                ui.add_space(8.0);
+        dialog(
+            "add_mycart_dialog",
+            "Add Mycart Site",
+            &mut self.show_add_dialog,
+        )
+        .min_width(400.0)
+        .max_width(window_width - 120.0)
+        .max_height(window_height - 120.0)
+        .scrollable(true)
+        .content(|ui, _open| {
+            ui.label("Add a new mycart site with admin credentials:");
+            ui.add_space(8.0);
 
-                ui.horizontal(|ui| {
-                    ui.label("Site Address:");
-                    ui.text_edit_singleline(&mut self.add_site);
-                });
+            ui.horizontal(|ui| {
+                ui.label("Site Address:");
+                ui.text_edit_singleline(&mut self.add_site);
+            });
 
-                ui.horizontal(|ui| {
-                    ui.label("Admin Email:");
-                    ui.text_edit_singleline(&mut self.add_email);
-                });
+            ui.horizontal(|ui| {
+                ui.label("Admin Email:");
+                ui.text_edit_singleline(&mut self.add_email);
+            });
 
-                ui.horizontal(|ui| {
-                    ui.label("Password:");
-                    ui.add(egui::TextEdit::singleline(&mut self.add_password).password(true));
-                });
+            ui.horizontal(|ui| {
+                ui.label("Password:");
+                ui.add(egui::TextEdit::singleline(&mut self.add_password).password(true));
+            });
 
-                // SSH Host dropdown (replaces text input)
-                ui.horizontal(|ui| {
-                    ui.label("SSH Host:");
+            // SSH Host dropdown (replaces text input)
+            ui.horizontal(|ui| {
+                ui.label("SSH Host:");
 
-                    let prev_ssh_host = self.add_ssh_host.clone();
-                    let selected_text = if self.add_ssh_host.is_empty() {
-                        "Select SSH host...".to_string()
-                    } else {
-                        self.add_ssh_host.clone()
-                    };
+                let prev_ssh_host = self.add_ssh_host.clone();
+                let selected_text = if self.add_ssh_host.is_empty() {
+                    "Select SSH host...".to_string()
+                } else {
+                    self.add_ssh_host.clone()
+                };
 
-                    egui::ComboBox::from_id_salt("add_mycart_ssh_host")
-                        .selected_text(selected_text)
-                        .show_ui(ui, |ui| {
-                            for host_config in &ssh_hosts {
-                                ui.selectable_value(
-                                    &mut self.add_ssh_host,
-                                    host_config.host.clone(),
-                                    &host_config.host,
-                                );
-                            }
-                        });
-
-                    // Auto-fill platform_id when ssh_host changes
-                    if self.add_ssh_host != prev_ssh_host && !self.add_ssh_host.is_empty() {
-                        if let Some(selected_host) = ssh_hosts.iter().find(|h| h.host == self.add_ssh_host) {
-                            self.add_platform_id = selected_host.platform_id.clone().unwrap_or_default();
+                egui::ComboBox::from_id_salt("add_mycart_ssh_host")
+                    .selected_text(selected_text)
+                    .show_ui(ui, |ui| {
+                        for host_config in &ssh_hosts {
+                            ui.selectable_value(
+                                &mut self.add_ssh_host,
+                                host_config.host.clone(),
+                                &host_config.host,
+                            );
                         }
-                    }
-                });
+                    });
 
-                // Platform ID (read-only, auto-filled from SSH host)
-                ui.horizontal(|ui| {
-                    ui.label("Platform ID:");
-                    if self.add_platform_id.is_empty() {
-                        ui.label(egui::RichText::new("(auto-filled from SSH host)").italics().color(egui::Color32::GRAY));
-                    } else {
-                        ui.label(egui::RichText::new(&self.add_platform_id).strong());
-                    }
-                });
-
-                if !self.add_status.is_empty() {
-                    ui.add_space(8.0);
-                    let color = if self.add_status.contains("success") {
-                        egui::Color32::from_rgb(0, 200, 0)
-                    } else {
-                        egui::Color32::from_rgb(255, 0, 0)
-                    };
-                    ui.colored_label(color, &self.add_status);
-                }
-
-                if self.add_in_progress {
-                    ui.add_space(8.0);
-                    ui.spinner();
-                    ui.label("Verifying credentials...");
-                }
-
-                ui.add_space(12.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(!self.add_in_progress, MaterialButton::filled("Add"))
-                        .clicked()
+                // Auto-fill platform_id when ssh_host changes
+                if self.add_ssh_host != prev_ssh_host && !self.add_ssh_host.is_empty() {
+                    if let Some(selected_host) =
+                        ssh_hosts.iter().find(|h| h.host == self.add_ssh_host)
                     {
-                        add_clicked.set(true);
+                        self.add_platform_id =
+                            selected_host.platform_id.clone().unwrap_or_default();
                     }
+                }
+            });
 
-                    if ui.add(MaterialButton::text("Cancel")).clicked() {
-                        cancel_clicked.set(true);
-                    }
-                });
-            })
-            .show(ctx);
+            // Platform ID (read-only, auto-filled from SSH host)
+            ui.horizontal(|ui| {
+                ui.label("Platform ID:");
+                if self.add_platform_id.is_empty() {
+                    ui.label(
+                        egui::RichText::new("(auto-filled from SSH host)")
+                            .italics()
+                            .color(egui::Color32::GRAY),
+                    );
+                } else {
+                    ui.label(egui::RichText::new(&self.add_platform_id).strong());
+                }
+            });
+
+            if !self.add_status.is_empty() {
+                ui.add_space(8.0);
+                let color = if self.add_status.contains("success") {
+                    egui::Color32::from_rgb(0, 200, 0)
+                } else {
+                    egui::Color32::from_rgb(255, 0, 0)
+                };
+                ui.colored_label(color, &self.add_status);
+            }
+
+            if self.add_in_progress {
+                ui.add_space(8.0);
+                ui.spinner();
+                ui.label("Verifying credentials...");
+            }
+        })
+        .action("Cancel", || {
+            cancel_clicked.set(true);
+        })
+        .primary_action("Add", || {
+            if !self.add_in_progress {
+                add_clicked.set(true);
+            }
+        })
+        .show(ctx);
 
         if add_clicked.get() && !self.add_in_progress {
             self.execute_add_site();
@@ -625,7 +672,8 @@ impl MycartTab {
     fn execute_add_site(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if self.add_site.is_empty() || self.add_email.is_empty() || self.add_password.is_empty() {
+            if self.add_site.is_empty() || self.add_email.is_empty() || self.add_password.is_empty()
+            {
                 self.add_status = "All fields are required".to_string();
                 return;
             }
@@ -644,14 +692,22 @@ impl MycartTab {
             let site = self.add_site.clone();
             let email = self.add_email.clone();
             let password = self.add_password.clone();
-            let platform_id = (!self.add_platform_id.is_empty()).then(|| self.add_platform_id.as_str());
+            let platform_id =
+                (!self.add_platform_id.is_empty()).then(|| self.add_platform_id.as_str());
             let ssh_host = (!self.add_ssh_host.is_empty()).then(|| self.add_ssh_host.as_str());
 
             self.add_in_progress = true;
             self.add_status.clear();
 
             // Spawn async task
-            let result = smol::block_on(mycart::add_mycart_site(&config_path, &site, &email, &password, platform_id, ssh_host));
+            let result = smol::block_on(mycart::add_mycart_site(
+                &config_path,
+                &site,
+                &email,
+                &password,
+                platform_id,
+                ssh_host,
+            ));
 
             self.add_in_progress = false;
 
@@ -659,7 +715,7 @@ impl MycartTab {
                 Ok(()) => {
                     self.add_status = "✓ Site added successfully".to_string();
                     self.loaded = false; // Trigger reload
-                    // Clear form fields
+                                         // Clear form fields
                     self.add_site.clear();
                     self.add_email.clear();
                     self.add_password.clear();
@@ -726,15 +782,20 @@ impl MycartTab {
             MycartAction::LoadStats(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let (Some(config_path), Some(row)) = (&self.config_path, self.rows.iter_mut().find(|r| r.site_address == site)) {
+                    if let (Some(config_path), Some(row)) = (
+                        &self.config_path,
+                        self.rows.iter_mut().find(|r| r.site_address == site),
+                    ) {
                         row.operation_state = OperationState::InProgress {
                             operation: "Loading stats".to_string(),
                             started_at: chrono::Utc::now().timestamp(),
                         };
 
                         // Load stats and seller info in parallel
-                        let stats_result = smol::block_on(mycart::get_site_stats(config_path, &site));
-                        let seller_result = smol::block_on(mycart::get_seller_info(config_path, &site));
+                        let stats_result =
+                            smol::block_on(mycart::get_site_stats(config_path, &site));
+                        let seller_result =
+                            smol::block_on(mycart::get_seller_info(config_path, &site));
 
                         match (stats_result, seller_result) {
                             (Ok(stats), Ok(seller)) => {
@@ -761,7 +822,10 @@ impl MycartTab {
             MycartAction::LoadCrontab(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let (Some(config_path), Some(row)) = (&self.config_path, self.rows.iter_mut().find(|r| r.site_address == site)) {
+                    if let (Some(config_path), Some(row)) = (
+                        &self.config_path,
+                        self.rows.iter_mut().find(|r| r.site_address == site),
+                    ) {
                         row.drawer_state.crontab_loading = true;
                         row.drawer_state.crontab_error = None;
 
@@ -779,14 +843,33 @@ impl MycartTab {
                     }
                 }
             }
-            MycartAction::ToggleCronjob { site_address, job_id, enabled } => {
+            MycartAction::ToggleCronjob {
+                site_address,
+                job_id,
+                enabled,
+            } => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let (Some(config_path), Some(row)) = (&self.config_path, self.rows.iter_mut().find(|r| r.site_address == site_address)) {
-                        match smol::block_on(mycart::update_site_cronjob_enabled(config_path, &site_address, &job_id, enabled)) {
+                    if let (Some(config_path), Some(row)) = (
+                        &self.config_path,
+                        self.rows
+                            .iter_mut()
+                            .find(|r| r.site_address == site_address),
+                    ) {
+                        match smol::block_on(mycart::update_site_cronjob_enabled(
+                            config_path,
+                            &site_address,
+                            &job_id,
+                            enabled,
+                        )) {
                             Ok(updated_job) => {
                                 // Update the job in the list
-                                if let Some(job) = row.drawer_state.crontab_jobs.iter_mut().find(|j| j.job_id == job_id) {
+                                if let Some(job) = row
+                                    .drawer_state
+                                    .crontab_jobs
+                                    .iter_mut()
+                                    .find(|j| j.job_id == job_id)
+                                {
                                     *job = updated_job;
                                 }
                             }
@@ -797,14 +880,33 @@ impl MycartTab {
                     }
                 }
             }
-            MycartAction::SetCronjobInterval { site_address, job_id, interval } => {
+            MycartAction::SetCronjobInterval {
+                site_address,
+                job_id,
+                interval,
+            } => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    if let (Some(config_path), Some(row)) = (&self.config_path, self.rows.iter_mut().find(|r| r.site_address == site_address)) {
-                        match smol::block_on(mycart::update_site_cronjob_interval(config_path, &site_address, &job_id, &interval)) {
+                    if let (Some(config_path), Some(row)) = (
+                        &self.config_path,
+                        self.rows
+                            .iter_mut()
+                            .find(|r| r.site_address == site_address),
+                    ) {
+                        match smol::block_on(mycart::update_site_cronjob_interval(
+                            config_path,
+                            &site_address,
+                            &job_id,
+                            &interval,
+                        )) {
                             Ok(updated_job) => {
                                 // Update the job in the list
-                                if let Some(job) = row.drawer_state.crontab_jobs.iter_mut().find(|j| j.job_id == job_id) {
+                                if let Some(job) = row
+                                    .drawer_state
+                                    .crontab_jobs
+                                    .iter_mut()
+                                    .find(|j| j.job_id == job_id)
+                                {
                                     *job = updated_job;
                                 }
                                 row.drawer_state.crontab_error = None;
@@ -828,12 +930,21 @@ impl MycartTab {
 
                         if let Some(profile) = current_profile {
                             let config = AppConfig::load_or_default(&profile.config_file);
-                            dure_debug!("CheckDureMycart: site={}, ssh_hosts_count={}", site, config.ssh_hosts.len());
-                            dure_debug!("CheckDureMycart: available ssh_hosts: {:?}", config.ssh_hosts.iter().map(|h| &h.host).collect::<Vec<_>>());
+                            dure_debug!(
+                                "CheckDureMycart: site={}, ssh_hosts_count={}",
+                                site,
+                                config.ssh_hosts.len()
+                            );
+                            dure_debug!(
+                                "CheckDureMycart: available ssh_hosts: {:?}",
+                                config.ssh_hosts.iter().map(|h| &h.host).collect::<Vec<_>>()
+                            );
 
                             // Find site config and use proper SSH host resolution
-                            let site_config = config.mycart_sites.iter().find(|s| s.site_address == site);
-                            let ssh_host = site_config.and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
+                            let site_config =
+                                config.mycart_sites.iter().find(|s| s.site_address == site);
+                            let ssh_host = site_config
+                                .and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
 
                             if ssh_host.is_none() && site_config.is_some() {
                                 dure_debug!("CheckDureMycart: resolution failed - site.ssh_host={:?}, site.platform_id={:?}",
@@ -842,7 +953,8 @@ impl MycartTab {
 
                             if let Some(host_config) = ssh_host {
                                 dure_debug!("CheckDureMycart: found ssh_host={}", host_config.host);
-                                match smol::block_on(mycart::get_duremycart_logs(host_config, None)) {
+                                match smol::block_on(mycart::get_duremycart_logs(host_config, None))
+                                {
                                     Ok(logs) => {
                                         row.drawer_state.mycart_logs = logs;
                                         row.drawer_state.mycart_loading = false;
@@ -893,11 +1005,17 @@ impl MycartTab {
 
                         if let Some(profile) = current_profile {
                             let config = AppConfig::load_or_default(&profile.config_file);
-                            dure_debug!("CheckXmppProxy: site={}, ssh_hosts_count={}", site, config.ssh_hosts.len());
+                            dure_debug!(
+                                "CheckXmppProxy: site={}, ssh_hosts_count={}",
+                                site,
+                                config.ssh_hosts.len()
+                            );
 
                             // Find site config and use proper SSH host resolution
-                            let site_config = config.mycart_sites.iter().find(|s| s.site_address == site);
-                            let ssh_host = site_config.and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
+                            let site_config =
+                                config.mycart_sites.iter().find(|s| s.site_address == site);
+                            let ssh_host = site_config
+                                .and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
 
                             if ssh_host.is_none() && site_config.is_some() {
                                 dure_debug!("CheckXmppProxy: resolution failed - site.ssh_host={:?}, site.platform_id={:?}",
@@ -906,7 +1024,8 @@ impl MycartTab {
 
                             if let Some(host_config) = ssh_host {
                                 dure_debug!("CheckXmppProxy: found ssh_host={}", host_config.host);
-                                match smol::block_on(mycart::get_xmppproxy_logs(host_config, None)) {
+                                match smol::block_on(mycart::get_xmppproxy_logs(host_config, None))
+                                {
                                     Ok(logs) => {
                                         row.drawer_state.xmppproxy_logs = logs;
                                         row.drawer_state.xmppproxy_loading = false;
@@ -957,11 +1076,17 @@ impl MycartTab {
 
                         if let Some(profile) = current_profile {
                             let config = AppConfig::load_or_default(&profile.config_file);
-                            dure_debug!("CheckFail2BanRS: site={}, ssh_hosts_count={}", site, config.ssh_hosts.len());
+                            dure_debug!(
+                                "CheckFail2BanRS: site={}, ssh_hosts_count={}",
+                                site,
+                                config.ssh_hosts.len()
+                            );
 
                             // Find site config and use proper SSH host resolution
-                            let site_config = config.mycart_sites.iter().find(|s| s.site_address == site);
-                            let ssh_host = site_config.and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
+                            let site_config =
+                                config.mycart_sites.iter().find(|s| s.site_address == site);
+                            let ssh_host = site_config
+                                .and_then(|s| mycart::resolve_ssh_host_for_site(&config, s));
 
                             if ssh_host.is_none() && site_config.is_some() {
                                 dure_debug!("CheckFail2BanRS: resolution failed - site.ssh_host={:?}, site.platform_id={:?}",
@@ -970,7 +1095,8 @@ impl MycartTab {
 
                             if let Some(host_config) = ssh_host {
                                 dure_debug!("CheckFail2BanRS: found ssh_host={}", host_config.host);
-                                match smol::block_on(mycart::get_fail2banrs_logs(host_config, None)) {
+                                match smol::block_on(mycart::get_fail2banrs_logs(host_config, None))
+                                {
                                     Ok(logs) => {
                                         row.drawer_state.fail2banrs_logs = logs;
                                         row.drawer_state.fail2banrs_loading = false;

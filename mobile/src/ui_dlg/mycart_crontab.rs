@@ -53,7 +53,6 @@ impl CrontabDialog {
             .min_width(600.0)
             .scrollable(true)
             .content(|ui, _open| {
-
                 // Site header
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Site:").strong());
@@ -131,7 +130,10 @@ impl CrontabDialog {
                                         use chrono::{DateTime, Utc};
                                         let dt = DateTime::<Utc>::from_timestamp(last_run, 0)
                                             .unwrap_or_default();
-                                        ui.label(format!("Last run: {}", dt.format("%Y-%m-%d %H:%M")));
+                                        ui.label(format!(
+                                            "Last run: {}",
+                                            dt.format("%Y-%m-%d %H:%M")
+                                        ));
                                     } else {
                                         ui.label("Last run: never");
                                     }
@@ -193,10 +195,7 @@ mod tests {
         assert_eq!(dialog.jobs.len(), 1);
         assert!(!dialog.loading);
         assert!(dialog.error.is_none());
-        assert_eq!(
-            dialog.interval_buffers.get("cleanup").unwrap(),
-            "0 0 * * *"
-        );
+        assert_eq!(dialog.interval_buffers.get("cleanup").unwrap(), "0 0 * * *");
     }
 
     #[test]

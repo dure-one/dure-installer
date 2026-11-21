@@ -6,8 +6,8 @@ pub mod types;
 
 pub use actor::log_actor_loop;
 pub use opslog_actor::OpsLogActor;
-pub use opslog_commands::{LogsCommand, LogStatus, StatsPeriod};
-pub use opslog_events::{LogsEvent, LogStats, OperationLog};
+pub use opslog_commands::{LogStatus, LogsCommand, StatsPeriod};
+pub use opslog_events::{LogStats, LogsEvent, OperationLog};
 pub use types::{LogBuffer, LogCommand, LogEvent, LogLevel};
 
 use smol::channel::Sender;

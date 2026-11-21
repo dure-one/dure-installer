@@ -79,7 +79,6 @@ impl SshActor {
             }
         }
 
-
         // Check new ports against allocated ports
         for (host_port, _) in new_ports {
             if allocated_ports.contains(host_port) {
@@ -715,27 +714,29 @@ impl SshActor {
     async fn get_operation_logs(&mut self, host: String, limit: usize) -> anyhow::Result<()> {
         let host_clone = host.clone();
 
-        let logs = runtime::unblock(move || -> anyhow::Result<Vec<crate::viewmodel::ssh::OperationLog>> {
-            use crate::calc::db;
-            use crate::storage::models::opslog::list_by_project;
+        let logs = runtime::unblock(
+            move || -> anyhow::Result<Vec<crate::viewmodel::ssh::OperationLog>> {
+                use crate::calc::db;
+                use crate::storage::models::opslog::list_by_project;
 
-            let mut conn = db::establish_connection();
-            let ops = list_by_project(&mut conn, &host_clone, limit as i64)?;
+                let mut conn = db::establish_connection();
+                let ops = list_by_project(&mut conn, &host_clone, limit as i64)?;
 
-            let logs = ops
-                .into_iter()
-                .map(|op| crate::viewmodel::ssh::OperationLog {
-                    id: op.id,
-                    project_id: op.project_id,
-                    operation_type: op.operation_type,
-                    status: op.status,
-                    started_at: op.started_at,
-                    completed_at: op.completed_at,
-                })
-                .collect();
+                let logs = ops
+                    .into_iter()
+                    .map(|op| crate::viewmodel::ssh::OperationLog {
+                        id: op.id,
+                        project_id: op.project_id,
+                        operation_type: op.operation_type,
+                        status: op.status,
+                        started_at: op.started_at,
+                        completed_at: op.completed_at,
+                    })
+                    .collect();
 
-            Ok(logs)
-        })
+                Ok(logs)
+            },
+        )
         .await?;
 
         self.send_event(SshEvent::OperationLogsRetrieved { host, logs })
@@ -1326,7 +1327,6 @@ impl SshActor {
         }
     }
 
-
     async fn send_progress(&self, operation: &str, progress: f32, status: &str) {
         let _ = self
             .event_tx
@@ -1743,9 +1743,17 @@ impl SshActor {
                     host, installed, running
                 )
             }
-            SshEvent::DureInstallCompleted { host, success, error, .. } => {
+            SshEvent::DureInstallCompleted {
+                host,
+                success,
+                error,
+                ..
+            } => {
                 if let Some(err) = error {
-                    format!("DureInstallCompleted({}, success={}, error={})", host, success, err)
+                    format!(
+                        "DureInstallCompleted({}, success={}, error={})",
+                        host, success, err
+                    )
                 } else {
                     format!("DureInstallCompleted({}, success={})", host, success)
                 }

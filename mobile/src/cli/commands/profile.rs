@@ -139,7 +139,10 @@ mod tests {
         // Invalid characters
         let result = create_profile("test@profile".to_string(), "pass".to_string());
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid character"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid character"));
 
         // Empty name
         let result = create_profile("".to_string(), "pass".to_string());
@@ -199,7 +202,10 @@ mod tests {
         // Wrong password
         let result = login_profile("test-login".to_string(), "wrong-pass".to_string());
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Incorrect password"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Incorrect password"));
 
         // Nonexistent profile
         let result = login_profile("missing".to_string(), "pass".to_string());

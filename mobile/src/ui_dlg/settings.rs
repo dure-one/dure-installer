@@ -58,215 +58,193 @@ impl DlgSettings {
 
         dialog("settings_dialog", &tr!("settings"), &mut self.open)
             .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
             .scrollable(true)
             .content(|ui, _open| {
                 ui.heading(tr!("settings"));
                 ui.add_space(8.0);
-                        // Language Selector
-                        ui.horizontal(|ui| {
-                            ui.label(tr!("language"));
-                            let mut selected_lang = settings.language.clone();
+                // Language Selector
+                ui.horizontal(|ui| {
+                    ui.label(tr!("language"));
+                    let mut selected_lang = settings.language.clone();
 
-                            egui::ComboBox::from_label("   ")
-                                .selected_text(match selected_lang.as_str() {
-                                    "Auto" => "Auto",
-                                    "en-US" => "English",
-                                    "ko-KR" => "한국어",
-                                    _ => &selected_lang,
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut selected_lang,
-                                        "Auto".to_string(),
-                                        "Auto",
-                                    );
-                                    ui.selectable_value(
-                                        &mut selected_lang,
-                                        "en-US".to_string(),
-                                        "English",
-                                    );
-                                    ui.selectable_value(
-                                        &mut selected_lang,
-                                        "ko-KR".to_string(),
-                                        "한국어",
-                                    );
-                                });
-
-                            if selected_lang != settings.language {
-                                settings.language = selected_lang.clone();
-                                let language_to_apply = if selected_lang == "Auto" {
-                                    Self::detect_system_language()
-                                } else {
-                                    selected_lang
-                                };
-                                egui_i18n::set_language(&language_to_apply);
-                            }
+                    egui::ComboBox::from_label("   ")
+                        .selected_text(match selected_lang.as_str() {
+                            "Auto" => "Auto",
+                            "en-US" => "English",
+                            "ko-KR" => "한국어",
+                            _ => &selected_lang,
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut selected_lang, "Auto".to_string(), "Auto");
+                            ui.selectable_value(&mut selected_lang, "en-US".to_string(), "English");
+                            ui.selectable_value(&mut selected_lang, "ko-KR".to_string(), "한국어");
                         });
 
-                        ui.add_space(8.0);
+                    if selected_lang != settings.language {
+                        settings.language = selected_lang.clone();
+                        let language_to_apply = if selected_lang == "Auto" {
+                            Self::detect_system_language()
+                        } else {
+                            selected_lang
+                        };
+                        egui_i18n::set_language(&language_to_apply);
+                    }
+                });
 
-                        // Color Mode Selector
-                        ui.horizontal(|ui| {
-                            ui.label(tr!("color-mode"));
-                            if let Ok(mut theme) = get_global_theme().lock() {
-                                let light_selected = theme.theme_mode == ThemeMode::Light;
-                                if ui
-                                    .selectable_label(light_selected, tr!("light-mode"))
-                                    .clicked()
-                                {
-                                    theme.theme_mode = ThemeMode::Light;
-                                    settings.theme_mode =
-                                        Self::theme_mode_to_string(ThemeMode::Light);
-                                }
+                ui.add_space(8.0);
 
-                                let auto_selected = theme.theme_mode == ThemeMode::Auto;
-                                if ui
-                                    .selectable_label(auto_selected, tr!("auto-mode"))
-                                    .clicked()
-                                {
-                                    theme.theme_mode = ThemeMode::Auto;
-                                    settings.theme_mode =
-                                        Self::theme_mode_to_string(ThemeMode::Auto);
-                                }
+                // Color Mode Selector
+                ui.horizontal(|ui| {
+                    ui.label(tr!("color-mode"));
+                    if let Ok(mut theme) = get_global_theme().lock() {
+                        let light_selected = theme.theme_mode == ThemeMode::Light;
+                        if ui
+                            .selectable_label(light_selected, tr!("light-mode"))
+                            .clicked()
+                        {
+                            theme.theme_mode = ThemeMode::Light;
+                            settings.theme_mode = Self::theme_mode_to_string(ThemeMode::Light);
+                        }
 
-                                let dark_selected = theme.theme_mode == ThemeMode::Dark;
-                                //if ui
-                                //    .selectable_label(dark_selected, tr!("dark-mode"))
-                                //    .clicked()
-                                //{
-                                //    theme.theme_mode = ThemeMode::Dark;
-                                //    settings.theme_mode =
-                                //        Self::theme_mode_to_string(ThemeMode::Dark);
-                                //}
-                            }
-                        });
+                        let auto_selected = theme.theme_mode == ThemeMode::Auto;
+                        if ui
+                            .selectable_label(auto_selected, tr!("auto-mode"))
+                            .clicked()
+                        {
+                            theme.theme_mode = ThemeMode::Auto;
+                            settings.theme_mode = Self::theme_mode_to_string(ThemeMode::Auto);
+                        }
 
-                        ui.add_space(8.0);
+                        let dark_selected = theme.theme_mode == ThemeMode::Dark;
+                        //if ui
+                        //    .selectable_label(dark_selected, tr!("dark-mode"))
+                        //    .clicked()
+                        //{
+                        //    theme.theme_mode = ThemeMode::Dark;
+                        //    settings.theme_mode =
+                        //        Self::theme_mode_to_string(ThemeMode::Dark);
+                        //}
+                    }
+                });
 
-                        // Theme Mode Selector (Material Colors)
-                        ui.horizontal(|ui| {
-                            ui.label(tr!("theme-mode"));
-                            let mut selected_theme = settings.theme_name.clone();
-                            egui::ComboBox::from_id_salt("theme_selector")
-                                .selected_text(match selected_theme.as_str() {
-                                    "leafgreen" => "Leaf Green",
-                                    "verysoftblue" => "Very Soft Blue",
-                                    "deepcrimson" => "Deep Crimson",
-                                    "goldenboy" => "Golden Boy",
-                                    "terracotta" => "Terracotta",
-                                    "oceanblue" => "Ocean Blue",
-                                    _ => "Default",
-                                })
-                                .show_ui(ui, |ui| {
-                                    for (value, label) in [
-                                        ("default", "Default"),
-                                        ("leafgreen", "Leaf Green"),
-                                        ("verysoftblue", "Very Soft Blue"),
-                                        ("deepcrimson", "Deep Crimson"),
-                                        ("goldenboy", "Golden Boy"),
-                                        ("terracotta", "Terracotta"),
-                                        ("oceanblue", "Ocean Blue"),
-                                    ] {
-                                        if ui
-                                            .selectable_value(
-                                                &mut selected_theme,
-                                                value.to_string(),
-                                                label,
-                                            )
-                                            .clicked()
-                                        {
-                                            settings.theme_name = value.to_string();
-                                            self.theme_to_apply = Some(value.to_string());
-                                        }
-                                    }
-                                });
-                        });
+                ui.add_space(8.0);
 
-                        ui.add_space(8.0);
-
-                        // Text Style Override Selector
-                        ui.horizontal(|ui| {
-                            let mut override_text_style = ui.style().override_text_style.clone();
-                            ui.label(tr!("text-style"));
-                            egui::ComboBox::from_id_salt("override_text_style")
-                                .selected_text(match &override_text_style {
-                                    None => "None".to_owned(),
-                                    Some(s) => s.to_string(),
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut override_text_style, None, "None");
-                                    let all_text_styles = ui.style().text_styles();
-                                    for style in all_text_styles {
-                                        use egui_material3::theme::get_global_color;
-                                        let text = egui::RichText::new(style.to_string())
-                                            .text_style(style.clone())
-                                            .color(get_global_color("onSurface"));
-                                        ui.selectable_value(
-                                            &mut override_text_style,
-                                            Some(style),
-                                            text,
-                                        );
-                                    }
-                                });
-                            let text_style = override_text_style.clone();
-                            ui.ctx().style_mut(|s| {
-                                s.override_text_style = text_style.clone();
-                            });
-
-                            let style_string = match text_style {
-                                None => String::new(),
-                                Some(s) => s.to_string(),
-                            };
-                            if style_string != settings.override_text_style {
-                                settings.override_text_style = style_string;
-                            }
-                        });
-
-                        ui.add_space(8.0);
-
-                        // Show Logs and Log Level
-                        ui.horizontal(|ui| {
-                            ui.label(tr!("show-logs"));
-                            let show_logs_changed =
-                                ui.checkbox(&mut settings.show_logs, tr!("show")).changed();
-                            if show_logs_changed {
-                                crate::dure_info!(
-                                    "🔧 Show Logs checkbox toggled: show_logs={}",
-                                    settings.show_logs
-                                );
-                            }
-
-                            use crate::LogLevel;
-                            let current_level = LogLevel::from_str(&settings.log_level);
-
-                            let mut level_changed = false;
-                            for (level, label) in [
-                                (LogLevel::Error, "ERROR"),
-                                (LogLevel::Warn, "WARN"),
-                                (LogLevel::Info, "INFO"),
-                                (LogLevel::Debug, "DEBUG"),
-                                (LogLevel::Trace, "TRACE"),
+                // Theme Mode Selector (Material Colors)
+                ui.horizontal(|ui| {
+                    ui.label(tr!("theme-mode"));
+                    let mut selected_theme = settings.theme_name.clone();
+                    egui::ComboBox::from_id_salt("theme_selector")
+                        .selected_text(match selected_theme.as_str() {
+                            "leafgreen" => "Leaf Green",
+                            "verysoftblue" => "Very Soft Blue",
+                            "deepcrimson" => "Deep Crimson",
+                            "goldenboy" => "Golden Boy",
+                            "terracotta" => "Terracotta",
+                            "oceanblue" => "Ocean Blue",
+                            _ => "Default",
+                        })
+                        .show_ui(ui, |ui| {
+                            for (value, label) in [
+                                ("default", "Default"),
+                                ("leafgreen", "Leaf Green"),
+                                ("verysoftblue", "Very Soft Blue"),
+                                ("deepcrimson", "Deep Crimson"),
+                                ("goldenboy", "Golden Boy"),
+                                ("terracotta", "Terracotta"),
+                                ("oceanblue", "Ocean Blue"),
                             ] {
-                                let selected = current_level == level;
-                                if ui.selectable_label(selected, label).clicked() {
-                                    settings.log_level = level.as_str().to_string();
-                                    level_changed = true;
-                                    #[cfg(not(target_arch = "wasm32"))]
-                                    crate::log_capture::update_log_level(&settings.log_level);
+                                if ui
+                                    .selectable_value(&mut selected_theme, value.to_string(), label)
+                                    .clicked()
+                                {
+                                    settings.theme_name = value.to_string();
+                                    self.theme_to_apply = Some(value.to_string());
                                 }
                             }
+                        });
+                });
 
-                            // Update log settings when show_logs or log_level changes
-                            #[cfg(not(target_arch = "wasm32"))]
-                            if show_logs_changed || level_changed {
-                                crate::log_capture::update_log_settings(
-                                    settings.show_logs,
-                                    LogLevel::from_str(&settings.log_level),
-                                );
+                ui.add_space(8.0);
+
+                // Text Style Override Selector
+                ui.horizontal(|ui| {
+                    let mut override_text_style = ui.style().override_text_style.clone();
+                    ui.label(tr!("text-style"));
+                    egui::ComboBox::from_id_salt("override_text_style")
+                        .selected_text(match &override_text_style {
+                            None => "None".to_owned(),
+                            Some(s) => s.to_string(),
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut override_text_style, None, "None");
+                            let all_text_styles = ui.style().text_styles();
+                            for style in all_text_styles {
+                                use egui_material3::theme::get_global_color;
+                                let text = egui::RichText::new(style.to_string())
+                                    .text_style(style.clone())
+                                    .color(get_global_color("onSurface"));
+                                ui.selectable_value(&mut override_text_style, Some(style), text);
                             }
                         });
+                    let text_style = override_text_style.clone();
+                    ui.ctx().style_mut(|s| {
+                        s.override_text_style = text_style.clone();
+                    });
+
+                    let style_string = match text_style {
+                        None => String::new(),
+                        Some(s) => s.to_string(),
+                    };
+                    if style_string != settings.override_text_style {
+                        settings.override_text_style = style_string;
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                // Show Logs and Log Level
+                ui.horizontal(|ui| {
+                    ui.label(tr!("show-logs"));
+                    let show_logs_changed =
+                        ui.checkbox(&mut settings.show_logs, tr!("show")).changed();
+                    if show_logs_changed {
+                        crate::dure_info!(
+                            "🔧 Show Logs checkbox toggled: show_logs={}",
+                            settings.show_logs
+                        );
+                    }
+
+                    use crate::LogLevel;
+                    let current_level = LogLevel::from_str(&settings.log_level);
+
+                    let mut level_changed = false;
+                    for (level, label) in [
+                        (LogLevel::Error, "ERROR"),
+                        (LogLevel::Warn, "WARN"),
+                        (LogLevel::Info, "INFO"),
+                        (LogLevel::Debug, "DEBUG"),
+                        (LogLevel::Trace, "TRACE"),
+                    ] {
+                        let selected = current_level == level;
+                        if ui.selectable_label(selected, label).clicked() {
+                            settings.log_level = level.as_str().to_string();
+                            level_changed = true;
+                            #[cfg(not(target_arch = "wasm32"))]
+                            crate::log_capture::update_log_level(&settings.log_level);
+                        }
+                    }
+
+                    // Update log settings when show_logs or log_level changes
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if show_logs_changed || level_changed {
+                        crate::log_capture::update_log_settings(
+                            settings.show_logs,
+                            LogLevel::from_str(&settings.log_level),
+                        );
+                    }
+                });
 
                 ui.add_space(8.0);
             })

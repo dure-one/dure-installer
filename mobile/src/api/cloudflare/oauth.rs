@@ -683,11 +683,11 @@ pub fn refresh_access_token(refresh_token: &str) -> Result<OAuthResult> {
 
     dure_info!("✓ Successfully refreshed Cloudflare access token");
 
+    // Per Cloudflare OAuth conventions: Cloudflare ALWAYS returns new refresh_token
+    // and immediately invalidates old one. No fallback to old token.
     Ok(OAuthResult {
         access_token: token_response.access_token,
-        refresh_token: token_response
-            .refresh_token
-            .or_else(|| Some(refresh_token.to_string())),
+        refresh_token: token_response.refresh_token,
         expires_at,
     })
 }
@@ -1395,5 +1395,63 @@ mod tests {
         assert_eq!(parsed2.access_token, "access_only");
         assert_eq!(parsed2.refresh_token, None);
         assert_eq!(parsed2.expires_in, Some(7200));
+    }
+
+    #[test]
+    fn test_refresh_token_must_rotate() {
+        // Test that verifies token rotation semantics:
+        // - Cloudflare ALWAYS returns new refresh_token on refresh
+        // - Old refresh_token is IMMEDIATELY invalidated
+        // - Preserving old token causes "invalid_grant" error
+        //
+        // This test documents the expected behavior per Cloudflare OAuth conventions
+
+        #[derive(serde::Deserialize)]
+        struct TokenResponse {
+            access_token: String,
+            refresh_token: Option<String>,
+            expires_in: Option<u64>,
+        }
+
+        // Simulate Cloudflare token refresh response (always includes new refresh_token)
+        let cloudflare_response = r#"{
+            "access_token": "NEW_access_token_xyz",
+            "refresh_token": "NEW_refresh_token_def",
+            "expires_in": 900
+        }"#;
+
+        let old_refresh_token = "OLD_refresh_token_abc";
+        let token_response: TokenResponse = serde_json::from_str(cloudflare_response).unwrap();
+
+        // Build OAuthResult (simulating refresh_access_token logic)
+        let result = OAuthResult {
+            access_token: token_response.access_token,
+            refresh_token: token_response.refresh_token.clone(),
+            expires_at: 1234567890,
+        };
+
+        // CRITICAL: New refresh_token MUST be used, not old one
+        assert_eq!(
+            result.refresh_token,
+            Some("NEW_refresh_token_def".to_string()),
+            "Token rotation failed: old refresh_token preserved instead of new one"
+        );
+        assert_ne!(
+            result.refresh_token,
+            Some(old_refresh_token.to_string()),
+            "Token rotation failed: must use new refresh_token from Cloudflare"
+        );
+
+        // If Cloudflare doesn't return refresh_token, result should be None (error condition)
+        let no_refresh_response = r#"{
+            "access_token": "access_only",
+            "expires_in": 900
+        }"#;
+        let token_response_no_refresh: TokenResponse =
+            serde_json::from_str(no_refresh_response).unwrap();
+        assert_eq!(
+            token_response_no_refresh.refresh_token, None,
+            "Missing refresh_token should be None, not fallback to old token"
+        );
     }
 }

@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::calc::mycart::{resolve_ssh_host_for_site};
+    use crate::calc::mycart::resolve_ssh_host_for_site;
     use crate::config::{AppConfig, MycartSiteConfig, SshHostConfig};
 
     fn create_test_ssh_host(host: &str, platform_id: Option<&str>) -> SshHostConfig {
@@ -46,8 +46,13 @@ mod tests {
     fn test_resolve_ssh_host_explicit_binding() {
         // Arrange
         let mut config = AppConfig::default();
-        config.ssh_hosts.push(create_test_ssh_host("ubuntu@34.134.123.45", Some("test-project")));
-        config.ssh_hosts.push(create_test_ssh_host("admin@dure.co", None));
+        config.ssh_hosts.push(create_test_ssh_host(
+            "ubuntu@34.134.123.45",
+            Some("test-project"),
+        ));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("admin@dure.co", None));
 
         let site = create_test_site("dure.co", Some("34.134.123.45"), Some("test-project"));
 
@@ -55,7 +60,10 @@ mod tests {
         let result = resolve_ssh_host_for_site(&config, &site);
 
         // Assert
-        assert!(result.is_some(), "Should find SSH host via explicit binding");
+        assert!(
+            result.is_some(),
+            "Should find SSH host via explicit binding"
+        );
         assert_eq!(result.unwrap().host, "ubuntu@34.134.123.45");
     }
 
@@ -63,8 +71,12 @@ mod tests {
     fn test_resolve_ssh_host_fallback_domain_match() {
         // Arrange
         let mut config = AppConfig::default();
-        config.ssh_hosts.push(create_test_ssh_host("ubuntu@dure.co", None));
-        config.ssh_hosts.push(create_test_ssh_host("admin@other.com", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("ubuntu@dure.co", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("admin@other.com", None));
 
         let site = create_test_site("dure.co", None, None);
 
@@ -80,7 +92,9 @@ mod tests {
     fn test_resolve_ssh_host_fallback_ip_match() {
         // Arrange
         let mut config = AppConfig::default();
-        config.ssh_hosts.push(create_test_ssh_host("ubuntu@34.134.123.45", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("ubuntu@34.134.123.45", None));
 
         let site = create_test_site("34.134.123.45", None, None);
 
@@ -96,7 +110,9 @@ mod tests {
     fn test_resolve_ssh_host_no_match() {
         // Arrange
         let mut config = AppConfig::default();
-        config.ssh_hosts.push(create_test_ssh_host("ubuntu@other.com", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("ubuntu@other.com", None));
 
         let site = create_test_site("dure.co", None, None);
 
@@ -111,8 +127,12 @@ mod tests {
     fn test_resolve_ssh_host_explicit_takes_precedence() {
         // Arrange
         let mut config = AppConfig::default();
-        config.ssh_hosts.push(create_test_ssh_host("ubuntu@34.134.123.45", None));
-        config.ssh_hosts.push(create_test_ssh_host("admin@dure.co", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("ubuntu@34.134.123.45", None));
+        config
+            .ssh_hosts
+            .push(create_test_ssh_host("admin@dure.co", None));
 
         // Explicit binding to IP, even though domain would also match
         let site = create_test_site("dure.co", Some("34.134.123.45"), None);
@@ -122,8 +142,11 @@ mod tests {
 
         // Assert
         assert!(result.is_some(), "Should find SSH host");
-        assert_eq!(result.unwrap().host, "ubuntu@34.134.123.45",
-            "Explicit binding should take precedence over domain fallback");
+        assert_eq!(
+            result.unwrap().host,
+            "ubuntu@34.134.123.45",
+            "Explicit binding should take precedence over domain fallback"
+        );
     }
 }
 

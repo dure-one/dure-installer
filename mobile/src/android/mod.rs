@@ -18,6 +18,5 @@ pub mod inputmethod;
 pub mod log;
 
 #[cfg(target_os = "android")]
-
 #[cfg(target_os = "android")]
 pub mod screensize;

@@ -28,7 +28,7 @@ pub enum Tab {
     Ssh,
     Dns, // New DNS tab with Cloudflare OAuth workflow
     Mycart, // Mycart admin management
-    // Ns tab kept in code but hidden from main tab list
+         // Ns tab kept in code but hidden from main tab list
 }
 
 impl Tab {

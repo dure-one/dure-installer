@@ -48,7 +48,7 @@ pub fn init_mycart_sites_table(conn: &mut SqliteConnection) -> Result<()> {
     }
 
     let has_admin_id = diesel::sql_query(
-        "SELECT COUNT(*) as count FROM pragma_table_info('mycart_sites') WHERE name='admin_id'"
+        "SELECT COUNT(*) as count FROM pragma_table_info('mycart_sites') WHERE name='admin_id'",
     )
     .get_result::<ColumnCheck>(conn)
     .map(|c| c.count > 0)
@@ -59,8 +59,8 @@ pub fn init_mycart_sites_table(conn: &mut SqliteConnection) -> Result<()> {
         log::info!("Migrating mycart_sites table from admin_id to email column");
 
         // Add jwt_token if missing
-        let _ = diesel::sql_query("ALTER TABLE mycart_sites ADD COLUMN jwt_token TEXT")
-            .execute(conn);
+        let _ =
+            diesel::sql_query("ALTER TABLE mycart_sites ADD COLUMN jwt_token TEXT").execute(conn);
 
         // Create new table with correct schema
         diesel::sql_query(
@@ -72,7 +72,7 @@ pub fn init_mycart_sites_table(conn: &mut SqliteConnection) -> Result<()> {
                 jwt_token TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
-            )"
+            )",
         )
         .execute(conn)
         .context("Failed to create new mycart_sites table")?;
@@ -107,7 +107,7 @@ pub fn init_mycart_sites_table(conn: &mut SqliteConnection) -> Result<()> {
                 jwt_token TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
-            )"
+            )",
         )
         .execute(conn)
         .context("Failed to create mycart_sites table")?;
@@ -116,7 +116,7 @@ pub fn init_mycart_sites_table(conn: &mut SqliteConnection) -> Result<()> {
     // Create index
     diesel::sql_query(
         "CREATE INDEX IF NOT EXISTS idx_mycart_sites_site_address
-         ON mycart_sites(site_address)"
+         ON mycart_sites(site_address)",
     )
     .execute(conn)
     .context("Failed to create index")?;
@@ -287,8 +287,8 @@ mod tests {
     use super::*;
 
     fn setup_test_db() -> SqliteConnection {
-        let mut conn = SqliteConnection::establish(":memory:")
-            .expect("Failed to create in-memory database");
+        let mut conn =
+            SqliteConnection::establish(":memory:").expect("Failed to create in-memory database");
         init_mycart_sites_table(&mut conn).expect("Failed to initialize table");
         conn
     }
@@ -298,8 +298,8 @@ mod tests {
         let mut conn = setup_test_db();
 
         // Table should exist and be queryable
-        let result = diesel::sql_query("SELECT COUNT(*) as count FROM mycart_sites")
-            .execute(&mut conn);
+        let result =
+            diesel::sql_query("SELECT COUNT(*) as count FROM mycart_sites").execute(&mut conn);
 
         assert!(result.is_ok(), "mycart_sites table should exist");
     }

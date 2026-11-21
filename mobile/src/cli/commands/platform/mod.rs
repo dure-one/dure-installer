@@ -44,21 +44,33 @@ pub fn execute_addvm_command(
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_restart_command(_profile: &ProfileContext, _name: String, _vm: Option<String>) -> Result<()> {
+pub fn execute_restart_command(
+    _profile: &ProfileContext,
+    _name: String,
+    _vm: Option<String>,
+) -> Result<()> {
     Err(anyhow!(
         "VM operations require GUI feature. Please use the GUI to restart VMs."
     ))
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_delvm_command(_profile: &ProfileContext, _name: String, _vm: Option<String>) -> Result<()> {
+pub fn execute_delvm_command(
+    _profile: &ProfileContext,
+    _name: String,
+    _vm: Option<String>,
+) -> Result<()> {
     Err(anyhow!(
         "VM operations require GUI feature. Please use the GUI to delete VMs."
     ))
 }
 
 #[cfg(not(feature = "gui"))]
-pub fn execute_firewall_command(_profile: &ProfileContext, _name: String, _ip: Option<String>) -> Result<()> {
+pub fn execute_firewall_command(
+    _profile: &ProfileContext,
+    _name: String,
+    _ip: Option<String>,
+) -> Result<()> {
     Err(anyhow!(
         "Firewall operations require GUI feature. Please use the GUI to update firewall rules."
     ))
@@ -135,7 +147,11 @@ pub fn execute_delete_command(profile: &ProfileContext, name: String) -> Result<
 }
 
 /// Execute platform add command
-pub fn execute_platform_add(profile: &ProfileContext, name: String, platform_type: String) -> Result<()> {
+pub fn execute_platform_add(
+    profile: &ProfileContext,
+    name: String,
+    platform_type: String,
+) -> Result<()> {
     use crate::config::CloudPlatformConfig;
 
     // Reserved platform names that cannot be used

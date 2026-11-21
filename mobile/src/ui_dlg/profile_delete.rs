@@ -62,34 +62,37 @@ impl DlgProfileDelete {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("profile_delete_dialog", &tr!("profile-delete-title"), &mut self.open)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading(tr!("profile-delete-heading"));
-                ui.add_space(12.0);
+        dialog(
+            "profile_delete_dialog",
+            &tr!("profile-delete-title"),
+            &mut self.open,
+        )
+        .min_width(350.0)
+        .max_width(window_width - 120.0)
+        .max_height(window_height - 120.0)
+        .scrollable(true)
+        .content(|ui, _open| {
+            ui.heading(tr!("profile-delete-heading"));
+            ui.add_space(12.0);
 
-                // Deletion confirmation message
-                ui.label(tr!("profile-delete-message", { name: self.profile_name.clone() }));
-                ui.add_space(12.0);
+            // Deletion confirmation message
+            ui.label(tr!("profile-delete-message", { name: self.profile_name.clone() }));
+            ui.add_space(12.0);
 
-                // Warning message
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                    tr!("profile-delete-warning"),
-                );
-                ui.add_space(12.0);
-
-            })
-            .action(tr!("cancel"), || {
-                dialog_action.set(DeleteDialogAction::Cancel);
-            })
-            .primary_action(tr!("delete"), || {
-                dialog_action.set(DeleteDialogAction::Submit);
-            })
-            .show(ctx);
+            // Warning message
+            ui.colored_label(
+                egui::Color32::from_rgb(255, 193, 7), // Warning amber
+                tr!("profile-delete-warning"),
+            );
+            ui.add_space(12.0);
+        })
+        .action(tr!("cancel"), || {
+            dialog_action.set(DeleteDialogAction::Cancel);
+        })
+        .primary_action(tr!("delete"), || {
+            dialog_action.set(DeleteDialogAction::Submit);
+        })
+        .show(ctx);
 
         self.process_action(dialog_action.get())
     }

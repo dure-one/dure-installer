@@ -3,16 +3,21 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use std::cell::Cell;
 use egui_material3::{
     badge, data_table, dialog, linear_progress, notification, BadgeColor, BadgeSize, DataTableCell,
     MaterialButton, NotificationAlign,
 };
 use egui_twemoji::EmojiLabel;
+use std::cell::Cell;
 
 use crate::api::gcp::bigquery::BillingRecord;
 use crate::calc::audit;
 use crate::config::{AppConfig, CloudPlatformConfig};
+use crate::ui_dlg::platform::{
+    AddFirewallDialog, AddPlatformDialog, BillingDialog, BindVmDialog, DeleteFirewallConfirmDialog,
+    DeletePlatformConfirmDialog, DeleteVmDialog, FirewallDialog, PlatformErrorDialog,
+    SelectProjectDialog,
+};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::ui_dlg::platform_gcp::GcpWizard;
@@ -25,19 +30,19 @@ const BUTTON_HORIZONTAL_SPACING: f32 = 4.0;
 
 /// Firewall rule information for firewall dialog (comprehensive GCP schema)
 #[derive(Clone, Debug)]
-struct FirewallRule {
-    name: String,
-    network: String,
-    direction: String, // "INGRESS" or "EGRESS"
-    priority: u32,
-    source_ranges: Vec<String>,
-    dest_ranges: Vec<String>,
-    allowed: Vec<String>, // e.g., ["tcp:22", "udp:53", "icmp"]
-    denied: Vec<String>,
-    source_tags: Vec<String>,
-    source_service_accounts: Vec<String>,
-    target_tags: Vec<String>,
-    target_service_accounts: Vec<String>,
+pub struct FirewallRule {
+    pub name: String,
+    pub network: String,
+    pub direction: String, // "INGRESS" or "EGRESS"
+    pub priority: u32,
+    pub source_ranges: Vec<String>,
+    pub dest_ranges: Vec<String>,
+    pub allowed: Vec<String>, // e.g., ["tcp:22", "udp:53", "icmp"]
+    pub denied: Vec<String>,
+    pub source_tags: Vec<String>,
+    pub source_service_accounts: Vec<String>,
+    pub target_tags: Vec<String>,
+    pub target_service_accounts: Vec<String>,
 }
 
 impl Default for FirewallRule {
@@ -231,41 +236,18 @@ pub struct PlatformTab {
 
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
+
+    /// Error dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    load_error: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_error_dialog: bool,
+    error_dialog: PlatformErrorDialog,
 
     /// Config file last modified time (to detect changes)
     #[cfg_attr(feature = "serde", serde(skip))]
     config_last_modified: Option<std::time::SystemTime>,
 
-    // Add dialog state
+    /// Add Platform dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_add_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_type: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_oauth_url: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_oauth_result: Option<crate::api::gcp::oauth::OAuthResult>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_oauth_promise:
-        Option<poll_promise::Promise<Result<crate::api::gcp::oauth::OAuthResult, String>>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_connected_email: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_project_list: Vec<(String, String)>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_selected_project: Option<usize>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_create_new: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_new_project_id: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_reauth_mode: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_existing_project_id: String,
+    add_platform_dialog: AddPlatformDialog,
 
     // Add platform wizard state
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -295,125 +277,35 @@ pub struct PlatformTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     platform_summaries: std::collections::HashMap<String, String>,
 
-    // Delete VM dialog state
+    /// Delete VM dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_delete_vm_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_platform: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_list: Vec<(String, String, String)>, // (name, zone, status)
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_selected: Option<usize>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_confirming: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_hard_delete: bool,
+    delete_vm_dialog: DeleteVmDialog,
 
-    // Static IP detection and release
+    /// Delete Platform confirm dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_has_static_ip: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_ip_address: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_ip_name: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_vm_release_ip: bool,
+    delete_platform_confirm_dialog: DeletePlatformConfirmDialog,
 
-    // Delete Platform dialog state
+    // Billing dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_delete_platform_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_platform_name: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_platform_vm_count: usize,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_platform_delete_vms: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_platform_delete_project: bool,
+    billing_dialog: BillingDialog,
 
-    // Billing dialog state
+    /// Select Project dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_billing_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_data: Option<Vec<BillingRecord>>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_loading: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_error: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_dataset: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_table: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    billing_project_id: String,
+    select_project_dialog: SelectProjectDialog,
 
-    // Select Project dialog state
+    /// Bind VM dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_select_project_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    select_project_platform_name: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    select_project_list: Vec<(String, String)>, // (project_id, project_name)
-    #[cfg_attr(feature = "serde", serde(skip))]
-    select_project_selected: Option<usize>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    select_project_loading: bool,
+    bind_vm_dialog: BindVmDialog,
 
-    // Bind VM dialog state
+    // Firewall dialogs
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_bind_vm_dialog: bool,
+    firewall_dialog: FirewallDialog,
     #[cfg_attr(feature = "serde", serde(skip))]
-    bind_vm_platform: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    bind_vm_list: Vec<(String, String, String, String)>, // (project_id, vm_name, zone, external_ip)
-    #[cfg_attr(feature = "serde", serde(skip))]
-    bind_vm_selected: Option<usize>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    bind_vm_loading: bool,
+    add_firewall_dialog: AddFirewallDialog,
 
-    // Firewall dialog state
+    /// Delete firewall confirm dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_firewall_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_platform: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_rule_list: Vec<crate::viewmodel::platform::FullFirewallRule>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_rules: Vec<FirewallRule>, // Full rule data for datatable
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_selected: Option<usize>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_selected_rows: Vec<bool>, // Selection state for datatable
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_edit_data: std::collections::HashMap<usize, FirewallRule>, // Edit state per row
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_add_firewall_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_form_data: FirewallRule, // Form data for Add/Edit dialog
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_form_edit_idx: Option<usize>, // If Some, editing row; if None, adding new
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_save_in_progress: bool, // Track if save operation is running
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_save_error: Option<String>, // Error message from failed operation
-    #[cfg_attr(feature = "serde", serde(skip))]
-    firewall_last_refresh_time: Option<std::time::Instant>, // Last refresh timestamp for debouncing
-    #[cfg_attr(feature = "serde", serde(skip))]
-    current_ip: Option<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_remove_ip_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    remove_ip_list: Vec<String>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    remove_ip_selected: Vec<bool>,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_flush_confirm: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_delete_firewall_confirm: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_firewall_rule_name: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    delete_firewall_rule_idx: Option<usize>,
+    delete_firewall_confirm_dialog: DeleteFirewallConfirmDialog,
 
     // SSH connection test state (per platform)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -451,21 +343,9 @@ impl Default for PlatformTab {
         Self {
             rows: Vec::new(),
             loaded: false,
-            load_error: None,
-            show_error_dialog: false,
+            error_dialog: PlatformErrorDialog::new(),
             config_last_modified: None,
-            show_add_dialog: false,
-            add_platform_type: "gcp".to_string(),
-            add_platform_oauth_url: None,
-            add_platform_oauth_result: None,
-            add_platform_oauth_promise: None,
-            add_platform_connected_email: None,
-            add_platform_project_list: Vec::new(),
-            add_platform_selected_project: None,
-            add_platform_create_new: false,
-            add_platform_new_project_id: String::new(),
-            add_platform_reauth_mode: false,
-            add_platform_existing_project_id: String::new(),
+            add_platform_dialog: AddPlatformDialog::new(),
             wizard_dialog_open: false,
             wizard_current_step: 0,
             init_in_progress: false,
@@ -476,59 +356,14 @@ impl Default for PlatformTab {
             #[cfg(not(target_arch = "wasm32"))]
             wizard_was_open: false,
             platform_summaries: std::collections::HashMap::new(),
-            show_delete_vm_dialog: false,
-            delete_vm_platform: String::new(),
-            delete_vm_list: Vec::new(),
-            delete_vm_selected: None,
-            delete_vm_confirming: false,
-            delete_vm_hard_delete: false,
-            delete_vm_has_static_ip: false,
-            delete_vm_ip_address: None,
-            delete_vm_ip_name: None,
-            delete_vm_release_ip: false,
-            show_delete_platform_dialog: false,
-            delete_platform_name: String::new(),
-            delete_platform_vm_count: 0,
-            delete_platform_delete_vms: false,
-            delete_platform_delete_project: false,
-            show_billing_dialog: false,
-            billing_data: None,
-            billing_loading: false,
-            billing_error: None,
-            billing_dataset: String::new(),
-            billing_table: String::new(),
-            billing_project_id: String::new(),
-            show_select_project_dialog: false,
-            select_project_platform_name: String::new(),
-            select_project_list: Vec::new(),
-            select_project_selected: None,
-            select_project_loading: false,
-            show_bind_vm_dialog: false,
-            bind_vm_platform: String::new(),
-            bind_vm_list: Vec::new(),
-            bind_vm_selected: None,
-            bind_vm_loading: false,
-            show_firewall_dialog: false,
-            firewall_platform: String::new(),
-            firewall_rule_list: Vec::new(),
-            firewall_rules: Vec::new(),
-            firewall_selected: None,
-            firewall_selected_rows: Vec::new(),
-            firewall_edit_data: std::collections::HashMap::new(),
-            show_add_firewall_dialog: false,
-            firewall_form_data: FirewallRule::default(),
-            firewall_form_edit_idx: None,
-            firewall_save_in_progress: false,
-            firewall_save_error: None,
-            firewall_last_refresh_time: None,
-            current_ip: None,
-            show_remove_ip_dialog: false,
-            remove_ip_list: Vec::new(),
-            remove_ip_selected: Vec::new(),
-            show_flush_confirm: false,
-            show_delete_firewall_confirm: false,
-            delete_firewall_rule_name: String::new(),
-            delete_firewall_rule_idx: None,
+            delete_vm_dialog: DeleteVmDialog::new(),
+            delete_platform_confirm_dialog: DeletePlatformConfirmDialog::new(),
+            billing_dialog: BillingDialog::new(),
+            select_project_dialog: SelectProjectDialog::new(),
+            bind_vm_dialog: BindVmDialog::new(),
+            firewall_dialog: FirewallDialog::new(),
+            add_firewall_dialog: AddFirewallDialog::new(),
+            delete_firewall_confirm_dialog: DeleteFirewallConfirmDialog::new(),
             ssh_test_promises: std::collections::HashMap::new(),
             ssh_test_results: std::collections::HashMap::new(),
             refresh_promises: std::collections::HashMap::new(),
@@ -1181,17 +1016,21 @@ impl PlatformTab {
 
                 match event {
                     ViewModelEvent::Platform(PlatformEvent::BillingFetched { records, .. }) => {
-                        self.billing_data = Some(records);
-                        self.billing_loading = false;
+                        self.billing_dialog.data = Some(records);
+                        self.billing_dialog.loading = false;
                     }
                     ViewModelEvent::Platform(PlatformEvent::BillingTableDiscovered {
                         platform_name: _,
                         dataset,
                         table,
                     }) => {
-                        dure_info!("[BILLING] Discovered billing table: dataset={}, table={}", dataset, table);
-                        self.billing_dataset = dataset;
-                        self.billing_table = table;
+                        dure_info!(
+                            "[BILLING] Discovered billing table: dataset={}, table={}",
+                            dataset,
+                            table
+                        );
+                        self.billing_dialog.dataset = dataset;
+                        self.billing_dialog.table = table;
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
                         platform_name,
@@ -1245,17 +1084,17 @@ impl PlatformTab {
                         );
 
                         // Check if this is for the firewall dialog
-                        if self.show_firewall_dialog && self.firewall_platform == platform_name {
+                        if self.firewall_dialog.open && self.firewall_dialog.platform == platform_name {
                             dure_info!(
                                 "[UI::PLATFO] Updating UI with {} firewall rules",
                                 rules.len()
                             );
-                            self.current_ip = Some(current_ip);
+                            self.firewall_dialog.current_ip = Some(current_ip);
                             // Use full data directly - no conversion needed!
-                            self.firewall_rule_list = rules;
+                            self.firewall_dialog.rule_list = rules;
                         } else {
                             dure_info!("[UI::PLATFO] Ignoring fetched rules: dialog_open={}, platform_match={}",
-                                self.show_firewall_dialog, self.firewall_platform == platform_name);
+                                self.firewall_dialog.open, self.firewall_dialog.platform == platform_name);
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallRuleUpdated {
@@ -1272,11 +1111,11 @@ impl PlatformTab {
                         }
 
                         // Force immediate refresh for save operations, debounce for others
-                        let force_refresh = self.firewall_save_in_progress
+                        let force_refresh = self.add_firewall_dialog.save_in_progress
                             && (operation == "create" || operation == "delete");
 
                         // Refresh firewall data to show updated state
-                        if self.show_firewall_dialog && self.firewall_platform == platform_name {
+                        if self.firewall_dialog.open && self.firewall_dialog.platform == platform_name {
                             dure_info!("[UI::PLATFO] Triggering firewall data refresh after {} operation (force={})",
                                 operation, force_refresh);
                             let profile_config_path = current_profile.config_file.clone();
@@ -1289,21 +1128,21 @@ impl PlatformTab {
                         } else {
                             dure_info!(
                                 "[UI::PLATFO] Skipping refresh: dialog_open={}, platform_match={}",
-                                self.show_firewall_dialog,
-                                self.firewall_platform == platform_name
+                                self.firewall_dialog.open,
+                                self.firewall_dialog.platform == platform_name
                             );
                         }
 
                         // Close add/edit dialog if save was in progress
-                        if self.firewall_save_in_progress
+                        if self.add_firewall_dialog.save_in_progress
                             && (operation == "create" || operation == "delete")
                         {
                             dure_info!("Closing Add/Edit Firewall Rule dialog after successful {} and immediate list refresh", operation);
-                            self.show_add_firewall_dialog = false;
-                            self.firewall_save_in_progress = false;
-                            self.firewall_save_error = None;
-                            self.firewall_form_edit_idx = None;
-                            self.firewall_form_data = FirewallRule::default();
+                            self.add_firewall_dialog.open = false;
+                            self.add_firewall_dialog.save_in_progress = false;
+                            self.add_firewall_dialog.save_error = None;
+                            self.add_firewall_dialog.edit_idx = None;
+                            self.add_firewall_dialog.form_data = FirewallRule::default();
 
                             // Clear persisted string state
                             let state_id = egui::Id::new("firewall_form_strings");
@@ -1323,8 +1162,8 @@ impl PlatformTab {
                         }
 
                         // Close subdialogs
-                        self.show_remove_ip_dialog = false;
-                        self.show_flush_confirm = false;
+                        self.firewall_dialog.show_remove_ip_dialog = false;
+                        self.firewall_dialog.show_flush_confirm = false;
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMRestarted {
                         platform_name,
@@ -1362,7 +1201,7 @@ impl PlatformTab {
                         dure_info!(" {}", message);
                         // Refresh to show updated VM details
                         self.loaded = false;
-                        self.load_error = None;
+                        self.error_dialog.close();
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMsScanned {
                         platform_name,
@@ -1386,7 +1225,7 @@ impl PlatformTab {
 
                         // Trigger reload to show imported VMs
                         self.loaded = false;
-                        self.load_error = None;
+                        self.error_dialog.close();
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMCreated {
                         platform_name,
@@ -1453,13 +1292,13 @@ impl PlatformTab {
                                 platform.vms.retain(|vm| vm.name != vm_name);
 
                                 if let Err(e) = app_config.save(&config_path) {
-                                    self.load_error = Some(
-                                        tr!("platform-error-save-config", {error: e.to_string()}),
+                                    self.error_dialog.open(
+                                        tr!("platform-error-save-config", {error: e.to_string()})
                                     );
                                 } else {
                                     dure_info!("✅ Config updated, refreshing table");
                                     self.loaded = false;
-                                    self.load_error = None;
+                                    self.error_dialog.close();
                                 }
                             }
                         }
@@ -1472,9 +1311,9 @@ impl PlatformTab {
                         ip_name,
                     }) => {
                         dure_info!("✅ Static IP check complete: has_static={}", has_static_ip);
-                        self.delete_vm_has_static_ip = has_static_ip;
-                        self.delete_vm_ip_address = ip_address;
-                        self.delete_vm_ip_name = ip_name;
+                        self.delete_vm_dialog.has_static_ip = has_static_ip;
+                        self.delete_vm_dialog.ip_address = ip_address;
+                        self.delete_vm_dialog.ip_name = ip_name;
                     }
                     ViewModelEvent::Platform(PlatformEvent::ProjectsListed {
                         platform_name,
@@ -1485,25 +1324,23 @@ impl PlatformTab {
                             platform_name,
                             projects.len()
                         );
-                        self.select_project_list = projects.clone();
-                        self.select_project_loading = false;
 
                         // Also populate add platform wizard list if active
-                        if self.show_add_dialog || self.wizard_dialog_open {
-                            self.add_platform_project_list = projects;
+                        if self.add_platform_dialog.open || self.wizard_dialog_open {
+                            self.add_platform_dialog.project_list = projects.clone();
                         }
 
-                        // Show the dialog now that projects are loaded
-                        if !self.show_select_project_dialog {
-                            self.show_select_project_dialog = true;
+                        // Open select project dialog with the loaded projects
+                        if !self.select_project_dialog.open {
+                            self.select_project_dialog.open(platform_name, projects);
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::VMsListed { platform_name, vms }) => {
                         dure_debug!("✅ VMs listed for {}: {} VMs", platform_name, vms.len());
 
                         // Check if this is for the bind VM dialog
-                        if self.show_bind_vm_dialog && self.bind_vm_platform == platform_name {
-                            self.bind_vm_list = vms
+                        if self.bind_vm_dialog.open && self.bind_vm_dialog.platform == platform_name {
+                            let vm_list: Vec<_> = vms
                                 .into_iter()
                                 .map(|vm| {
                                     let zone_name =
@@ -1516,7 +1353,7 @@ impl PlatformTab {
                                     )
                                 })
                                 .collect();
-                            self.bind_vm_loading = false;
+                            self.bind_vm_dialog.open(platform_name, vm_list);
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::ProjectSelected {
@@ -1525,7 +1362,7 @@ impl PlatformTab {
                         dure_info!(" Project selected: {}", project_id);
                         // Refresh spreadsheet to show updated project
                         self.loaded = false;
-                        self.load_error = None;
+                        self.error_dialog.close();
                     }
                     ViewModelEvent::Platform(PlatformEvent::PlatformAdded {
                         platform_name,
@@ -1534,7 +1371,7 @@ impl PlatformTab {
                         dure_info!(" Platform '{}' ({}) added", platform_name, platform_type);
                         // Refresh spreadsheet to show new platform
                         self.loaded = false;
-                        self.load_error = None;
+                        self.error_dialog.close();
                     }
                     ViewModelEvent::Platform(PlatformEvent::PlatformDeleted {
                         platform_name,
@@ -1543,32 +1380,32 @@ impl PlatformTab {
                         dure_info!(" Platform '{}' deleted ({} VMs)", platform_name, vm_count);
                         // Refresh spreadsheet to show removal
                         self.loaded = false;
-                        self.load_error = None;
+                        self.error_dialog.close();
                     }
                     ViewModelEvent::Platform(PlatformEvent::Error { operation, error }) => {
                         if operation == "fetch_billing" {
-                            self.billing_error = Some(error);
-                            self.billing_loading = false;
+                            self.billing_dialog.error = Some(error);
+                            self.billing_dialog.loading = false;
                         } else if operation == "update_firewall" {
-                            self.load_error = Some(format!("Failed to update firewall: {}", error));
+                            self.error_dialog.open(format!("Failed to update firewall: {}", error));
                         } else if operation == "create_firewall_rule"
                             || operation == "delete_firewall_rule"
                         {
                             // Show error in dialog, keep it open
-                            self.firewall_save_error = Some(error);
-                            self.firewall_save_in_progress = false;
+                            self.add_firewall_dialog.save_error = Some(error);
+                            self.add_firewall_dialog.save_in_progress = false;
                         } else if operation == "restart_vm" {
-                            self.load_error = Some(format!("Failed to restart VM: {}", error));
+                            self.error_dialog.open(format!("Failed to restart VM: {}", error));
                         } else if operation == "delete_vm" {
-                            self.load_error = Some(format!("Failed to delete VM: {}", error));
+                            self.error_dialog.open(format!("Failed to delete VM: {}", error));
                         } else if operation == "list_vms" {
                             dure_error!("Failed to list VMs: {}", error);
-                            self.bind_vm_loading = false;
-                            self.bind_vm_list = Vec::new();
+                            self.bind_vm_dialog.loading = false;
+                            self.bind_vm_dialog.vm_list = Vec::new();
                         } else if operation == "fetch_firewall_rules" {
                             dure_error!("Failed to fetch firewall rules: {}", error);
-                            self.current_ip = None;
-                            self.firewall_rule_list = Vec::new();
+                            self.firewall_dialog.current_ip = None;
+                            self.firewall_dialog.rule_list = Vec::new();
                         }
                     }
                     ViewModelEvent::Platform(PlatformEvent::RefreshCompleted {
@@ -1854,14 +1691,10 @@ impl PlatformTab {
             }
         }
 
-        // Show error in modal dialog instead of replacing UI
-        if let Some(error) = &self.load_error {
-            if !self.show_error_dialog {
-                self.show_error_dialog = true;
-            }
-        }
+        // Show error dialog
+        self.error_dialog.show(ui.ctx());
 
-        if self.rows.is_empty() && self.load_error.is_none() {
+        if self.rows.is_empty() && !self.error_dialog.open {
             ui.heading(tr!("platform-main-heading"));
             ui.add_space(4.0);
             ui.label(tr!("platform-main-desc"));
@@ -1873,7 +1706,7 @@ impl PlatformTab {
             {
                 self.wizard_dialog_open = true;
                 self.wizard_current_step = 0;
-                self.add_platform_type = "gcp".to_string();
+                self.add_platform_dialog.platform_type = "gcp".to_string();
             }
             ui.add_space(8.0);
             ui.label(tr!("platform-main-empty"));
@@ -2278,8 +2111,8 @@ impl PlatformTab {
                     .add(MaterialButton::filled(tr!("platform-button-add")))
                     .clicked()
                 {
-                    self.show_add_dialog = true;
-                    self.add_platform_type = "gcp".to_string();
+                    self.add_platform_dialog.open = true;
+                    self.add_platform_dialog.platform_type = "gcp".to_string();
                 }
                 ui.add_space(8.0);
 
@@ -2362,10 +2195,10 @@ impl PlatformTab {
                             .iter()
                             .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                         {
-                            self.add_platform_reauth_mode = true;
-                            self.add_platform_existing_project_id = platform_name.clone();
-                            self.add_platform_type = "gcp".to_string();
-                            self.show_add_dialog = true;
+                            self.add_platform_dialog.reauth_mode = true;
+                            self.add_platform_dialog.existing_project_id = platform_name.clone();
+                            self.add_platform_dialog.platform_type = "gcp".to_string();
+                            self.add_platform_dialog.open = true;
                             dure_info!(
                                 "Opening re-authentication dialog for project: {}",
                                 platform_name
@@ -2383,8 +2216,8 @@ impl PlatformTab {
                 if let Some(platform_name) = ui.data(|d| {
                     d.get_temp::<String>(egui::Id::new("platform_action_update_firewall"))
                 }) {
-                    self.firewall_platform = platform_name.clone();
-                    self.show_firewall_dialog = true;
+                    self.firewall_dialog.platform = platform_name.clone();
+                    self.firewall_dialog.open = true;
 
                     // Fetch current IP and firewall rules
                     let profile_config_path = current_profile.config_file.clone();
@@ -2399,9 +2232,9 @@ impl PlatformTab {
                 if let Some(platform_name) =
                     ui.data(|d| d.get_temp::<String>(egui::Id::new("platform_action_bind_vm")))
                 {
-                    self.bind_vm_platform = platform_name.clone();
-                    self.bind_vm_loading = true;
-                    self.show_bind_vm_dialog = true;
+                    self.bind_vm_dialog.platform = platform_name.clone();
+                    self.bind_vm_dialog.loading = true;
+                    self.bind_vm_dialog.open = true;
 
                     // Fetch VM list from GCP
                     let profile_config_path = current_profile.config_file.clone();
@@ -2587,11 +2420,7 @@ impl PlatformTab {
                     if let Some(project_id) = ui.data(|d| {
                         d.get_temp::<String>(egui::Id::new("platform_action_billing_project"))
                     }) {
-                        // Reset billing state to force auto-discovery for each project
-                        self.billing_dataset.clear();
-                        self.billing_table.clear();
-                        self.billing_project_id = project_id.clone();
-                        self.show_billing_dialog = true;
+                        self.billing_dialog.open(project_id.clone());
                         self.fetch_billing_data(
                             current_profile,
                             vm.as_deref_mut(),
@@ -2615,9 +2444,54 @@ impl PlatformTab {
             }
         }
 
-        // Add platform dialog
-        if self.show_add_dialog {
-            self.render_add_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        // Add platform dialog - check OAuth promise first
+        if self.add_platform_dialog.open {
+            // Check for OAuth promise result
+            if let Some(promise) = &self.add_platform_dialog.oauth_promise {
+                if let Some(result) = promise.ready() {
+                    match result {
+                        Ok(oauth_result) => {
+                            self.add_platform_dialog.oauth_result = Some(oauth_result.clone());
+                            self.add_platform_dialog.connected_email = Some("Connected Account".to_string());
+                            self.add_platform_dialog.oauth_promise = None;
+                        }
+                        Err(e) => {
+                            self.error_dialog.open(format!("OAuth failed: {}", e));
+                            self.add_platform_dialog.oauth_promise = None;
+                        }
+                    }
+                }
+            }
+
+            // Fetch projects if OAuth succeeded and list is empty
+            if self.add_platform_dialog.connected_email.is_some()
+                && !self.add_platform_dialog.reauth_mode
+                && self.add_platform_dialog.project_list.is_empty()
+            {
+                if let Some(ref vm) = vm {
+                    let _ = vm.list_projects("temp-platform".to_string());
+                }
+            }
+
+            match self.add_platform_dialog.show(ui.ctx()) {
+                crate::ui_dlg::platform::AddPlatformAction::Connect => {
+                    self.start_add_platform_oauth();
+                }
+                crate::ui_dlg::platform::AddPlatformAction::Add {
+                    platform_type,
+                    project_id,
+                    oauth_result,
+                } => {
+                    self.handle_add_platform(
+                        current_profile,
+                        platform_type,
+                        project_id,
+                        oauth_result,
+                        vm.as_deref_mut(),
+                    );
+                }
+                _ => {}
+            }
         }
 
         // Add Platform Wizard
@@ -2626,56 +2500,124 @@ impl PlatformTab {
         }
 
         // Delete Platform dialog
-        if self.show_delete_platform_dialog {
-            self.render_delete_platform_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        match self.delete_platform_confirm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::DeletePlatformConfirmAction::Delete {
+                platform_name,
+                delete_vms,
+                delete_project,
+            } => {
+                self.handle_delete_platform(
+                    current_profile,
+                    platform_name,
+                    delete_vms,
+                    delete_project,
+                    vm.as_deref_mut(),
+                );
+            }
+            _ => {}
         }
 
         // Select Project dialog
         #[cfg(not(target_arch = "wasm32"))]
-        if self.show_select_project_dialog {
-            self.render_select_project_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        match self.select_project_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::SelectProjectAction::Select {
+                platform_name,
+                project_id,
+            } => {
+                self.handle_select_project(current_profile, platform_name, project_id, vm.as_deref_mut());
+            }
+            _ => {}
         }
 
         // Delete VM dialog
-        if self.show_delete_vm_dialog {
-            self.render_delete_vm_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
-        }
-
-        // Error dialog
-        if self.show_error_dialog {
-            self.render_error_dialog(ui.ctx());
+        match self.delete_vm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::DeleteVmAction::Delete {
+                vm_name,
+                zone,
+                force,
+                release_ip,
+            } => {
+                self.handle_delete_vm(current_profile, vm_name, zone, force, release_ip, vm.as_deref_mut());
+            }
+            _ => {}
         }
 
         // Billing dialog
-        if self.show_billing_dialog {
-            self.render_billing_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        match self.billing_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::BillingAction::Refresh => {
+                self.handle_billing_refresh(current_profile, vm.as_deref_mut());
+            }
+            _ => {}
         }
 
         // Bind VM dialog
-        if self.show_bind_vm_dialog {
-            self.render_bind_vm_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        match self.bind_vm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::BindVmAction::Bind { platform } => {
+                self.handle_bind_vm(current_profile, platform, vm.as_deref_mut());
+            }
+            _ => {}
         }
 
         // Firewall dialog (skip if Add/Edit is open to maintain z-order)
-        if self.show_firewall_dialog && !self.show_add_firewall_dialog {
-            self.render_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
-        } else if !self.show_firewall_dialog {
+        if self.firewall_dialog.open && !self.add_firewall_dialog.open {
+            match self.firewall_dialog.show(ui.ctx()) {
+                crate::ui_dlg::platform::FirewallAction::AddIp => {
+                    self.handle_firewall_add_ip(current_profile, vm.as_deref_mut());
+                }
+                crate::ui_dlg::platform::FirewallAction::AddRule => {
+                    self.handle_firewall_add_rule();
+                }
+                crate::ui_dlg::platform::FirewallAction::EditRule { rule_data, rule_idx } => {
+                    self.handle_firewall_edit_rule(rule_data, rule_idx);
+                }
+                crate::ui_dlg::platform::FirewallAction::DeleteRule { rule_name, rule_idx } => {
+                    self.handle_firewall_delete_rule(rule_name, rule_idx);
+                }
+                crate::ui_dlg::platform::FirewallAction::Reset => {
+                    self.handle_firewall_reset(current_profile, vm.as_deref_mut());
+                }
+                crate::ui_dlg::platform::FirewallAction::Close => {
+                    self.firewall_dialog.last_refresh_time = None;
+                }
+                _ => {}
+            }
+        } else if !self.firewall_dialog.open {
             // Clear debounce state when dialog is closed
-            self.firewall_last_refresh_time = None;
+            self.firewall_dialog.last_refresh_time = None;
         }
 
         // Add/Edit Firewall Rule dialog (renders on top when open)
-        if self.show_add_firewall_dialog {
-            self.render_add_firewall_dialog(current_profile, ui.ctx(), vm.as_deref_mut());
+        match self.add_firewall_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::AddFirewallAction::Save {
+                rule_data,
+                edit_idx,
+            } => {
+                self.handle_add_firewall_save(
+                    current_profile,
+                    rule_data,
+                    edit_idx,
+                    vm.as_deref_mut(),
+                );
+            }
+            _ => {}
         }
 
         // Delete Firewall Rule confirmation dialog
-        if self.show_delete_firewall_confirm {
-            self.render_delete_firewall_confirm_dialog(
-                current_profile,
-                ui.ctx(),
-                vm.as_deref_mut(),
-            );
+        match self.delete_firewall_confirm_dialog.show(ui.ctx()) {
+            crate::ui_dlg::platform::DeleteFirewallConfirmAction::Delete {
+                rule_name,
+                platform,
+                rule_idx,
+            } => {
+                self.handle_delete_firewall_rule(
+                    current_profile,
+                    rule_name,
+                    platform,
+                    rule_idx,
+                    vm.as_deref_mut(),
+                );
+            }
+            _ => {}
         }
 
         // Init progress display
@@ -2798,7 +2740,7 @@ impl PlatformTab {
         current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         self.rows.clear();
-        self.load_error = None;
+        self.error_dialog.close();
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -3039,7 +2981,7 @@ impl PlatformTab {
                     self.loaded = true;
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.error_dialog.open(format!("Failed to load config: {}", e));
                     self.loaded = true; // Still mark as loaded to show error
                 }
             }
@@ -3047,7 +2989,7 @@ impl PlatformTab {
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.load_error = Some("WASM platform not supported".to_string());
+            self.error_dialog.open("WASM platform not supported".to_string());
             self.loaded = true;
         }
     }
@@ -3092,340 +3034,60 @@ impl PlatformTab {
     }
 
     /// Fetch GCP account summary (billing accounts, projects, VMs)
-    fn render_add_dialog(
+
+    fn handle_add_platform(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        let add_clicked = Cell::new(false);
-        let cancel_clicked = Cell::new(false);
-
-        let title = if self.add_platform_reauth_mode {
-            tr!("reauth-platform-title")
-        } else {
-            tr!("add-platform-title")
-        };
-
-        let heading = if self.add_platform_reauth_mode {
-            tr!("reauth-platform-heading")
-        } else {
-            tr!("add-platform-heading")
-        };
-
-        let button_text = if self.add_platform_reauth_mode {
-            tr!("reauth")
-        } else {
-            tr!("add")
-        };
-
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        let mut open = self.show_add_dialog;
-
-        dialog("add_platform_dialog", &title, &mut open)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading(&heading);
-                ui.add_space(12.0);
-
-                // Show existing project in re-auth mode
-                if self.add_platform_reauth_mode {
-                    ui.label(format!("Project: {}", self.add_platform_existing_project_id));
-                    ui.add_space(8.0);
-                } else {
-                    ui.label(tr!("platform-add-configure"));
-                    ui.add_space(8.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label(tr!("platform-add-type"));
-                        egui::ComboBox::from_id_salt("platform_type_combo")
-                            .selected_text(&self.add_platform_type)
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.add_platform_type,
-                                    "gcp".to_string(),
-                                    "GCP (Google Cloud Platform)",
-                                );
-                            });
-                    });
-
-                    ui.add_space(12.0);
-                }
-
-                // Show OAuth connection for GCP
-                if self.add_platform_type == "gcp" {
-                    ui.separator();
-                    ui.add_space(8.0);
-
-                    // Check for OAuth promise result
-                    if let Some(promise) = &self.add_platform_oauth_promise {
-                        if let Some(result) = promise.ready() {
-                            match result {
-                                Ok(oauth_result) => {
-                                    self.add_platform_oauth_result = Some(oauth_result.clone());
-                                    // Set default connected account label (email fetch removed)
-                                    self.add_platform_connected_email = Some("Connected Account".to_string());
-                                    self.add_platform_oauth_promise = None;
-                                }
-                                Err(e) => {
-                                    self.load_error = Some(format!("OAuth failed: {}", e));
-                                    self.add_platform_oauth_promise = None;
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(email) = &self.add_platform_connected_email {
-                        ui.colored_label(
-                            egui::Color32::from_rgb(76, 175, 80), // Success green
-                            format!("Connected as: {}", email)
-                        );
-
-                        ui.add_space(8.0);
-
-                        // Skip project selection in re-auth mode
-                        if !self.add_platform_reauth_mode {
-                            // Fetch projects if not already fetched
-                            if self.add_platform_project_list.is_empty() {
-                                if let Some(ref vm) = vm {
-                                    // Use temporary platform name for OAuth wizard
-                                    let _ = vm.list_projects("temp-platform".to_string());
-                                    // Projects will be populated via ProjectsListed event
-                                }
-                            }
-
-                            // Show project selection or creation
-                            ui.label(tr!("platform-add-project"));
-                            ui.add_space(4.0);
-
-                            // Radio buttons for select vs create
-                            ui.horizontal(|ui| {
-                                ui.radio_value(&mut self.add_platform_create_new, false, "Select Existing");
-                                ui.radio_value(&mut self.add_platform_create_new, true, "Create New");
-                            });
-                            ui.add_space(8.0);
-
-                            if self.add_platform_create_new {
-                                // Create new project UI
-                                ui.label(tr!("platform-add-project-id"));
-                                ui.add_space(4.0);
-                                ui.text_edit_singleline(&mut self.add_platform_new_project_id);
-                                ui.add_space(4.0);
-                                ui.colored_label(
-                                    egui_material3::theme::get_global_color("onSurfaceVariant"),
-                                    "Project ID must be 6-30 characters, lowercase letters, digits, hyphens"
-                                );
-                            } else {
-                                // Select existing project UI
-                                ui.label(format!(
-                                    "Select Project ({} available):",
-                                    self.add_platform_project_list.len()
-                                ));
-                                ui.add_space(4.0);
-
-                                egui::ScrollArea::vertical()
-                                    .max_height(200.0)
-                                    .show(ui, |ui| {
-                                        for (idx, (project_id, project_name)) in
-                                            self.add_platform_project_list.iter().enumerate()
-                                        {
-                                            let is_selected =
-                                                self.add_platform_selected_project == Some(idx);
-                                            if ui
-                                                .selectable_label(
-                                                    is_selected,
-                                                    format!("{} ({})", project_name, project_id),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.add_platform_selected_project = Some(idx);
-                                            }
-                                        }
-                                    });
-                            }
-                        }
-                    } else if self.add_platform_oauth_promise.is_some() {
-                        ui.spinner();
-                        ui.label(tr!("platform-add-oauth-waiting"));
-                        ui.label(tr!("platform-add-oauth-complete"));
-                    } else {
-                        if ui
-                            .add(MaterialButton::outlined(tr!("platform-add-oauth-connect")))
-                            .clicked()
-                        {
-                            self.start_add_platform_oauth();
-                        }
-
-                        // Show OAuth URL if available
-                        if let Some(ref oauth_url) = self.add_platform_oauth_url {
-                            ui.add_space(8.0);
-                            ui.label(tr!("platform-add-oauth-url"));
-                            ui.add_space(4.0);
-                            egui::ScrollArea::vertical()
-                                .max_height(60.0)
-                                .show(ui, |ui| {
-                                    ui.text_edit_multiline(&mut oauth_url.as_str());
-                                });
-                        }
-                    }
-
-                    ui.add_space(8.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-                }
-
-            })
-            .action(&tr!("cancel"), || {
-                cancel_clicked.set(true);
-            })
-            .primary_action(&button_text, || {
-                add_clicked.set(true);
-            })
-            .show(ctx);
-
-        if !open {
-            self.reset_add_dialog_state();
-        }
-
-        if cancel_clicked.get() {
-            self.reset_add_dialog_state();
-        }
-
-        if add_clicked.get() {
-            let can_add = if self.add_platform_reauth_mode {
-                // In re-auth mode, only need OAuth connection
-                self.add_platform_connected_email.is_some()
-            } else {
-                // In add mode, need OAuth + project selection
-                self.add_platform_type != "gcp"
-                    || (self.add_platform_connected_email.is_some()
-                        && (self.add_platform_selected_project.is_some()
-                            || (!self.add_platform_new_project_id.is_empty())))
-            };
-
-            if can_add {
-                self.execute_add_platform(current_profile, vm.as_deref_mut());
-                self.reset_add_dialog_state();
-            }
-        }
-    }
-
-    /// Reset Add Platform dialog state
-    fn reset_add_dialog_state(&mut self) {
-        self.show_add_dialog = false;
-        self.add_platform_oauth_url = None;
-        self.add_platform_oauth_result = None;
-        self.add_platform_oauth_promise = None;
-        self.add_platform_connected_email = None;
-        self.add_platform_project_list.clear();
-        self.add_platform_selected_project = None;
-        self.add_platform_create_new = false;
-        self.add_platform_new_project_id.clear();
-        self.add_platform_reauth_mode = false;
-        self.add_platform_existing_project_id.clear();
-    }
-
-    fn execute_add_platform(
-        &mut self,
-        current_profile: &crate::calc::profile::ProfileContext,
+        platform_type: String,
+        project_id: String,
+        oauth_result: crate::api::gcp::oauth::OAuthResult,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            // Extract OAuth info if GCP
-            let (oauth_access, oauth_refresh, oauth_expiry, connected_email, selected_project) =
-                if self.add_platform_type == "gcp" {
-                    if let Some(oauth) = &self.add_platform_oauth_result {
-                        let project_id = if self.add_platform_create_new {
-                            // Create new project
-                            if !self.add_platform_new_project_id.is_empty() {
-                                // TODO: Call GCP API to create project
-                                // For now, just use the entered project ID
-                                // In production, you'd call:
-                                // let client = GcpRestClient::new(oauth.access_token.clone());
-                                // client.create_project(&self.add_platform_new_project_id, &self.add_platform_new_project_id)?;
-                                Some(self.add_platform_new_project_id.clone())
-                            } else {
-                                None
-                            }
-                        } else {
-                            // Select existing project
-                            self.add_platform_selected_project
-                                .and_then(|idx| self.add_platform_project_list.get(idx))
-                                .map(|(id, _)| id.clone())
-                        };
-                        (
-                            Some(oauth.access_token.clone()),
-                            Some(oauth.refresh_token.clone()),
-                            Some(oauth.expires_at as i64),
-                            self.add_platform_connected_email.clone(),
-                            project_id,
-                        )
-                    } else {
-                        (None, None, None, None, None)
-                    }
-                } else {
-                    (None, None, None, None, None)
-                };
-
             if let Some(vm) = vm {
-                // Get config path from profile
                 let config_path = current_profile.config_file.clone();
 
-                // Check if in re-auth mode (update existing platform) or add mode (add new platform)
-                if self.add_platform_reauth_mode {
-                    // Re-auth mode: Update existing platform's OAuth tokens
-                    match (oauth_access, oauth_refresh, oauth_expiry, connected_email) {
-                        (Some(access), Some(refresh), Some(expiry), Some(email)) => {
-                            match vm.update_platform_oauth(
-                                config_path,
-                                self.add_platform_existing_project_id.clone(),
-                                access,
-                                refresh,
-                                expiry,
-                                email,
-                            ) {
-                                Ok(_) => {
-                                    dure_info!("Platform OAuth update command sent");
-                                }
-                                Err(e) => {
-                                    self.load_error =
-                                        Some(format!("Failed to update platform OAuth: {}", e));
-                                }
-                            }
+                if self.add_platform_dialog.reauth_mode {
+                    // Re-auth mode: update existing platform OAuth
+                    match vm.update_platform_oauth(
+                        config_path,
+                        project_id,
+                        oauth_result.access_token,
+                        oauth_result.refresh_token,
+                        oauth_result.expires_at as i64,
+                        self.add_platform_dialog.connected_email.clone().unwrap_or_default(),
+                    ) {
+                        Ok(_) => {
+                            dure_info!("Platform OAuth update command sent");
                         }
-                        _ => {
-                            self.load_error =
-                                Some("Missing OAuth tokens for re-authentication".to_string());
+                        Err(e) => {
+                            self.error_dialog.open(format!("Failed to update platform OAuth: {}", e));
                         }
                     }
                 } else {
-                    // Add mode: Add new platform
+                    // Add mode: add new platform
                     match vm.add_platform(
                         config_path,
-                        self.add_platform_type.clone(),
-                        oauth_access,
-                        oauth_refresh,
-                        oauth_expiry,
-                        connected_email,
-                        selected_project,
+                        platform_type,
+                        Some(oauth_result.access_token),
+                        Some(oauth_result.refresh_token),
+                        Some(oauth_result.expires_at as i64),
+                        self.add_platform_dialog.connected_email.clone(),
+                        Some(project_id),
                     ) {
                         Ok(_) => {
                             dure_info!("Platform add command sent");
                         }
                         Err(e) => {
-                            self.load_error = Some(format!("Failed to add platform: {}", e));
+                            self.error_dialog.open(format!("Failed to add platform: {}", e));
                         }
                     }
                 }
             }
         }
     }
+
 
     /// Render add platform wizard dialog
     fn render_add_platform_wizard(
@@ -3438,36 +3100,40 @@ impl PlatformTab {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("add_platform_wizard", &tr!("platform-wizard-title"), &mut open)
-            .min_width(500.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                // Step indicator
-                ui.add_space(10.0);
-                self.render_wizard_step_indicator(ui);
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
+        dialog(
+            "add_platform_wizard",
+            &tr!("platform-wizard-title"),
+            &mut open,
+        )
+        .min_width(500.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
+        .scrollable(true)
+        .content(|ui, open| {
+            // Step indicator
+            ui.add_space(10.0);
+            self.render_wizard_step_indicator(ui);
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(10.0);
 
-                // Step content
-                match self.wizard_current_step {
-                    0 => self.render_wizard_oauth_step(ui, vm.as_deref_mut()),
-                    1 => self.render_wizard_project_step(ui),
-                    2 => self.render_wizard_confirm_step(ui),
-                    3 => self.render_wizard_success_step(ui),
-                    _ => {}
-                }
+            // Step content
+            match self.wizard_current_step {
+                0 => self.render_wizard_oauth_step(ui, vm.as_deref_mut()),
+                1 => self.render_wizard_project_step(ui),
+                2 => self.render_wizard_confirm_step(ui),
+                3 => self.render_wizard_success_step(ui),
+                _ => {}
+            }
 
-                // Navigation buttons
-                ui.add_space(20.0);
-                ui.separator();
-                ui.add_space(10.0);
+            // Navigation buttons
+            ui.add_space(20.0);
+            ui.separator();
+            ui.add_space(10.0);
 
-                self.render_wizard_navigation(ui, open, current_profile, vm);
-            })
-            .show(ctx);
+            self.render_wizard_navigation(ui, open, current_profile, vm);
+        })
+        .show(ctx);
 
         self.wizard_dialog_open = open;
     }
@@ -3513,23 +3179,23 @@ impl PlatformTab {
         ui.add_space(15.0);
 
         // Check if OAuth is complete
-        if let Some(email) = &self.add_platform_connected_email {
+        if let Some(email) = &self.add_platform_dialog.connected_email {
             ui.colored_label(
                 egui_material3::theme::get_global_color("success"),
                 format!("✓ Connected as: {}", email),
             );
-        } else if let Some(promise) = &self.add_platform_oauth_promise {
+        } else if let Some(promise) = &self.add_platform_dialog.oauth_promise {
             // Poll OAuth promise
             if let Some(result) = promise.ready() {
                 match result {
                     Ok(oauth_result) => {
-                        self.add_platform_oauth_result = Some(oauth_result.clone());
+                        self.add_platform_dialog.oauth_result = Some(oauth_result.clone());
                         // Set default connected account label (email fetch removed)
-                        self.add_platform_connected_email = Some("Connected Account".to_string());
-                        self.add_platform_oauth_promise = None;
+                        self.add_platform_dialog.connected_email = Some("Connected Account".to_string());
+                        self.add_platform_dialog.oauth_promise = None;
 
                         // Fetch projects
-                        if self.add_platform_project_list.is_empty() {
+                        if self.add_platform_dialog.project_list.is_empty() {
                             if let Some(ref vm) = vm {
                                 // Use temporary platform name for OAuth wizard
                                 let _ = vm.list_projects("temp-platform".to_string());
@@ -3538,8 +3204,8 @@ impl PlatformTab {
                         }
                     }
                     Err(e) => {
-                        self.load_error = Some(format!("OAuth failed: {}", e));
-                        self.add_platform_oauth_promise = None;
+                        self.error_dialog.open(format!("OAuth failed: {}", e));
+                        self.add_platform_dialog.oauth_promise = None;
                     }
                 }
             } else {
@@ -3565,18 +3231,18 @@ impl PlatformTab {
 
         // Reuse existing project selection logic
         ui.radio_value(
-            &mut self.add_platform_create_new,
+            &mut self.add_platform_dialog.create_new,
             false,
             tr!("platform-add-project-existing"),
         );
 
-        if !self.add_platform_create_new {
+        if !self.add_platform_dialog.create_new {
             ui.add_space(5.0);
             for (idx, (project_id, project_name)) in
-                self.add_platform_project_list.iter().enumerate()
+                self.add_platform_dialog.project_list.iter().enumerate()
             {
                 ui.radio_value(
-                    &mut self.add_platform_selected_project,
+                    &mut self.add_platform_dialog.selected_project,
                     Some(idx),
                     format!("{} ({})", project_name, project_id),
                 );
@@ -3585,16 +3251,16 @@ impl PlatformTab {
 
         ui.add_space(10.0);
         ui.radio_value(
-            &mut self.add_platform_create_new,
+            &mut self.add_platform_dialog.create_new,
             true,
             tr!("platform-add-project-new"),
         );
 
-        if self.add_platform_create_new {
+        if self.add_platform_dialog.create_new {
             ui.add_space(5.0);
             ui.horizontal(|ui| {
                 ui.label(tr!("platform-add-project-id"));
-                ui.text_edit_singleline(&mut self.add_platform_new_project_id);
+                ui.text_edit_singleline(&mut self.add_platform_dialog.new_project_id);
             });
         }
     }
@@ -3608,24 +3274,24 @@ impl PlatformTab {
 
         ui.label(format!(
             "Email: {}",
-            self.add_platform_connected_email
+            self.add_platform_dialog.connected_email
                 .as_ref()
                 .unwrap_or(&"Not connected".to_string())
         ));
 
-        if self.add_platform_create_new {
+        if self.add_platform_dialog.create_new {
             ui.label(format!(
                 "Project: New - {}",
-                if self.add_platform_new_project_id.is_empty() {
+                if self.add_platform_dialog.new_project_id.is_empty() {
                     "Not specified"
                 } else {
-                    &self.add_platform_new_project_id
+                    &self.add_platform_dialog.new_project_id
                 }
             ));
         } else {
             let project_info = self
-                .add_platform_selected_project
-                .and_then(|idx| self.add_platform_project_list.get(idx))
+                .add_platform_dialog.selected_project
+                .and_then(|idx| self.add_platform_dialog.project_list.get(idx))
                 .map(|(id, name)| format!("{} ({})", name, id))
                 .unwrap_or_else(|| "Not selected".to_string());
             ui.label(format!("Project: {}", project_info));
@@ -3686,7 +3352,24 @@ impl PlatformTab {
                 {
                     // Step 2 → 3: Execute add platform command
                     if self.wizard_current_step == 2 {
-                        self.execute_add_platform(current_profile, vm);
+                        // Extract data from dialog and call handle_add_platform
+                        if let Some(oauth_result) = self.add_platform_dialog.oauth_result.clone() {
+                            let project_id = if self.add_platform_dialog.create_new {
+                                self.add_platform_dialog.new_project_id.clone()
+                            } else {
+                                self.add_platform_dialog.selected_project
+                                    .and_then(|idx| self.add_platform_dialog.project_list.get(idx))
+                                    .map(|(id, _)| id.clone())
+                                    .unwrap_or_default()
+                            };
+                            self.handle_add_platform(
+                                current_profile,
+                                self.add_platform_dialog.platform_type.clone(),
+                                project_id,
+                                oauth_result,
+                                vm,
+                            );
+                        }
                         // Force reload on next frame
                         self.loaded = false;
                     }
@@ -3705,13 +3388,13 @@ impl PlatformTab {
     /// Check if wizard can proceed to next step
     fn can_proceed_wizard(&self) -> bool {
         match self.wizard_current_step {
-            0 => self.add_platform_connected_email.is_some(), // OAuth connected
+            0 => self.add_platform_dialog.connected_email.is_some(), // OAuth connected
             1 => {
                 // Project selected
-                if self.add_platform_create_new {
-                    !self.add_platform_new_project_id.is_empty()
+                if self.add_platform_dialog.create_new {
+                    !self.add_platform_dialog.new_project_id.is_empty()
                 } else {
-                    self.add_platform_selected_project.is_some()
+                    self.add_platform_dialog.selected_project.is_some()
                 }
             }
             2 => true, // Confirm step - always allow
@@ -3723,7 +3406,7 @@ impl PlatformTab {
     fn reset_wizard_state(&mut self) {
         self.wizard_dialog_open = false;
         self.wizard_current_step = 0;
-        self.reset_add_dialog_state(); // Reuse existing reset logic
+        self.add_platform_dialog.close();
     }
 
     fn render_init_progress(&mut self, ui: &mut egui::Ui) {
@@ -3821,12 +3504,12 @@ impl PlatformTab {
             // Send command to ViewModel with profile-specific config path
             let profile_config_path = profile.config_file.clone();
             if let Err(e) = vm.restart_vm(profile_config_path, platform_name, vm_name, zone) {
-                self.load_error = Some(format!("Failed to start VM restart: {}", e));
+                self.error_dialog.open(format!("Failed to start VM restart: {}", e));
             }
             // Note: UI will be updated by event processing when VMRestarted event arrives
         } else {
             // Fallback: no ViewModel available
-            self.load_error = Some("ViewModel not available".to_string());
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
@@ -3851,16 +3534,16 @@ impl PlatformTab {
                         if let Some(vm_cfg) = platform.vms.iter().find(|v| v.name == vm_name) {
                             vm_cfg.zone.clone()
                         } else {
-                            self.load_error = Some(format!("VM not found: {}", vm_name));
+                            self.error_dialog.open(format!("VM not found: {}", vm_name));
                             return;
                         }
                     } else {
-                        self.load_error = Some(format!("Platform not found: {}", platform_name));
+                        self.error_dialog.open(format!("Platform not found: {}", platform_name));
                         return;
                     }
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
+                    self.error_dialog.open(format!("Failed to load config: {}", e));
                     return;
                 }
             };
@@ -3873,11 +3556,11 @@ impl PlatformTab {
                 zone,
                 profile_kdbx,
             ) {
-                self.load_error = Some(format!("Failed to start VM regeneration: {}", e));
+                self.error_dialog.open(format!("Failed to start VM regeneration: {}", e));
             }
             // Result will be delivered via VMRegenerated event
         } else {
-            self.load_error = Some("ViewModel not available".to_string());
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
@@ -3901,7 +3584,7 @@ impl PlatformTab {
                 }
                 Err(e) => {
                     dure_error!("Failed to get current IP: {}", e);
-                    self.load_error = Some(format!("Failed to get current IP: {}", e));
+                    self.error_dialog.open(format!("Failed to get current IP: {}", e));
                     return;
                 }
             };
@@ -3909,7 +3592,7 @@ impl PlatformTab {
             // Send command to ViewModel
             if let Err(e) = vm.update_firewall(platform_name.clone(), current_ip.clone()) {
                 dure_error!("Failed to send firewall update command: {}", e);
-                self.load_error = Some(format!("Failed to start firewall update: {}", e));
+                self.error_dialog.open(format!("Failed to start firewall update: {}", e));
             } else {
                 dure_info!(" Firewall update command sent successfully");
             }
@@ -3917,7 +3600,7 @@ impl PlatformTab {
         } else {
             // Fallback: no ViewModel available
             dure_error!("ViewModel not available for firewall update");
-            self.load_error = Some("ViewModel not available".to_string());
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
@@ -3933,12 +3616,12 @@ impl PlatformTab {
 
             // Send command to ViewModel with profile-specific config path
             if let Err(e) = vm.scan_existing_vms(profile_config_path, platform_name) {
-                self.load_error = Some(format!("Failed to start VM scan: {}", e));
+                self.error_dialog.open(format!("Failed to start VM scan: {}", e));
             }
             // Note: UI will be updated when VMsScanned event arrives
         } else {
             // Fallback: no ViewModel available
-            self.load_error = Some("ViewModel not available".to_string());
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
@@ -3948,22 +3631,22 @@ impl PlatformTab {
         platform_name: String,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        self.select_project_platform_name = platform_name.clone();
-        self.select_project_list.clear();
-        self.select_project_selected = None;
-        self.select_project_loading = true;
+        self.select_project_dialog.platform_name = platform_name.clone();
+        self.select_project_dialog.project_list.clear();
+        self.select_project_dialog.selected = None;
+        self.select_project_dialog.loading = true;
 
         // Trigger ViewModel to fetch projects
         if let Some(vm) = vm {
             if let Err(e) = vm.list_projects(platform_name.clone()) {
-                self.load_error = Some(format!("Failed to start project listing: {}", e));
-                self.select_project_loading = false;
+                self.error_dialog.open(format!("Failed to start project listing: {}", e));
+                self.select_project_dialog.loading = false;
             }
             // Dialog will be shown when ProjectsListed event arrives
         } else {
             // Fallback: No ViewModel available, show error
-            self.load_error = Some("ViewModel not available".to_string());
-            self.select_project_loading = false;
+            self.error_dialog.open("ViewModel not available".to_string());
+            self.select_project_dialog.loading = false;
         }
     }
 
@@ -3975,19 +3658,13 @@ impl PlatformTab {
         vm_name: String,
         zone: String,
     ) {
-        self.delete_vm_platform = platform_name.clone();
-        self.delete_vm_list.clear();
-        self.delete_vm_list
-            .push((vm_name.clone(), zone.clone(), "".to_string()));
-        self.delete_vm_selected = Some(0);
-        self.delete_vm_confirming = true;
-        self.show_delete_vm_dialog = true;
-
-        // Reset static IP state
-        self.delete_vm_has_static_ip = false;
-        self.delete_vm_ip_address = None;
-        self.delete_vm_ip_name = None;
-        self.delete_vm_release_ip = false;
+        // Open dialog with single VM pre-selected and go directly to confirmation step
+        self.delete_vm_dialog.open(
+            platform_name.clone(),
+            vec![(vm_name.clone(), zone.clone(), "".to_string())],
+        );
+        self.delete_vm_dialog.selected = Some(0);
+        self.delete_vm_dialog.confirming = true;
 
         // Check if VM has static IP (requires access token and config)
         #[cfg(not(target_arch = "wasm32"))]
@@ -4038,264 +3715,46 @@ impl PlatformTab {
             }
             dure_info!(
                 "=== Static IP Detection END (has_static_ip={}) ===",
-                self.delete_vm_has_static_ip
+                self.delete_vm_dialog.has_static_ip
             );
         }
     }
 
-    fn render_delete_vm_dialog(
-        &mut self,
-        profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        let next_clicked = Cell::new(false);
-        let yes_clicked = Cell::new(false);
-        let cancel_clicked = Cell::new(false);
-
-        let is_confirming = self.delete_vm_confirming;
-        let button_text = if is_confirming {
-            tr!("platform-delete-vm-yes")
-        } else {
-            tr!("platform-delete-vm-next")
-        };
-
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        dialog("delete_vm_dialog", "Delete VM", &mut self.show_delete_vm_dialog)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                if self.delete_vm_confirming {
-                    // Confirmation step
-                    ui.heading(tr!("platform-delete-vm-confirm"));
-                    ui.add_space(8.0);
-
-                    if let Some(idx) = self.delete_vm_selected {
-                        if let Some((name, zone, _)) = self.delete_vm_list.get(idx).cloned() {
-                            ui.label(tr!("platform-delete-vm-question", {name: name.clone()}));
-                            ui.add_space(4.0);
-                            ui.colored_label(
-                                egui_material3::theme::get_global_color("error"),
-                                "This action cannot be undone!",
-                            );
-                            ui.add_space(4.0);
-                            ui.label(tr!("platform-delete-vm-zone", {zone: zone.clone()}));
-
-                            ui.add_space(8.0);
-
-                            // No graceful shutdown checkbox
-                            ui.checkbox(&mut self.delete_vm_hard_delete, "Skip graceful shutdown");
-                            ui.add_space(4.0);
-                            ui.colored_label(
-                                egui_material3::theme::get_global_color("onSurfaceVariant"),
-                                "VM will be terminated immediately without graceful shutdown",
-                            );
-
-                            // Static IP section
-                            if self.delete_vm_has_static_ip {
-                                ui.add_space(8.0);
-                                ui.separator();
-                                ui.add_space(8.0);
-
-                                ui.label(format!(
-                                    "Static IP: {}",
-                                    self.delete_vm_ip_address.as_ref().unwrap()
-                                ));
-                                ui.checkbox(
-                                    &mut self.delete_vm_release_ip,
-                                    "Release static IP address"
-                                );
-                                ui.label("(Default: Keep IP reserved for future use)");
-
-                                ui.add_space(8.0);
-                                if ui.add(MaterialButton::text(tr!("platform-delete-vm-manage-ips")).small()).clicked() {
-                                    let url = format!(
-                                        "https://console.cloud.google.com/networking/addresses/list?project={}",
-                                        self.delete_vm_platform
-                                    );
-                                    let _ = webbrowser::open(&url);
-                                }
-                            }
-
-                            ui.add_space(12.0);
-                        }
-                    }
-                } else {
-                    // VM selection step
-                    ui.heading(tr!("platform-delete-vm-select"));
-                    ui.add_space(8.0);
-
-                    if self.delete_vm_list.is_empty() {
-                        ui.label(tr!("platform-delete-vm-none"));
-                        ui.add_space(8.0);
-                        ui.colored_label(
-                            egui_material3::theme::get_global_color("onSurfaceVariant"),
-                            "Note: Only VMs in common zones are shown.",
-                        );
-                    } else {
-                        ui.label(tr!("platform-delete-vm-found", {count: self.delete_vm_list.len()}));
-                        ui.add_space(8.0);
-
-                        egui::ScrollArea::vertical()
-                            .max_height(300.0)
-                            .show(ui, |ui| {
-                                for (idx, (name, zone, status)) in
-                                    self.delete_vm_list.iter().enumerate()
-                                {
-                                    let is_selected = self.delete_vm_selected == Some(idx);
-                                    if ui
-                                        .selectable_label(
-                                            is_selected,
-                                            format!("{} ({}, {})", name, zone, status),
-                                        )
-                                        .clicked()
-                                    {
-                                        self.delete_vm_selected = Some(idx);
-                                    }
-                                }
-                            });
-                    }
-
-                    ui.add_space(12.0);
-                }
-            })
-            .action(&tr!("platform-delete-vm-cancel"), || {
-                cancel_clicked.set(true);
-            })
-            .primary_action(&button_text, || {
-                if is_confirming {
-                    yes_clicked.set(true);
-                } else {
-                    next_clicked.set(true);
-                }
-            })
-            .show(ctx);
-
-        let mut should_clear_progress = false;
-
-        if cancel_clicked.get() {
-            if self.delete_vm_confirming {
-                self.delete_vm_confirming = false;
-                should_clear_progress = true;
-            } else {
-                self.show_delete_vm_dialog = false;
-                should_clear_progress = true;
-            }
-        }
-
-        if next_clicked.get() && self.delete_vm_selected.is_some() {
-            self.delete_vm_confirming = true;
-        }
-
-        if yes_clicked.get() {
-            if let Some(idx) = self.delete_vm_selected {
-                if let Some((name, zone, _)) = self.delete_vm_list.get(idx).cloned() {
-                    self.execute_delete_vm(profile, name, zone, vm);
-                    self.show_delete_vm_dialog = false;
-                }
-            }
-        }
-
-        if should_clear_progress {
-            // Clear progress bar when dialog is closed or cancelled
-            if let Some(row) = self
-                .rows
-                .iter_mut()
-                .find(|r| r.project_id == self.delete_vm_platform)
-            {
-                row.operation_state = OperationState::Idle;
-            }
-
-            self.show_delete_vm_dialog = false;
-            self.delete_vm_confirming = false;
-            self.delete_vm_hard_delete = false;
-        }
-    }
-
-    fn render_error_dialog(&mut self, ctx: &egui::Context) {
-        if let Some(error) = self.load_error.clone() {
-            let ok_clicked = Cell::new(false);
-
-            let window_width = ctx.viewport_rect().width();
-            let window_height = ctx.viewport_rect().height();
-
-            dialog("error_dialog", "Error", &mut self.show_error_dialog)
-                .min_width(350.0)
-                .max_width(window_width - 40.0)
-                .max_height(window_height - 40.0)
-                .scrollable(true)
-                .content(|ui, _open| {
-                    ui.add_space(8.0);
-                    ui.colored_label(egui_material3::theme::get_global_color("error"), &error);
-                    ui.add_space(12.0);
-                })
-                .primary_action("OK", || {
-                    ok_clicked.set(true);
-                })
-                .show(ctx);
-
-            if ok_clicked.get() {
-                self.show_error_dialog = false;
-                self.load_error = None;
-            }
-        }
-    }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_vm(
+    fn handle_delete_vm(
         &mut self,
         profile: &crate::calc::profile::ProfileContext,
         instance_name: String,
         zone: String,
+        force: bool,
+        release_ip: Option<(String, String)>,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        // ViewModel-based implementation
         if let Some(vm) = vm {
-            // Send command to ViewModel with profile-specific config path
             let profile_config_path = profile.config_file.clone();
-            let force = self.delete_vm_hard_delete;
-
-            // Build release_ip payload so the actor can release the IP AFTER
-            // GCP confirms VM deletion (delete_instance is async; releasing the
-            // address before wait_for_operation returns gives resourceInUseByAnotherResource).
-            let release_ip = if self.delete_vm_release_ip {
-                match (self.delete_vm_ip_name.clone(), self.delete_vm_list.get(0)) {
-                    (Some(addr_name), Some((_, zone_s, _))) => {
-                        // Region = zone with trailing "-<letter>" stripped (e.g. us-central1-a -> us-central1)
-                        let region = zone_s.rsplitn(2, '-').nth(1).unwrap_or(zone_s).to_string();
-                        Some((region, addr_name))
-                    }
-                    _ => None,
-                }
-            } else {
-                None
-            };
+            let platform = self.delete_vm_dialog.platform.clone();
 
             if let Err(e) = vm.delete_vm(
                 profile_config_path,
-                self.delete_vm_platform.clone(),
+                platform.clone(),
                 instance_name.clone(),
                 zone.clone(),
                 force,
                 release_ip,
             ) {
-                self.load_error = Some(format!("Failed to start VM deletion: {}", e));
+                self.error_dialog.open(format!("Failed to start VM deletion: {}", e));
                 return;
             }
 
             // Record audit event
-            // TODO: This should be moved to the actor/calc layer
             if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
-                if let Some(platform) = app_config
+                if let Some(plat) = app_config
                     .platforms
                     .iter()
-                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&self.delete_vm_platform))
+                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform))
                 {
-                    if let Some(vm_config) = platform.vms.iter().find(|v| v.name == instance_name) {
+                    if let Some(vm_config) = plat.vms.iter().find(|v| v.name == instance_name) {
                         let project_id = &vm_config.gcp_project_id;
                         match audit::push_gui(
                             "system",
@@ -4313,11 +3772,8 @@ impl PlatformTab {
                     }
                 }
             }
-
-            // Note: Config will be updated when VMDeleted event arrives
         } else {
-            // Fallback: no ViewModel available
-            self.load_error = Some("ViewModel not available".to_string());
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
@@ -4604,233 +4060,76 @@ impl PlatformTab {
         profile: &crate::calc::profile::ProfileContext,
         platform_name: String,
     ) {
-        self.delete_platform_name = platform_name.clone();
-
         // Count VMs for this platform
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
-                if let Some(platform) = app_config
-                    .platforms
-                    .iter()
-                    .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
-                {
-                    self.delete_platform_vm_count = platform.vms.len();
-                }
-            }
-        }
-
-        self.show_delete_platform_dialog = true;
-    }
-
-    fn render_delete_platform_dialog(
-        &mut self,
-        current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        let delete_clicked = Cell::new(false);
-        let cancel_clicked = Cell::new(false);
-
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        dialog("delete_platform_dialog", &tr!("delete-platform-title"), &mut self.show_delete_platform_dialog)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading(tr!("delete-platform-heading"));
-                ui.add_space(12.0);
-
-                ui.label(format!(
-                    "Are you sure you want to delete platform '{}'?",
-                    self.delete_platform_name
-                ));
-                ui.add_space(8.0);
-
-                if self.delete_platform_vm_count > 0 {
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("error"),
-                        format!(
-                            "This will also remove {} VM(s) from config!",
-                            self.delete_platform_vm_count
-                        ),
-                    );
-                    ui.add_space(4.0);
-                    ui.colored_label(
-                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                        "Note: VMs will be removed from config but NOT deleted from GCP.",
-                    );
-                } else {
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("onSurfaceVariant"),
-                        tr!("platform-drawer-no-vms"),
-                    );
-                }
-
-                ui.add_space(8.0);
-                ui.colored_label(
-                    egui_material3::theme::get_global_color("error"),
-                    "This action cannot be undone!",
-                );
-
-                ui.add_space(12.0);
-
-                // Delete options
-                ui.checkbox(&mut self.delete_platform_delete_vms, "Delete VMs from GCP");
-                ui.checkbox(
-                    &mut self.delete_platform_delete_project,
-                    "Delete GCP project",
-                );
-
-                ui.add_space(12.0);
-            })
-            .action(&tr!("cancel"), || {
-                cancel_clicked.set(true);
-            })
-            .primary_action(&tr!("delete"), || {
-                delete_clicked.set(true);
-            })
-            .show(ctx);
-
-        if cancel_clicked.get() {
-            self.show_delete_platform_dialog = false;
-            self.delete_platform_delete_vms = false;
-            self.delete_platform_delete_project = false;
-        }
-
-        if delete_clicked.get() {
-            self.execute_delete_platform(current_profile, vm.as_deref_mut());
-            self.show_delete_platform_dialog = false;
-            self.delete_platform_delete_vms = false;
-            self.delete_platform_delete_project = false;
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn render_select_project_dialog(
-        &mut self,
-        current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        let select_clicked = Cell::new(false);
-        let cancel_clicked = Cell::new(false);
-
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        dialog("select_project_dialog", "Select GCP Project", &mut self.show_select_project_dialog)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading(tr!("platform-select-project-heading"));
-                ui.add_space(8.0);
-
-                if self.select_project_list.is_empty() {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(255, 193, 7),
-                        tr!("platform-select-project-none"),
-                    ); // Warning amber
-                } else {
-                    ui.label(format!(
-                        "Found {} projects:",
-                        self.select_project_list.len()
-                    ));
-                    ui.add_space(8.0);
-
-                    egui::ScrollArea::vertical()
-                        .max_height(300.0)
-                        .show(ui, |ui| {
-                            for (idx, (project_id, project_name)) in
-                                self.select_project_list.iter().enumerate()
-                            {
-                                let is_selected = self.select_project_selected == Some(idx);
-                                if ui
-                                    .selectable_label(
-                                        is_selected,
-                                        format!("{} ({})", project_name, project_id),
-                                    )
-                                    .clicked()
-                                {
-                                    self.select_project_selected = Some(idx);
-                                }
-                            }
-                        });
-                }
-
-                ui.add_space(12.0);
-            })
-            .action("Cancel", || {
-                cancel_clicked.set(true);
-            })
-            .primary_action(&tr!("platform-select-project-button"), || {
-                select_clicked.set(true);
-            })
-            .show(ctx);
-
-        if cancel_clicked.get() {
-            self.show_select_project_dialog = false;
-        }
-
-        if select_clicked.get() && self.select_project_selected.is_some() {
-            self.execute_select_project(current_profile, vm);
-            self.show_select_project_dialog = false;
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn execute_select_project(
-        &mut self,
-        current_profile: &crate::calc::profile::ProfileContext,
-        vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        if let Some(selected_idx) = self.select_project_selected {
-            if selected_idx < self.select_project_list.len() {
-                let (project_id, _) = &self.select_project_list[selected_idx];
-                let platform_name = self.select_project_platform_name.clone();
-
-                if let Some(vm) = vm {
-                    let config_path = current_profile.config_file.clone();
-                    if let Err(e) =
-                        vm.select_project(config_path, platform_name.clone(), project_id.clone())
+        let vm_count = {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if let Ok((app_config, _)) = load_config(&Some(profile.clone())) {
+                    if let Some(platform) = app_config
+                        .platforms
+                        .iter()
+                        .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                     {
-                        self.load_error = Some(format!("Failed to select project: {}", e));
+                        platform.vms.len()
+                    } else {
+                        0
                     }
-                    // Result will be delivered via ProjectSelected event
                 } else {
-                    self.load_error = Some("ViewModel not available".to_string());
+                    0
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            {
+                0
+            }
+        };
+
+        self.delete_platform_confirm_dialog.open(platform_name, vm_count);
+    }
+
+
+    #[cfg(not(target_arch = "wasm32"))]
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn handle_select_project(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        platform_name: String,
+        project_id: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        if let Some(vm) = vm {
+            let config_path = current_profile.config_file.clone();
+            if let Err(e) = vm.select_project(config_path, platform_name, project_id) {
+                self.error_dialog.open(format!("Failed to select project: {}", e));
+            }
+            // Result will be delivered via ProjectSelected event
+        } else {
+            self.error_dialog.open("ViewModel not available".to_string());
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn execute_delete_platform(
+    fn handle_delete_platform(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
+        platform_name: String,
+        delete_vms: bool,
+        delete_project: bool,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
         if let Some(vm) = vm {
             let config_path = current_profile.config_file.clone();
             let delete_options = crate::viewmodel::platform::DeleteOptions {
-                delete_vms: self.delete_platform_delete_vms,
-                delete_project: self.delete_platform_delete_project,
+                delete_vms,
+                delete_project,
             };
-            match vm.delete_platform(
-                config_path,
-                self.delete_platform_name.clone(),
-                delete_options,
-            ) {
+            match vm.delete_platform(config_path, platform_name, delete_options) {
                 Ok(_) => {
                     dure_info!(" Platform delete command sent");
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to delete platform: {}", e));
+                    self.error_dialog.open(format!("Failed to delete platform: {}", e));
                 }
             }
         }
@@ -4844,7 +4143,7 @@ impl PlatformTab {
         // Use embedded OAuth credentials (compiled into binary)
         let handler = OAuthHandler::default();
 
-        self.add_platform_oauth_promise =
+        self.add_platform_dialog.oauth_promise =
             Some(Promise::spawn_thread("gcp_oauth_add_platform", move || {
                 handler.run_oauth_flow().map_err(|e| e.to_string())
             }));
@@ -4864,9 +4163,9 @@ impl PlatformTab {
         // ViewModel-based implementation
         if let Some(vm) = vm {
             dure_debug!("[BILLING] Setting billing_loading = true");
-            self.billing_loading = true;
-            self.billing_error = None;
-            self.billing_data = None;
+            self.billing_dialog.loading = true;
+            self.billing_dialog.error = None;
+            self.billing_dialog.data = None;
 
             // Load config to get GCP platform with OAuth
             dure_debug!("[BILLING] Loading config...");
@@ -4877,8 +4176,8 @@ impl PlatformTab {
                 }
                 Err(e) => {
                     dure_error!("[BILLING] Failed to load config: {}", e);
-                    self.billing_error = Some(format!("Failed to load config: {}", e));
-                    self.billing_loading = false;
+                    self.billing_dialog.error = Some(format!("Failed to load config: {}", e));
+                    self.billing_dialog.loading = false;
                     return;
                 }
             };
@@ -4893,11 +4192,11 @@ impl PlatformTab {
             {
                 Some(idx) => idx,
                 None => {
-                    self.billing_error = Some(
+                    self.billing_dialog.error = Some(
                         "No connected GCP platform found. Please add a GCP platform first."
                             .to_string(),
                     );
-                    self.billing_loading = false;
+                    self.billing_dialog.loading = false;
                     return;
                 }
             };
@@ -4907,9 +4206,9 @@ impl PlatformTab {
                 match self.get_valid_access_token(&mut app_config, platform_idx, &config_path) {
                     Ok(token) => token,
                     Err(e) => {
-                        self.billing_error =
+                        self.billing_dialog.error =
                             Some(format!("Failed to get valid OAuth token: {}", e));
-                        self.billing_loading = false;
+                        self.billing_dialog.loading = false;
                         return;
                     }
                 };
@@ -4925,14 +4224,14 @@ impl PlatformTab {
             } else if !platform.vms.is_empty() {
                 platform.vms[0].gcp_project_id.clone()
             } else {
-                self.billing_error =
+                self.billing_dialog.error =
                     Some("No project ID available. Please select a project first.".to_string());
-                self.billing_loading = false;
+                self.billing_dialog.loading = false;
                 return;
             };
 
             // Auto-discover billing table if not configured
-            if self.billing_dataset.is_empty() || self.billing_table.is_empty() {
+            if self.billing_dialog.dataset.is_empty() || self.billing_dialog.table.is_empty() {
                 dure_info!(
                     "[BILLING] Auto-discovering billing table for project: {}",
                     project_id
@@ -4941,52 +4240,52 @@ impl PlatformTab {
                 if let Err(e) = vm.discover_billing_table(project_id.clone(), project_id.clone()) {
                     dure_error!("[BILLING] Failed to start billing discovery: {}", e);
                     // Fall back to default names
-                    self.billing_dataset = "billing_export".to_string();
-                    self.billing_table =
+                    self.billing_dialog.dataset = "billing_export".to_string();
+                    self.billing_dialog.table =
                         format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                    self.billing_project_id = project_id.clone();
-                    self.billing_error = Some(format!(
+                    self.billing_dialog.project_id = project_id.clone();
+                    self.billing_dialog.error = Some(format!(
                         "Failed to start discovery: {}\n\nUsing default names.",
                         e
                     ));
                 }
                 // Discovery will trigger BillingTableDiscovered event
                 // For now, use defaults and let event update later
-                if self.billing_dataset.is_empty() {
-                    self.billing_dataset = "billing_export".to_string();
-                    self.billing_table =
+                if self.billing_dialog.dataset.is_empty() {
+                    self.billing_dialog.dataset = "billing_export".to_string();
+                    self.billing_dialog.table =
                         format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                    self.billing_project_id = project_id.clone();
+                    self.billing_dialog.project_id = project_id.clone();
                 }
             } else {
                 dure_debug!(
                     "[BILLING] Using existing dataset={}, table={}",
-                    self.billing_dataset,
-                    self.billing_table
+                    self.billing_dialog.dataset,
+                    self.billing_dialog.table
                 );
             }
 
-            if self.billing_project_id.is_empty() {
-                self.billing_project_id = project_id.clone();
+            if self.billing_dialog.project_id.is_empty() {
+                self.billing_dialog.project_id = project_id.clone();
             }
 
             // Send command to ViewModel
             dure_info!(
                 "[BILLING] Sending fetch_billing command: project={}, dataset={}, table={}",
                 project_id,
-                self.billing_dataset,
-                self.billing_table
+                self.billing_dialog.dataset,
+                self.billing_dialog.table
             );
             if let Err(e) = vm.fetch_billing(
                 profile.config_file.clone(),
                 project_id.clone(), // Use project_id as platform identifier
                 project_id,
-                self.billing_dataset.clone(),
-                self.billing_table.clone(),
+                self.billing_dialog.dataset.clone(),
+                self.billing_dialog.table.clone(),
             ) {
                 dure_error!("[BILLING] Failed to send fetch_billing command: {}", e);
-                self.billing_error = Some(format!("Failed to start billing fetch: {}", e));
-                self.billing_loading = false;
+                self.billing_dialog.error = Some(format!("Failed to start billing fetch: {}", e));
+                self.billing_dialog.loading = false;
             } else {
                 dure_info!("[BILLING] fetch_billing command sent successfully");
             }
@@ -4994,213 +4293,17 @@ impl PlatformTab {
         } else {
             dure_warn!("[BILLING] No ViewModel available");
             // Fallback: no ViewModel available (shouldn't happen in normal operation)
-            self.billing_error = Some("ViewModel not available".to_string());
-            self.billing_loading = false;
+            self.billing_dialog.error = Some("ViewModel not available".to_string());
+            self.billing_dialog.loading = false;
         }
     }
 
-    fn render_billing_dialog(
+    fn handle_billing_refresh(
         &mut self,
         profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        use std::cell::Cell;
-
-        let billing_project_id = self.billing_project_id.clone();
-        let billing_loading = self.billing_loading;
-        let billing_error = self.billing_error.clone();
-        let billing_data = self.billing_data.clone();
-
-        let refresh_requested = Cell::new(false);
-
-        dialog(
-            "billing_dialog",
-            &tr!("platform-billing-title"),
-            &mut self.show_billing_dialog,
-        )
-        .max_width(600.0)
-        .max_height(600.0)
-        .scrollable(true)
-        .content(|ui, open| {
-            ui.heading(tr!("platform-billing-heading"));
-            ui.add_space(8.0);
-
-            // Project ID display with GCP console link
-            ui.horizontal(|ui| {
-                ui.label(tr!("platform-billing-project-id"));
-                ui.label(&billing_project_id);
-                ui.add_space(8.0);
-                ui.hyperlink_to(
-                    "GCP Console",
-                    format!(
-                        "https://console.cloud.google.com/billing?project={}",
-                        billing_project_id
-                    ),
-                );
-            });
-            ui.add_space(8.0);
-            ui.separator();
-            ui.add_space(8.0);
-
-            if billing_loading {
-                ui.spinner();
-                ui.label(tr!("platform-billing-loading"));
-            } else if let Some(error) = &billing_error {
-                // Check if this is a "table not found" error (billing export not configured)
-                let is_table_not_found =
-                    error.contains("was not found") || error.contains("Not found");
-
-                if is_table_not_found {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                        "⚠️ Billing Export Not Configured",
-                    );
-                    ui.add_space(4.0);
-                    ui.label(tr!("platform-billing-no-table"));
-                } else {
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("error"),
-                        tr!("platform-billing-error"),
-                    );
-                    ui.add_space(4.0);
-                    ui.label(error);
-                }
-                ui.add_space(16.0);
-
-                ui.label(tr!("platform-billing-help"));
-                ui.label("1. Go to GCP Console → Billing → Billing export");
-                ui.label("2. Select 'Detailed cost data' tab");
-                ui.label("3. Select or create a BigQuery dataset");
-                ui.label("4. Wait a few hours for data to populate");
-            } else if let Some(records) = &billing_data {
-                if records.is_empty() {
-                    ui.label(tr!("platform-billing-no-data"));
-                    ui.add_space(8.0);
-                    ui.label("This could mean:");
-                    ui.label("• Billing export is not configured");
-                    ui.label("• No costs have been incurred yet this month");
-                    ui.label("• Data is still being processed (can take up to 5 days)");
-                } else {
-                    // Display monthly totals
-                    ui.label(tr!("platform-billing-monthly-total", {count: records.len()}));
-                    ui.add_space(8.0);
-
-                    for record in records {
-                        ui.group(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("📅 {} ({})", record.month, record.currency));
-
-                                // Helper to format currency with thousand separators
-                                let format_currency = |amount: f64, currency: &str| -> String {
-                                    // Determine if currency uses decimals
-                                    let uses_decimals = match currency {
-                                        "KRW" | "JPY" | "VND" | "IDR" => false,
-                                        _ => true,
-                                    };
-
-                                    // Get currency symbol
-                                    let symbol = match currency {
-                                        "USD" => "$",
-                                        "EUR" => "€",
-                                        "GBP" => "£",
-                                        "JPY" => "¥",
-                                        "KRW" => "₩",
-                                        "CNY" => "¥",
-                                        "INR" => "₹",
-                                        "AUD" => "A$",
-                                        "CAD" => "C$",
-                                        "SGD" => "S$",
-                                        "HKD" => "HK$",
-                                        "TWD" => "NT$",
-                                        "THB" => "฿",
-                                        "VND" => "₫",
-                                        "IDR" => "Rp",
-                                        "BRL" => "R$",
-                                        _ => currency, // Fallback to currency code
-                                    };
-
-                                    if uses_decimals {
-                                        format!("{}{:.2}", symbol, amount)
-                                    } else {
-                                        let int_amount = amount as i64;
-                                        let abs_amount = int_amount.abs();
-                                        let formatted = abs_amount
-                                            .to_string()
-                                            .as_bytes()
-                                            .rchunks(3)
-                                            .rev()
-                                            .map(std::str::from_utf8)
-                                            .collect::<Result<Vec<&str>, _>>()
-                                            .unwrap()
-                                            .join(",");
-                                        if int_amount < 0 {
-                                            format!("-{}{}", symbol, formatted)
-                                        } else {
-                                            format!("{}{}", symbol, formatted)
-                                        }
-                                    }
-                                };
-
-                                let (color, text) = if record.total_net_cost < 0.0 {
-                                    (
-                                        egui::Color32::from_rgb(76, 175, 80), // Success green
-                                        format!(
-                                            "{} (credit)",
-                                            format_currency(
-                                                record.total_net_cost,
-                                                &record.currency
-                                            )
-                                        ),
-                                    )
-                                } else if record.total_net_cost == 0.0 {
-                                    (
-                                        egui_material3::theme::get_global_color("onSurfaceVariant"),
-                                        format!(
-                                            "{} (no charges)",
-                                            format_currency(0.0, &record.currency)
-                                        ),
-                                    )
-                                } else {
-                                    (
-                                        egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                                        format_currency(record.total_net_cost, &record.currency),
-                                    )
-                                };
-
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.colored_label(color, &text);
-                                    },
-                                );
-                            });
-                        });
-                        ui.add_space(4.0);
-                    }
-                }
-            }
-
-            ui.add_space(16.0);
-            ui.separator();
-            ui.add_space(8.0);
-
-            // Action buttons
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(MaterialButton::filled(&tr!("close"))).clicked() {
-                    *open = false;
-                }
-
-                if ui.add(MaterialButton::outlined(&tr!("refresh"))).clicked() {
-                    refresh_requested.set(true);
-                }
-            });
-        })
-        .show(ctx);
-
-        if refresh_requested.get() {
-            self.fetch_billing_data(profile, vm, None);
-        }
+        self.fetch_billing_data(profile, vm, None);
     }
 
     fn fetch_vm_list_for_binding(
@@ -5212,148 +4315,32 @@ impl PlatformTab {
         if let Some(vm) = vm {
             if let Err(e) = vm.list_vms(profile_config_path, platform_name) {
                 dure_error!("Failed to list VMs for binding: {}", e);
-                self.bind_vm_loading = false;
-                self.bind_vm_list = Vec::new();
+                self.bind_vm_dialog.loading = false;
+                self.bind_vm_dialog.vm_list = Vec::new();
             }
             // Results will come via ViewModelEvent::VMsListed in update_from_viewmodel
-            // bind_vm_loading stays true until event arrives
+            // bind_vm_dialog.loading stays true until event arrives
         } else {
-            self.bind_vm_loading = false;
-            self.bind_vm_list = Vec::new();
+            self.bind_vm_dialog.loading = false;
+            self.bind_vm_dialog.vm_list = Vec::new();
         }
     }
 
-    fn render_bind_vm_dialog(
+    #[cfg(not(target_arch = "wasm32"))]
+    fn handle_bind_vm(
         &mut self,
-        _current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        _vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile: &crate::calc::profile::ProfileContext,
+        platform: String,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        use std::cell::Cell;
-
-        let bind_vm_loading = self.bind_vm_loading;
-        let bind_vm_list = self.bind_vm_list.clone();
-        let mut bind_vm_selected = self.bind_vm_selected;
-        let bind_vm_platform = self.bind_vm_platform.clone();
-
-        let bind_requested = Cell::new(false);
-
-        dialog(
-            "bind_vm_dialog",
-            &tr!("platform-dialog-bind-title"),
-            &mut self.show_bind_vm_dialog,
-        )
-        .min_width(500.0)
-        .max_height(450.0)
-        .scrollable(true)
-        .content(|ui, open| {
-            ui.heading(tr!("platform-dialog-bind-heading"));
-            ui.add_space(12.0);
-
-            if bind_vm_loading {
-                ui.spinner();
-                ui.label(tr!("platform-dialog-bind-loading"));
-            } else if bind_vm_list.is_empty() {
-                ui.colored_label(
-                    egui::Color32::from_rgb(255, 193, 7),
-                    tr!("platform-dialog-bind-no-vms"),
-                ); // Warning amber
-            } else {
-                ui.label(tr!("platform-dialog-bind-select", {count: bind_vm_list.len()}));
-                ui.add_space(8.0);
-
-                use egui_material3::{ListItem, MaterialList};
-                let mut vm_list = MaterialList::new().id("vm_binding_list").fill_width(true);
-
-                for (idx, (project_id, vm_name, zone, external_ip)) in
-                    bind_vm_list.iter().enumerate()
-                {
-                    let is_selected = bind_vm_selected == Some(idx);
-                    let secondary = if !external_ip.is_empty() {
-                        format!("{}, {}, {}", project_id, zone, external_ip)
-                    } else {
-                        format!("{}, {}", project_id, zone)
-                    };
-
-                    let item = ListItem::new(vm_name)
-                        .secondary_text(&secondary)
-                        .leading_icon("computer".to_string())
-                        .dense(true)
-                        .selected(is_selected)
-                        .on_click({
-                            let idx_copy = idx;
-                            move || {
-                                // Selection handled via UI interaction below
-                                dure_debug!("VM {} clicked", idx_copy);
-                            }
-                        });
-
-                    vm_list = vm_list.item(item);
-                }
-
-                let list_response = ui.add(vm_list);
-
-                // Handle selection via clicking on list items
-                for (idx, _) in bind_vm_list.iter().enumerate() {
-                    let item_id = egui::Id::new("vm_binding_list").with(idx);
-                    if ui
-                        .ctx()
-                        .input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
-                    {
-                        if let Some(pos) = ui.ctx().input(|i| i.pointer.interact_pos()) {
-                            // Check if click was on this item (approximate bounds check)
-                            // This is simplified - the actual item interaction is handled by MaterialList
-                            bind_vm_selected = Some(idx);
-                            break;
-                        }
-                    }
-                }
+        if let Some(vm_ref) = vm {
+            let profile_config_path = current_profile.config_file.clone();
+            if let Err(e) = vm_ref.scan_existing_vms(profile_config_path, platform) {
+                self.error_dialog.open(format!("Failed to bind VMs: {}", e));
             }
-
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(8.0);
-
-            // Action buttons
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let bind_enabled = !bind_vm_loading && bind_vm_selected.is_some();
-                if ui
-                    .add_enabled(bind_enabled, MaterialButton::filled(tr!("button-bind")))
-                    .clicked()
-                {
-                    bind_requested.set(true);
-                    *open = false;
-                }
-                if ui
-                    .add(MaterialButton::outlined(tr!("button-cancel")))
-                    .clicked()
-                {
-                    *open = false;
-                }
-            });
-        })
-        .show(ctx);
-
-        // Update selection state
-        self.bind_vm_selected = bind_vm_selected;
-
-        // Handle bind action
-        if bind_requested.get() {
-            #[cfg(not(target_arch = "wasm32"))]
-            if let Some(vm_ref) = _vm {
-                let profile_config_path = _current_profile.config_file.clone();
-                if let Err(e) = vm_ref.scan_existing_vms(profile_config_path, bind_vm_platform) {
-                    dure_error!("Failed to bind VMs: {}", e);
-                }
-            }
-            self.bind_vm_selected = None;
-        }
-
-        // Clear selection when dialog closes
-        if !self.show_bind_vm_dialog {
-            self.bind_vm_selected = None;
         }
     }
+
 
     fn fetch_firewall_data(
         &mut self,
@@ -5368,16 +4355,16 @@ impl PlatformTab {
         if let Some(vm) = vm {
             if let Err(e) = vm.fetch_firewall_rules(profile_config_path, platform_name.clone()) {
                 dure_error!("[UI::PLATFO] Failed to fetch firewall rules: {}", e);
-                self.current_ip = None;
-                self.firewall_rule_list = Vec::new();
+                self.firewall_dialog.current_ip = None;
+                self.firewall_dialog.rule_list = Vec::new();
             } else {
                 dure_info!("[UI::PLATFO] Firewall rules fetch command sent, awaiting FirewallRulesFetched event");
             }
             // Results will come via ViewModelEvent::FirewallRulesFetched
         } else {
             dure_info!("[UI::PLATFO] No VM available, clearing firewall data");
-            self.current_ip = None;
-            self.firewall_rule_list = Vec::new();
+            self.firewall_dialog.current_ip = None;
+            self.firewall_dialog.rule_list = Vec::new();
         }
     }
 
@@ -5391,7 +4378,7 @@ impl PlatformTab {
     ) {
         // Debounce: skip if refreshed within last 1 second (unless force=true)
         if !force {
-            if let Some(last_refresh) = self.firewall_last_refresh_time {
+            if let Some(last_refresh) = self.firewall_dialog.last_refresh_time {
                 if last_refresh.elapsed() < std::time::Duration::from_secs(1) {
                     dure_info!("[UI::PLATFO] Skipping duplicate refresh (debounced)");
                     return;
@@ -5403,966 +4390,203 @@ impl PlatformTab {
             "[UI::PLATFO] Refreshing firewall rules for {}",
             platform_name
         );
-        self.firewall_last_refresh_time = Some(std::time::Instant::now());
+        self.firewall_dialog.last_refresh_time = Some(std::time::Instant::now());
         self.fetch_firewall_data(profile_config_path, platform_name, vm);
     }
 
-    fn render_firewall_dialog(
+
+    fn handle_add_firewall_save(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
-        use std::cell::Cell;
-        use std::sync::{Arc, Mutex};
-
-        let current_ip = self.current_ip.clone();
-        let firewall_rule_list = self.firewall_rule_list.clone();
-        let mut firewall_selected = self.firewall_selected;
-        let firewall_platform = self.firewall_platform.clone();
-
-        let add_ip_requested = Cell::new(false);
-        let remove_ip_requested = Cell::new(false);
-        let flush_requested = Cell::new(false);
-        let selected_rule_name = Cell::new(String::new());
-        let add_requested = Cell::new(false);
-        let delete_requested = Cell::new(false);
-        let reset_requested = Cell::new(false);
-        let edit_row_idx = Arc::new(Mutex::new(None::<usize>));
-        let delete_row_idx = Arc::new(Mutex::new(None::<usize>));
-        let table_selected_rows = Cell::new(Vec::<bool>::new());
-
-        // let window_width = ctx.input(|i| i.viewport().inner_rect.unwrap_or_else(|| ctx.screen_rect()).width());
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        // Wrap in Background order so Add/Edit dialog appears on top
-        egui::Area::new(egui::Id::new("firewall_dialog_background"))
-            .order(egui::Order::Background)
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .show(ctx, |_ui| {
-                dialog(
-                    "firewall_dialog",
-                    "Manage Firewall Rules",
-                    &mut self.show_firewall_dialog,
-                )
-                .min_width(350.0)
-                .max_width(window_width - 40.0)
-                .max_height(window_height - 40.0)
-                .scrollable(true)
-                .content(|ui, open| {
-                    // Current IP display - only show loading when both IP and rules are empty
-                    if let Some(ip) = &current_ip {
-                        ui.label(format!("Current IP: {}", ip));
-                    } else if firewall_rule_list.is_empty() {
-                        ui.label("Fetching current IP...");
-                    }
-                    ui.add_space(8.0);
-
-                    // Toolbar: Add/Reset buttons (Edit/Delete moved to per-row trailing actions)
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add(MaterialButton::filled(tr!("firewall-button-add-row")))
-                            .clicked()
-                        {
-                            add_requested.set(true);
-                        }
-                        if ui
-                            .add(MaterialButton::text(tr!("firewall-button-reset")))
-                            .clicked()
-                        {
-                            reset_requested.set(true);
-                        }
-                    });
-                    ui.add_space(8.0);
-
-                    // Use full GCP firewall data directly (no conversion needed!)
-                    let rules_for_table = &firewall_rule_list;
-
-                    // Responsive view: datatable for wide screens, list for narrow screens
-                    if window_width >= 1000.0 {
-                        // Wide screen: Compact datatable with 8 columns + drawer
-                        use egui_material3::data_table;
-                        let mut table = data_table()
-                            .id(egui::Id::new("firewall_rules_table"))
-                            .allow_drawer(true)
-                            .allow_selection(true)
-                            .default_row_height(30.0)
-                            .column("NAME", 150.0, false)
-                            .column("NETWORK", 80.0, false)
-                            .column("DIRECTION", 90.0, false)
-                            .column("PRIORITY", 80.0, true)
-                            .column("SRC_RANGES", 120.0, false)
-                            .column("DEST_RANGES", 120.0, false)
-                            .column("ALLOW", 120.0, false)
-                            .column("DENY", 100.0, false);
-
-                        for (idx, rule) in rules_for_table.iter().enumerate() {
-                            let rule_name = rule.name.clone();
-                            let rule_network = rule.network.clone();
-                            let rule_direction = rule.direction.clone();
-                            let rule_priority = rule.priority;
-                            let src_ranges_str = rule.source_ranges.join(", ");
-                            let dest_ranges_str = rule.dest_ranges.join(", ");
-                            let allowed_str = rule.allowed.join(", ");
-                            let denied_str = rule.denied.join(", ");
-                            let src_tags_str = rule.source_tags.join(", ");
-                            let src_svc_str = rule.source_service_accounts.join(", ");
-                            let target_tags_str = rule.target_tags.join(", ");
-                            let target_svc_str = rule.target_service_accounts.join(", ");
-
-                            let row_color = if rule.source_ranges.contains(&"0.0.0.0/0".to_string())
-                            {
-                                egui::Color32::from_rgb(255, 240, 200)
-                            } else {
-                                egui::Color32::TRANSPARENT
-                            };
-
-                            table = table.row(|row| {
-                                row.cell(rule_name.clone())
-                                    .cell(rule_network.clone())
-                                    .cell(rule_direction.clone())
-                                    .cell(rule_priority.to_string())
-                                    .cell(src_ranges_str.clone())
-                                    .cell(dest_ranges_str.clone())
-                                    .cell(allowed_str.clone())
-                                    .cell(denied_str.clone())
-                                    .color(row_color)
-                                    .id(format!("firewall_row_{}", idx))
-                                    .drawer({
-                                        let name_clone = rule_name.clone();
-                                        let network_clone = rule_network.clone();
-                                        let direction_clone = rule_direction.clone();
-                                        let priority_clone = rule_priority;
-                                        let src_ranges_clone = src_ranges_str.clone();
-                                        let dest_ranges_clone = dest_ranges_str.clone();
-                                        let allowed_clone = allowed_str.clone();
-                                        let denied_clone = denied_str.clone();
-                                        let src_tags_clone = src_tags_str.clone();
-                                        let src_svc_clone = src_svc_str.clone();
-                                        let target_tags_clone = target_tags_str.clone();
-                                        let target_svc_clone = target_svc_str.clone();
-
-                                        move |ui| {
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Name:");
-                                                ui.label(&name_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Network:");
-                                                ui.label(&network_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Direction:");
-                                                ui.label(&direction_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Priority:");
-                                                ui.label(priority_clone.to_string());
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Source Ranges:");
-                                                ui.label(&src_ranges_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Dest Ranges:");
-                                                ui.label(&dest_ranges_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Allowed:");
-                                                ui.label(&allowed_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Denied:");
-                                                ui.label(&denied_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Source Tags:");
-                                                ui.label(&src_tags_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Source Service Accounts:");
-                                                ui.label(&src_svc_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Target Tags:");
-                                                ui.label(&target_tags_clone);
-                                            });
-                                            ui.horizontal(|ui| {
-                                                ui.strong("Target Service Accounts:");
-                                                ui.label(&target_svc_clone);
-                                            });
-                                        }
-                                    })
-                            });
-                        }
-
-                        let table_response = table.show(ui);
-                        table_selected_rows.set(table_response.selected_rows.clone());
-                    } else {
-                        // Narrow screen: 5-line drawer list (overline + primary + 2-line secondary + trailing indicator)
-                        use egui_material3::{ListItem, MaterialList, VisualDensity};
-                        use std::rc::Rc;
-
-                        let list_id = egui::Id::new("firewall_rules_list");
-                        let list_clicked_idx = Rc::new(Cell::new(None::<usize>));
-
-                        let mut list = MaterialList::new()
-                            .id(list_id)
-                            .allow_drawer(true)
-                            .fill_width(true);
-
-                        for (idx, rule) in firewall_rule_list.iter().enumerate() {
-                            let is_selected = firewall_selected == Some(idx);
-                            let has_full_access =
-                                rule.source_ranges.contains(&"0.0.0.0/0".to_string());
-
-                            // Overline: S:source_ranges D:dest_ranges
-                            let src_str = if rule.source_ranges.is_empty() {
-                                "none".to_string()
-                            } else if rule.source_ranges.len() <= 2 {
-                                rule.source_ranges.join(",")
-                            } else {
-                                format!(
-                                    "{},{} +{} more",
-                                    rule.source_ranges[0],
-                                    rule.source_ranges[1],
-                                    rule.source_ranges.len() - 2
-                                )
-                            };
-                            let dest_str = if rule.dest_ranges.is_empty() {
-                                "0.0.0.0/0".to_string()
-                            } else if rule.dest_ranges.len() <= 2 {
-                                rule.dest_ranges.join(",")
-                            } else {
-                                format!(
-                                    "{},{} +{} more",
-                                    rule.dest_ranges[0],
-                                    rule.dest_ranges[1],
-                                    rule.dest_ranges.len() - 2
-                                )
-                            };
-                            let overline_text = format!("S:{} D:{}", src_str, dest_str);
-
-                            // Secondary line 1: A:allowed
-                            // Secondary line 2: D:denied
-                            let allowed_str = if rule.allowed.is_empty() {
-                                "none".to_string()
-                            } else {
-                                rule.allowed.join(",")
-                            };
-                            let denied_str = if rule.denied.is_empty() {
-                                "none".to_string()
-                            } else {
-                                rule.denied.join(",")
-                            };
-                            let secondary_text = format!("A:{}\nD:{}", allowed_str, denied_str);
-
-                            // Leading icon label: Priority below icon
-                            let icon_label = format!("(P:{})", rule.priority);
-
-                            // Icon: ingress/egress direction or warning
-                            let icon_name = if has_full_access {
-                                "warning"
-                            } else if rule.direction == "INGRESS" {
-                                "call_received"
-                            } else {
-                                "call_made"
-                            };
-
-                            // Clone data for drawer closure
-                            let rule_name = rule.name.clone();
-                            let rule_network = rule.network.clone();
-                            let rule_direction = rule.direction.clone();
-                            let rule_priority = rule.priority;
-                            let src_ranges_str = rule.source_ranges.join(", ");
-                            let dest_ranges_str = rule.dest_ranges.join(", ");
-                            let allowed_full = rule.allowed.join(", ");
-                            let denied_full = rule.denied.join(", ");
-                            let src_tags_str = rule.source_tags.join(", ");
-                            let src_svc_str = rule.source_service_accounts.join(", ");
-                            let target_tags_str = rule.target_tags.join(", ");
-                            let target_svc_str = rule.target_service_accounts.join(", ");
-
-                            let item = ListItem::new(&rule.name)
-                                .overline(&overline_text)
-                                .secondary_text(&secondary_text)
-                                .leading_icon(icon_name.to_string())
-                                .leading_icon_label(&icon_label)
-                                .visual_density(VisualDensity::COMFORTABLE)
-                                .selected(is_selected)
-                                .on_click({
-                                    let list_clicked_idx = Rc::clone(&list_clicked_idx);
-                                    move || {
-                                        list_clicked_idx.set(Some(idx));
-                                    }
-                                })
-                                .trailing_widget({
-                                    let edit_row_idx = Arc::clone(&edit_row_idx);
-                                    let delete_row_idx = Arc::clone(&delete_row_idx);
-                                    move |ui| {
-                                        ui.horizontal(|ui| {
-                                            if ui
-                                                .add(MaterialButton::outlined("Edit").small())
-                                                .clicked()
-                                            {
-                                                *edit_row_idx.lock().unwrap() = Some(idx);
-                                            }
-                                            if ui
-                                                .add(MaterialButton::outlined("Delete").small())
-                                                .clicked()
-                                            {
-                                                *delete_row_idx.lock().unwrap() = Some(idx);
-                                            }
-                                        });
-                                    }
-                                })
-                                .drawer(move |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Name:");
-                                        ui.label(&rule_name);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Network:");
-                                        ui.label(&rule_network);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Direction:");
-                                        ui.label(&rule_direction);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Priority:");
-                                        ui.label(rule_priority.to_string());
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Source Ranges:");
-                                        ui.label(&src_ranges_str);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Dest Ranges:");
-                                        ui.label(&dest_ranges_str);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Allowed:");
-                                        ui.label(&allowed_full);
-                                    });
-                                    ui.horizontal(|ui| {
-                                        ui.strong("Denied:");
-                                        ui.label(&denied_full);
-                                    });
-                                    if !src_tags_str.is_empty() {
-                                        ui.horizontal(|ui| {
-                                            ui.strong("Source Tags:");
-                                            ui.label(&src_tags_str);
-                                        });
-                                    }
-                                    if !src_svc_str.is_empty() {
-                                        ui.horizontal(|ui| {
-                                            ui.strong("Source Service Accounts:");
-                                            ui.label(&src_svc_str);
-                                        });
-                                    }
-                                    if !target_tags_str.is_empty() {
-                                        ui.horizontal(|ui| {
-                                            ui.strong("Target Tags:");
-                                            ui.label(&target_tags_str);
-                                        });
-                                    }
-                                    if !target_svc_str.is_empty() {
-                                        ui.horizontal(|ui| {
-                                            ui.strong("Target Service Accounts:");
-                                            ui.label(&target_svc_str);
-                                        });
-                                    }
-                                });
-
-                            list = list.item(item);
-                        }
-
-                        ui.add(list);
-
-                        // Handle selection from list clicks
-                        if let Some(clicked_idx) = list_clicked_idx.get() {
-                            let mut selected = vec![false; firewall_rule_list.len()];
-                            selected[clicked_idx] = true;
-                            table_selected_rows.set(selected);
-                        }
-                    }
-
-                    ui.add_space(50.0);
-
-                    // Close button
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(MaterialButton::filled("Close")).clicked() {
-                            *open = false;
-                        }
-                    });
-                })
-                .show(ctx);
-            });
-
-        // Update selection state from table response
-        let selected_rows = table_selected_rows.take();
-        if !selected_rows.is_empty() {
-            // Find first selected row
-            if let Some((idx, _)) = selected_rows.iter().enumerate().find(|(_, &sel)| sel) {
-                self.firewall_selected = Some(idx);
-            } else {
-                self.firewall_selected = None;
-            }
-        } else {
-            self.firewall_selected = None;
-        }
-
-        // Handle Edit action from Actions column
-        if let Some(idx) = edit_row_idx.lock().unwrap().take() {
-            if let Some(rule) = firewall_rule_list.get(idx) {
-                dure_info!(
-                    "Edit button clicked for rule '{}' at index {}",
-                    rule.name,
-                    idx
-                );
-                // Populate form with all fields from existing rule
-                self.firewall_form_data = FirewallRule {
-                    name: rule.name.clone(),
-                    network: rule.network.clone(),
-                    direction: rule.direction.clone(),
-                    priority: rule.priority,
-                    source_ranges: rule.source_ranges.clone(),
-                    dest_ranges: rule.dest_ranges.clone(),
-                    allowed: rule.allowed.clone(),
-                    denied: rule.denied.clone(),
-                    source_tags: rule.source_tags.clone(),
-                    source_service_accounts: rule.source_service_accounts.clone(),
-                    target_tags: rule.target_tags.clone(),
-                    target_service_accounts: rule.target_service_accounts.clone(),
-                };
-                self.firewall_form_edit_idx = Some(idx);
-                dure_info!("Edit firewall rule at index {}", idx);
-                self.show_add_firewall_dialog = true;
-            }
-        }
-
-        // Handle Delete action from Actions column - show confirmation dialog
-        if let Some(idx) = delete_row_idx.lock().unwrap().take() {
-            if let Some(rule) = firewall_rule_list.get(idx) {
-                dure_info!(
-                    "Delete button clicked for rule '{}' - showing confirmation",
-                    rule.name
-                );
-                self.show_delete_firewall_confirm = true;
-                self.delete_firewall_rule_name = rule.name.clone();
-                self.delete_firewall_rule_idx = Some(idx);
-            }
-        }
-
-        // Handle add row action
-        if add_requested.get() {
-            dure_info!("Add Row button clicked - opening Add Firewall Rule dialog");
-            self.firewall_form_data = FirewallRule::default();
-            self.firewall_form_edit_idx = None;
-            self.show_add_firewall_dialog = true;
-        }
-
-        // Handle delete selected action
-        if delete_requested.get() {
-            let selected_indices: Vec<usize> = if let Some(idx) = self.firewall_selected {
-                vec![idx]
-            } else {
-                Vec::new()
-            };
-
-            if !selected_indices.is_empty() {
-                dure_info!("Delete selected rules: {} rules", selected_indices.len());
-                if let Some(vm_ref) = vm.as_ref() {
-                    for idx in selected_indices.iter().rev() {
-                        if let Some(rule) = firewall_rule_list.get(*idx) {
-                            if let Err(e) = vm_ref.delete_firewall_rule(
-                                current_profile.config_file.clone(),
-                                firewall_platform.clone(),
-                                rule.name.clone(),
-                            ) {
-                                dure_error!(
-                                    "Failed to delete firewall rule '{}': {}",
-                                    rule.name,
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
-                self.firewall_selected = None;
-            }
-        }
-
-        // Handle reset action
-        if reset_requested.get() {
-            dure_info!("Reset firewall rules from GCP (forced refresh)");
-            self.refresh_firewall_list_if_needed(
-                current_profile.config_file.clone(),
-                firewall_platform.clone(),
-                vm.as_deref_mut(),
-                true, // Force refresh, skip debounce
-            );
-        }
-
-        // Handle add IP action
-        if add_ip_requested.get() {
-            if let (Some(vm_ref), Some(ip)) = (vm.as_ref(), &self.current_ip) {
-                if let Err(e) = vm_ref.update_firewall_rule(
-                    current_profile.config_file.clone(),
-                    firewall_platform.clone(),
-                    selected_rule_name.take(),
-                    ip.clone(),
-                ) {
-                    dure_error!("Failed to add IP to firewall rule: {}", e);
-                }
-            }
-        }
-
-        // Handle remove IP dialog trigger
-        if remove_ip_requested.get() {
-            if let Some(idx) = self.firewall_selected {
-                if let Some(rule) = self.firewall_rule_list.get(idx) {
-                    self.show_remove_ip_dialog = true;
-                    self.remove_ip_list = rule.source_ranges.clone();
-                    self.remove_ip_selected = vec![false; rule.source_ranges.len()];
-                }
-            }
-        }
-
-        // Handle flush dialog trigger
-        if flush_requested.get() {
-            self.show_flush_confirm = true;
-        }
-
-        // Clear selection when dialog closes
-        if !self.show_firewall_dialog {
-            self.firewall_selected = None;
-        }
-    }
-
-    fn render_add_firewall_dialog(
-        &mut self,
-        current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
+        rule_data: FirewallRule,
+        edit_idx: Option<usize>,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        if self.show_add_firewall_dialog {
-            use egui_material3::{MaterialButton, MaterialInput};
-            use std::cell::Cell;
+        use crate::{dure_error, dure_info};
 
-            let form_data = &mut self.firewall_form_data;
-            let is_edit = self.firewall_form_edit_idx.is_some();
-            let confirmed = Cell::new(false);
-            let firewall_platform = self.firewall_platform.clone();
+        self.add_firewall_dialog.save_error = None;
+        self.add_firewall_dialog.save_in_progress = true;
 
-            // Validation error states
-            let name_error = Cell::new(false);
-            let network_error = Cell::new(false);
-            let direction_error = Cell::new(false);
-            let allowed_denied_error = Cell::new(false);
-
-            // Persist string state across frames using egui memory
-            let state_id = egui::Id::new("firewall_form_strings");
-            let mut strings = ctx
-                .data_mut(|d| {
-                    d.get_persisted::<(
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                    )>(state_id)
-                })
-                .unwrap_or_else(|| {
-                    // Initialize from form_data on first frame
-                    (
-                        form_data.source_ranges.join(", "),
-                        form_data.dest_ranges.join(", "),
-                        form_data.allowed.join(", "),
-                        form_data.denied.join(", "),
-                        form_data.source_tags.join(", "),
-                        form_data.source_service_accounts.join(", "),
-                        form_data.target_tags.join(", "),
-                        form_data.target_service_accounts.join(", "),
-                        form_data.priority.to_string(),
-                    )
-                });
-
-            let (
-                mut src_ranges_str,
-                mut dest_ranges_str,
-                mut allowed_str,
-                mut denied_str,
-                mut src_tags_str,
-                mut src_svc_str,
-                mut target_tags_str,
-                mut target_svc_str,
-                mut priority_str,
-            ) = strings;
-
-            let title = if is_edit {
-                "Edit Firewall Rule".to_string()
-            } else {
-                tr!("firewall-add-dialog-title")
-            };
-
-            let title_clone = title.clone();
-            let window_width = ctx.input(|i| {
-                i.viewport()
-                    .inner_rect
-                    .unwrap_or_else(|| ctx.screen_rect())
-                    .width()
-            });
-
-            dialog("add_firewall_dialog", title, &mut self.show_add_firewall_dialog)
-                .min_width(600.0)
-                .max_width((window_width * 0.8).min(600.0))
-                .scrollable(true)
-                .content(|ui, open| {
-                    ui.heading(&title_clone);
-                    ui.add_space(12.0);
-
-                    // Show progress indicator when save is in progress
-                    if self.firewall_save_in_progress {
-                        ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            ui.add(linear_progress());
-                            ui.label(if is_edit { "Updating firewall rule..." } else { "Creating firewall rule..." });
-                        });
-                        ui.add_space(8.0);
-                    }
-
-                    // Show error if present
-                    if let Some(ref error_msg) = self.firewall_save_error {
-                        ui.add_space(8.0);
-                        ui.colored_label(
-                            egui::Color32::from_rgb(255, 82, 82), // Material3 error red
-                            format!("❌ Error: {}", error_msg)
+        if let Some(idx) = edit_idx {
+            dure_info!("Update firewall rule at index {}: {}", idx, rule_data.name);
+            if let Some(vm_ref) = vm.as_ref() {
+                // Get original rule name for deletion
+                if let Some(old_rule) = self.firewall_dialog.rule_list.get(idx) {
+                    let old_rule_name = old_rule.name.clone();
+                    // Delete old rule first
+                    if let Err(e) = vm_ref.delete_firewall_rule(
+                        current_profile.config_file.clone(),
+                        self.add_firewall_dialog.platform.clone(),
+                        old_rule_name.clone(),
+                    ) {
+                        dure_error!(
+                            "Failed to delete old firewall rule '{}': {}",
+                            old_rule_name,
+                            e
                         );
-                        ui.add_space(8.0);
-                    }
-
-                    // All 12 fields with MaterialInput labels (examples in label text)
-                    ui.add(MaterialInput::filled(&mut form_data.name)
-                        .label("Name (e.g., allow-ssh-from-office)")
-                        .is_error(name_error.get())
-                        .error_text("Name is required"));
-
-                    ui.add(MaterialInput::filled(&mut form_data.network)
-                        .label("Network (e.g., default)")
-                        .is_error(network_error.get())
-                        .error_text("Network is required"));
-
-                    ui.add(MaterialInput::filled(&mut form_data.direction)
-                        .label("Direction (INGRESS or EGRESS)")
-                        .is_error(direction_error.get())
-                        .error_text("Must be INGRESS or EGRESS"));
-
-                    ui.add(MaterialInput::filled(&mut priority_str)
-                        .label("Priority (e.g., 1000 - lower = higher priority)"));
-
-                    ui.add(MaterialInput::filled(&mut src_ranges_str)
-                        .label("Source IP Ranges (e.g., 203.0.113.0/24, 198.51.100.42/32)"));
-
-                    ui.add(MaterialInput::filled(&mut dest_ranges_str)
-                        .label("Destination Ranges (e.g., 0.0.0.0/0)"));
-
-                    ui.add(MaterialInput::filled(&mut allowed_str)
-                        .label("Allowed Protocols (e.g., tcp:22, tcp:80, tcp:443, icmp)")
-                        .is_error(allowed_denied_error.get())
-                        .error_text("Either allowed or denied rules required"));
-
-                    ui.add(MaterialInput::filled(&mut denied_str)
-                        .label("Denied Protocols (e.g., tcp:23 - optional)")
-                        .is_error(allowed_denied_error.get()));
-
-                    ui.add(MaterialInput::filled(&mut src_tags_str)
-                        .label("Source Tags (e.g., web-server, api-backend)"));
-
-                    ui.add(MaterialInput::filled(&mut src_svc_str)
-                        .label("Source Service Account (e.g., app@project.iam.gserviceaccount.com)"));
-
-                    ui.add(MaterialInput::filled(&mut target_tags_str)
-                        .label("Target Tags (e.g., http-server, https-server)"));
-
-                    ui.add(MaterialInput::filled(&mut target_svc_str)
-                        .label("Target Service Account (e.g., vm@project.iam.gserviceaccount.com)"));
-
-                    ui.add_space(12.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let button_text = if is_edit { "Save" } else { "Create" };
-                        let save_button = MaterialButton::filled(button_text)
-                            .enabled(!self.firewall_save_in_progress);  // Disable during progress
-                        if ui.add(save_button).clicked() {
-                            dure_info!("Save/Create clicked - parsing string inputs to form_data");
-
-                            // Parse string inputs to form_data (only on Save, not every frame)
-                            if let Ok(val) = priority_str.parse::<u32>() {
-                                form_data.priority = val;
-                            }
-                            form_data.source_ranges = src_ranges_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.dest_ranges = dest_ranges_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.allowed = allowed_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.denied = denied_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.source_tags = src_tags_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.source_service_accounts = src_svc_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.target_tags = target_tags_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            form_data.target_service_accounts = target_svc_str.split(',')
-                                .map(|s| s.trim().to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
-
-                            // Validate inputs
-                            let name_valid = !form_data.name.trim().is_empty();
-                            let network_valid = !form_data.network.trim().is_empty();
-                            let direction_valid = form_data.direction == "INGRESS" || form_data.direction == "EGRESS";
-                            let allowed_denied_valid = !form_data.allowed.is_empty() || !form_data.denied.is_empty();
-
-                            // Set error states
-                            name_error.set(!name_valid);
-                            network_error.set(!network_valid);
-                            direction_error.set(!direction_valid);
-                            allowed_denied_error.set(!allowed_denied_valid);
-
-                            // Only proceed if all validations pass
-                            if name_valid && network_valid && direction_valid && allowed_denied_valid {
-                                confirmed.set(true);
-                            } else {
-                                dure_info!("Validation failed: name={}, network={}, direction={}, allowed_denied={}",
-                                    name_valid, network_valid, direction_valid, allowed_denied_valid);
-                            }
-                        }
-                        if ui.add(MaterialButton::outlined("Cancel")).clicked() {
-                            *open = false;
-                        }
-                    });
-
-                    // Save string state to egui memory for next frame
-                    ctx.data_mut(|d| {
-                        d.insert_persisted(state_id, (
-                            src_ranges_str.clone(),
-                            dest_ranges_str.clone(),
-                            allowed_str.clone(),
-                            denied_str.clone(),
-                            src_tags_str.clone(),
-                            src_svc_str.clone(),
-                            target_tags_str.clone(),
-                            target_svc_str.clone(),
-                            priority_str.clone(),
-                        ));
-                    });
-                })
-                .show(ctx);
-
-            if confirmed.get() {
-                // Clear previous error and mark operation as in progress
-                self.firewall_save_error = None;
-                self.firewall_save_in_progress = true;
-
-                if let Some(idx) = self.firewall_form_edit_idx {
-                    dure_info!("Update firewall rule at index {}: {}", idx, form_data.name);
-                    if let Some(vm_ref) = vm.as_ref() {
-                        // Get original rule name for deletion
-                        if let Some(old_rule) = self.firewall_rule_list.get(idx) {
-                            let old_rule_name = old_rule.name.clone();
-                            // Delete old rule first
-                            if let Err(e) = vm_ref.delete_firewall_rule(
-                                current_profile.config_file.clone(),
-                                firewall_platform.clone(),
-                                old_rule_name.clone(),
-                            ) {
-                                dure_error!(
-                                    "Failed to delete old firewall rule '{}': {}",
-                                    old_rule_name,
-                                    e
-                                );
-                            } else {
-                                // Create new rule with updated data
-                                let rule_data = crate::viewmodel::platform::FirewallRuleData {
-                                    name: form_data.name.clone(),
-                                    network: form_data.network.clone(),
-                                    direction: form_data.direction.clone(),
-                                    priority: form_data.priority,
-                                    source_ranges: form_data.source_ranges.clone(),
-                                    dest_ranges: form_data.dest_ranges.clone(),
-                                    allowed: form_data.allowed.clone(),
-                                    denied: form_data.denied.clone(),
-                                    source_tags: form_data.source_tags.clone(),
-                                    source_service_accounts: form_data
-                                        .source_service_accounts
-                                        .clone(),
-                                    target_tags: form_data.target_tags.clone(),
-                                    target_service_accounts: form_data
-                                        .target_service_accounts
-                                        .clone(),
-                                };
-                                if let Err(e) = vm_ref.create_firewall_rule(
-                                    current_profile.config_file.clone(),
-                                    firewall_platform.clone(),
-                                    rule_data,
-                                ) {
-                                    dure_error!("Failed to recreate firewall rule: {}", e);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    dure_info!("Create new firewall rule: {}", form_data.name);
-                    if let Some(vm_ref) = vm.as_ref() {
-                        let rule_data = crate::viewmodel::platform::FirewallRuleData {
-                            name: form_data.name.clone(),
-                            network: form_data.network.clone(),
-                            direction: form_data.direction.clone(),
-                            priority: form_data.priority,
-                            source_ranges: form_data.source_ranges.clone(),
-                            dest_ranges: form_data.dest_ranges.clone(),
-                            allowed: form_data.allowed.clone(),
-                            denied: form_data.denied.clone(),
-                            source_tags: form_data.source_tags.clone(),
-                            source_service_accounts: form_data.source_service_accounts.clone(),
-                            target_tags: form_data.target_tags.clone(),
-                            target_service_accounts: form_data.target_service_accounts.clone(),
+                    } else {
+                        // Create new rule with updated data
+                        let rule = crate::viewmodel::platform::FirewallRuleData {
+                            name: rule_data.name.clone(),
+                            network: rule_data.network.clone(),
+                            direction: rule_data.direction.clone(),
+                            priority: rule_data.priority,
+                            source_ranges: rule_data.source_ranges.clone(),
+                            dest_ranges: rule_data.dest_ranges.clone(),
+                            allowed: rule_data.allowed.clone(),
+                            denied: rule_data.denied.clone(),
+                            source_tags: rule_data.source_tags.clone(),
+                            source_service_accounts: rule_data.source_service_accounts.clone(),
+                            target_tags: rule_data.target_tags.clone(),
+                            target_service_accounts: rule_data.target_service_accounts.clone(),
                         };
 
                         if let Err(e) = vm_ref.create_firewall_rule(
                             current_profile.config_file.clone(),
-                            firewall_platform.clone(),
-                            rule_data,
+                            self.add_firewall_dialog.platform.clone(),
+                            rule,
                         ) {
-                            dure_error!("Failed to create firewall rule: {}", e);
+                            dure_error!("Failed to recreate firewall rule: {}", e);
+                            self.add_firewall_dialog.save_error =
+                                Some(format!("Failed to update rule: {}", e));
+                            self.add_firewall_dialog.save_in_progress = false;
                         }
                     }
                 }
-                // Don't close dialog here - wait for FirewallRuleUpdated event
             }
+        } else {
+            dure_info!("Create new firewall rule: {}", rule_data.name);
+            if let Some(vm_ref) = vm.as_ref() {
+                let rule = crate::viewmodel::platform::FirewallRuleData {
+                    name: rule_data.name.clone(),
+                    network: rule_data.network.clone(),
+                    direction: rule_data.direction.clone(),
+                    priority: rule_data.priority,
+                    source_ranges: rule_data.source_ranges.clone(),
+                    dest_ranges: rule_data.dest_ranges.clone(),
+                    allowed: rule_data.allowed.clone(),
+                    denied: rule_data.denied.clone(),
+                    source_tags: rule_data.source_tags.clone(),
+                    source_service_accounts: rule_data.source_service_accounts.clone(),
+                    target_tags: rule_data.target_tags.clone(),
+                    target_service_accounts: rule_data.target_service_accounts.clone(),
+                };
 
-            // Clear state when dialog closes
-            if !self.show_add_firewall_dialog {
-                ctx.data_mut(|d| {
-                    d.remove::<(
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                        String,
-                    )>(state_id)
-                });
+                if let Err(e) = vm_ref.create_firewall_rule(
+                    current_profile.config_file.clone(),
+                    self.add_firewall_dialog.platform.clone(),
+                    rule,
+                ) {
+                    dure_error!("Failed to create firewall rule: {}", e);
+                    self.add_firewall_dialog.save_error =
+                        Some(format!("Failed to create rule: {}", e));
+                    self.add_firewall_dialog.save_in_progress = false;
+                }
             }
-        } else if !self.show_add_firewall_dialog {
-            // Dialog was closed without saving
-            if self.firewall_form_edit_idx.is_some() || !self.firewall_form_data.name.is_empty() {
-                dure_info!("Add/Edit Firewall Rule dialog closed without saving");
-            }
-            // Clear persisted string state
-            let state_id = egui::Id::new("firewall_form_strings");
-            ctx.data_mut(|d| {
-                d.remove::<(
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                    String,
-                )>(state_id)
-            });
         }
     }
 
-    fn render_delete_firewall_confirm_dialog(
+    fn handle_firewall_add_ip(
         &mut self,
         current_profile: &crate::calc::profile::ProfileContext,
-        ctx: &egui::Context,
         vm: Option<&mut crate::viewmodel::ViewModel>,
     ) {
-        use egui_material3::{dialog, MaterialButton};
-        use std::cell::Cell;
+        use crate::dure_error;
 
-        let confirmed = Cell::new(false);
-        let rule_name = self.delete_firewall_rule_name.clone();
-        let firewall_platform = self.firewall_platform.clone();
-
-        dialog(
-            "delete_firewall_confirm",
-            "Confirm Delete",
-            &mut self.show_delete_firewall_confirm,
-        )
-        .min_width(400.0)
-        .content(|ui, open| {
-            ui.label(format!("Delete firewall rule '{}'?", rule_name));
-            ui.add_space(8.0);
-            ui.label("This action cannot be undone.");
-            ui.add_space(16.0);
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add(
-                        MaterialButton::filled("Delete")
-                            .text_color(egui::Color32::from_rgb(255, 82, 82)),
-                    )
-                    .clicked()
-                {
-                    confirmed.set(true);
-                }
-                if ui.add(MaterialButton::outlined("Cancel")).clicked() {
-                    *open = false;
-                }
-            });
-        })
-        .show(ctx);
-
-        if confirmed.get() {
-            dure_info!("Delete confirmed for firewall rule: {}", rule_name);
-            if let Some(vm_ref) = vm.as_ref() {
-                if let Err(e) = vm_ref.delete_firewall_rule(
-                    current_profile.config_file.clone(),
-                    firewall_platform.clone(),
-                    rule_name.clone(),
-                ) {
-                    dure_error!("Failed to delete firewall rule '{}': {}", rule_name, e);
+        if let (Some(vm_ref), Some(ip)) = (vm.as_ref(), &self.firewall_dialog.current_ip) {
+            if let Some(selected_idx) = self.firewall_dialog.selected {
+                if let Some(rule) = self.firewall_dialog.rule_list.get(selected_idx) {
+                    if let Err(e) = vm_ref.update_firewall_rule(
+                        current_profile.config_file.clone(),
+                        self.firewall_dialog.platform.clone(),
+                        rule.name.clone(),
+                        ip.clone(),
+                    ) {
+                        dure_error!("Failed to add IP to firewall rule: {}", e);
+                    }
                 }
             }
-            self.show_delete_firewall_confirm = false;
-            self.delete_firewall_rule_name.clear();
-            self.delete_firewall_rule_idx = None;
         }
     }
+
+    fn handle_firewall_add_rule(&mut self) {
+        use crate::dure_info;
+
+        dure_info!("Add Row button clicked - opening Add Firewall Rule dialog");
+        self.add_firewall_dialog.form_data = FirewallRule::default();
+        self.add_firewall_dialog.edit_idx = None;
+        self.add_firewall_dialog.platform = self.firewall_dialog.platform.clone();
+        self.add_firewall_dialog.open = true;
+    }
+
+    fn handle_firewall_edit_rule(
+        &mut self,
+        rule_data: FirewallRule,
+        rule_idx: usize,
+    ) {
+        use crate::dure_info;
+
+        dure_info!("Edit firewall rule at index {}", rule_idx);
+        self.add_firewall_dialog.form_data = rule_data;
+        self.add_firewall_dialog.edit_idx = Some(rule_idx);
+        self.add_firewall_dialog.platform = self.firewall_dialog.platform.clone();
+        self.add_firewall_dialog.open = true;
+    }
+
+    fn handle_firewall_delete_rule(
+        &mut self,
+        rule_name: String,
+        rule_idx: Option<usize>,
+    ) {
+        use crate::dure_info;
+
+        dure_info!(
+            "Delete button clicked for rule '{}' - showing confirmation",
+            rule_name
+        );
+        self.delete_firewall_confirm_dialog.open(
+            rule_name,
+            self.firewall_dialog.platform.clone(),
+            rule_idx,
+        );
+    }
+
+    fn handle_firewall_reset(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        use crate::dure_info;
+
+        dure_info!("Reset firewall rules from GCP (forced refresh)");
+        self.refresh_firewall_list_if_needed(
+            current_profile.config_file.clone(),
+            self.firewall_dialog.platform.clone(),
+            vm,
+            true, // Force refresh, skip debounce
+        );
+    }
+
+    fn handle_delete_firewall_rule(
+        &mut self,
+        current_profile: &crate::calc::profile::ProfileContext,
+        rule_name: String,
+        platform: String,
+        _rule_idx: Option<usize>,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        dure_info!("Delete confirmed for firewall rule: {}", rule_name);
+        if let Some(vm_ref) = vm.as_ref() {
+            if let Err(e) = vm_ref.delete_firewall_rule(
+                current_profile.config_file.clone(),
+                platform,
+                rule_name.clone(),
+            ) {
+                dure_error!("Failed to delete firewall rule '{}': {}", rule_name, e);
+            }
+        }
+    }
+
 }
 
 #[cfg(test)]
@@ -6578,9 +4802,7 @@ mod tests {
         assert!(!tab.can_proceed_wizard());
 
         // Project selected
-        tab.add_platform_project_list = vec![
-            ("project-1".to_string(), "Project 1".to_string()),
-        ];
+        tab.add_platform_project_list = vec![("project-1".to_string(), "Project 1".to_string())];
         tab.add_platform_selected_project = Some(0);
         assert!(tab.can_proceed_wizard());
     }
@@ -6616,9 +4838,7 @@ mod tests {
         tab.wizard_dialog_open = true;
         tab.wizard_current_step = 2;
         tab.add_platform_connected_email = Some("test@example.com".to_string());
-        tab.add_platform_project_list = vec![
-            ("project-1".to_string(), "Project 1".to_string()),
-        ];
+        tab.add_platform_project_list = vec![("project-1".to_string(), "Project 1".to_string())];
 
         // Reset
         tab.reset_wizard_state();

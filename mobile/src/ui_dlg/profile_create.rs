@@ -129,112 +129,111 @@ impl DlgProfileCreate {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("profile_create_dialog", &tr!("profile-create-title"), &mut self.open)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading(tr!("profile-create-heading"));
-                ui.add_space(12.0);
+        dialog(
+            "profile_create_dialog",
+            &tr!("profile-create-title"),
+            &mut self.open,
+        )
+        .min_width(350.0)
+        .max_width(window_width - 120.0)
+        .max_height(window_height - 120.0)
+        .scrollable(true)
+        .content(|ui, _open| {
+            ui.heading(tr!("profile-create-heading"));
+            ui.add_space(12.0);
 
-                // Error message display
-                if !self.error_message.is_empty() {
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("error"),
-                        &self.error_message,
-                    );
-                    ui.add_space(8.0);
-                }
-
-                // Profile name input
-                ui.label(tr!("profile-name"));
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.profile_name)
-                        .hint_text(tr!("profile-name-hint"))
-                        .desired_width(ui.available_width() - 40.0),
+            // Error message display
+            if !self.error_message.is_empty() {
+                ui.colored_label(
+                    egui_material3::theme::get_global_color("error"),
+                    &self.error_message,
                 );
-
-                #[cfg(target_os = "android")]
-                {
-                    if response.gained_focus() {
-                        let _ = crate::android::inputmethod::show_soft_input();
-                    }
-                    if response.lost_focus() {
-                        let _ = crate::android::inputmethod::hide_soft_input();
-                    }
-                }
-
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
-                    ui,
-                    &response,
-                    &mut self.profile_name,
-                );
-
                 ui.add_space(8.0);
+            }
 
-                // Password input
-                ui.label(tr!("password"));
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.password)
-                        .password(true)
-                        .hint_text(tr!("password-hint"))
-                        .desired_width(ui.available_width() - 40.0),
-                );
+            // Profile name input
+            ui.label(tr!("profile-name"));
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.profile_name)
+                    .hint_text(tr!("profile-name-hint"))
+                    .desired_width(ui.available_width() - 40.0),
+            );
 
-                #[cfg(target_os = "android")]
-                {
-                    if response.gained_focus() {
-                        let _ = crate::android::inputmethod::show_soft_input();
-                    }
-                    if response.lost_focus() {
-                        let _ = crate::android::inputmethod::hide_soft_input();
-                    }
+            #[cfg(target_os = "android")]
+            {
+                if response.gained_focus() {
+                    let _ = crate::android::inputmethod::show_soft_input();
                 }
-
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
-                    ui,
-                    &response,
-                    &mut self.password,
-                );
-
-                ui.add_space(8.0);
-
-                // Password confirmation input
-                ui.label(tr!("password-confirm"));
-                let response = ui.add(
-                    egui::TextEdit::singleline(&mut self.password_confirm)
-                        .password(true)
-                        .hint_text(tr!("password-confirm-hint"))
-                        .desired_width(ui.available_width() - 40.0),
-                );
-
-                #[cfg(target_os = "android")]
-                {
-                    if response.gained_focus() {
-                        let _ = crate::android::inputmethod::show_soft_input();
-                    }
-                    if response.lost_focus() {
-                        let _ = crate::android::inputmethod::hide_soft_input();
-                    }
+                if response.lost_focus() {
+                    let _ = crate::android::inputmethod::hide_soft_input();
                 }
+            }
 
-                crate::ui_dlg::clipboard_popup::show_clipboard_popup(
-                    ui,
-                    &response,
-                    &mut self.password_confirm,
-                );
+            crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                ui,
+                &response,
+                &mut self.profile_name,
+            );
 
-                ui.add_space(12.0);
+            ui.add_space(8.0);
 
-            })
-            .action(tr!("cancel"), || {
-                dialog_action.set(CreateDialogAction::Cancel);
-            })
-            .primary_action(tr!("create"), || {
-                dialog_action.set(CreateDialogAction::Submit);
-            })
-            .show(ctx);
+            // Password input
+            ui.label(tr!("password"));
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.password)
+                    .password(true)
+                    .hint_text(tr!("password-hint"))
+                    .desired_width(ui.available_width() - 40.0),
+            );
+
+            #[cfg(target_os = "android")]
+            {
+                if response.gained_focus() {
+                    let _ = crate::android::inputmethod::show_soft_input();
+                }
+                if response.lost_focus() {
+                    let _ = crate::android::inputmethod::hide_soft_input();
+                }
+            }
+
+            crate::ui_dlg::clipboard_popup::show_clipboard_popup(ui, &response, &mut self.password);
+
+            ui.add_space(8.0);
+
+            // Password confirmation input
+            ui.label(tr!("password-confirm"));
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.password_confirm)
+                    .password(true)
+                    .hint_text(tr!("password-confirm-hint"))
+                    .desired_width(ui.available_width() - 40.0),
+            );
+
+            #[cfg(target_os = "android")]
+            {
+                if response.gained_focus() {
+                    let _ = crate::android::inputmethod::show_soft_input();
+                }
+                if response.lost_focus() {
+                    let _ = crate::android::inputmethod::hide_soft_input();
+                }
+            }
+
+            crate::ui_dlg::clipboard_popup::show_clipboard_popup(
+                ui,
+                &response,
+                &mut self.password_confirm,
+            );
+
+            ui.add_space(12.0);
+        })
+        .action(tr!("cancel"), || {
+            dialog_action.set(CreateDialogAction::Cancel);
+        })
+        .primary_action(tr!("create"), || {
+            dialog_action.set(CreateDialogAction::Submit);
+        })
+        .show(ctx);
 
         self.process_action(dialog_action.get())
     }

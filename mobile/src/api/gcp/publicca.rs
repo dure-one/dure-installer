@@ -151,9 +151,6 @@ mod tests {
 
     #[test]
     fn test_api_base_url_format() {
-        assert_eq!(
-            GCP_PUBLIC_CA_API_BASE,
-            "https://publicca.googleapis.com/v1"
-        );
+        assert_eq!(GCP_PUBLIC_CA_API_BASE, "https://publicca.googleapis.com/v1");
     }
 }

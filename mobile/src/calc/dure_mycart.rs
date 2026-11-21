@@ -226,10 +226,8 @@ pub async fn install_dure_with_config(
                     || output.contains("fatal")
                     || output.contains("Connection failed")
                 {
-                    let err_msg = format!(
-                        "✗ Cannot reach GitHub from remote host: {}",
-                        output.trim()
-                    );
+                    let err_msg =
+                        format!("✗ Cannot reach GitHub from remote host: {}", output.trim());
                     progress.push(err_msg.clone());
                     dure_error!("{}", err_msg);
                     return Err(anyhow::anyhow!(err_msg));
@@ -275,7 +273,10 @@ pub async fn install_dure_with_config(
                 }
             }
             Err(e) => {
-                let error_msg = format!("✗ Failed to clone repository: {}\nCommand: {}", e, clone_cmd);
+                let error_msg = format!(
+                    "✗ Failed to clone repository: {}\nCommand: {}",
+                    e, clone_cmd
+                );
                 progress.push(error_msg.clone());
                 dure_error!("{}", error_msg);
                 return Err(anyhow::anyhow!(error_msg));
@@ -317,7 +318,10 @@ pub async fn install_dure_with_config(
         env_text
     );
 
-    dure_debug!("Writing .env file with heredoc command ({} bytes)", write_env.len());
+    dure_debug!(
+        "Writing .env file with heredoc command ({} bytes)",
+        write_env.len()
+    );
 
     let write_result = ssh::execute_command(host_config, &write_env, profile_keyring).await;
 
@@ -491,11 +495,12 @@ async fn run_post_install_commands(
                     }
                 }
             } else {
-                progress
-                    .push("⚠ PROSODY_ADMINS is empty or invalid format".to_string());
+                progress.push("⚠ PROSODY_ADMINS is empty or invalid format".to_string());
             }
         } else {
-            progress.push("⚠ Skipping prosody admin registration: PROSODY_ADMIN_PW not set".to_string());
+            progress.push(
+                "⚠ Skipping prosody admin registration: PROSODY_ADMIN_PW not set".to_string(),
+            );
         }
     } else {
         progress.push("⚠ Skipping prosody admin registration: PROSODY_ADMINS not set".to_string());
@@ -894,7 +899,9 @@ mod tests {
         assert!(heredoc.contains("'ENVEOF'"));
 
         // Verify heredoc structure
-        assert!(heredoc.starts_with("cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n"));
+        assert!(
+            heredoc.starts_with("cat > /srv/dure-mycart/prosody-mycart-stack/.env << 'ENVEOF'\n")
+        );
         assert!(heredoc.ends_with("\nENVEOF"));
     }
 }

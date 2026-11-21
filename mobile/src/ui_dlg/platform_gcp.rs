@@ -432,8 +432,8 @@ impl GcpWizard {
 
         dialog("add_vm_wizard", "Add VM", &mut open)
             .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
             .scrollable(true)
             .content(|ui, _open| {
                 // Progress indicator

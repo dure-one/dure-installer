@@ -248,7 +248,7 @@ pub struct SshHostConfig {
     #[serde(skip)]
     pub last_status: Option<String>,
     /// Platform ID - links to platform's project ID (gcp_selected_project_id, etc.)
-    #[serde(default, alias = "platform_name")]  // backward compat: read old field name
+    #[serde(default, alias = "platform_name")] // backward compat: read old field name
     pub platform_id: Option<String>,
 
     /// Docker containers installed on this host
@@ -314,7 +314,6 @@ impl Default for SshHostConfig {
         }
     }
 }
-
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -406,7 +405,9 @@ impl AppConfig {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn load_for_profile(profile: &crate::calc::profile::ProfileContext) -> anyhow::Result<Self> {
+    pub fn load_for_profile(
+        profile: &crate::calc::profile::ProfileContext,
+    ) -> anyhow::Result<Self> {
         Self::load(&profile.config_file)
     }
 
@@ -435,7 +436,10 @@ impl AppConfig {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn save_for_profile(&self, profile: &crate::calc::profile::ProfileContext) -> anyhow::Result<()> {
+    pub fn save_for_profile(
+        &self,
+        profile: &crate::calc::profile::ProfileContext,
+    ) -> anyhow::Result<()> {
         self.save(&profile.config_file)
     }
 }

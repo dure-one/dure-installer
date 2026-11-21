@@ -350,8 +350,7 @@ impl ProfileManager {
     pub fn set_active_profile(name: &str) -> Result<()> {
         let base_dir = crate::get_profiles_base_dir()?;
         let active_file = base_dir.join(".active");
-        fs::write(active_file, name)
-            .context("Failed to write .active file")?;
+        fs::write(active_file, name).context("Failed to write .active file")?;
         Ok(())
     }
 
@@ -364,8 +363,7 @@ impl ProfileManager {
             return Ok(None);
         }
 
-        let name = fs::read_to_string(active_file)
-            .context("Failed to read .active file")?;
+        let name = fs::read_to_string(active_file).context("Failed to read .active file")?;
         Ok(Some(name.trim().to_string()))
     }
 
@@ -375,8 +373,7 @@ impl ProfileManager {
         let active_file = base_dir.join(".active");
 
         if active_file.exists() {
-            fs::remove_file(active_file)
-                .context("Failed to remove .active file")?;
+            fs::remove_file(active_file).context("Failed to remove .active file")?;
         }
         Ok(())
     }

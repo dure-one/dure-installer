@@ -47,11 +47,7 @@ impl InstallDure {
         self.state.should_close
     }
 
-    pub fn show(
-        &mut self,
-        ctx: &egui::Context,
-        mut vm: Option<&mut crate::viewmodel::ViewModel>,
-    ) {
+    pub fn show(&mut self, ctx: &egui::Context, mut vm: Option<&mut crate::viewmodel::ViewModel>) {
         dure_debug!(
             "show() called: step={:?}, vm={}",
             self.state.step,
@@ -75,7 +71,8 @@ impl InstallDure {
                 }
                 Err(e) => {
                     dure_error!("[InstallDure] Failed to fetch EAB keys: {}", e);
-                    self.state.step = InstallStep::Error(format!("Failed to fetch EAB keys: {}", e));
+                    self.state.step =
+                        InstallStep::Error(format!("Failed to fetch EAB keys: {}", e));
                 }
             }
         }
@@ -165,13 +162,16 @@ impl InstallDure {
                                 dure_info!("[UiDlg::Ins] Transitioned to Complete state");
                                 ctx.request_repaint();
                             } else {
-                                let err_msg = error
-                                    .unwrap_or_else(|| "Installation failed".to_string());
+                                let err_msg =
+                                    error.unwrap_or_else(|| "Installation failed".to_string());
                                 self.state.step = InstallStep::Error(err_msg.clone());
                                 self.state
                                     .progress_log
                                     .push(format!("✗ Error: {}", err_msg));
-                                dure_error!("[UiDlg::Ins] Transitioned to Error state: {}", err_msg);
+                                dure_error!(
+                                    "[UiDlg::Ins] Transitioned to Error state: {}",
+                                    err_msg
+                                );
                                 ctx.request_repaint();
                             }
                         } else {
@@ -194,8 +194,8 @@ impl InstallDure {
 
         dialog("install_dure_dialog", &title, &mut open)
             .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
             .scrollable(true)
             .content(|ui, _| {
                 self.render_header(ui);
@@ -232,8 +232,8 @@ impl InstallDure {
                     env_fields.iter().map(|f| &f.key).collect::<Vec<_>>()
                 );
 
-                let version = self.state.available_versions[self.state.selected_version.unwrap()]
-                    .clone();
+                let version =
+                    self.state.available_versions[self.state.selected_version.unwrap()].clone();
                 let image_tag = self.state.image_tag.clone();
 
                 match vm_ref.install_dure(
@@ -251,10 +251,8 @@ impl InstallDure {
                         dure_info!("Install Dure command sent to ViewModel");
                     }
                     Err(e) => {
-                        self.state.step = InstallStep::Error(format!(
-                            "Failed to start installation: {}",
-                            e
-                        ));
+                        self.state.step =
+                            InstallStep::Error(format!("Failed to start installation: {}", e));
                         dure_error!("Failed to send install command: {}", e);
                     }
                 }
@@ -343,7 +341,9 @@ impl InstallDure {
 
             let provider_text = match self.state.acme_provider {
                 super::install_dure_stt::AcmeProvider::LetsEncrypt => "Let's Encrypt",
-                super::install_dure_stt::AcmeProvider::GoogleTrustServices => "Google Trust Services",
+                super::install_dure_stt::AcmeProvider::GoogleTrustServices => {
+                    "Google Trust Services"
+                }
             };
 
             egui::ComboBox::from_id_source("acme_provider_select")
@@ -396,8 +396,6 @@ impl InstallDure {
                     self.state.active_tab = idx;
                 }
             }
-
-
         });
 
         ui.separator();

@@ -15,6 +15,10 @@ use poll_promise::Promise;
 use std::cell::Cell;
 
 use crate::calc::profile::ProfileContext;
+use crate::ui_dlg::dns::{DnsSettingsDialog, HttpsCheckDialog, NsCheckDialog};
+
+// Re-export types used by config.rs
+pub use crate::ui_dlg::dns::{DnsRecordDisplay, HttpsCheckResult, SettingsCheckResult};
 
 // Button spacing matching Platform tab
 const BUTTON_VERTICAL_SPACING: f32 = 4.0;
@@ -100,29 +104,17 @@ pub struct DnsTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     dns_wizard: Option<crate::ui_dlg::dns_wizard::DnsWizard>,
 
-    /// Show NS check dialog
+    /// NS check dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_ns_check_dialog: bool,
+    ns_check_dialog: NsCheckDialog,
 
-    /// NS check results
+    /// DNS settings dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    ns_check_results: Vec<String>,
+    dns_settings_dialog: DnsSettingsDialog,
 
-    /// Show DNS settings check dialog
+    /// HTTPS check dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_dns_settings_dialog: bool,
-
-    /// DNS settings check result
-    #[cfg_attr(feature = "serde", serde(skip))]
-    dns_settings_result: Option<(SettingsCheckResult, Vec<String>)>,
-
-    /// Show HTTPS connection check dialog
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_https_check_dialog: bool,
-
-    /// HTTPS check result
-    #[cfg_attr(feature = "serde", serde(skip))]
-    https_check_result: Option<HttpsCheckResult>,
+    https_check_dialog: HttpsCheckDialog,
 
     /// NS check promise
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -214,14 +206,6 @@ struct DnsRecordCheck {
 }
 
 /// HTTPS connection check result
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct HttpsCheckResult {
-    pub checked_at: i64,
-    pub resolves_to_vm: bool,
-    pub resolved_ip: Option<String>,
-    pub expected_ip: Option<String>,
-    pub error: Option<String>,
-}
 
 /// NS check result
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -230,59 +214,6 @@ pub struct NsCheckResult {
     pub uses_cloudflare: bool,
     pub nameservers: Vec<String>,
     pub error: Option<String>,
-}
-
-/// DNS record display format
-#[derive(Clone, Debug)]
-pub struct DnsRecordDisplay {
-    pub name: String,        // "dure.co" or "xmpp.dure.co"
-    pub record_type: String, // "A", "CNAME", "SRV"
-    pub value: String,       // "1.2.3.4" or "dure.co"
-}
-
-/// DNS settings check result
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct SettingsCheckResult {
-    pub checked_at: i64,
-    pub records_valid: bool,
-    pub missing_records: Vec<String>,
-    pub error: Option<String>,
-    #[serde(default)]
-    pub fetched_records: Vec<DnsRecordDisplay>, // Actual records from Cloudflare
-}
-
-impl serde::Serialize for DnsRecordDisplay {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("DnsRecordDisplay", 3)?;
-        state.serialize_field("name", &self.name)?;
-        state.serialize_field("record_type", &self.record_type)?;
-        state.serialize_field("value", &self.value)?;
-        state.end()
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for DnsRecordDisplay {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(serde::Deserialize)]
-        struct Helper {
-            name: String,
-            record_type: String,
-            value: String,
-        }
-        let helper = Helper::deserialize(deserializer)?;
-        Ok(DnsRecordDisplay {
-            name: helper.name,
-            record_type: helper.record_type,
-            value: helper.value,
-        })
-    }
 }
 
 /// Drawer state for DNS domain
@@ -387,12 +318,9 @@ impl Default for DnsTab {
             domain_rows: Vec::new(),
             show_add_dns_wizard: false,
             dns_wizard: None,
-            show_ns_check_dialog: false,
-            ns_check_results: Vec::new(),
-            show_dns_settings_dialog: false,
-            dns_settings_result: None,
-            show_https_check_dialog: false,
-            https_check_result: None,
+            ns_check_dialog: NsCheckDialog::new(),
+            dns_settings_dialog: DnsSettingsDialog::new(),
+            https_check_dialog: HttpsCheckDialog::new(),
             ns_check_promise: None,
             dns_settings_promise: None,
             https_check_promise: None,
@@ -448,12 +376,15 @@ fn refresh_oauth_token_standalone(
         return Err("Failed to load config".to_string());
     }
 
+    // Per Cloudflare OAuth: new refresh_token MUST be present (rotation is mandatory)
+    let new_refresh_token = oauth_result
+        .refresh_token
+        .ok_or_else(|| "Cloudflare did not return new refresh_token".to_string())?;
+
     Ok((
         oauth_result.access_token,
         oauth_result.expires_at,
-        oauth_result
-            .refresh_token
-            .unwrap_or_else(|| refresh_token.to_string()),
+        new_refresh_token,
     ))
 }
 
@@ -722,10 +653,7 @@ impl DnsTab {
 
                                 // Delete button (always enabled, even during re-auth)
                                 if ui
-                                    .add(
-                                        MaterialButton::outlined(tr!("dns-button-delete"))
-                                            .small(),
-                                    )
+                                    .add(MaterialButton::outlined(tr!("dns-button-delete")).small())
                                     .on_hover_text(tr!("dns-button-delete-tooltip"))
                                     .clicked()
                                 {
@@ -912,7 +840,7 @@ impl DnsTab {
 
         self.ns_check_promise = Some(promise);
         if show_dialog {
-            self.show_ns_check_dialog = true;
+            self.ns_check_dialog.open = true;
         }
     }
 
@@ -964,6 +892,85 @@ impl DnsTab {
         self.dns_create_promise = Some(promise);
     }
 
+    fn handle_dns_setup(&mut self) {
+        let setup_data = self.selected_domain.as_ref().and_then(|domain| {
+            self.domain_rows.iter().find(|r| &r.domain == domain).and_then(|row| {
+                let zone_id = row.zone_id.clone()?;
+                let vm_ip = row.vm_external_ip.clone()?;
+                let token = row.oauth_access_token.clone()
+                    .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))?;
+                Some((domain.clone(), zone_id, vm_ip, token))
+            })
+        });
+
+        if let Some((domain, zone_id, vm_ip, token)) = setup_data {
+            self.create_dns_records_for_domain(&domain, &zone_id, &vm_ip, &token);
+        }
+    }
+
+    fn handle_wizard_completion(
+        &mut self,
+        completed_domain: (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<u64>),
+        platform_info: (Option<String>, Option<String>, Option<String>, Option<String>),
+        profile: &ProfileContext,
+    ) {
+        let (provider, domain, zone_id, account_id, access_token, refresh_token, expires_at) = completed_domain;
+        let (platform_id, platform_name, vm_name, vm_external_ip) = platform_info;
+
+        if let Some(existing_row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+            existing_row.oauth_access_token = access_token.clone();
+            existing_row.oauth_refresh_token = refresh_token.clone();
+            existing_row.oauth_token_expiry = expires_at;
+            existing_row.oauth_refresh_failed = false;
+            dure_info!("Updated OAuth tokens for existing domain: {}", domain);
+
+            Self::save_domain_to_config(
+                &profile.config_file,
+                &provider,
+                &domain,
+                &zone_id,
+                &account_id,
+                &platform_id,
+                &access_token,
+                &refresh_token,
+                &expires_at,
+            );
+        } else {
+            self.domain_rows.push(DnsDomainRow {
+                provider: provider.clone(),
+                domain: domain.clone(),
+                status: DomainStatus::Configured,
+                platform_id: platform_id.clone(),
+                platform_name,
+                vm_name,
+                vm_external_ip,
+                account_id: account_id.clone(),
+                zone_id: zone_id.clone(),
+                oauth_access_token: access_token.clone(),
+                oauth_refresh_token: refresh_token.clone(),
+                oauth_token_expiry: expires_at,
+                oauth_refresh_failed: false,
+                last_ns_check: None,
+                last_settings_check: None,
+                last_https_check: None,
+                operation_state: OperationState::Idle,
+                drawer_state: DnsDrawerState::default(),
+            });
+
+            Self::save_domain_to_config(
+                &profile.config_file,
+                &provider,
+                &domain,
+                &zone_id,
+                &account_id,
+                &platform_id,
+                &access_token,
+                &refresh_token,
+                &expires_at,
+            );
+        }
+    }
+
     /// Update domain OAuth tokens in config and domain row
     fn update_domain_oauth_tokens(
         &mut self,
@@ -998,6 +1005,9 @@ impl DnsTab {
     /// Refresh OAuth token using refresh_token
     ///
     /// Returns (access_token, expires_at) on success
+    ///
+    /// Note: This is a simplified method used in tests. Production code uses
+    /// refresh_oauth_token_standalone which also saves to config.
     fn refresh_dns_oauth_token(
         &self,
         domain: &str,
@@ -1024,6 +1034,11 @@ impl DnsTab {
 
         let oauth_result = oauth::refresh_access_token(refresh_tok)
             .map_err(|e| format!("Token refresh failed: {}", e))?;
+
+        // Verify new refresh_token was returned (per Cloudflare OAuth conventions)
+        if oauth_result.refresh_token.is_none() {
+            return Err("Token refresh failed: Cloudflare did not return new refresh_token".to_string());
+        }
 
         dure_info!("✓ OAuth token refreshed successfully");
 
@@ -1065,7 +1080,7 @@ impl DnsTab {
             } else {
                 vec!["⚠ DNS records missing or incorrect - click Setup DNS in wizard".to_string()]
             };
-            self.dns_settings_result = Some((cached_check, display_msgs));
+            self.dns_settings_dialog.result = Some((cached_check, display_msgs));
         }
 
         let domain = domain.to_string();
@@ -1305,7 +1320,7 @@ impl DnsTab {
         self.dns_settings_promise = Some(promise);
         self.dns_operation_log.clear();
         if show_dialog {
-            self.show_dns_settings_dialog = true;
+            self.dns_settings_dialog.open = true;
         }
     }
 
@@ -1392,13 +1407,14 @@ impl DnsTab {
 
         self.https_check_promise = Some(promise);
         if show_dialog {
-            self.show_https_check_dialog = true;
+            self.https_check_dialog.open = true;
         }
     }
 
     /// Render all dialogs
     fn render_dialogs(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
         // Add DNS wizard
+        let mut wizard_should_close = false;
         if self.show_add_dns_wizard {
             if let Some(wizard) = &mut self.dns_wizard {
                 let mut open = true;
@@ -1407,98 +1423,40 @@ impl DnsTab {
                 let window_width = ctx.viewport_rect().width();
                 let window_height = ctx.viewport_rect().height();
 
-                dialog("add_dns_wizard_dialog", "Add DNS - Automated Setup", &mut open)
-                    .min_width(350.0)
-                    .max_width(window_width - 40.0)
-                    .max_height(window_height - 40.0)
-                    .scrollable(true)
-                    .content(|ui, _open| {
-                        wizard.ui(ui, profile);
-                    })
-                    .show(&ctx);
+                dialog(
+                    "add_dns_wizard_dialog",
+                    "Add DNS - Automated Setup",
+                    &mut open,
+                )
+                .min_width(350.0)
+                .max_width(window_width - 40.0)
+                .max_height(window_height - 40.0)
+                .scrollable(true)
+                .content(|ui, _open| {
+                    wizard.ui(ui, profile);
+                })
+                .show(&ctx);
 
-                // Close wizard if requested or window closed
                 if !open || wizard.should_close {
-                    // Check if wizard completed a domain setup
-                    if let Some((
-                        provider,
-                        domain,
-                        zone_id,
-                        account_id,
-                        access_token,
-                        refresh_token,
-                        expires_at,
-                    )) = &wizard.completed_domain
-                    {
-                        // Extract platform/VM info from wizard
-                        let (platform_id, platform_name, vm_name, vm_external_ip) =
-                            wizard.get_selected_platform_info();
-
-                        // Check if re-auth mode (domain already exists)
-                        if let Some(existing_row) =
-                            self.domain_rows.iter_mut().find(|r| &r.domain == domain)
-                        {
-                            // Re-auth mode: update tokens in existing row
-                            existing_row.oauth_access_token = access_token.clone();
-                            existing_row.oauth_refresh_token = refresh_token.clone();
-                            existing_row.oauth_token_expiry = *expires_at;
-                            existing_row.oauth_refresh_failed = false; // Clear failure flag
-                            dure_info!("Updated OAuth tokens for existing domain: {}", domain);
-
-                            // Save to config
-                            Self::save_domain_to_config(
-                                &profile.config_file,
-                                provider,
-                                domain,
-                                zone_id,
-                                account_id,
-                                &platform_id,
-                                access_token,
-                                refresh_token,
-                                expires_at,
-                            );
-                        } else {
-                            // New domain: add to domain rows
-                            self.domain_rows.push(DnsDomainRow {
-                                provider: provider.clone(),
-                                domain: domain.clone(),
-                                status: DomainStatus::Configured,
-                                platform_id: platform_id.clone(),
-                                platform_name,
-                                vm_name,
-                                vm_external_ip,
-                                account_id: account_id.clone(),
-                                zone_id: zone_id.clone(),
-                                oauth_access_token: access_token.clone(),
-                                oauth_refresh_token: refresh_token.clone(),
-                                oauth_token_expiry: *expires_at,
-                                oauth_refresh_failed: false,
-                                last_ns_check: None,
-                                last_settings_check: None,
-                                last_https_check: None,
-                                operation_state: OperationState::Idle,
-                                drawer_state: DnsDrawerState::default(),
-                            });
-
-                            // Save to config
-                            Self::save_domain_to_config(
-                                &profile.config_file,
-                                provider,
-                                domain,
-                                zone_id,
-                                account_id,
-                                &platform_id,
-                                access_token,
-                                refresh_token,
-                                expires_at,
-                            );
-                        }
-                    }
-
-                    self.show_add_dns_wizard = false;
-                    self.dns_wizard = None;
+                    wizard_should_close = true;
                 }
             }
+        }
+
+        if wizard_should_close {
+            let wizard_data = self.dns_wizard.as_mut().and_then(|wizard| {
+                wizard.completed_domain.as_ref().map(|completed| {
+                    let platform_info = wizard.get_selected_platform_info();
+                    (completed.clone(), platform_info)
+                })
+            });
+
+            if let Some((completed_domain, platform_info)) = wizard_data {
+                self.handle_wizard_completion(completed_domain, platform_info, profile);
+            }
+
+            self.show_add_dns_wizard = false;
+            self.dns_wizard = None;
         }
 
         // Poll NS check promise (unconditional - runs even when dialog closed)
@@ -1506,7 +1464,7 @@ impl DnsTab {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok((check_result, display_results)) => {
-                        self.ns_check_results = display_results.clone();
+                        self.ns_check_dialog.results = display_results.clone();
                         // Update domain row with check result and operation state
                         if let Some(domain) = &self.selected_domain {
                             if let Some(row) =
@@ -1521,7 +1479,7 @@ impl DnsTab {
                         }
                     }
                     Err((check_result, display_results)) => {
-                        self.ns_check_results = display_results.clone();
+                        self.ns_check_dialog.results = display_results.clone();
                         // Store error result and update operation state
                         if let Some(domain) = &self.selected_domain {
                             if let Some(row) =
@@ -1573,50 +1531,14 @@ impl DnsTab {
         }
 
         // NS check dialog
-        if self.show_ns_check_dialog {
-            let ns_check_results = self.ns_check_results.clone();
-
-            let window_width = ui.ctx().viewport_rect().width();
-            let window_height = ui.ctx().viewport_rect().height();
-
-            dialog(
-                "ns_server_check_dialog",
-                tr!("dns-dialog-ns-title"),
-                &mut self.show_ns_check_dialog,
-            )
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                if ns_check_results.is_empty() {
-                    ui.spinner();
-                    ui.label(tr!("dns-dialog-ns-querying"));
-                } else {
-                    for result in &ns_check_results {
-                        ui.label(result);
-                    }
-                }
-
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(8.0);
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
-                        *open = false;
-                    }
-                });
-            })
-            .show(ui.ctx());
-        }
+        self.ns_check_dialog.show(ui.ctx());
 
         // Poll DNS settings check promise (unconditional - runs even when dialog closed)
         if let Some(promise) = self.dns_settings_promise.take() {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok((check_result, display_msgs)) => {
-                        self.dns_settings_result =
+                        self.dns_settings_dialog.result =
                             Some((check_result.clone(), display_msgs.clone()));
                         // Store result in domain row and update operation state
                         if let Some(domain) = &self.selected_domain {
@@ -1633,7 +1555,7 @@ impl DnsTab {
                         }
                     }
                     Err((check_result, display_msgs)) => {
-                        self.dns_settings_result =
+                        self.dns_settings_dialog.result =
                             Some((check_result.clone(), display_msgs.clone()));
                         // Store error result in domain row and update operation state
                         if let Some(domain) = &self.selected_domain {
@@ -1696,7 +1618,7 @@ impl DnsTab {
         }
 
         // DNS settings check dialog with OAuth/create promise polling
-        if self.show_dns_settings_dialog {
+        if self.dns_settings_dialog.open {
             // Poll DNS OAuth promise (dialog-only operation)
             if let Some(promise) = self.dns_oauth_promise.take() {
                 if let Some(result) = promise.ready() {
@@ -1746,191 +1668,29 @@ impl DnsTab {
                 }
             }
 
-            let dns_settings_result = self.dns_settings_result.clone();
-            let domain = self.selected_domain.clone();
-            let has_oauth_token = domain
+            // Update dialog state
+            self.dns_settings_dialog.domain = self.selected_domain.clone();
+            self.dns_settings_dialog.has_oauth_token = self.selected_domain
                 .as_ref()
                 .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
                 .and_then(|r| r.oauth_access_token.clone())
-                .or(self
-                    .dns_oauth_result
-                    .as_ref()
-                    .map(|r| r.access_token.clone()))
+                .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))
                 .is_some();
+            self.dns_settings_dialog.vm_ip = self.selected_domain
+                .as_ref()
+                .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
+                .and_then(|r| r.vm_external_ip.clone());
+            self.dns_settings_dialog.operation_log = self.dns_operation_log.clone();
 
-            let mut show_dialog = self.show_dns_settings_dialog;
-
-            let window_width = ui.ctx().viewport_rect().width();
-            let window_height = ui.ctx().viewport_rect().height();
-
-            dialog(
-                "dns_settings_check_dialog",
-                &tr!("dns-settings-dialog-title"),
-                &mut show_dialog,
-            )
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                if let Some((check_result, display_msgs)) = &dns_settings_result {
-                    ui.heading(&tr!("dns-settings-status-heading"));
-                    ui.add_space(8.0);
-
-                    // Show display messages (already contains status)
-                    if !display_msgs.is_empty() {
-                        ui.group(|ui| {
-                            for msg in display_msgs {
-                                ui.label(msg);
-                            }
-                        });
-                    }
-
-                    // Show missing records
-                    if !check_result.missing_records.is_empty() {
-                        ui.add_space(8.0);
-                        ui.label(tr!("dns-settings-missing-label"));
-                        ui.group(|ui| {
-                            for record in &check_result.missing_records {
-                                ui.label(format!("  • {}", record));
-                            }
-                        });
-                    }
-
-                    // Show fetched DNS records
-                    if !check_result.fetched_records.is_empty() {
-                        ui.add_space(8.0);
-                        ui.label("Current DNS Records:");
-                        ui.add_space(4.0);
-
-                        egui::ScrollArea::vertical()
-                            .max_height(200.0)
-                            .show(ui, |ui| {
-                                for record in &check_result.fetched_records {
-                                    ui.monospace(format!(
-                                        "{:<30} {:<8} {}",
-                                        record.name, record.record_type, record.value
-                                    ));
-                                }
-                            });
-                    }
-
-                    // Show error if any
-                    if let Some(error) = &check_result.error {
-                        use egui_material3::theme::get_global_color;
-                        ui.add_space(8.0);
-                        ui.colored_label(
-                            get_global_color("error"),
-                            tr!("dns-settings-error", {error: error}),
-                        );
-
-                        // Show authentication button if no OAuth token
-                        if !has_oauth_token {
-                            ui.add_space(8.0);
-                            if ui
-                                .add(MaterialButton::filled(tr!("dns-settings-auth-button")))
-                                .clicked()
-                            {
-                                if let Some(domain) = &domain {
-                                    self.start_dns_oauth(domain);
-                                }
-                            }
-                        }
-                    }
-
-                    // Show Setup DNS button if authenticated and records missing
-                    if has_oauth_token
-                        && !check_result.records_valid
-                        && !check_result.missing_records.is_empty()
-                    {
-                        ui.add_space(8.0);
-                        ui.separator();
-                        ui.add_space(8.0);
-
-                        ui.label(tr!("dns-settings-setup-prompt"));
-                        ui.add_space(4.0);
-
-                        // DNS record preview (collect data first to avoid borrow conflicts)
-                        let vm_ip_preview = domain
-                            .as_ref()
-                            .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
-                            .and_then(|r| r.vm_external_ip.clone());
-
-                        if let (Some(domain_str), Some(vm_ip)) = (&domain, &vm_ip_preview) {
-                            ui.group(|ui| {
-                                ui.label(format!("A    {}  →  {}", domain_str, vm_ip));
-                                ui.label(format!(
-                                    "CNAME    conference.{}  →  {}",
-                                    domain_str, domain_str
-                                ));
-                                ui.label(format!(
-                                    "SRV    _xmpp-client._tcp.{}  →  {}",
-                                    domain_str, domain_str
-                                ));
-                                ui.label(format!(
-                                    "SRV    _xmpp-server._tcp.{}  →  {}",
-                                    domain_str, domain_str
-                                ));
-                            });
-                        }
-
-                        ui.add_space(8.0);
-
-                        // Collect all needed data before button click handler
-                        let setup_data = domain.as_ref().and_then(|d| {
-                            self.domain_rows
-                                .iter()
-                                .find(|r| &r.domain == d)
-                                .and_then(|row| {
-                                    let zone_id = row.zone_id.clone()?;
-                                    let vm_ip = row.vm_external_ip.clone()?;
-                                    let token = row.oauth_access_token.clone().or(self
-                                        .dns_oauth_result
-                                        .as_ref()
-                                        .map(|r| r.access_token.clone()))?;
-                                    Some((d.clone(), zone_id, vm_ip, token))
-                                })
-                        });
-
-                        if ui
-                            .add(MaterialButton::filled(tr!("dns-settings-setup-button")))
-                            .clicked()
-                        {
-                            if let Some((domain, zone_id, vm_ip, token)) = setup_data {
-                                self.create_dns_records_for_domain(
-                                    &domain, &zone_id, &vm_ip, &token,
-                                );
-                            }
-                        }
-                    }
+            match self.dns_settings_dialog.show(ui.ctx()) {
+                crate::ui_dlg::dns::DnsSettingsAction::Authenticate { domain } => {
+                    self.start_dns_oauth(&domain);
                 }
-
-                // Show operation log if any
-                if !self.dns_operation_log.is_empty() {
-                    ui.add_space(12.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-                    ui.label(tr!("dns-settings-op-log-label"));
-                    ui.group(|ui| {
-                        for log_entry in &self.dns_operation_log {
-                            ui.label(log_entry);
-                        }
-                    });
+                crate::ui_dlg::dns::DnsSettingsAction::SetupDns => {
+                    self.handle_dns_setup();
                 }
-
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(8.0);
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
-                        *open = false;
-                    }
-                });
-            })
-            .show(ui.ctx());
-
-            self.show_dns_settings_dialog = show_dialog;
+                _ => {}
+            }
         }
 
         // Poll HTTPS check promise (unconditional - runs even when dialog closed)
@@ -1938,7 +1698,7 @@ impl DnsTab {
             if let Some(result) = promise.ready() {
                 match result {
                     Ok(check_result) => {
-                        self.https_check_result = Some(check_result.clone());
+                        self.https_check_dialog.result = Some(check_result.clone());
                         // Store result in domain row and update operation state
                         if let Some(domain) = &self.selected_domain {
                             if let Some(row) =
@@ -1960,7 +1720,7 @@ impl DnsTab {
                             expected_ip: None,
                             error: Some(err.clone()),
                         };
-                        self.https_check_result = Some(error_result.clone());
+                        self.https_check_dialog.result = Some(error_result.clone());
                         // Store error result in domain row and update operation state
                         if let Some(domain) = &self.selected_domain {
                             if let Some(row) =
@@ -2007,85 +1767,7 @@ impl DnsTab {
         }
 
         // HTTPS check dialog
-        if self.show_https_check_dialog {
-            let https_check_result = self.https_check_result.clone();
-
-            let window_width = ui.ctx().viewport_rect().width();
-            let window_height = ui.ctx().viewport_rect().height();
-
-            dialog(
-                "https_connection_check_dialog",
-                tr!("dns-dialog-https-title"),
-                &mut self.show_https_check_dialog,
-            )
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, open| {
-                if let Some(result) = &https_check_result {
-                    ui.heading(if result.resolves_to_vm {
-                        tr!("dns-dialog-https-ok")
-                    } else {
-                        tr!("dns-dialog-https-mismatch")
-                    });
-                    ui.add_space(10.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label(tr!("dns-dialog-https-resolved-ip"));
-                        if let Some(ip) = &result.resolved_ip {
-                            ui.label(ip);
-                        } else {
-                            ui.weak(tr!("dns-dialog-https-na"));
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label(tr!("dns-dialog-https-expected-ip"));
-                        if let Some(ip) = &result.expected_ip {
-                            ui.label(ip);
-                        } else {
-                            ui.weak(tr!("dns-dialog-https-na"));
-                        }
-                    });
-
-                    ui.horizontal(|ui| {
-                        ui.label(tr!("dns-dialog-https-matches-vm"));
-                        if result.resolves_to_vm {
-                            ui.label(tr!("dns-dialog-https-yes"));
-                        } else {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(255, 193, 7),
-                                tr!("dns-dialog-https-no"),
-                            );
-                        }
-                    });
-
-                    if let Some(err_msg) = &result.error {
-                        use egui_material3::theme::get_global_color;
-                        ui.add_space(10.0);
-                        ui.colored_label(
-                            get_global_color("error"),
-                            format!("{} {}", tr!("dns-dialog-https-error-prefix"), err_msg),
-                        );
-                    }
-                } else {
-                    ui.spinner();
-                    ui.label(tr!("dns-dialog-https-checking"));
-                }
-
-                ui.add_space(12.0);
-                ui.separator();
-                ui.add_space(8.0);
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(MaterialButton::filled(tr!("close"))).clicked() {
-                        *open = false;
-                    }
-                });
-            })
-            .show(ui.ctx());
-        }
+        self.https_check_dialog.show(ui.ctx());
     }
 
     /// Load platforms from config file

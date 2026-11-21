@@ -142,7 +142,6 @@ pub enum SshEvent {
     },
 
     // Ansible and WSS status events removed
-
     /// Host health check completed (TCP port check result)
     HostHealthChecked {
         name: String,

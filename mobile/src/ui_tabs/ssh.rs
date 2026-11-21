@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::{AppConfig, SshHostConfig};
 use crate::ui_components::drawer::{LogsRenderer, OperationsRenderer};
+use crate::ui_dlg::ssh::{AddHostDialog, EditHostDialog, RemoveDureDialog, SshErrorDialog};
 use crate::viewmodel::ssh::{DrawerState, DrawerTab};
 
 // Button spacing matching Platform tab
@@ -364,62 +365,21 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     loaded: bool,
 
+    /// Error dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    load_error: Option<String>,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_error_dialog: bool,
+    error_dialog: SshErrorDialog,
 
     /// Config file last modified time (to detect changes)
     #[cfg_attr(feature = "serde", serde(skip))]
     config_last_modified: Option<std::time::SystemTime>,
 
-    // Add host dialog
+    /// Add host dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_add_dialog: bool,
+    add_dialog: AddHostDialog,
 
+    /// Edit host dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    add_host: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_password: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_private_key_path: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_port: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_use_password: bool,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_use_private_key: bool,
-
-    // Edit host dialog
-    #[cfg_attr(feature = "serde", serde(skip))]
-    show_edit_dialog: bool,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_original_host: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_host: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_password: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_private_key_path: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_port: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_use_password: bool,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    edit_use_private_key: bool,
+    edit_dialog: EditHostDialog,
 
     // Install Dure dialog
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -434,15 +394,9 @@ pub struct SshTab {
     #[cfg_attr(feature = "serde", serde(skip))]
     install_dure_image_tag: String,
 
-    // Remove Dure dialog
+    /// Remove Dure dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_remove_dure_dialog: bool,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    remove_dure_host: String,
-
-    #[cfg_attr(feature = "serde", serde(skip))]
-    remove_dure_delete_data: bool,
+    remove_dure_dialog: RemoveDureDialog,
 
     /// Automatic refresh deadline for log updates after operations
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -458,31 +412,15 @@ impl Default for SshTab {
         Self {
             rows: Vec::new(),
             loaded: false,
-            load_error: None,
-            show_error_dialog: false,
+            error_dialog: SshErrorDialog::new(),
             config_last_modified: None,
-            show_add_dialog: false,
-            add_host: String::new(),
-            add_password: String::new(),
-            add_private_key_path: String::new(),
-            add_port: "22".to_string(),
-            add_use_password: false,
-            add_use_private_key: false,
-            show_edit_dialog: false,
-            edit_original_host: String::new(),
-            edit_host: String::new(),
-            edit_password: String::new(),
-            edit_private_key_path: String::new(),
-            edit_port: "22".to_string(),
-            edit_use_password: false,
-            edit_use_private_key: false,
+            add_dialog: AddHostDialog::new(),
+            edit_dialog: EditHostDialog::new(),
             show_install_dure_dialog: false,
             install_dure_host: String::new(),
             install_dure_domain: String::new(),
             install_dure_image_tag: "latest".to_string(),
-            show_remove_dure_dialog: false,
-            remove_dure_host: String::new(),
-            remove_dure_delete_data: false,
+            remove_dure_dialog: RemoveDureDialog::new(),
             refresh_until: None,
             install_dure_dialog: None,
         }
@@ -514,7 +452,7 @@ impl SshTab {
     /// Load SSH hosts from config and build row data
     fn load_rows(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
         self.rows.clear();
-        self.load_error = None;
+        self.error_dialog.close();
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -568,8 +506,7 @@ impl SshTab {
                     self.loaded = true;
                 }
                 Err(e) => {
-                    self.load_error = Some(format!("Failed to load config: {}", e));
-                    self.show_error_dialog = true;
+                    self.error_dialog.open(format!("Failed to load config: {}", e));
                     self.loaded = true;
                 }
             }
@@ -577,8 +514,7 @@ impl SshTab {
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.load_error = Some(tr!("ssh-error-wasm"));
-            self.show_error_dialog = true;
+            self.error_dialog.open(tr!("ssh-error-wasm"));
             self.loaded = true;
         }
     }
@@ -1375,10 +1311,8 @@ impl SshTab {
         }
 
         // Error dialog
-        if self.show_error_dialog {
-            self.render_error_dialog(ui.ctx());
-        }
-        if self.load_error.is_some() {
+        self.error_dialog.show(ui.ctx());
+        if self.error_dialog.open {
             return;
         }
 
@@ -1386,10 +1320,22 @@ impl SshTab {
         self.render_table(ui, profile, vm.as_deref_mut(), current_profile_kdbx);
 
         // Add host dialog
-        self.render_add_dialog(ui, profile);
+        use crate::ui_dlg::ssh::AddHostAction;
+        match self.add_dialog.show(ui.ctx()) {
+            AddHostAction::Add { host, port, use_password, password, use_private_key, private_key_path } => {
+                self.handle_add_host(profile, host, port, use_password, password, use_private_key, private_key_path);
+            }
+            _ => {}
+        }
 
         // Edit host dialog
-        self.render_edit_dialog(ui, profile);
+        use crate::ui_dlg::ssh::EditHostAction;
+        match self.edit_dialog.show(ui.ctx()) {
+            EditHostAction::Save { original_host, host, port, use_password, password, use_private_key, private_key_path } => {
+                self.handle_edit_host(profile, original_host, host, port, use_password, password, use_private_key, private_key_path);
+            }
+            _ => {}
+        }
 
         // Install Dure dialog
         self.render_install_dure_dialog(ui, profile);
@@ -1403,7 +1349,13 @@ impl SshTab {
         }
 
         // Remove Dure dialog
-        self.render_remove_dure_dialog(ui, profile);
+        use crate::ui_dlg::ssh::RemoveDureAction;
+        match self.remove_dure_dialog.show(ui.ctx()) {
+            RemoveDureAction::Remove { host, delete_data } => {
+                self.handle_remove_dure(profile, host, delete_data, ui);
+            }
+            _ => {}
+        }
     }
 
     /// Render SSH hosts table with drawer
@@ -1490,7 +1442,7 @@ impl SshTab {
                 .add(MaterialButton::filled(tr!("ssh-button-add")))
                 .clicked()
             {
-                self.show_add_dialog = true;
+                self.add_dialog.open();
             }
             ui.add_space(8.0);
 
@@ -1677,14 +1629,17 @@ impl SshTab {
                     if let Some(ref p) = profile {
                         let config = AppConfig::load_or_default(&p.config_file);
                         // Find host config to get platform_id
-                        if let Some(host_config) = config.ssh_hosts.iter().find(|h| h.host == host) {
+                        if let Some(host_config) = config.ssh_hosts.iter().find(|h| h.host == host)
+                        {
                             if let Some(ref platform_id) = host_config.platform_id {
                                 // Find platform config
                                 if let Some(platform) = config.platforms.iter().find(|plat| {
                                     plat.gcp_selected_project_id.as_ref() == Some(platform_id)
                                 }) {
-                                    dlg.state.gcp_project_id = platform.gcp_selected_project_id.clone();
-                                    dlg.state.gcp_access_token = platform.gcp_oauth_access_token.clone();
+                                    dlg.state.gcp_project_id =
+                                        platform.gcp_selected_project_id.clone();
+                                    dlg.state.gcp_access_token =
+                                        platform.gcp_oauth_access_token.clone();
                                 }
                             }
                         }
@@ -1693,15 +1648,21 @@ impl SshTab {
                     self.install_dure_dialog = Some(dlg);
 
                     if let Some(domain) = platform_domain {
-                        dure_info!("[SSH] Opening install Dure wizard for {} (domain: {})", host, domain);
+                        dure_info!(
+                            "[SSH] Opening install Dure wizard for {} (domain: {})",
+                            host,
+                            domain
+                        );
                     } else {
-                        dure_info!("[SSH] Opening install Dure wizard for {} (no platform domain)", host);
+                        dure_info!(
+                            "[SSH] Opening install Dure wizard for {} (no platform domain)",
+                            host
+                        );
                     }
                 }
                 SshAction::RemoveDure(host) => {
                     // Open remove dialog
-                    self.remove_dure_host = host.clone();
-                    self.show_remove_dure_dialog = true;
+                    self.remove_dure_dialog.open(host.clone());
                     dure_info!("Opening remove Dure dialog for {}", host);
                 }
             }
@@ -1733,9 +1694,9 @@ impl SshTab {
 
                 let _ = vm.install_dure(
                     host,
-                    "main".to_string(),  // Default version
+                    "main".to_string(), // Default version
                     env_fields,
-                    "latest".to_string(),  // Default image tag
+                    "latest".to_string(), // Default image tag
                     (*current_profile_kdbx).clone(),
                 );
             }
@@ -1827,114 +1788,27 @@ impl SshTab {
     }
 
     /// Render add host dialog
-    fn render_add_dialog(
+
+    /// Handle add host action from extracted dialog
+    fn handle_add_host(
         &mut self,
-        ui: &mut egui::Ui,
         profile: &Option<crate::calc::profile::ProfileContext>,
+        host: String,
+        port_str: String,
+        use_password: bool,
+        password: String,
+        use_private_key: bool,
+        private_key_path: String,
     ) {
-        if !self.show_add_dialog {
-            return;
-        }
-
-        use std::cell::Cell;
-
-        // Clone data for dialog
-        let mut add_host = self.add_host.clone();
-        let mut add_port = self.add_port.clone();
-        let mut add_use_password = self.add_use_password;
-        let mut add_password = self.add_password.clone();
-        let mut add_use_private_key = self.add_use_private_key;
-        let mut add_private_key_path = self.add_private_key_path.clone();
-
-        let add_requested = Cell::new(false);
-        let reset_requested = Cell::new(false);
-
-        let window_width = ui.ctx().viewport_rect().width();
-        let window_height = ui.ctx().viewport_rect().height();
-
-        dialog(
-            "add_ssh_host_dialog",
-            &tr!("ssh-dialog-add-title"),
-            &mut self.show_add_dialog,
-        )
-        .min_width(350.0)
-        .max_width(window_width - 40.0)
-        .max_height(window_height - 40.0)
-        .scrollable(true)
-        .content(|ui, open| {
-            ui.label(tr!("ssh-dialog-add-heading"));
-            ui.add_space(8.0);
-
-            ui.label(tr!("ssh-dialog-add-host-label"));
-            ui.text_edit_singleline(&mut add_host);
-            ui.add_space(8.0);
-
-            ui.label(tr!("ssh-dialog-add-port-label"));
-            ui.text_edit_singleline(&mut add_port);
-            ui.add_space(8.0);
-
-            ui.checkbox(&mut add_use_password, &tr!("ssh-dialog-add-use-password"));
-            if add_use_password {
-                ui.label(tr!("ssh-dialog-add-password-label"));
-                ui.add(egui::TextEdit::singleline(&mut add_password).password(true));
-            }
-            ui.add_space(8.0);
-
-            ui.checkbox(&mut add_use_private_key, &tr!("ssh-dialog-add-use-key"));
-            if add_use_private_key {
-                ui.label(tr!("ssh-dialog-add-key-path-label"));
-                ui.text_edit_singleline(&mut add_private_key_path);
-            }
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(8.0);
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(MaterialButton::filled(tr!("button-add"))).clicked() {
-                    add_requested.set(true);
-                    *open = false;
-                }
-                if ui
-                    .add(MaterialButton::outlined(tr!("button-cancel")))
-                    .clicked()
-                {
-                    reset_requested.set(true);
-                    *open = false;
-                }
-            });
-        })
-        .show(ui.ctx());
-
-        // Update state from dialog
-        self.add_host = add_host;
-        self.add_port = add_port;
-        self.add_use_password = add_use_password;
-        self.add_password = add_password;
-        self.add_use_private_key = add_use_private_key;
-        self.add_private_key_path = add_private_key_path;
-
-        if add_requested.get() {
-            self.add_host_action(profile);
-            self.reset_add_dialog();
-        }
-
-        if reset_requested.get() {
-            self.reset_add_dialog();
-        }
-    }
-
-    /// Add SSH host action
-    fn add_host_action(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             // Validate port number
-            let port = match self.add_port.parse::<u16>() {
+            let port = match port_str.parse::<u16>() {
                 Ok(p) => p,
                 Err(e) => {
-                    self.load_error = Some(
-                        tr!("ssh-error-invalid-port", {port: self.add_port.clone(), error: e.to_string()}),
+                    self.error_dialog.open(
+                        tr!("ssh-error-invalid-port", {port: port_str, error: e.to_string()}),
                     );
-                    self.show_error_dialog = true;
                     return;
                 }
             };
@@ -1942,25 +1816,18 @@ impl SshTab {
             match load_config(profile) {
                 Ok((mut app_config, config_path)) => {
                     // Check for duplicates
-                    if app_config.ssh_hosts.iter().any(|h| h.host == self.add_host) {
-                        self.load_error =
-                            Some(tr!("ssh-error-host-exists", {host: self.add_host.clone()}));
+                    if app_config.ssh_hosts.iter().any(|h| h.host == host) {
+                        self.error_dialog.open(
+                            tr!("ssh-error-host-exists", {host: host.clone()})
+                        );
                         return;
                     }
 
                     // Create new host config
                     let host_config = SshHostConfig {
-                        host: self.add_host.clone(),
-                        password: if self.add_use_password {
-                            Some(self.add_password.clone())
-                        } else {
-                            None
-                        },
-                        private_key_path: if self.add_use_private_key {
-                            Some(self.add_private_key_path.clone())
-                        } else {
-                            None
-                        },
+                        host: host.clone(),
+                        password: if use_password { Some(password) } else { None },
+                        private_key_path: if use_private_key { Some(private_key_path) } else { None },
                         keyring_domain: None,
                         port,
                         initialized: false,
@@ -1977,36 +1844,25 @@ impl SshTab {
 
                     // Save config
                     if let Err(e) = app_config.save(&config_path) {
-                        self.load_error =
-                            Some(tr!("ssh-error-save-config", {error: e.to_string()}));
+                        self.error_dialog.open(
+                            tr!("ssh-error-save-config", {error: e.to_string()})
+                        );
                         return;
                     }
 
-                    dure_info!("SSH host '{}' added successfully", self.add_host);
+                    dure_info!("SSH host '{}' added successfully", host);
 
                     // Reload rows
                     self.loaded = false;
-                    self.show_add_dialog = false;
-                    self.reset_add_dialog();
                 }
                 Err(e) => {
-                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
-                    self.show_error_dialog = true;
+                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
     }
 
     /// Reset add dialog fields
-    fn reset_add_dialog(&mut self) {
-        self.add_host.clear();
-        self.add_password.clear();
-        self.add_private_key_path.clear();
-        self.add_port = "22".to_string();
-        self.add_use_password = false;
-        self.add_use_private_key = false;
-    }
-
     /// Start editing an SSH host
     fn start_edit_host(
         &mut self,
@@ -2019,134 +1875,43 @@ impl SshTab {
                 Ok((app_config, _)) => {
                     if let Some(host_config) = app_config.ssh_hosts.iter().find(|h| h.host == host)
                     {
-                        self.edit_original_host = host.to_string();
-                        self.edit_host = host_config.host.clone();
-                        self.edit_port = host_config.port.to_string();
-                        self.edit_use_password = host_config.password.is_some();
-                        self.edit_password = host_config.password.clone().unwrap_or_default();
-                        self.edit_use_private_key = host_config.private_key_path.is_some();
-                        self.edit_private_key_path =
-                            host_config.private_key_path.clone().unwrap_or_default();
-                        self.show_edit_dialog = true;
+                        self.edit_dialog.open(
+                            host.to_string(),
+                            host_config.host.clone(),
+                            host_config.port,
+                            host_config.password.clone(),
+                            host_config.private_key_path.clone(),
+                        );
                         dure_info!("Started editing host {}", host);
                     }
                 }
                 Err(e) => {
-                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
-                    self.show_error_dialog = true;
+                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
     }
 
-    /// Render edit SSH host dialog
-    fn render_edit_dialog(
+    /// Handle edit host action from extracted dialog
+    fn handle_edit_host(
         &mut self,
-        ui: &mut egui::Ui,
         profile: &Option<crate::calc::profile::ProfileContext>,
+        original_host: String,
+        host: String,
+        port_str: String,
+        use_password: bool,
+        password: String,
+        use_private_key: bool,
+        private_key_path: String,
     ) {
-        if !self.show_edit_dialog {
-            return;
-        }
-
-        use std::cell::Cell;
-
-        // Clone data for dialog
-        let mut edit_host = self.edit_host.clone();
-        let mut edit_port = self.edit_port.clone();
-        let mut edit_use_password = self.edit_use_password;
-        let mut edit_password = self.edit_password.clone();
-        let mut edit_use_private_key = self.edit_use_private_key;
-        let mut edit_private_key_path = self.edit_private_key_path.clone();
-
-        let save_requested = Cell::new(false);
-        let reset_requested = Cell::new(false);
-
-        let window_width = ui.ctx().viewport_rect().width();
-        let window_height = ui.ctx().viewport_rect().height();
-
-        dialog(
-            "edit_ssh_host_dialog",
-            &tr!("ssh-dialog-edit-title"),
-            &mut self.show_edit_dialog,
-        )
-        .min_width(350.0)
-        .max_width(window_width - 40.0)
-        .max_height(window_height - 40.0)
-        .scrollable(true)
-        .content(|ui, open| {
-            ui.label(tr!("ssh-dialog-edit-heading"));
-            ui.add_space(8.0);
-
-            ui.label(tr!("ssh-dialog-add-host-label"));
-            ui.text_edit_singleline(&mut edit_host);
-            ui.add_space(8.0);
-
-            ui.label(tr!("ssh-dialog-add-port-label"));
-            ui.text_edit_singleline(&mut edit_port);
-            ui.add_space(8.0);
-
-            ui.checkbox(&mut edit_use_password, &tr!("ssh-dialog-add-use-password"));
-            if edit_use_password {
-                ui.label(tr!("ssh-dialog-add-password-label"));
-                ui.add(egui::TextEdit::singleline(&mut edit_password).password(true));
-            }
-            ui.add_space(8.0);
-
-            ui.checkbox(&mut edit_use_private_key, &tr!("ssh-dialog-add-use-key"));
-            if edit_use_private_key {
-                ui.label(tr!("ssh-dialog-add-key-path-label"));
-                ui.text_edit_singleline(&mut edit_private_key_path);
-            }
-            ui.add_space(12.0);
-            ui.separator();
-            ui.add_space(8.0);
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(MaterialButton::filled(tr!("button-save"))).clicked() {
-                    save_requested.set(true);
-                    *open = false;
-                }
-                if ui
-                    .add(MaterialButton::outlined(tr!("button-cancel")))
-                    .clicked()
-                {
-                    reset_requested.set(true);
-                    *open = false;
-                }
-            });
-        })
-        .show(ui.ctx());
-
-        // Update state from dialog
-        self.edit_host = edit_host;
-        self.edit_port = edit_port;
-        self.edit_use_password = edit_use_password;
-        self.edit_password = edit_password;
-        self.edit_use_private_key = edit_use_private_key;
-        self.edit_private_key_path = edit_private_key_path;
-
-        if save_requested.get() {
-            self.save_edit_host(profile);
-            self.reset_edit_dialog();
-        }
-
-        if reset_requested.get() {
-            self.reset_edit_dialog();
-        }
-    }
-
-    /// Save edited SSH host
-    fn save_edit_host(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let port = match self.edit_port.parse::<u16>() {
+            let port = match port_str.parse::<u16>() {
                 Ok(p) => p,
                 Err(e) => {
-                    self.load_error = Some(
-                        tr!("ssh-error-invalid-port", {port: self.edit_port.clone(), error: e.to_string()}),
+                    self.error_dialog.open(
+                        tr!("ssh-error-invalid-port", {port: port_str, error: e.to_string()}),
                     );
-                    self.show_error_dialog = true;
                     return;
                 }
             };
@@ -2156,52 +1921,50 @@ impl SshTab {
                     if let Some(host_config) = app_config
                         .ssh_hosts
                         .iter_mut()
-                        .find(|h| h.host == self.edit_original_host)
+                        .find(|h| h.host == original_host)
                     {
-                        host_config.host = self.edit_host.clone();
+                        host_config.host = host.clone();
                         host_config.port = port;
-                        host_config.password = if self.edit_use_password {
-                            Some(self.edit_password.clone())
-                        } else {
-                            None
-                        };
-                        host_config.private_key_path = if self.edit_use_private_key {
-                            Some(self.edit_private_key_path.clone())
-                        } else {
-                            None
-                        };
+                        host_config.password = if use_password { Some(password) } else { None };
+                        host_config.private_key_path = if use_private_key { Some(private_key_path) } else { None };
 
                         if let Err(e) = app_config.save(&config_path) {
-                            self.load_error =
-                                Some(tr!("ssh-error-save-config", {error: e.to_string()}));
+                            self.error_dialog.open(
+                                tr!("ssh-error-save-config", {error: e.to_string()})
+                            );
                             return;
                         }
 
-                        self.show_edit_dialog = false;
-                        self.reset_edit_dialog();
                         self.loaded = false;
-                        dure_info!("Saved changes to SSH host {}", self.edit_host);
+                        dure_info!("Saved changes to SSH host {}", host);
                     }
                 }
                 Err(e) => {
-                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
-                    self.show_error_dialog = true;
+                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
     }
 
-    /// Reset edit dialog fields
-    fn reset_edit_dialog(&mut self) {
-        self.edit_original_host.clear();
-        self.edit_host.clear();
-        self.edit_password.clear();
-        self.edit_private_key_path.clear();
-        self.edit_port = "22".to_string();
-        self.edit_use_password = false;
-        self.edit_use_private_key = false;
+    /// Handle remove dure action from extracted dialog
+    fn handle_remove_dure(
+        &mut self,
+        _profile: &Option<crate::calc::profile::ProfileContext>,
+        host: String,
+        delete_data: bool,
+        ui: &mut egui::Ui,
+    ) {
+        // Store action in temp data for processing in render_table (where vm is available)
+        ui.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("ssh_remove_dure_pending"),
+                (host.clone(), delete_data),
+            );
+        });
+        dure_info!("Scheduled remove Dure for {} (delete_data: {})", host, delete_data);
     }
 
+    /// Reset edit dialog fields
     /// Load operation logs for SSH host from database
     fn load_operations_for_host(&mut self, host: &str) {
         #[cfg(not(target_arch = "wasm32"))]
@@ -2231,8 +1994,9 @@ impl SshTab {
                     app_config.ssh_hosts.retain(|h| h.host != host);
 
                     if let Err(e) = app_config.save(&config_path) {
-                        self.load_error =
-                            Some(tr!("ssh-error-save-config", {error: e.to_string()}));
+                        self.error_dialog.open(
+                            tr!("ssh-error-save-config", {error: e.to_string()})
+                        );
                         return;
                     }
 
@@ -2241,100 +2005,10 @@ impl SshTab {
                     self.loaded = false;
                 }
                 Err(e) => {
-                    self.load_error = Some(tr!("ssh-error-load-config", {error: e.to_string()}));
-                    self.show_error_dialog = true;
+                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
-    }
-
-    /// Render Remove Dure dialog
-    fn render_remove_dure_dialog(
-        &mut self,
-        ui: &mut egui::Ui,
-        profile: &Option<crate::calc::profile::ProfileContext>,
-    ) {
-        if !self.show_remove_dure_dialog {
-            return;
-        }
-
-        use std::cell::Cell;
-
-        let mut delete_data = self.remove_dure_delete_data;
-        let remove_requested = Cell::new(false);
-        let cancel_requested = Cell::new(false);
-
-        let window_width = ui.ctx().viewport_rect().width();
-        let window_height = ui.ctx().viewport_rect().height();
-
-        dialog(
-            "remove_dure_dialog",
-            "Remove Dure",
-            &mut self.show_remove_dure_dialog,
-        )
-        .min_width(350.0)
-        .max_width(window_width - 40.0)
-        .max_height(window_height - 40.0)
-        .scrollable(true)
-        .content(|ui, open| {
-            ui.label(format!("Remove Dure from host: {}", self.remove_dure_host));
-            ui.add_space(12.0);
-
-            ui.checkbox(
-                &mut delete_data,
-                "Delete data directories (/srv/dure-mycart and /srv/data)",
-            );
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new("Warning: Deleting data cannot be undone!")
-                    .color(egui::Color32::from_rgb(211, 47, 47)),
-            );
-            ui.add_space(12.0);
-
-            ui.separator();
-            ui.add_space(8.0);
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add(MaterialButton::filled("Remove")).clicked() {
-                    remove_requested.set(true);
-                    *open = false;
-                }
-                if ui
-                    .add(MaterialButton::outlined(tr!("button-cancel")))
-                    .clicked()
-                {
-                    cancel_requested.set(true);
-                    *open = false;
-                }
-            });
-        })
-        .show(ui.ctx());
-
-        self.remove_dure_delete_data = delete_data;
-
-        if remove_requested.get() {
-            // Note: Actual removal will be handled via UI action trigger
-            // since we need vm reference which is not available here
-            // Store state for the action handler to pick up
-            ui.data_mut(|d| {
-                d.insert_temp(
-                    egui::Id::new("ssh_remove_dure_pending"),
-                    (self.remove_dure_host.clone(), self.remove_dure_delete_data),
-                );
-            });
-
-            self.reset_remove_dure_dialog();
-        }
-
-        if cancel_requested.get() {
-            self.reset_remove_dure_dialog();
-        }
-    }
-
-    /// Reset remove Dure dialog state
-    fn reset_remove_dure_dialog(&mut self) {
-        self.remove_dure_host = String::new();
-        self.remove_dure_delete_data = false;
     }
 
     /// Render Install Dure dialog
@@ -2408,8 +2082,7 @@ impl SshTab {
 
         if install_requested.get() {
             if self.install_dure_domain.is_empty() {
-                self.load_error = Some("Domain is required".to_string());
-                self.show_error_dialog = true;
+                self.error_dialog.open("Domain is required".to_string());
                 return;
             }
 
@@ -2457,34 +2130,6 @@ impl SshTab {
         self.install_dure_host = String::new();
         self.install_dure_domain = String::new();
         self.install_dure_image_tag = "latest".to_string();
-    }
-
-    fn render_error_dialog(&mut self, ctx: &egui::Context) {
-        if let Some(error) = self.load_error.clone() {
-            let ok_clicked = Cell::new(false);
-            let window_width = ctx.viewport_rect().width();
-            let window_height = ctx.viewport_rect().height();
-
-            dialog("ssh_error_dialog", "Error", &mut self.show_error_dialog)
-                .min_width(350.0)
-                .max_width(window_width - 40.0)
-                .max_height(window_height - 40.0)
-                .scrollable(true)
-                .content(|ui, _open| {
-                    ui.add_space(8.0);
-                    ui.colored_label(egui_material3::theme::get_global_color("error"), &error);
-                    ui.add_space(12.0);
-                })
-                .primary_action("OK", || {
-                    ok_clicked.set(true);
-                })
-                .show(ctx);
-
-            if ok_clicked.get() || !self.show_error_dialog {
-                self.show_error_dialog = false;
-                self.load_error = None;
-            }
-        }
     }
 }
 

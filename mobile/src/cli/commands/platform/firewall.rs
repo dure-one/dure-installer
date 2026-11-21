@@ -55,7 +55,11 @@ pub async fn execute_firewall_inner(
 }
 
 /// Execute firewall command
-pub fn execute_firewall_command(profile: &ProfileContext, name: String, ip: Option<String>) -> Result<()> {
+pub fn execute_firewall_command(
+    profile: &ProfileContext,
+    name: String,
+    ip: Option<String>,
+) -> Result<()> {
     let config = AppConfig::load_or_default_for_profile(profile);
 
     let platform = config

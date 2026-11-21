@@ -1,7 +1,7 @@
 //! Operation logs actor - manages audit trail in database
 
-use super::opslog_commands::{LogsCommand, LogStatus, StatsPeriod};
-use super::opslog_events::{LogsEvent, LogStats, OperationLog};
+use super::opslog_commands::{LogStatus, LogsCommand, StatsPeriod};
+use super::opslog_events::{LogStats, LogsEvent, OperationLog};
 use crate::storage::models::opslog;
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info};
@@ -70,8 +70,14 @@ impl OpsLogActor {
                 status,
                 metadata,
             } => {
-                self.create_log(project_id, operation_type, operation_subtype, status, metadata)
-                    .await
+                self.create_log(
+                    project_id,
+                    operation_type,
+                    operation_subtype,
+                    status,
+                    metadata,
+                )
+                .await
             }
             LogsCommand::UpdateLog {
                 log_id,
@@ -93,10 +99,9 @@ impl OpsLogActor {
                     .await
             }
             LogsCommand::GetLog { log_id } => self.get_log(log_id).await,
-            LogsCommand::GetLogStats {
-                project_id,
-                period,
-            } => self.get_log_stats(project_id, period).await,
+            LogsCommand::GetLogStats { project_id, period } => {
+                self.get_log_stats(project_id, period).await
+            }
             LogsCommand::PurgeLogs { older_than_days } => self.purge_logs(older_than_days).await,
         };
 
@@ -127,12 +132,16 @@ impl OpsLogActor {
             use crate::calc::db;
             let mut conn = db::establish_connection();
 
-            let new_log = opslog::NewOperationLog::new(&project_id_clone, &operation_type_clone, &operation_subtype)
-                .status(match status {
-                    LogStatus::Running => opslog::OperationStatus::Running,
-                    LogStatus::Success => opslog::OperationStatus::Success,
-                    LogStatus::Failed | LogStatus::Cancelled => opslog::OperationStatus::Failed,
-                });
+            let new_log = opslog::NewOperationLog::new(
+                &project_id_clone,
+                &operation_type_clone,
+                &operation_subtype,
+            )
+            .status(match status {
+                LogStatus::Running => opslog::OperationStatus::Running,
+                LogStatus::Success => opslog::OperationStatus::Success,
+                LogStatus::Failed | LogStatus::Cancelled => opslog::OperationStatus::Failed,
+            });
 
             let new_log = if let Some(meta) = metadata {
                 new_log.details(meta)

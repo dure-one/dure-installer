@@ -1131,19 +1131,23 @@ impl DureApp {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("install_dialog", &tr!("install"), &mut self.install_dialog_open)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.label(&self.install_message);
-                ui.add_space(8.0);
-            })
-            .primary_action(&tr!("ok"), || {
-                ok_clicked.set(true);
-            })
-            .show(ctx);
+        dialog(
+            "install_dialog",
+            &tr!("install"),
+            &mut self.install_dialog_open,
+        )
+        .min_width(350.0)
+        .max_width(window_width - 40.0)
+        .max_height(window_height - 40.0)
+        .scrollable(true)
+        .content(|ui, _open| {
+            ui.label(&self.install_message);
+            ui.add_space(8.0);
+        })
+        .primary_action(&tr!("ok"), || {
+            ok_clicked.set(true);
+        })
+        .show(ctx);
 
         if ok_clicked.get() {
             self.install_dialog_open = false;

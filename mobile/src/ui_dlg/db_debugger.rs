@@ -301,109 +301,109 @@ impl DlgDbDebugger {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog("db_debugger_window", "🔍 Database Debugger (Hidden)", &mut open)
-            .min_width(350.0)
-            .max_width(window_width - 40.0)
-            .max_height(window_height - 40.0)
-            .scrollable(true)
-            .content(|ui, _open| {
-                ui.heading("Database Debugger");
-                ui.label("⚠️ Hidden debug tool - Ctrl+Shift+D x3 to open");
-                ui.separator();
+        dialog(
+            "db_debugger_window",
+            "🔍 Database Debugger (Hidden)",
+            &mut open,
+        )
+        .min_width(350.0)
+        .max_width(window_width - 120.0)
+        .max_height(window_height - 120.0)
+        .scrollable(true)
+        .content(|ui, _open| {
+            ui.heading("Database Debugger");
+            ui.label("⚠️ Hidden debug tool - Ctrl+Shift+D x3 to open");
+            ui.separator();
 
-                if let Some(err) = &self.error_message {
-                    ui.colored_label(
-                        egui_material3::theme::get_global_color("error"),
-                        format!("Error: {}", err),
-                    );
-                    ui.separator();
+            if let Some(err) = &self.error_message {
+                ui.colored_label(
+                    egui_material3::theme::get_global_color("error"),
+                    format!("Error: {}", err),
+                );
+                ui.separator();
+            }
+
+            if let Some(conn) = conn {
+                // Load tables if not loaded
+                if self.table_names.is_empty() {
+                    self.load_tables(conn);
                 }
 
-                if let Some(conn) = conn {
-                    // Load tables if not loaded
-                    if self.table_names.is_empty() {
-                        self.load_tables(conn);
+                // Table selector
+                ui.horizontal(|ui| {
+                    ui.label("Table:");
+
+                    let prev_table = self.selected_table.clone();
+                    egui::ComboBox::from_id_salt("table_selector")
+                        .selected_text(&self.selected_table)
+                        .show_ui(ui, |ui| {
+                            for table in &self.table_names {
+                                ui.selectable_value(&mut self.selected_table, table.clone(), table);
+                            }
+                        });
+
+                    // Reload if table changed
+                    if prev_table != self.selected_table {
+                        self.data_loaded = false;
                     }
 
-                    // Table selector
-                    ui.horizontal(|ui| {
-                        ui.label("Table:");
-
-                        let prev_table = self.selected_table.clone();
-                        egui::ComboBox::from_id_salt("table_selector")
-                            .selected_text(&self.selected_table)
-                            .show_ui(ui, |ui| {
-                                for table in &self.table_names {
-                                    ui.selectable_value(
-                                        &mut self.selected_table,
-                                        table.clone(),
-                                        table,
-                                    );
-                                }
-                            });
-
-                        // Reload if table changed
-                        if prev_table != self.selected_table {
-                            self.data_loaded = false;
-                        }
-
-                        if ui.button("🔄 Reload").clicked() {
-                            self.data_loaded = false;
-                        }
-                    });
-
-                    ui.separator();
-
-                    // Load data if needed
-                    if !self.data_loaded && !self.selected_table.is_empty() {
-                        self.load_table_data(conn);
+                    if ui.button("🔄 Reload").clicked() {
+                        self.data_loaded = false;
                     }
+                });
 
-                    // Display data
-                    if self.data_loaded {
-                        ui.label(format!(
-                            "Showing {} rows from table: {}",
-                            self.table_data.len(),
-                            self.selected_table
-                        ));
+                ui.separator();
 
-                        egui::ScrollArea::both()
-                            .max_height(ui.available_height() - 40.0)
-                            .show(ui, |ui| {
-                                if self.table_data.is_empty() {
-                                    ui.label("No data in table");
-                                } else {
-                                    // Table header
-                                    egui::Grid::new("db_table_grid")
-                                        .striped(true)
-                                        .show(ui, |ui| {
-                                            // Header row
-                                            for col in &self.column_names {
-                                                ui.strong(col);
+                // Load data if needed
+                if !self.data_loaded && !self.selected_table.is_empty() {
+                    self.load_table_data(conn);
+                }
+
+                // Display data
+                if self.data_loaded {
+                    ui.label(format!(
+                        "Showing {} rows from table: {}",
+                        self.table_data.len(),
+                        self.selected_table
+                    ));
+
+                    egui::ScrollArea::both()
+                        .max_height(ui.available_height() - 40.0)
+                        .show(ui, |ui| {
+                            if self.table_data.is_empty() {
+                                ui.label("No data in table");
+                            } else {
+                                // Table header
+                                egui::Grid::new("db_table_grid")
+                                    .striped(true)
+                                    .show(ui, |ui| {
+                                        // Header row
+                                        for col in &self.column_names {
+                                            ui.strong(col);
+                                        }
+                                        ui.end_row();
+
+                                        // Data rows
+                                        for row in &self.table_data {
+                                            for cell in row {
+                                                ui.label(cell);
                                             }
                                             ui.end_row();
-
-                                            // Data rows
-                                            for row in &self.table_data {
-                                                for cell in row {
-                                                    ui.label(cell);
-                                                }
-                                                ui.end_row();
-                                            }
-                                        });
-                                }
-                            });
-                    }
-                } else {
-                    ui.label("❌ No database connection (no profile loaded)");
+                                        }
+                                    });
+                            }
+                        });
                 }
+            } else {
+                ui.label("❌ No database connection (no profile loaded)");
+            }
 
-                ui.separator();
-            })
-            .primary_action("Close", || {
-                close_clicked.set(true);
-            })
-            .show(ctx);
+            ui.separator();
+        })
+        .primary_action("Close", || {
+            close_clicked.set(true);
+        })
+        .show(ctx);
 
         if !open || close_clicked.get() {
             self.close();
