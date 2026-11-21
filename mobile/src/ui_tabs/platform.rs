@@ -1008,6 +1008,9 @@ impl PlatformTab {
 
         // ViewModel event processing (MVVM pattern)
         if let Some(ref mut vm) = vm {
+            // Track if we need to fetch billing after discovery
+            let mut pending_billing_fetch: Option<(String, String, String)> = None;
+
             // Process events first
             let events = vm.poll_events(ui.ctx());
             for event in events {
@@ -1020,7 +1023,7 @@ impl PlatformTab {
                         self.billing_dialog.loading = false;
                     }
                     ViewModelEvent::Platform(PlatformEvent::BillingTableDiscovered {
-                        platform_name: _,
+                        platform_name,
                         dataset,
                         table,
                     }) => {
@@ -1029,8 +1032,11 @@ impl PlatformTab {
                             dataset,
                             table
                         );
-                        self.billing_dialog.dataset = dataset;
-                        self.billing_dialog.table = table;
+                        self.billing_dialog.dataset = dataset.clone();
+                        self.billing_dialog.table = table.clone();
+
+                        // Store for fetch after event loop
+                        pending_billing_fetch = Some((platform_name, dataset, table));
                     }
                     ViewModelEvent::Platform(PlatformEvent::FirewallUpdated {
                         platform_name,
@@ -1561,6 +1567,28 @@ impl PlatformTab {
                         }
                     }
                     _ => {}
+                }
+            }
+
+            // Auto-fetch billing after discovery completes
+            if let Some((platform_name, dataset, table)) = pending_billing_fetch {
+                dure_info!(
+                    "[BILLING] Auto-fetching billing data after discovery: platform={}, dataset={}, table={}",
+                    platform_name,
+                    dataset,
+                    table
+                );
+
+                if let Err(e) = vm.fetch_billing(
+                    current_profile.config_file.clone(),
+                    platform_name.clone(),
+                    platform_name,
+                    dataset,
+                    table,
+                ) {
+                    dure_error!("[BILLING] Auto-fetch failed: {}", e);
+                    self.billing_dialog.error = Some(format!("Auto-fetch failed: {}", e));
+                    self.billing_dialog.loading = false;
                 }
             }
 
@@ -4249,35 +4277,28 @@ impl PlatformTab {
                     "[BILLING] Auto-discovering billing table for project: {}",
                     project_id
                 );
+                self.billing_dialog.project_id = project_id.clone();
+
                 // Trigger async discovery via actor
                 let config_path = get_config_path(&Some(profile.clone())).unwrap_or_default();
                 if let Err(e) = vm.discover_billing_table(config_path, project_id.clone(), project_id.clone()) {
                     dure_error!("[BILLING] Failed to start billing discovery: {}", e);
-                    // Fall back to default names
-                    self.billing_dialog.dataset = "billing_export".to_string();
-                    self.billing_dialog.table =
-                        format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                    self.billing_dialog.project_id = project_id.clone();
-                    self.billing_dialog.error = Some(format!(
-                        "Failed to start discovery: {}\n\nUsing default names.",
-                        e
-                    ));
+                    self.billing_dialog.error = Some(format!("Failed to start discovery: {}", e));
+                    self.billing_dialog.loading = false;
+                    return;
                 }
-                // Discovery will trigger BillingTableDiscovered event
-                // For now, use defaults and let event update later
-                if self.billing_dialog.dataset.is_empty() {
-                    self.billing_dialog.dataset = "billing_export".to_string();
-                    self.billing_dialog.table =
-                        format!("gcp_billing_export_v1_{}", project_id.replace('-', "_"));
-                    self.billing_dialog.project_id = project_id.clone();
-                }
-            } else {
-                dure_debug!(
-                    "[BILLING] Using existing dataset={}, table={}",
-                    self.billing_dialog.dataset,
-                    self.billing_dialog.table
-                );
+
+                // Discovery will trigger BillingTableDiscovered event which will auto-fetch
+                dure_info!("[BILLING] Waiting for billing table discovery to complete...");
+                return;
             }
+
+            // Dataset and table are already configured, fetch immediately
+            dure_debug!(
+                "[BILLING] Using existing dataset={}, table={}",
+                self.billing_dialog.dataset,
+                self.billing_dialog.table
+            );
 
             if self.billing_dialog.project_id.is_empty() {
                 self.billing_dialog.project_id = project_id.clone();
