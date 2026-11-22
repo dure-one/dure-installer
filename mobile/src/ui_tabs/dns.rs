@@ -391,7 +391,20 @@ fn refresh_oauth_token_standalone(
 
 impl DnsTab {
     /// Render the DNS tab
-    pub fn ui(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        profile: &ProfileContext,
+        vm: Option<&mut crate::viewmodel::ViewModel>,
+    ) {
+        // Poll for ViewModel events
+        if let Some(viewmodel) = vm {
+            let events = viewmodel.poll_events(ui.ctx());
+            for event in events {
+                self.handle_event(event);
+            }
+        }
+
         // Load DNS domains from config on first render
         if !self.loaded {
             self.load_domain_rows(profile);
@@ -496,12 +509,10 @@ impl DnsTab {
             if let Some(domain) =
                 ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs")))
             {
-                if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
-                    row.drawer_state.set_loading(true);
-
-                    // Load logs (placeholder - implement when log actor ready)
-                    // For now, just clear loading state
-                    row.drawer_state.set_loading(false);
+                if let Some(sender) = crate::viewmodel::logs::get_log_sender() {
+                    let _ = sender.try_send(crate::viewmodel::logs::LogCommand::GetLogs {
+                        host_id: domain.clone(),
+                    });
                 }
                 ui.data_mut(|d| d.remove::<String>(egui::Id::new("drawer_action_refresh_logs")));
             }
@@ -509,6 +520,22 @@ impl DnsTab {
             // Dialogs
             self.render_dialogs(ui, profile);
         });
+    }
+
+    /// Handle ViewModel events (logs retrieval)
+    fn handle_event(&mut self, event: crate::viewmodel::common::ViewModelEvent) {
+        use crate::viewmodel::logs::LogEvent;
+
+        if let crate::viewmodel::common::ViewModelEvent::Logs(LogEvent::LogsRetrieved {
+            filter_id,
+            lines,
+        }) = event
+        {
+            if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == filter_id) {
+                row.drawer_state.logs = lines;
+                row.drawer_state.set_loading(false);
+            }
+        }
     }
 
     /// Render domain table
@@ -807,17 +834,7 @@ impl DnsTab {
     }
 
     fn check_ns_server_impl(&mut self, domain: &str, show_dialog: bool) {
-        dure_info!("Checking NS server for domain: {}", domain);
-
-        // Log operation
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let log = NewOperationLog::new(domain, "check_ns", "dns_query")
-                .status(OperationStatus::Running);
-            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-            }
-        }
+        dure_info!(project_id = domain, "Checking NS server");
 
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
@@ -926,7 +943,7 @@ impl DnsTab {
 
     /// Start OAuth authentication for DNS settings check
     fn start_dns_oauth(&mut self, domain: &str) {
-        dure_info!("Starting DNS OAuth for domain: {}", domain);
+        dure_info!(project_id = domain, "Starting DNS OAuth");
 
         let domain = domain.to_string();
         self.dns_operation_log.push(tr!("dns-oauth-starting"));
@@ -951,7 +968,7 @@ impl DnsTab {
         vm_ip: &str,
         access_token: &str,
     ) {
-        dure_info!("Creating DNS records for domain: {}", domain);
+        dure_info!(project_id = domain, "Creating DNS records");
 
         let domain = domain.to_string();
         let zone_id = zone_id.to_string();
@@ -959,6 +976,16 @@ impl DnsTab {
         let access_token = access_token.to_string();
 
         self.dns_operation_log.push(tr!("dns-create-starting"));
+
+        // Log operation start
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let log = NewOperationLog::dns(&domain, "create_xmpp_records", "cloudflare")
+                .status(OperationStatus::Running);
+            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+            }
+        }
 
         let promise = Promise::spawn_thread("create_dns_records", move || {
             use crate::api::cloudflare::dns::CloudflareClient;
@@ -1002,7 +1029,7 @@ impl DnsTab {
             existing_row.oauth_refresh_token = refresh_token.clone();
             existing_row.oauth_token_expiry = expires_at;
             existing_row.oauth_refresh_failed = false;
-            dure_info!("Updated OAuth tokens for existing domain: {}", domain);
+            dure_info!(project_id = domain, "Updated OAuth tokens for existing domain");
 
             Self::save_domain_to_config(
                 &profile.config_file,
@@ -1136,17 +1163,7 @@ impl DnsTab {
         show_dialog: bool,
         profile: &ProfileContext,
     ) {
-        dure_info!("Checking DNS settings for domain: {}", domain);
-
-        // Log operation
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let log = NewOperationLog::new(domain, "check_dns_settings", "cloudflare")
-                .status(OperationStatus::Running);
-            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-            }
-        }
+        dure_info!(project_id = domain, "Checking DNS settings");
 
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
@@ -1420,17 +1437,7 @@ impl DnsTab {
     }
 
     fn check_https_connection_impl(&mut self, domain: &str, show_dialog: bool) {
-        dure_info!("Checking HTTPS connection for domain: {}", domain);
-
-        // Log operation
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let log = NewOperationLog::new(domain, "check_https", "https_resolver")
-                .status(OperationStatus::Running);
-            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-            }
-        }
+        dure_info!(project_id = domain, "Checking HTTPS connection");
 
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
@@ -1572,7 +1579,7 @@ impl DnsTab {
                             {
                                 row.last_ns_check = Some(check_result.clone());
                                 row.operation_state = row.operation_state.clone().complete();
-                                dure_info!("NS check completed for domain: {}", domain);
+                                dure_info!(project_id = domain, "NS check completed");
                             }
                             // Save to config
                             self.save_check_results_to_config(domain, profile);
@@ -1648,7 +1655,7 @@ impl DnsTab {
                                 row.last_settings_check = Some(check_result.clone());
                                 row.oauth_refresh_failed = false; // Clear flag on success
                                 row.operation_state = row.operation_state.clone().complete();
-                                dure_info!("DNS settings check completed for domain: {}", domain);
+                                dure_info!(project_id = domain, "DNS settings check completed");
                             }
                             // Save to config
                             self.save_check_results_to_config(domain, profile);
@@ -1753,6 +1760,21 @@ impl DnsTab {
                     match result {
                         Ok(()) => {
                             self.dns_operation_log.push(tr!("dns-create-success"));
+
+                            // Update operation status to success
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if let Some(domain) = &self.selected_domain {
+                                dure_info!(project_id = domain, "DNS records created successfully");
+                                if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                    let _ = crate::storage::models::opslog::complete_latest_operation(
+                                        &mut conn,
+                                        domain,
+                                        "dns",
+                                        OperationStatus::Success,
+                                    );
+                                }
+                            }
+
                             // Trigger re-check
                             if let Some(domain) = self.selected_domain.clone() {
                                 self.check_dns_settings(&domain, profile);
@@ -1760,6 +1782,26 @@ impl DnsTab {
                         }
                         Err(e) => {
                             self.dns_operation_log.push(format!("✗ {}", e));
+
+                            // Update operation status to failed
+                            #[cfg(not(target_arch = "wasm32"))]
+                            if let Some(domain) = &self.selected_domain {
+                                dure_error!(project_id = domain, "DNS records creation failed: {}", e);
+                                if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                                    let _ = crate::storage::models::opslog::complete_latest_operation(
+                                        &mut conn,
+                                        domain,
+                                        "dns",
+                                        OperationStatus::Failed,
+                                    ).map(|log_id| {
+                                        crate::storage::models::opslog::set_error_message(
+                                            &mut conn,
+                                            log_id,
+                                            &e,
+                                        )
+                                    });
+                                }
+                            }
                         }
                     }
                 } else {
@@ -1806,7 +1848,7 @@ impl DnsTab {
                             {
                                 row.last_https_check = Some(check_result.clone());
                                 row.operation_state = row.operation_state.clone().complete();
-                                dure_info!("HTTPS check completed for domain: {}", domain);
+                                dure_info!(project_id = domain, "HTTPS check completed");
                             }
                             // Save to config
                             self.save_check_results_to_config(domain, profile);
@@ -1948,7 +1990,7 @@ impl DnsTab {
         if let Err(e) = config.save(&config_file.to_path_buf()) {
             dure_error!("Failed to save DNS domain to config: {}", e);
         } else {
-            dure_info!("Saved DNS domain {} with OAuth tokens to config", domain);
+            dure_info!(project_id = domain, "Saved DNS domain with OAuth tokens to config");
         }
     }
 
@@ -1956,7 +1998,7 @@ impl DnsTab {
     fn delete_domain(&mut self, domain: &str, profile: &ProfileContext) {
         use crate::config::AppConfig;
 
-        dure_info!("Deleting DNS domain: {}", domain);
+        dure_info!(project_id = domain, "Deleting DNS domain");
 
         // Remove from memory
         self.domain_rows.retain(|row| row.domain != domain);
@@ -1971,7 +2013,7 @@ impl DnsTab {
             if let Err(e) = config.save(&profile.config_file) {
                 dure_error!("Failed to save config after deleting domain: {}", e);
             } else {
-                dure_info!("Successfully deleted DNS domain {} from config", domain);
+                dure_info!(project_id = domain, "Successfully deleted DNS domain from config");
             }
         } else {
             dure_warn!("Domain {} not found in config", domain);
@@ -2064,7 +2106,7 @@ impl DnsTab {
                     // Attempt token refresh
                     match refresh_oauth_token_standalone(&row.domain, refresh_token, &config_path) {
                         Ok((new_access, new_expiry, new_refresh)) => {
-                            dure_info!("✓ Token auto-refreshed on load for domain: {}", row.domain);
+                            dure_info!(project_id = &row.domain, "✓ Token auto-refreshed on load");
                             row.oauth_access_token = Some(new_access);
                             row.oauth_token_expiry = Some(new_expiry);
                             row.oauth_refresh_token = Some(new_refresh);
@@ -2135,7 +2177,7 @@ impl DnsTab {
     /// This is useful when the secret may have been compromised or for regular rotation policy
     #[cfg(not(target_arch = "wasm32"))]
     fn rotate_oauth_secret(&mut self, domain: &str, profile: &ProfileContext) {
-        dure_info!("Rotating OAuth secret for domain: {}", domain);
+        dure_info!(project_id = domain, "Rotating OAuth secret");
 
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
             row.operation_state = OperationState::start("Rotating OAuth secret");

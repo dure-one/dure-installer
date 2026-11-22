@@ -1518,6 +1518,58 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    pub fn load_mycart_config(
+        &self,
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadMycartConfig {
+                site_address,
+                profile_kdbx,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn load_xmppproxy_config(
+        &self,
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadXMPPProxyConfig {
+                site_address,
+                profile_kdbx,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn load_fail2banrs_config(
+        &self,
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadFail2BanRSConfig {
+                site_address,
+                profile_kdbx,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    pub fn load_fail2banrs_nft(
+        &self,
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.mycart_tx
+            .send_blocking(mycart::MycartCommand::LoadFail2BanRSNFT {
+                site_address,
+                profile_kdbx,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     pub fn list_mycart_crontab(&self, site_address: String) -> anyhow::Result<()> {
         self.mycart_tx
             .send_blocking(mycart::MycartCommand::ListCrontab { site_address })

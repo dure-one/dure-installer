@@ -93,7 +93,7 @@ pub fn append_log(host_id_override: Option<String>, level: LogLevel, message: St
             Err(e) => log::error!("[APPEND_LOG] ✗ Failed to send command: {}", e),
         }
     } else {
-        log::debug!("[APPEND_LOG] Log sender not initialized yet (profile not loaded)");
+        log::warn!("[APPEND_LOG] ⚠ Log sender not initialized - logs will not appear in drawer");
     }
 }
 

@@ -125,6 +125,44 @@ impl NewOperationLog {
         }
     }
 
+    /// Create a DNS operation log entry
+    pub fn dns(
+        domain: impl Into<String>,
+        operation_type: impl Into<String>,
+        external_system: impl Into<String>,
+    ) -> Self {
+        let domain_str = domain.into();
+        Self {
+            operation_source: "dns".to_string(),
+            relevant_id: domain_str.clone(),
+            project_id: domain_str,
+            operation_type: operation_type.into(),
+            external_system: external_system.into(),
+            status: OperationStatus::Running,
+            error_message: None,
+            details: None,
+        }
+    }
+
+    /// Create a Mycart operation log entry
+    pub fn mycart(
+        site: impl Into<String>,
+        operation_type: impl Into<String>,
+        external_system: impl Into<String>,
+    ) -> Self {
+        let site_str = site.into();
+        Self {
+            operation_source: "mycart".to_string(),
+            relevant_id: site_str.clone(),
+            project_id: site_str,
+            operation_type: operation_type.into(),
+            external_system: external_system.into(),
+            status: OperationStatus::Running,
+            error_message: None,
+            details: None,
+        }
+    }
+
     pub fn status(mut self, status: OperationStatus) -> Self {
         self.status = status;
         self
@@ -591,7 +629,7 @@ pub fn get_dns_operations(
     let rows: Vec<Row> = diesel::sql_query(
         "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
          FROM operation_logs
-         WHERE relevant_id = ?1
+         WHERE operation_source = 'dns' AND relevant_id = ?1
          ORDER BY started_at DESC
          LIMIT ?2",
     )
@@ -655,7 +693,7 @@ pub fn get_mycart_operations(
     let rows: Vec<Row> = diesel::sql_query(
         "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
          FROM operation_logs
-         WHERE relevant_id = ?1
+         WHERE operation_source = 'mycart' AND relevant_id = ?1
          ORDER BY started_at DESC
          LIMIT ?2",
     )
@@ -680,6 +718,78 @@ pub fn get_mycart_operations(
             details: r.details,
         })
         .collect())
+}
+
+/// Complete the latest running operation for a given relevant_id and operation_source
+pub fn complete_latest_operation(
+    conn: &mut SqliteConnection,
+    relevant_id: &str,
+    operation_source: &str,
+    status: OperationStatus,
+) -> Result<i64> {
+    use diesel::sql_types::{BigInt, Text};
+
+    let now = chrono::Utc::now().timestamp();
+
+    diesel::sql_query(
+        "UPDATE operation_logs
+         SET status = ?1, completed_at = ?2
+         WHERE id = (
+             SELECT id FROM operation_logs
+             WHERE relevant_id = ?3 AND operation_source = ?4 AND status = 'running'
+             ORDER BY started_at DESC
+             LIMIT 1
+         )",
+    )
+    .bind::<Text, _>(status.as_str())
+    .bind::<BigInt, _>(now)
+    .bind::<Text, _>(relevant_id)
+    .bind::<Text, _>(operation_source)
+    .execute(conn)
+    .context("Failed to complete operation")?;
+
+    // Return the updated operation id
+    #[derive(QueryableByName)]
+    struct IdRow {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+    }
+
+    let rows: Vec<IdRow> = diesel::sql_query(
+        "SELECT id FROM operation_logs
+         WHERE relevant_id = ?1 AND operation_source = ?2
+         ORDER BY started_at DESC
+         LIMIT 1",
+    )
+    .bind::<Text, _>(relevant_id)
+    .bind::<Text, _>(operation_source)
+    .load(conn)
+    .context("Failed to get updated operation id")?;
+
+    rows.first()
+        .map(|r| r.id)
+        .ok_or_else(|| anyhow::anyhow!("No operation found"))
+}
+
+/// Set error message for an operation
+pub fn set_error_message(
+    conn: &mut SqliteConnection,
+    operation_id: i64,
+    error_message: &str,
+) -> Result<()> {
+    use diesel::sql_types::{BigInt, Text};
+
+    diesel::sql_query(
+        "UPDATE operation_logs
+         SET error_message = ?1
+         WHERE id = ?2",
+    )
+    .bind::<Text, _>(error_message)
+    .bind::<BigInt, _>(operation_id)
+    .execute(conn)
+    .context("Failed to set error message")?;
+
+    Ok(())
 }
 
 #[cfg(test)]

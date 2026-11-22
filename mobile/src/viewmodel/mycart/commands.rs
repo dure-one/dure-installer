@@ -40,6 +40,27 @@ pub enum MycartCommand {
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
+    // Phase 6: Config files
+    LoadMycartConfig {
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    },
+
+    LoadXMPPProxyConfig {
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    },
+
+    LoadFail2BanRSConfig {
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    },
+
+    LoadFail2BanRSNFT {
+        site_address: String,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    },
+
     // Phase 4: Crontab management commands
     ListCrontab {
         site_address: String,

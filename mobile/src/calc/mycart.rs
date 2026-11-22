@@ -19,6 +19,8 @@ use crate::calc::crypt;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::calc::keyring::DatabaseHandle;
 #[cfg(not(target_arch = "wasm32"))]
+use crate::calc::ssh;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::config::{AppConfig, MycartSiteConfig, SshHostConfig};
 
 /// Add a new mycart site after verifying admin credentials
@@ -308,6 +310,74 @@ pub async fn get_fail2banrs_logs(
     }
 
     Ok(logs_map)
+}
+
+/// Get Mycart .env config file
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_mycart_config(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+) -> Result<String> {
+    dure_info!("Reading Mycart config from /srv/dure-mycart/prosody-mycart-stack/.env");
+    let config = ssh::execute_command(
+        host_config,
+        "cat /srv/dure-mycart/prosody-mycart-stack/.env",
+        profile_keyring,
+    )
+    .await
+    .context("Failed to read /srv/dure-mycart/prosody-mycart-stack/.env")?;
+    Ok(config)
+}
+
+/// Get XMPPProxy config via docker exec
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_xmppproxy_config(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+) -> Result<String> {
+    dure_info!("Reading XMPPProxy config from container");
+    let config = ssh::execute_command(
+        host_config,
+        "docker exec dure-mycart /bin/busybox cat /etc/xmpp-proxy/xmpp-proxy.toml",
+        profile_keyring,
+    )
+    .await
+    .context("Failed to read XMPPProxy config from container")?;
+    Ok(config)
+}
+
+/// Get Fail2BanRS config via docker exec
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_fail2banrs_config(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+) -> Result<String> {
+    dure_info!("Reading Fail2BanRS config from container");
+    let config = ssh::execute_command(
+        host_config,
+        "docker exec dure-mycart /bin/busybox cat /etc/fail2ban-rs/config.toml",
+        profile_keyring,
+    )
+    .await
+    .context("Failed to read Fail2BanRS config from container")?;
+    Ok(config)
+}
+
+/// Get Fail2BanRS nftables rules
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn get_fail2banrs_nft(
+    host_config: &SshHostConfig,
+    profile_keyring: Option<&Arc<DatabaseHandle>>,
+) -> Result<String> {
+    dure_info!("Reading nftables rules");
+    let nft_rules = ssh::execute_command(
+        host_config,
+        "nft list ruleset",
+        profile_keyring,
+    )
+    .await
+    .context("Failed to read nftables ruleset")?;
+    Ok(nft_rules)
 }
 
 /// Get crontab jobs for a mycart site (high-level wrapper with JWT loading)

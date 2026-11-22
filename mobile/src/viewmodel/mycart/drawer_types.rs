@@ -113,6 +113,15 @@ pub struct DrawerState {
     pub xmppproxy_loading: bool,
     pub fail2banrs_logs: std::collections::HashMap<String, Vec<String>>,
     pub fail2banrs_loading: bool,
+    // Phase 6: Config files for each service
+    pub mycart_config: Option<String>,
+    pub mycart_config_loading: bool,
+    pub xmppproxy_config: Option<String>,
+    pub xmppproxy_config_loading: bool,
+    pub fail2banrs_config: Option<String>,
+    pub fail2banrs_config_loading: bool,
+    pub fail2banrs_nft: Option<String>,
+    pub fail2banrs_nft_loading: bool,
 }
 
 impl Default for DrawerState {
@@ -132,6 +141,14 @@ impl Default for DrawerState {
             xmppproxy_loading: false,
             fail2banrs_logs: std::collections::HashMap::new(),
             fail2banrs_loading: false,
+            mycart_config: None,
+            mycart_config_loading: false,
+            xmppproxy_config: None,
+            xmppproxy_config_loading: false,
+            fail2banrs_config: None,
+            fail2banrs_config_loading: false,
+            fail2banrs_nft: None,
+            fail2banrs_nft_loading: false,
         }
     }
 }

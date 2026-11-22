@@ -1432,11 +1432,11 @@ impl PlatformTab {
                         }
 
                         dure_info!("✅ Refresh completed for {}", platform_name);
-                        dure_info!(
+                        dure_debug!(
                             "🔍 RefreshCompleted event: firewall_status.whitelisted = {}",
                             firewall_status.whitelisted
                         );
-                        dure_info!(
+                        dure_debug!(
                             "🔍 RefreshCompleted event: firewall_status.current_ip = {:?}",
                             firewall_status.current_ip
                         );
@@ -1458,19 +1458,19 @@ impl PlatformTab {
                             row.firewall_updated = firewall_status.whitelisted;
                             if let Some(current_ip) = firewall_status.current_ip {
                                 if firewall_status.whitelisted {
-                                    dure_info!(
+                                    dure_debug!(
                                         "🔍 Setting row.firewall_status = '✅ Whitelisted ({})'",
                                         current_ip
                                     );
                                     row.firewall_status =
                                         format!("✅ Whitelisted ({})", current_ip);
                                 } else {
-                                    dure_info!("🔍 Setting row.firewall_status = '❌ Not whitelisted ({})'", current_ip);
+                                    dure_debug!("🔍 Setting row.firewall_status = '❌ Not whitelisted ({})'", current_ip);
                                     row.firewall_status =
                                         format!("❌ Not whitelisted ({})", current_ip);
                                 }
                             } else {
-                                dure_info!("🔍 Setting row.firewall_status = '? Status unknown'");
+                                dure_debug!("🔍 Setting row.firewall_status = '? Status unknown'");
                                 row.firewall_status = "? Status unknown".to_string();
                             }
 

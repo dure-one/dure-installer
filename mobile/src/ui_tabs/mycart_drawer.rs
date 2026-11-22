@@ -15,7 +15,7 @@ pub enum DrawerAction {
     SetCronjobInterval { job_id: String, interval: String },
 }
 
-/// Render the Mycart drawer with tabs (Phase 5: 6 tabs)
+/// Render the Mycart drawer with tabs (Phase 6: 6 tabs with config support)
 pub fn render_drawer(
     ui: &mut egui::Ui,
     site: &str,
@@ -29,10 +29,18 @@ pub fn render_drawer(
     operations_loading: bool,
     mycart_logs: &std::collections::HashMap<String, Vec<String>>,
     mycart_loading: bool,
+    mycart_config: &Option<String>,
+    mycart_config_loading: bool,
     xmppproxy_logs: &std::collections::HashMap<String, Vec<String>>,
     xmppproxy_loading: bool,
+    xmppproxy_config: &Option<String>,
+    xmppproxy_config_loading: bool,
     fail2banrs_logs: &std::collections::HashMap<String, Vec<String>>,
     fail2banrs_loading: bool,
+    fail2banrs_config: &Option<String>,
+    fail2banrs_config_loading: bool,
+    fail2banrs_nft: &Option<String>,
+    fail2banrs_nft_loading: bool,
 ) {
     // Tab bar (Phase 5: 6 tabs)
     let mut temp_selected = active_tab.to_index();
@@ -60,9 +68,9 @@ pub fn render_drawer(
             DrawerTab::Status => render_status_tab(ui, site, stats, seller),
             DrawerTab::Logs => render_logs_tab(ui, logs, logs_loading, site),
             DrawerTab::Operations => render_operations_tab(ui, operations, operations_loading, site),
-            DrawerTab::Mycart => render_mycart_tab(ui, mycart_logs, mycart_loading),
-            DrawerTab::XMPPProxy => render_xmppproxy_tab(ui, xmppproxy_logs, xmppproxy_loading),
-            DrawerTab::Fail2BanRS => render_fail2banrs_tab(ui, fail2banrs_logs, fail2banrs_loading),
+            DrawerTab::Mycart => render_mycart_tab(ui, mycart_logs, mycart_loading, mycart_config, mycart_config_loading),
+            DrawerTab::XMPPProxy => render_xmppproxy_tab(ui, xmppproxy_logs, xmppproxy_loading, xmppproxy_config, xmppproxy_config_loading),
+            DrawerTab::Fail2BanRS => render_fail2banrs_tab(ui, fail2banrs_logs, fail2banrs_loading, fail2banrs_config, fail2banrs_config_loading, fail2banrs_nft, fail2banrs_nft_loading),
         });
 }
 
@@ -181,171 +189,262 @@ fn render_status_tab(
     }
 }
 
-/// Render Mycart tab with sub-tabs for each log file
+/// Render Mycart tab with Config | stderr | stdout
 fn render_mycart_tab(
     ui: &mut egui::Ui,
     logs: &std::collections::HashMap<String, Vec<String>>,
     loading: bool,
+    config: &Option<String>,
+    config_loading: bool,
 ) {
-    ui.heading("Mycart Logs");
+    ui.heading("Mycart Service");
 
-    if loading {
-        ui.spinner();
-        ui.label("Loading logs...");
-        return;
-    }
-
-    if logs.is_empty() {
-        ui.label("No logs loaded. Click 'Check Mycart' button to load logs.");
-        return;
-    }
-
-    // Sub-tabs: stderr | stdout
+    // Sub-tabs: Config | stderr | stdout
     let mut active_subtab = ui
-        .data(|d| d.get_temp::<usize>(egui::Id::new("mycart_log_subtab")))
+        .data(|d| d.get_temp::<usize>(egui::Id::new("mycart_subtab")))
         .unwrap_or(0);
 
     ui.add(
         tabs_secondary(&mut active_subtab)
-            .id_salt("mycart_log_subtabs")
+            .id_salt("mycart_subtabs")
             .height(32.0)
+            .tab("Config")
             .tab("stderr")
             .tab("stdout"),
     );
-    ui.data_mut(|d| d.insert_temp(egui::Id::new("mycart_log_subtab"), active_subtab));
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("mycart_subtab"), active_subtab));
 
     ui.separator();
 
-    // Show selected file based on tab index
-    let selected_file = match active_subtab {
-        0 => "stderr",
-        1 => "stdout",
-        _ => "stderr",
-    };
+    match active_subtab {
+        0 => {
+            // Config
+            if config_loading {
+                ui.spinner();
+                ui.label("Loading config...");
+                return;
+            }
 
-    if let Some(lines) = logs.get(selected_file) {
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .max_height(500.0)
-            .show(ui, |ui| {
-                for line in lines {
-                    ui.label(egui::RichText::new(line).monospace().small());
-                }
-            });
-    } else {
-        ui.label(format!("No logs for {}", selected_file));
+            if let Some(config_text) = config {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(config_text).monospace().small());
+                    });
+            } else {
+                ui.label("No config loaded. Click 'Check Mycart' button to load config.");
+            }
+        }
+        1 | 2 => {
+            // stderr or stdout
+            if loading {
+                ui.spinner();
+                ui.label("Loading logs...");
+                return;
+            }
+
+            if logs.is_empty() {
+                ui.label("No logs loaded. Click 'Check Mycart' button to load logs.");
+                return;
+            }
+
+            let selected_file = if active_subtab == 1 { "stderr" } else { "stdout" };
+
+            if let Some(lines) = logs.get(selected_file) {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        for line in lines {
+                            ui.label(egui::RichText::new(line).monospace().small());
+                        }
+                    });
+            } else {
+                ui.label(format!("No logs for {}", selected_file));
+            }
+        }
+        _ => {}
     }
 }
 
-/// Render XMPPProxy tab with sub-tabs for each log file
+/// Render XMPPProxy tab with Config | stderr | stdout
 fn render_xmppproxy_tab(
     ui: &mut egui::Ui,
     logs: &std::collections::HashMap<String, Vec<String>>,
     loading: bool,
+    config: &Option<String>,
+    config_loading: bool,
 ) {
-    ui.heading("XMPPProxy Logs");
+    ui.heading("XMPPProxy Service");
 
-    if loading {
-        ui.spinner();
-        ui.label("Loading logs...");
-        return;
-    }
-
-    if logs.is_empty() {
-        ui.label("No logs loaded. Click 'Check XMPPProxy' button to load logs.");
-        return;
-    }
-
-    // Sub-tabs: stdout | stderr
+    // Sub-tabs: Config | stderr | stdout
     let mut active_subtab = ui
-        .data(|d| d.get_temp::<usize>(egui::Id::new("xmppproxy_log_subtab")))
+        .data(|d| d.get_temp::<usize>(egui::Id::new("xmppproxy_subtab")))
         .unwrap_or(0);
 
     ui.add(
         tabs_secondary(&mut active_subtab)
-            .id_salt("xmppproxy_log_subtabs")
+            .id_salt("xmppproxy_subtabs")
             .height(32.0)
-            .tab("stdout")
-            .tab("stderr"),
+            .tab("Config")
+            .tab("stderr")
+            .tab("stdout"),
     );
-    ui.data_mut(|d| d.insert_temp(egui::Id::new("xmppproxy_log_subtab"), active_subtab));
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("xmppproxy_subtab"), active_subtab));
 
     ui.separator();
 
-    // Show selected file based on tab index
-    let selected_file = match active_subtab {
-        0 => "stdout",
-        1 => "stderr",
-        _ => "stdout",
-    };
+    match active_subtab {
+        0 => {
+            // Config
+            if config_loading {
+                ui.spinner();
+                ui.label("Loading config...");
+                return;
+            }
 
-    if let Some(lines) = logs.get(selected_file) {
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .max_height(500.0)
-            .show(ui, |ui| {
-                for line in lines {
-                    ui.label(egui::RichText::new(line).monospace().small());
-                }
-            });
-    } else {
-        ui.label(format!("No logs for {}", selected_file));
+            if let Some(config_text) = config {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(config_text).monospace().small());
+                    });
+            } else {
+                ui.label("No config loaded. Click 'Check XMPPProxy' button to load config.");
+            }
+        }
+        1 | 2 => {
+            // stderr or stdout
+            if loading {
+                ui.spinner();
+                ui.label("Loading logs...");
+                return;
+            }
+
+            if logs.is_empty() {
+                ui.label("No logs loaded. Click 'Check XMPPProxy' button to load logs.");
+                return;
+            }
+
+            let selected_file = if active_subtab == 1 { "stderr" } else { "stdout" };
+
+            if let Some(lines) = logs.get(selected_file) {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        for line in lines {
+                            ui.label(egui::RichText::new(line).monospace().small());
+                        }
+                    });
+            } else {
+                ui.label(format!("No logs for {}", selected_file));
+            }
+        }
+        _ => {}
     }
 }
 
-/// Render Fail2BanRS tab with sub-tabs for each log file
+/// Render Fail2BanRS tab with Config | NFT | stderr | stdout
 fn render_fail2banrs_tab(
     ui: &mut egui::Ui,
     logs: &std::collections::HashMap<String, Vec<String>>,
     loading: bool,
+    config: &Option<String>,
+    config_loading: bool,
+    nft: &Option<String>,
+    nft_loading: bool,
 ) {
-    ui.heading("Fail2BanRS Logs");
+    ui.heading("Fail2BanRS Service");
 
-    if loading {
-        ui.spinner();
-        ui.label("Loading logs...");
-        return;
-    }
-
-    if logs.is_empty() {
-        ui.label("No logs loaded. Click 'Check Fail2BanRS' button to load logs.");
-        return;
-    }
-
-    // Sub-tabs: stderr | stdout
+    // Sub-tabs: Config | NFT | stderr | stdout
     let mut active_subtab = ui
-        .data(|d| d.get_temp::<usize>(egui::Id::new("fail2banrs_log_subtab")))
+        .data(|d| d.get_temp::<usize>(egui::Id::new("fail2banrs_subtab")))
         .unwrap_or(0);
 
     ui.add(
         tabs_secondary(&mut active_subtab)
-            .id_salt("fail2banrs_log_subtabs")
+            .id_salt("fail2banrs_subtabs")
             .height(32.0)
+            .tab("Config")
+            .tab("NFT")
             .tab("stderr")
             .tab("stdout"),
     );
-    ui.data_mut(|d| d.insert_temp(egui::Id::new("fail2banrs_log_subtab"), active_subtab));
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("fail2banrs_subtab"), active_subtab));
 
     ui.separator();
 
-    // Show selected file based on tab index
-    let selected_file = match active_subtab {
-        0 => "stderr",
-        1 => "stdout",
-        _ => "stderr",
-    };
+    match active_subtab {
+        0 => {
+            // Config
+            if config_loading {
+                ui.spinner();
+                ui.label("Loading config...");
+                return;
+            }
 
-    if let Some(lines) = logs.get(selected_file) {
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .max_height(500.0)
-            .show(ui, |ui| {
-                for line in lines {
-                    ui.label(egui::RichText::new(line).monospace().small());
-                }
-            });
-    } else {
-        ui.label(format!("No logs for {}", selected_file));
+            if let Some(config_text) = config {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(config_text).monospace().small());
+                    });
+            } else {
+                ui.label("No config loaded. Click 'Check Fail2BanRS' button to load config.");
+            }
+        }
+        1 => {
+            // NFT
+            if nft_loading {
+                ui.spinner();
+                ui.label("Loading nftables rules...");
+                return;
+            }
+
+            if let Some(nft_text) = nft {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new(nft_text).monospace().small());
+                    });
+            } else {
+                ui.label("No nftables rules loaded. Click 'Check Fail2BanRS' button to load.");
+            }
+        }
+        2 | 3 => {
+            // stderr or stdout
+            if loading {
+                ui.spinner();
+                ui.label("Loading logs...");
+                return;
+            }
+
+            if logs.is_empty() {
+                ui.label("No logs loaded. Click 'Check Fail2BanRS' button to load logs.");
+                return;
+            }
+
+            let selected_file = if active_subtab == 2 { "stderr" } else { "stdout" };
+
+            if let Some(lines) = logs.get(selected_file) {
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        for line in lines {
+                            ui.label(egui::RichText::new(line).monospace().small());
+                        }
+                    });
+            } else {
+                ui.label(format!("No logs for {}", selected_file));
+            }
+        }
+        _ => {}
     }
 }
 

@@ -208,7 +208,7 @@ fn render_drawer_for_row(
     // Create unique drawer ID for persistent tab storage (mirror platform.rs:977)
     let drawer_id = egui::Id::new("mycart_drawer").with(&row.site_address);
 
-    // Load active tab from persistent storage (mirror platform.rs:977)
+    // Load active tab from persistent storage (source of truth - mirror platform.rs:816)
     let active_tab: DrawerTab =
         ui.data_mut(|d| d.get_persisted(drawer_id).unwrap_or(DrawerTab::Status));
 
@@ -228,10 +228,18 @@ fn render_drawer_for_row(
         false, // operations_loading
         &row.drawer_state.mycart_logs,
         row.drawer_state.mycart_loading,
+        &row.drawer_state.mycart_config,
+        row.drawer_state.mycart_config_loading,
         &row.drawer_state.xmppproxy_logs,
         row.drawer_state.xmppproxy_loading,
+        &row.drawer_state.xmppproxy_config,
+        row.drawer_state.xmppproxy_config_loading,
         &row.drawer_state.fail2banrs_logs,
         row.drawer_state.fail2banrs_loading,
+        &row.drawer_state.fail2banrs_config,
+        row.drawer_state.fail2banrs_config_loading,
+        &row.drawer_state.fail2banrs_nft,
+        row.drawer_state.fail2banrs_nft_loading,
     );
 
     // Handle tab switch (no auto-load - user clicks button to load)
@@ -310,10 +318,10 @@ impl MycartTab {
         if let Some(ref mut viewmodel) = vm {
             let events = viewmodel.poll_events(ui.ctx());
             if !events.is_empty() {
-                dure_info!("[UI::Mycart] 📬 Polled {} events from ViewModel", events.len());
+                dure_debug!("[UI::Mycart] 📬 Polled {} events from ViewModel", events.len());
             }
             for event in events {
-                self.handle_event(event, current_profile);
+                self.handle_event(event, current_profile, ui);
             }
         }
 
@@ -490,9 +498,8 @@ impl MycartTab {
                     }
                     CrontabAction::UpdateJob { job_id, patch } => {
                         dure_info!(
-                            "Mycart tab: Received UpdateJob action for site={}, job_id={}",
-                            site,
-                            job_id
+                            project_id = site,
+                            "Mycart tab: Received UpdateJob action",
                         );
                         self.handle_action(
                             current_profile,
@@ -708,9 +715,10 @@ impl MycartTab {
         if let Some(site_address) =
             ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs")))
         {
-            if let Some(_row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
-                // Load logs (placeholder - implement when log actor ready)
-                // For now, just acknowledge the trigger
+            if let Some(sender) = crate::viewmodel::logs::get_log_sender() {
+                let _ = sender.try_send(crate::viewmodel::logs::LogCommand::GetLogs {
+                    host_id: site_address.clone(),
+                });
             }
             ui.data_mut(|d| d.remove::<String>(egui::Id::new("drawer_action_refresh_logs")));
         }
@@ -721,8 +729,20 @@ impl MycartTab {
         &mut self,
         event: crate::viewmodel::common::ViewModelEvent,
         _current_profile: &Option<ProfileContext>,
+        ui: &mut egui::Ui,
     ) {
         use crate::viewmodel::mycart::events::MycartEvent;
+
+        // Handle general log events (installer logs tagged with project_id)
+        if let crate::viewmodel::common::ViewModelEvent::Logs(log_event) = &event {
+            use crate::viewmodel::logs::LogEvent;
+            if let LogEvent::LogsRetrieved { filter_id, lines } = log_event {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == *filter_id) {
+                    row.drawer_state.logs = lines.clone();
+                    row.drawer_state.logs_loading = false;
+                }
+            }
+        }
 
         if let crate::viewmodel::common::ViewModelEvent::Mycart(mycart_event) = event {
             match mycart_event {
@@ -732,6 +752,11 @@ impl MycartTab {
                         row.drawer_state.mycart_logs = logs;
                         row.drawer_state.mycart_loading = false;
                         row.drawer_state.active_tab = crate::viewmodel::mycart::DrawerTab::Mycart;
+
+                        // Persist tab for auto-focus (matches manual click behavior at line 240)
+                        let drawer_id = egui::Id::new("mycart_drawer").with(&site_address);
+                        ui.data_mut(|d| d.insert_persisted(drawer_id, crate::viewmodel::mycart::DrawerTab::Mycart));
+
                         row.operation_state = OperationState::Completed {
                             operation: "Checking DureMycart".to_string(),
                             completed_at: chrono::Utc::now().timestamp(),
@@ -744,6 +769,11 @@ impl MycartTab {
                         row.drawer_state.xmppproxy_logs = logs;
                         row.drawer_state.xmppproxy_loading = false;
                         row.drawer_state.active_tab = crate::viewmodel::mycart::DrawerTab::XMPPProxy;
+
+                        // Persist tab for auto-focus (matches manual click behavior at line 240)
+                        let drawer_id = egui::Id::new("mycart_drawer").with(&site_address);
+                        ui.data_mut(|d| d.insert_persisted(drawer_id, crate::viewmodel::mycart::DrawerTab::XMPPProxy));
+
                         row.operation_state = OperationState::Completed {
                             operation: "Checking XMPPProxy".to_string(),
                             completed_at: chrono::Utc::now().timestamp(),
@@ -756,10 +786,43 @@ impl MycartTab {
                         row.drawer_state.fail2banrs_logs = logs;
                         row.drawer_state.fail2banrs_loading = false;
                         row.drawer_state.active_tab = crate::viewmodel::mycart::DrawerTab::Fail2BanRS;
+
+                        // Persist tab for auto-focus (matches manual click behavior at line 240)
+                        let drawer_id = egui::Id::new("mycart_drawer").with(&site_address);
+                        ui.data_mut(|d| d.insert_persisted(drawer_id, crate::viewmodel::mycart::DrawerTab::Fail2BanRS));
+
                         row.operation_state = OperationState::Completed {
                             operation: "Checking Fail2BanRS".to_string(),
                             completed_at: chrono::Utc::now().timestamp(),
                         };
+                    }
+                }
+                MycartEvent::MycartConfigLoaded { site_address, config } => {
+                    dure_info!(project_id = site_address, "Mycart config loaded for {}", site_address);
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                        row.drawer_state.mycart_config = Some(config);
+                        row.drawer_state.mycart_config_loading = false;
+                    }
+                }
+                MycartEvent::XMPPProxyConfigLoaded { site_address, config } => {
+                    dure_info!(project_id = site_address, "XMPPProxy config loaded for {}", site_address);
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                        row.drawer_state.xmppproxy_config = Some(config);
+                        row.drawer_state.xmppproxy_config_loading = false;
+                    }
+                }
+                MycartEvent::Fail2BanRSConfigLoaded { site_address, config } => {
+                    dure_info!(project_id = site_address, "Fail2BanRS config loaded for {}", site_address);
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                        row.drawer_state.fail2banrs_config = Some(config);
+                        row.drawer_state.fail2banrs_config_loading = false;
+                    }
+                }
+                MycartEvent::Fail2BanRSNFTLoaded { site_address, nft_rules } => {
+                    dure_info!(project_id = site_address, "Fail2BanRS NFT rules loaded for {}", site_address);
+                    if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                        row.drawer_state.fail2banrs_nft = Some(nft_rules);
+                        row.drawer_state.fail2banrs_nft_loading = false;
                     }
                 }
                 _ => {
@@ -790,16 +853,16 @@ impl MycartTab {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     if let Some(config_path) = &self.config_path {
-                        dure_debug!("LoadCrontab: site={}, config_path={:?}", site, config_path);
+                        dure_debug!(project_id = site, "LoadCrontab triggered");
                         match smol::block_on(mycart::get_site_crontab(config_path, &site)) {
                             Ok(jobs) => {
-                                dure_debug!("LoadCrontab: loaded {} jobs", jobs.len());
+                                dure_debug!(project_id = site, "LoadCrontab: loaded {} jobs", jobs.len());
                                 if let Some(dialog) = &mut self.crontab_dialog {
                                     dialog.set_jobs(jobs);
                                 }
                             }
                             Err(e) => {
-                                dure_error!("LoadCrontab: failed with error: {:?}", e);
+                                dure_error!(project_id = site, "LoadCrontab failed: {:?}", e);
                                 if let Some(dialog) = &mut self.crontab_dialog {
                                     dialog.set_error(format!("Failed to list crontab jobs: {}", e));
                                 }
@@ -817,7 +880,7 @@ impl MycartTab {
                         if let Err(e) = mycart::delete_mycart_site(config_path, &site) {
                             self.load_error = Some(format!("Failed to delete site: {}", e));
                         } else {
-                            dure_info!("Deleted mycart site: {}", site);
+                            dure_info!(project_id = site, "Deleted mycart site");
                             self.loaded = false; // Trigger reload
                         }
                     }
@@ -907,7 +970,7 @@ impl MycartTab {
                             enabled,
                         )) {
                             Ok(()) => {
-                                dure_info!("ToggleCronjob: Success - job list will be reloaded");
+                                dure_info!(project_id = site_address, "ToggleCronjob success");
                                 row.drawer_state.crontab_error = None;
                                 // Job list will be reloaded by OpenCrontabDialog action
                             }
@@ -938,9 +1001,7 @@ impl MycartTab {
                             &interval,
                         )) {
                             Ok(()) => {
-                                dure_info!(
-                                    "SetCronjobInterval: Success - job list will be reloaded"
-                                );
+                                dure_info!(project_id = site_address, "SetCronjobInterval success");
                                 row.drawer_state.crontab_error = None;
                                 // Job list will be reloaded by OpenCrontabDialog action
                             }
@@ -964,13 +1025,10 @@ impl MycartTab {
                             .iter_mut()
                             .find(|r| r.site_address == site_address),
                     ) {
-                        dure_info!(
-                            "UpdateCronjob: Calling API for site={}, job_id={}, patch enabled={:?}, interval={:?}",
-                            site_address, job_id, patch.enabled, patch.interval
-                        );
+                        dure_info!(project_id = site_address, "UpdateCronjob: Calling API");
 
                         // Log operation
-                        let log = NewOperationLog::new(&site_address, "crontab_patch", "mycart_api")
+                        let log = NewOperationLog::mycart(&site_address, "crontab_patch", "mycart_api")
                             .status(OperationStatus::Running)
                             .details(format!("job_id={}", job_id));
                         if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
@@ -984,12 +1042,12 @@ impl MycartTab {
                             patch,
                         )) {
                             Ok(()) => {
-                                dure_info!("UpdateCronjob: Success - job list will be reloaded");
+                                dure_info!(project_id = site_address, "UpdateCronjob success");
                                 row.drawer_state.crontab_error = None;
                                 // Job list will be reloaded by OpenCrontabDialog action
                             }
                             Err(e) => {
-                                dure_error!("UpdateCronjob: Failed - {}", e);
+                                dure_error!(project_id = site_address, "UpdateCronjob failed: {}", e);
                                 row.drawer_state.crontab_error = Some(e.to_string());
                             }
                         }
@@ -999,15 +1057,9 @@ impl MycartTab {
             MycartAction::CheckDureMycart(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    // Log operation
-                    let log = NewOperationLog::new(&site, "check_mycart", "ssh")
-                        .status(OperationStatus::Running);
-                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-                    }
-
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.mycart_loading = true;
+                        row.drawer_state.mycart_config_loading = true;
                         row.operation_state = OperationState::InProgress {
                             operation: "Checking DureMycart".to_string(),
                             started_at: chrono::Utc::now().timestamp(),
@@ -1015,6 +1067,7 @@ impl MycartTab {
                     }
                     if let Some(ref vm) = vm {
                         let _ = vm.load_mycart_logs(site.clone(), 100, (*current_profile_kdbx).clone());
+                        let _ = vm.load_mycart_config(site.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "Mycart check triggered for {}", site);
                     }
                 }
@@ -1022,15 +1075,9 @@ impl MycartTab {
             MycartAction::CheckXmppProxy(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    // Log operation
-                    let log = NewOperationLog::new(&site, "check_xmppproxy", "ssh")
-                        .status(OperationStatus::Running);
-                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-                    }
-
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.xmppproxy_loading = true;
+                        row.drawer_state.xmppproxy_config_loading = true;
                         row.operation_state = OperationState::InProgress {
                             operation: "Checking XMPPProxy".to_string(),
                             started_at: chrono::Utc::now().timestamp(),
@@ -1038,6 +1085,7 @@ impl MycartTab {
                     }
                     if let Some(ref vm) = vm {
                         let _ = vm.load_xmppproxy_logs(site.clone(), 100, (*current_profile_kdbx).clone());
+                        let _ = vm.load_xmppproxy_config(site.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "XMPPProxy check triggered for {}", site);
                     }
                 }
@@ -1045,15 +1093,10 @@ impl MycartTab {
             MycartAction::CheckFail2BanRS(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    // Log operation
-                    let log = NewOperationLog::new(&site, "check_fail2banrs", "ssh")
-                        .status(OperationStatus::Running);
-                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
-                    }
-
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.fail2banrs_loading = true;
+                        row.drawer_state.fail2banrs_config_loading = true;
+                        row.drawer_state.fail2banrs_nft_loading = true;
                         row.operation_state = OperationState::InProgress {
                             operation: "Checking Fail2BanRS".to_string(),
                             started_at: chrono::Utc::now().timestamp(),
@@ -1061,6 +1104,8 @@ impl MycartTab {
                     }
                     if let Some(ref vm) = vm {
                         let _ = vm.load_fail2banrs_logs(site.clone(), 100, (*current_profile_kdbx).clone());
+                        let _ = vm.load_fail2banrs_config(site.clone(), (*current_profile_kdbx).clone());
+                        let _ = vm.load_fail2banrs_nft(site.clone(), (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "Fail2BanRS check triggered for {}", site);
                     }
                 }

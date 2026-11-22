@@ -658,7 +658,7 @@ impl DureApp {
                 ),
                 Tab::Dns => {
                     if let Some(profile) = &self.current_profile {
-                        self.tab_dns.ui(ui, profile)
+                        self.tab_dns.ui(ui, profile, self.viewmodel.as_mut())
                     }
                 }
                 Tab::Mycart => self.tab_mycart.ui(

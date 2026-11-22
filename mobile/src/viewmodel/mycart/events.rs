@@ -31,6 +31,27 @@ pub enum MycartEvent {
         logs: std::collections::HashMap<String, Vec<String>>,
     },
 
+    // Phase 6: Config files
+    MycartConfigLoaded {
+        site_address: String,
+        config: String,
+    },
+
+    XMPPProxyConfigLoaded {
+        site_address: String,
+        config: String,
+    },
+
+    Fail2BanRSConfigLoaded {
+        site_address: String,
+        config: String,
+    },
+
+    Fail2BanRSNFTLoaded {
+        site_address: String,
+        nft_rules: String,
+    },
+
     // Phase 5: Operations event
     OperationsLoaded {
         site_address: String,
