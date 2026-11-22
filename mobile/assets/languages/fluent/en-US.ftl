@@ -230,7 +230,7 @@ close = Close
 
 # About Dialog
 about = About
-about-description = Remove bloat apps selectively, scan installed apps with VirusTotal/HybridAnalysis, and install FOSS apps through Obtainium.
+about-description = Mycart & Prosody installer and manager for small shop owners. Automate GCP deployment, DNS configuration, SSH management, and security hardening for your e-commerce backend.
 about-version = Version
 about-website = Website
 about-credits = Credits

@@ -230,7 +230,7 @@ close = 닫기
 
 # About Dialog
 about = 정보
-about-description = 블로트웨어를 선택적으로 제거하고, 설치된 앱을 VirusTotal/HybridAnalysis로 검사하며, Obtainium을 통해 FOSS 앱을 설치합니다.
+about-description = 소규모 상점 주인을 위한 Mycart 및 Prosody 설치 및 관리 도구. GCP 배포, DNS 구성, SSH 관리 및 전자상거래 백엔드 보안 강화를 자동화합니다.
 about-version = 버전
 about-website = 웹사이트
 about-credits = 크레딧
