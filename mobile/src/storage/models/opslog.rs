@@ -554,6 +554,134 @@ pub fn get_platform_operations(
         .collect())
 }
 
+/// Query DNS operations by domain, newest first
+pub fn get_dns_operations(
+    conn: &mut SqliteConnection,
+    domain: &str,
+    limit: i64,
+) -> Result<Vec<OperationLog>> {
+    use diesel::sql_types::{BigInt, Nullable, Text};
+
+    #[derive(QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
+        #[diesel(sql_type = Text)]
+        project_id: String,
+        #[diesel(sql_type = Text)]
+        operation_type: String,
+        #[diesel(sql_type = Text)]
+        external_system: String,
+        #[diesel(sql_type = Text)]
+        status: String,
+        #[diesel(sql_type = BigInt)]
+        started_at: i64,
+        #[diesel(sql_type = Nullable<BigInt>)]
+        completed_at: Option<i64>,
+        #[diesel(sql_type = Nullable<Text>)]
+        error_message: Option<String>,
+        #[diesel(sql_type = Nullable<Text>)]
+        details: Option<String>,
+    }
+
+    let rows: Vec<Row> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+         FROM operation_logs
+         WHERE relevant_id = ?1
+         ORDER BY started_at DESC
+         LIMIT ?2",
+    )
+    .bind::<Text, _>(domain)
+    .bind::<BigInt, _>(limit)
+    .load(conn)
+    .context("Failed to load DNS operations")?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| OperationLog {
+            id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
+            project_id: r.project_id,
+            operation_type: r.operation_type,
+            external_system: r.external_system,
+            status: r.status,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            error_message: r.error_message,
+            details: r.details,
+        })
+        .collect())
+}
+
+/// Query Mycart operations by site_address, newest first
+pub fn get_mycart_operations(
+    conn: &mut SqliteConnection,
+    site_address: &str,
+    limit: i64,
+) -> Result<Vec<OperationLog>> {
+    use diesel::sql_types::{BigInt, Nullable, Text};
+
+    #[derive(QueryableByName)]
+    struct Row {
+        #[diesel(sql_type = BigInt)]
+        id: i64,
+        #[diesel(sql_type = Text)]
+        operation_source: String,
+        #[diesel(sql_type = Text)]
+        relevant_id: String,
+        #[diesel(sql_type = Text)]
+        project_id: String,
+        #[diesel(sql_type = Text)]
+        operation_type: String,
+        #[diesel(sql_type = Text)]
+        external_system: String,
+        #[diesel(sql_type = Text)]
+        status: String,
+        #[diesel(sql_type = BigInt)]
+        started_at: i64,
+        #[diesel(sql_type = Nullable<BigInt>)]
+        completed_at: Option<i64>,
+        #[diesel(sql_type = Nullable<Text>)]
+        error_message: Option<String>,
+        #[diesel(sql_type = Nullable<Text>)]
+        details: Option<String>,
+    }
+
+    let rows: Vec<Row> = diesel::sql_query(
+        "SELECT id, operation_source, relevant_id, project_id, operation_type, external_system, status, started_at, completed_at, error_message, details
+         FROM operation_logs
+         WHERE relevant_id = ?1
+         ORDER BY started_at DESC
+         LIMIT ?2",
+    )
+    .bind::<Text, _>(site_address)
+    .bind::<BigInt, _>(limit)
+    .load(conn)
+    .context("Failed to load Mycart operations")?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| OperationLog {
+            id: r.id,
+            operation_source: r.operation_source,
+            relevant_id: r.relevant_id,
+            project_id: r.project_id,
+            operation_type: r.operation_type,
+            external_system: r.external_system,
+            status: r.status,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            error_message: r.error_message,
+            details: r.details,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,6 +3,7 @@
 use crate::ui_dlg::mycart::AddMycartDialog;
 use crate::ui_dlg::mycart_crontab::{CrontabAction, CrontabDialog};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
+use crate::storage::models::opslog::{NewOperationLog, OperationStatus};
 use eframe::egui;
 use egui_material3::{data_table, dialog, MaterialButton};
 use std::cell::Cell;
@@ -107,14 +108,34 @@ fn render_site_column(ui: &mut egui::Ui, row: &MycartRow) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
 
-        // Platform ID badge (if exists)
-        if row.platform_id_display != "—" {
-            ui.add(
-                badge(&row.platform_id_display)
-                    .color(BadgeColor::Primary)
-                    .size(BadgeSize::Small),
-            );
-        }
+        // Badges horizontal above domain
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+
+            if row.platform_id_display != "—" {
+                ui.add(
+                    badge(&row.platform_id_display)
+                        .color(BadgeColor::Primary)
+                        .size(BadgeSize::Small),
+                );
+            }
+
+            if let Some(provider) = &row.provider_id {
+                ui.add(
+                    badge(provider)
+                        .color(BadgeColor::Primary)
+                        .size(BadgeSize::Small),
+                );
+            }
+
+            if let Some(host_ip) = &row.host_ip {
+                ui.add(
+                    badge(host_ip)
+                        .color(BadgeColor::Primary)
+                        .size(BadgeSize::Small),
+                );
+            }
+        });
 
         // Domain (PRIMARY - big bold text)
         ui.label(
@@ -123,24 +144,6 @@ fn render_site_column(ui: &mut egui::Ui, row: &MycartRow) {
                 .strong()
                 .color(get_global_color("onSurface")),
         );
-
-        // Provider badge (if exists)
-        if let Some(provider) = &row.provider_id {
-            ui.add(
-                badge(provider)
-                    .color(BadgeColor::Success)
-                    .size(BadgeSize::Small),
-            );
-        }
-
-        // Host IP badge (if exists)
-        if let Some(host_ip) = &row.host_ip {
-            ui.add(
-                badge(host_ip)
-                    .color(BadgeColor::Success)
-                    .size(BadgeSize::Small),
-            );
-        }
     });
 }
 
@@ -613,10 +616,10 @@ impl MycartTab {
         vm: Option<&mut crate::viewmodel::ViewModel>,
         current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
-        // Calculate responsive column widths
+        // Calculate responsive column widths to fill available space
         let available_width = ui.available_width() - 40.0;
-        let base_width = 740.0; // Base width for columns
-        let width_ratio = (available_width / base_width).min(1.5).max(0.8);
+        let col1_width = 280.0_f32.max(available_width * 0.35);
+        let col2_width = available_width - col1_width - 20.0; // 20px spacing
 
         // Build table with drawer support
         let table_id = egui::Id::new("mycart_sites_table");
@@ -627,8 +630,8 @@ impl MycartTab {
             .allow_drawer(true)
             .min_row_height(80.0)
             .drawer_row_height(500.0)
-            .column("Site", 280.0 * width_ratio, false)
-            .column("Operations", 460.0 * width_ratio, false);
+            .column("Site", col1_width, false)
+            .column("Operations", col2_width, false);
 
         for row in self.rows.iter() {
             let row_for_site = row.clone();
@@ -668,6 +671,48 @@ impl MycartTab {
         {
             ui.data_mut(|d| d.remove::<MycartAction>(egui::Id::new("mycart_pending_action")));
             self.handle_action(current_profile, action, vm, current_profile_kdbx);
+        }
+
+        // Drawer action: Refresh operations
+        if let Some(site_address) = ui.data(|d| {
+            d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations"))
+        }) {
+            if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                // Load operations from DB
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                        match crate::storage::models::opslog::get_mycart_operations(
+                            &mut conn,
+                            &site_address,
+                            100,
+                        ) {
+                            Ok(ops) => row.drawer_state.operations = ops,
+                            Err(e) => {
+                                dure_error!(
+                                    "Failed to load operations for {}: {}",
+                                    site_address,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            ui.data_mut(|d| {
+                d.remove::<String>(egui::Id::new("drawer_action_refresh_operations"))
+            });
+        }
+
+        // Drawer action: Refresh logs
+        if let Some(site_address) =
+            ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs")))
+        {
+            if let Some(_row) = self.rows.iter_mut().find(|r| r.site_address == site_address) {
+                // Load logs (placeholder - implement when log actor ready)
+                // For now, just acknowledge the trigger
+            }
+            ui.data_mut(|d| d.remove::<String>(egui::Id::new("drawer_action_refresh_logs")));
         }
     }
 
@@ -923,6 +968,15 @@ impl MycartTab {
                             "UpdateCronjob: Calling API for site={}, job_id={}, patch enabled={:?}, interval={:?}",
                             site_address, job_id, patch.enabled, patch.interval
                         );
+
+                        // Log operation
+                        let log = NewOperationLog::new(&site_address, "crontab_patch", "mycart_api")
+                            .status(OperationStatus::Running)
+                            .details(format!("job_id={}", job_id));
+                        if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                            let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+                        }
+
                         match smol::block_on(mycart::update_site_cronjob(
                             config_path,
                             &site_address,
@@ -945,6 +999,13 @@ impl MycartTab {
             MycartAction::CheckDureMycart(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
+                    // Log operation
+                    let log = NewOperationLog::new(&site, "check_mycart", "ssh")
+                        .status(OperationStatus::Running);
+                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+                    }
+
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.mycart_loading = true;
                         row.operation_state = OperationState::InProgress {
@@ -961,6 +1022,13 @@ impl MycartTab {
             MycartAction::CheckXmppProxy(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
+                    // Log operation
+                    let log = NewOperationLog::new(&site, "check_xmppproxy", "ssh")
+                        .status(OperationStatus::Running);
+                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+                    }
+
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.xmppproxy_loading = true;
                         row.operation_state = OperationState::InProgress {
@@ -977,6 +1045,13 @@ impl MycartTab {
             MycartAction::CheckFail2BanRS(site) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
+                    // Log operation
+                    let log = NewOperationLog::new(&site, "check_fail2banrs", "ssh")
+                        .status(OperationStatus::Running);
+                    if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                        let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+                    }
+
                     if let Some(row) = self.rows.iter_mut().find(|r| r.site_address == site) {
                         row.drawer_state.fail2banrs_loading = true;
                         row.operation_state = OperationState::InProgress {

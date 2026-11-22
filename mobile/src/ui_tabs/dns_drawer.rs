@@ -35,8 +35,8 @@ pub fn render_drawer(
         .max_height(400.0)
         .show(ui, |ui| match drawer_state.active_tab {
             DnsDrawerTab::Status => render_status_tab(ui, row),
-            DnsDrawerTab::Logs => render_logs_tab(ui, drawer_state),
-            DnsDrawerTab::Operations => render_operations_tab(ui, drawer_state),
+            DnsDrawerTab::Logs => render_logs_tab(ui, drawer_state, &row.domain),
+            DnsDrawerTab::Operations => render_operations_tab(ui, drawer_state, &row.domain),
         });
 }
 
@@ -184,7 +184,26 @@ fn render_status_tab(ui: &mut egui::Ui, row: &DnsDomainRow) {
 }
 
 /// Render Logs tab
-fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
+fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState, domain: &str) {
+    // Auto-refresh every 2s
+    let refresh_id = egui::Id::new("drawer_logs_last_refresh");
+    let now = std::time::Instant::now();
+    let should_refresh = ui.data(|d| {
+        d.get_temp::<std::time::Instant>(refresh_id)
+            .map(|last| now.duration_since(last).as_secs() >= 2)
+            .unwrap_or(true)
+    });
+
+    if should_refresh {
+        ui.data_mut(|d| {
+            d.insert_temp(refresh_id, now);
+            d.insert_temp(
+                egui::Id::new("drawer_action_refresh_logs"),
+                domain.to_string(),
+            );
+        });
+    }
+
     let renderer = LogsRenderer::new(&tr!("dns-logs-heading"))
         .max_height(400.0)
         .refresh_interval(2);
@@ -194,8 +213,35 @@ fn render_logs_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
 }
 
 /// Render Operations tab
-fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState) {
-    let renderer = OperationsRenderer::new().max_height(400.0);
+fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState, domain: &str) {
+    // Auto-refresh every 2s
+    let refresh_id = egui::Id::new("drawer_ops_last_refresh");
+    let now = std::time::Instant::now();
+    let should_refresh = ui.data(|d| {
+        d.get_temp::<std::time::Instant>(refresh_id)
+            .map(|last| now.duration_since(last).as_secs() >= 2)
+            .unwrap_or(true)
+    });
 
+    if should_refresh {
+        ui.data_mut(|d| {
+            d.insert_temp(refresh_id, now);
+            d.insert_temp(
+                egui::Id::new("drawer_action_refresh_operations"),
+                domain.to_string(),
+            );
+        });
+    }
+
+    ui.heading("Operation History");
+    ui.add_space(8.0);
+
+    if drawer_state.loading {
+        ui.spinner();
+        ui.label("Loading operations...");
+        return;
+    }
+
+    let renderer = OperationsRenderer::new().max_height(400.0);
     renderer.show(ui, &drawer_state.operations);
 }

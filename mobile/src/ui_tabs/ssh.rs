@@ -371,21 +371,43 @@ fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
 
-        // Platform badge (if connected)
-        if let Some(platform_id) = &row.platform_id {
-            ui.add(
-                badge(platform_id)
-                    .color(BadgeColor::Primary)
-                    .size(BadgeSize::Small),
-            );
-        }
-
         // Extract IP for display (username@ip → ip)
         let host_display = if row.host.contains('@') {
             row.host.split('@').last().unwrap_or(&row.host)
         } else {
             &row.host
         };
+
+        // Badges horizontal above host
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+
+            if let Some(platform_id) = &row.platform_id {
+                ui.add(
+                    badge(platform_id)
+                        .color(BadgeColor::Primary)
+                        .size(BadgeSize::Small),
+                );
+            }
+
+            if let Some(username) = &row.username {
+                ui.add(
+                    badge(username)
+                        .color(BadgeColor::Primary)
+                        .size(BadgeSize::Small),
+                );
+            }
+
+            if let Some(domain) = &row.domain {
+                if domain != host_display {
+                    ui.add(
+                        badge(domain)
+                            .color(BadgeColor::Primary)
+                            .size(BadgeSize::Small),
+                    );
+                }
+            }
+        });
 
         // Host IP (PRIMARY - big bold text)
         ui.label(
@@ -394,26 +416,6 @@ fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
                 .strong()
                 .color(get_global_color("onSurface")),
         );
-
-        // Username badge (if exists)
-        if let Some(username) = &row.username {
-            ui.add(
-                badge(username)
-                    .color(BadgeColor::Success)
-                    .size(BadgeSize::Small),
-            );
-        }
-
-        // Domain badge (if exists and different from displayed host)
-        if let Some(domain) = &row.domain {
-            if domain != host_display {
-                ui.add(
-                    badge(domain)
-                        .color(BadgeColor::Success)
-                        .size(BadgeSize::Small),
-                );
-            }
-        }
     });
 }
 
@@ -523,6 +525,12 @@ fn load_config(
 impl SshTab {
     /// Load SSH hosts from config and build row data
     fn load_rows(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
+        // Preserve existing drawer states and open status before clearing rows
+        let mut existing_drawer_states: std::collections::HashMap<String, (DrawerState, bool)> =
+            self.rows.iter()
+                .map(|row| (row.host.clone(), (row.drawer_state.clone(), row.drawer_open)))
+                .collect();
+
         self.rows.clear();
         self.error_dialog.close();
 
@@ -553,8 +561,14 @@ impl SshTab {
                     }
 
                     for host_config in &app_config.ssh_hosts {
-                        let mut drawer_state = DrawerState::new();
-                        drawer_state.set_ssh_host(host_config.host.clone());
+                        // Reuse existing drawer_state and drawer_open if available
+                        let (drawer_state, drawer_open) = existing_drawer_states
+                            .remove(&host_config.host)
+                            .unwrap_or_else(|| {
+                                let mut state = DrawerState::new();
+                                state.set_ssh_host(host_config.host.clone());
+                                (state, false)
+                            });
 
                         // Extract username and domain/IP from host config
                         let (username, domain) = if host_config.host.contains('@') {
@@ -603,7 +617,7 @@ impl SshTab {
                                 .map(|c| c.installed)
                                 .unwrap_or(false),
                             ssh_private_key: host_config.private_key_path.clone(),
-                            drawer_open: false,
+                            drawer_open,
                             drawer_state,
                             operation_state: OperationState::Idle,
                             last_ssh_check: host_config.last_ssh_check.clone(),
@@ -1532,10 +1546,10 @@ impl SshTab {
     ) {
         use egui_material3::{data_table, MaterialButton};
 
-        // Calculate responsive column widths (match platform tab layout)
+        // Calculate responsive column widths to fill available space
         let available_width = ui.available_width() - 40.0;
-        let base_width = 740.0; // Match platform tab: 230 + 510
-        let width_ratio = (available_width / base_width).min(1.5).max(0.8);
+        let col1_width = 250.0_f32.max(available_width * 0.3);
+        let col2_width = available_width - col1_width - 20.0; // 20px spacing
 
         // Build table with drawer support
         let table_id = egui::Id::new("ssh_hosts_table");
@@ -1546,10 +1560,10 @@ impl SshTab {
             .allow_drawer(true)
             .min_row_height(100.0)
             .drawer_row_height(500.0)
-            .column(&tr!("ssh-drawer-tab-host"), 230.0 * width_ratio, false)
+            .column(&tr!("ssh-drawer-tab-host"), col1_width, false)
             .column(
                 &tr!("ssh-drawer-tab-operations"),
-                510.0 * width_ratio,
+                col2_width,
                 false,
             );
 

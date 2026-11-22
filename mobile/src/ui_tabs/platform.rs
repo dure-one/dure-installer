@@ -1743,11 +1743,10 @@ impl PlatformTab {
             ui.add_space(8.0);
             ui.label(tr!("platform-main-empty"));
         } else if !self.rows.is_empty() {
-            // Calculate responsive column widths
-            // Reserve space for borders, padding, and scrollbar
+            // Calculate responsive column widths to fill available space
             let available_width = ui.available_width() - 40.0;
-            let base_width = 740.0; // Base design width (reduced to fit with borders)
-            let width_ratio = (available_width / base_width).min(1.5).max(0.8);
+            let col1_width = 250.0_f32.max(available_width * 0.3);
+            let col2_width = available_width - col1_width - 20.0; // 20px spacing
 
             // Build data table
             let table_id = egui::Id::new("platform_table");
@@ -1778,12 +1777,12 @@ impl PlatformTab {
                 .drawer_row_height(500.0)
                 .column(
                     &tr!("platform-table-col-project"),
-                    230.0 * width_ratio,
+                    col1_width,
                     false,
                 )
                 .column(
                     &tr!("platform-table-col-operations"),
-                    510.0 * width_ratio,
+                    col2_width,
                     false,
                 );
 
@@ -1798,11 +1797,26 @@ impl PlatformTab {
                         ui.vertical(|ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
 
-                            ui.add(
-                                badge(&row_for_cells.platform_type)
-                                    .color(BadgeColor::Primary)
-                                    .size(BadgeSize::Small),
-                            );
+                            // Badges horizontal above project_id
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+
+                                ui.add(
+                                    badge(&row_for_cells.platform_type)
+                                        .color(BadgeColor::Primary)
+                                        .size(BadgeSize::Small),
+                                );
+
+                                if let Some(vm_ip) = &row_for_cells.vm_external_ip {
+                                    ui.add(
+                                        badge(vm_ip)
+                                            .color(BadgeColor::Primary)
+                                            .size(BadgeSize::Small),
+                                    );
+                                }
+                            });
+
+                            // Project ID (primary text)
                             use egui_material3::theme::get_global_color;
                             ui.label(
                                 egui::RichText::new(&row_for_cells.project_id)
@@ -1810,20 +1824,11 @@ impl PlatformTab {
                                     .strong()
                                     .color(get_global_color("onSurface")),
                             );
-
-                            // Display VM IP badge if bound
-                            if let Some(vm_ip) = &row_for_cells.vm_external_ip {
-                                ui.add(
-                                    badge(vm_ip)
-                                        .color(BadgeColor::Success)
-                                        .size(BadgeSize::Small),
-                                );
-                            }
                         });
                     })
                     .cell_widget(move |ui| {
                         // Calculate needed height for button wrapping
-                        let column_width = 260.0 * width_ratio;
+                        let column_width = ui.available_width();
                         let button_width = 90.0; // Approximate width including spacing
                         let button_height = 32.0; // Button height + vertical spacing
 

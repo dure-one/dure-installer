@@ -15,6 +15,7 @@ use poll_promise::Promise;
 use std::cell::Cell;
 
 use crate::calc::profile::ProfileContext;
+use crate::storage::models::opslog::{NewOperationLog, OperationStatus};
 use crate::ui_dlg::dns::{DnsSettingsDialog, HttpsCheckDialog, NsCheckDialog};
 
 // Re-export types used by config.rs
@@ -461,6 +462,50 @@ impl DnsTab {
                 }
             }
 
+            // Drawer action: Refresh operations
+            if let Some(domain) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_operations")))
+            {
+                if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+                    row.drawer_state.set_loading(true);
+
+                    // Load operations from DB
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                            match crate::storage::models::opslog::get_dns_operations(
+                                &mut conn,
+                                &domain,
+                                100,
+                            ) {
+                                Ok(ops) => row.drawer_state.set_operations(ops),
+                                Err(e) => {
+                                    dure_error!("Failed to load operations for {}: {}", domain, e);
+                                    row.drawer_state.set_loading(false);
+                                }
+                            }
+                        }
+                    }
+                }
+                ui.data_mut(|d| {
+                    d.remove::<String>(egui::Id::new("drawer_action_refresh_operations"))
+                });
+            }
+
+            // Drawer action: Refresh logs
+            if let Some(domain) =
+                ui.data(|d| d.get_temp::<String>(egui::Id::new("drawer_action_refresh_logs")))
+            {
+                if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
+                    row.drawer_state.set_loading(true);
+
+                    // Load logs (placeholder - implement when log actor ready)
+                    // For now, just clear loading state
+                    row.drawer_state.set_loading(false);
+                }
+                ui.data_mut(|d| d.remove::<String>(egui::Id::new("drawer_action_refresh_logs")));
+            }
+
             // Dialogs
             self.render_dialogs(ui, profile);
         });
@@ -468,10 +513,10 @@ impl DnsTab {
 
     /// Render domain table
     fn render_domain_table(&mut self, ui: &mut egui::Ui, profile: &ProfileContext) {
-        // Calculate responsive column widths
+        // Calculate responsive column widths to fill available space
         let available_width = ui.available_width() - 40.0;
-        let base_width = 740.0;
-        let width_ratio = (available_width / base_width).min(1.5).max(0.8);
+        let col1_width = 250.0_f32.max(available_width * 0.3);
+        let col2_width = available_width - col1_width - 20.0; // 20px spacing
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.heading(tr!("dns-main-heading"));
@@ -511,8 +556,8 @@ impl DnsTab {
                 .allow_drawer(true)
                 .min_row_height(68.0)
                 .drawer_row_height(400.0)
-                .column(tr!("dns-table-col-dns"), 230.0 * width_ratio, false)
-                .column(tr!("dns-table-col-operations"), 510.0 * width_ratio, false);
+                .column(tr!("dns-table-col-dns"), col1_width, false)
+                .column(tr!("dns-table-col-operations"), col2_width, false);
 
             for row in self.domain_rows.clone().iter() {
                 let row_for_cells = row.clone();
@@ -521,15 +566,38 @@ impl DnsTab {
 
                 table = table.row(move |r| {
                     r.cell_widget(move |ui| {
-                        // DNS column: badge + domain name + platform/IP badges
+                        // DNS column: horizontal badges above domain name
                         ui.vertical(|ui| {
                             ui.spacing_mut().item_spacing.y = 2.0;
 
-                            ui.add(
-                                badge(&row_for_cells.provider)
-                                    .color(BadgeColor::Primary)
-                                    .size(BadgeSize::Small),
-                            );
+                            // Badges horizontal above domain
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+
+                                ui.add(
+                                    badge(&row_for_cells.provider)
+                                        .color(BadgeColor::Primary)
+                                        .size(BadgeSize::Small),
+                                );
+
+                                if let Some(platform_id) = &row_for_cells.platform_id {
+                                    ui.add(
+                                        badge(platform_id)
+                                            .color(BadgeColor::Primary)
+                                            .size(BadgeSize::Small),
+                                    );
+                                }
+
+                                if let Some(vm_ip) = &row_for_cells.vm_external_ip {
+                                    ui.add(
+                                        badge(vm_ip)
+                                            .color(BadgeColor::Primary)
+                                            .size(BadgeSize::Small),
+                                    );
+                                }
+                            });
+
+                            // Domain name (primary text)
                             use egui_material3::theme::get_global_color;
                             ui.label(
                                 egui::RichText::new(&row_for_cells.domain)
@@ -537,24 +605,6 @@ impl DnsTab {
                                     .strong()
                                     .color(get_global_color("onSurface")),
                             );
-
-                            // Platform ID badge (if exists)
-                            if let Some(platform_id) = &row_for_cells.platform_id {
-                                ui.add(
-                                    badge(platform_id)
-                                        .color(BadgeColor::Success)
-                                        .size(BadgeSize::Small),
-                                );
-                            }
-
-                            // VM IP badge (if exists)
-                            if let Some(vm_ip) = &row_for_cells.vm_external_ip {
-                                ui.add(
-                                    badge(vm_ip)
-                                        .color(BadgeColor::Success)
-                                        .size(BadgeSize::Small),
-                                );
-                            }
                         });
                     })
                     .cell_widget(move |ui| {
@@ -758,6 +808,16 @@ impl DnsTab {
 
     fn check_ns_server_impl(&mut self, domain: &str, show_dialog: bool) {
         dure_info!("Checking NS server for domain: {}", domain);
+
+        // Log operation
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let log = NewOperationLog::new(domain, "check_ns", "dns_query")
+                .status(OperationStatus::Running);
+            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+            }
+        }
 
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
@@ -1078,6 +1138,16 @@ impl DnsTab {
     ) {
         dure_info!("Checking DNS settings for domain: {}", domain);
 
+        // Log operation
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let log = NewOperationLog::new(domain, "check_dns_settings", "cloudflare")
+                .status(OperationStatus::Running);
+            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+            }
+        }
+
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
             row.operation_state = OperationState::start(tr!("dns-operation-check-settings"));
@@ -1351,6 +1421,16 @@ impl DnsTab {
 
     fn check_https_connection_impl(&mut self, domain: &str, show_dialog: bool) {
         dure_info!("Checking HTTPS connection for domain: {}", domain);
+
+        // Log operation
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let log = NewOperationLog::new(domain, "check_https", "https_resolver")
+                .status(OperationStatus::Running);
+            if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
+                let _ = crate::storage::models::opslog::create_log(&mut conn, log);
+            }
+        }
 
         // Set operation state to InProgress
         if let Some(row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {

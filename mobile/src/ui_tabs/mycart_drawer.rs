@@ -58,8 +58,8 @@ pub fn render_drawer(
         .max_height(500.0)
         .show(ui, |ui| match active_tab {
             DrawerTab::Status => render_status_tab(ui, site, stats, seller),
-            DrawerTab::Logs => render_logs_tab(ui, logs, logs_loading),
-            DrawerTab::Operations => render_operations_tab(ui, operations, operations_loading),
+            DrawerTab::Logs => render_logs_tab(ui, logs, logs_loading, site),
+            DrawerTab::Operations => render_operations_tab(ui, operations, operations_loading, site),
             DrawerTab::Mycart => render_mycart_tab(ui, mycart_logs, mycart_loading),
             DrawerTab::XMPPProxy => render_xmppproxy_tab(ui, xmppproxy_logs, xmppproxy_loading),
             DrawerTab::Fail2BanRS => render_fail2banrs_tab(ui, fail2banrs_logs, fail2banrs_loading),
@@ -67,7 +67,26 @@ pub fn render_drawer(
 }
 
 /// Render Logs tab (installer stdout logs filtered by site, mirroring platform)
-fn render_logs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool) {
+fn render_logs_tab(ui: &mut egui::Ui, logs: &Vec<String>, loading: bool, site: &str) {
+    // Auto-refresh every 2s
+    let refresh_id = egui::Id::new("drawer_logs_last_refresh");
+    let now = std::time::Instant::now();
+    let should_refresh = ui.data(|d| {
+        d.get_temp::<std::time::Instant>(refresh_id)
+            .map(|last| now.duration_since(last).as_secs() >= 2)
+            .unwrap_or(true)
+    });
+
+    if should_refresh {
+        ui.data_mut(|d| {
+            d.insert_temp(refresh_id, now);
+            d.insert_temp(
+                egui::Id::new("drawer_action_refresh_logs"),
+                site.to_string(),
+            );
+        });
+    }
+
     ui.horizontal(|ui| {
         ui.heading("Installer Logs");
         ui.add_space(8.0);
@@ -335,7 +354,27 @@ fn render_operations_tab(
     ui: &mut egui::Ui,
     operations: &[crate::storage::models::opslog::OperationLog],
     loading: bool,
+    site: &str,
 ) {
+    // Auto-refresh every 2s
+    let refresh_id = egui::Id::new("drawer_ops_last_refresh");
+    let now = std::time::Instant::now();
+    let should_refresh = ui.data(|d| {
+        d.get_temp::<std::time::Instant>(refresh_id)
+            .map(|last| now.duration_since(last).as_secs() >= 2)
+            .unwrap_or(true)
+    });
+
+    if should_refresh {
+        ui.data_mut(|d| {
+            d.insert_temp(refresh_id, now);
+            d.insert_temp(
+                egui::Id::new("drawer_action_refresh_operations"),
+                site.to_string(),
+            );
+        });
+    }
+
     ui.add_space(8.0);
 
     if loading {
