@@ -87,32 +87,46 @@ RecentFixes {
 
 ```sudo
 interface EntryPoints {
-  constraint: Platform-specific entry points with shared core via lib.rs
+  constraint {
+    Platform-specific entry points with shared core via lib.rs
+  }
   
   lib.rs {
     // Library exports and core module declarations
     modules: [api, attestation, calc, i18n, logging, site, storage]
     platform_modules: [android, config, config_migration]
     gui_modules: [ui_components, ui_dlg, ui_tabs, viewmodel, dure]
-    constraint: Feature-gated GUI modules (#[cfg(feature = "gui")])
+    
+    constraint {
+      Feature-gated GUI modules (#[cfg(feature = "gui")])
+    }
   }
   
   main.rs {
     // Desktop entry point (Linux/macOS/Windows)
     fn main() => eframe::run_native(DureApp)
-    constraint: Loads config, theme, spawns GUI
+    
+    constraint {
+      Loads config, theme, spawns GUI
+    }
   }
   
   main_android.rs {
     // Android entry point (native-activity)
     fn android_main(app: AndroidApp) => eframe::run_native(DureApp)
-    constraint: Android-specific initialization (JNI, ndk-context)
+    
+    constraint {
+      Android-specific initialization (JNI, ndk-context)
+    }
   }
   
   main_wasm.rs {
     // WASM entry point (browser)
     fn main() => eframe::start_web(DureApp)
-    constraint: WASM-specific initialization
+    
+    constraint {
+      WASM-specific initialization
+    }
   }
 }
 ```
@@ -130,19 +144,28 @@ interface CoreModules {
     
     fn load_config(profile: &str) -> Config
     fn save_config(config: &Config)
-    constraint: Profile-scoped config paths
+    
+    constraint {
+      Profile-scoped config paths
+    }
   }
   
   config_migration.rs {
     // Migrate legacy config formats
     fn migrate_config_v1_to_v2()
-    constraint: Desktop only (#[cfg(not(target_arch = "wasm32"))])
+    
+    constraint {
+      Desktop only (#[cfg(not(target_arch = "wasm32"))])
+    }
   }
   
   logging.rs {
     // Logging setup with platform-specific backends
     fn setup_logger(level: LevelFilter)
-    constraint: Android uses android_logger, desktop uses env_logger
+    
+    constraint {
+      Android uses android_logger, desktop uses env_logger
+    }
   }
   
   logging_test.rs {
@@ -157,14 +180,20 @@ interface CoreModules {
   i18n.rs {
     // Internationalization setup
     fn setup_i18n() -> I18n
-    constraint: Loads translations from embedded resources
+    
+    constraint {
+      Loads translations from embedded resources
+    }
   }
   
   install.rs {
     // Installation utilities
     fn install_server()
     fn setup_systemd_service()
-    constraint: Desktop only
+    
+    constraint {
+      Desktop only
+    }
   }
   
   install_stt.rs {
@@ -185,7 +214,9 @@ interface CoreModules {
       fn update(&mut self, ctx: &Context, frame: &mut Frame)
     }
     
-    constraint: Material3 theme, actor-based updates
+    constraint {
+      Material3 theme, actor-based updates
+    }
   }
   
   dure_stt.rs {
@@ -215,7 +246,9 @@ interface CoreModules {
 
 ```sudo
 interface AndroidModule {
-  constraint: Platform-specific Android utilities (#[cfg(target_os = "android")])
+  constraint {
+    Platform-specific Android utilities (#[cfg(target_os = "android")])
+  }
   
   mod.rs {
     // Module exports
@@ -284,7 +317,10 @@ interface ApiModule {
     // GitHub API integration
     fn get_latest_release() -> Result<Release>
     fn download_artifact(url: &str) -> Result<Vec<u8>>
-    constraint: Used for attestation verification
+    
+    constraint {
+      Used for attestation verification
+    }
   }
   
   mycart.rs {
@@ -298,9 +334,11 @@ interface ApiModule {
     fn read_log_file(host_config: &SshHostConfig, log_name: &str, tail_lines: usize) -> Result<String>
     
     // Recent fix (2026-11-21): Flexible JSON parsing
-    constraint: get_crontab() handles both array and map response formats
-    constraint: Backward compatible with multiple API versions
-    constraint: Logs response format (array/map/other) for debugging
+    constraint {
+      get_crontab() handles both array and map response formats
+      Backward compatible with multiple API versions
+      Logs response format (array/map/other) for debugging
+    }
   }
   
   // DNS provider APIs
@@ -422,12 +460,18 @@ interface AttestationModule {
   
   download.rs {
     fn download_attestation(artifact_url: &str) -> Result<Attestation>
-    constraint: Downloads from GitHub releases
+    
+    constraint {
+      Downloads from GitHub releases
+    }
   }
   
   verify.rs {
     fn verify_attestation(binary: &[u8], attestation: Attestation) -> Result<VerificationResult>
-    constraint: Uses Sigstore verification, checks certificate chain
+    
+    constraint {
+      Uses Sigstore verification, checks certificate chain
+    }
   }
 }
 ```
@@ -440,7 +484,9 @@ Business logic layer - profile-scoped operations.
 
 ```sudo
 interface CalcModule {
-  constraint: All operations scoped to ProfileContext
+  constraint {
+    All operations scoped to ProfileContext
+  }
   
   mod.rs {
     // Module exports
@@ -458,7 +504,9 @@ interface CalcModule {
     fn load_profile(store_id: &str) -> Result<ProfileContext>
     fn list_profiles() -> Result<Vec<Profile>>
     
-    constraint: Scopes all DB/file operations to profile
+    constraint {
+      Scopes all DB/file operations to profile
+    }
   }
   
   db.rs {
@@ -468,7 +516,9 @@ interface CalcModule {
     fn query_vms(profile: &ProfileContext) -> Result<Vec<Vm>>
     fn insert_vm(vm: Vm, profile: &ProfileContext) -> Result<()>
     
-    constraint: All queries filtered by profile.store_id
+    constraint {
+      All queries filtered by profile.store_id
+    }
   }
   
   crypt.rs {
@@ -477,7 +527,9 @@ interface CalcModule {
     fn encrypt(data: &[u8], recipient_pk: PublicKey) -> Result<Vec<u8>>
     fn decrypt(encrypted: &[u8], sk: SecretKey) -> Result<Vec<u8>>
     
-    constraint: Uses Ed25519/X25519 key pairs
+    constraint {
+      Uses Ed25519/X25519 key pairs
+    }
   }
   
   keyring.rs {
@@ -486,7 +538,9 @@ interface CalcModule {
     fn retrieve_key(domain: &str) -> Result<(String, String)>
     fn delete_key(domain: &str) -> Result<()>
     
-    constraint: Platform-specific (keychain/secret-service/DPAPI)
+    constraint {
+      Platform-specific (keychain/secret-service/DPAPI)
+    }
   }
   
   audit.rs {
@@ -508,7 +562,9 @@ interface CalcModule {
     fn lookup_aaaa(domain: &str) -> Result<Vec<Ipv6Addr>>
     fn lookup_txt(domain: &str) -> Result<Vec<String>>
     
-    constraint: Caches results, uses multiple resolvers
+    constraint {
+      Caches results, uses multiple resolvers
+    }
   }
   
   ssh.rs {
@@ -517,7 +573,9 @@ interface CalcModule {
     fn execute_command(session: &SshSession, cmd: &str) -> Result<String>
     fn upload_file(session: &SshSession, local: &Path, remote: &str) -> Result<()>
     
-    constraint: Uses russh (pure Rust SSH)
+    constraint {
+      Uses russh (pure Rust SSH)
+    }
   }
   
   docker.rs {
@@ -555,7 +613,9 @@ interface CalcModule {
       fn compute_project_status(platform: &CloudPlatformConfig, current_ip: &str, whitelisted: bool) -> String
     }
     
-    constraint: Calls api::gcp, stores state in DB
+    constraint {
+      Calls api::gcp, stores state in DB
+    }
   }
   
   mycart.rs {
@@ -577,8 +637,10 @@ interface CalcModule {
     fn load_site_operations(site_address: &str, limit: i64) -> Result<Vec<OperationLog>>
     
     // Recent fix (2026-11-21): SSH host resolution
-    constraint: resolve_ssh_host_for_site() supports explicit binding + domain/IP fallback
-    constraint: Used by CheckDureMycart, CheckXmppProxy, CheckFail2BanRS in ui_tabs/mycart.rs
+    constraint {
+      resolve_ssh_host_for_site() supports explicit binding + domain/IP fallback
+      Used by CheckDureMycart, CheckXmppProxy, CheckFail2BanRS in ui_tabs/mycart.rs
+    }
   }
   
   mycart_tests.rs {
@@ -591,7 +653,9 @@ interface CalcModule {
     test_crontab_response_array_format()
     test_crontab_response_map_format()
     
-    constraint: Tests SSH resolution logic and API response parsing
+    constraint {
+      Tests SSH resolution logic and API response parsing
+    }
   }
   
   dure_mycart.rs {
@@ -613,7 +677,9 @@ Command-line interface implementation.
 
 ```sudo
 interface CliModule {
-  constraint: Reuses ViewModel actors for headless operation
+  constraint {
+    Reuses ViewModel actors for headless operation
+  }
   
   mod.rs {
     // CLI definition (clap)
@@ -721,7 +787,9 @@ Database schema, models, and migrations.
 
 ```sudo
 interface StorageModule {
-  constraint: Diesel ORM with SQLite (PostgreSQL support)
+  constraint {
+    Diesel ORM with SQLite (PostgreSQL support)
+  }
   
   mod.rs {
     // Storage module exports
@@ -810,7 +878,9 @@ Reusable GUI components.
 
 ```sudo
 interface UiComponentsModule {
-  constraint: Feature-gated (#[cfg(feature = "gui")])
+  constraint {
+    Feature-gated (#[cfg(feature = "gui")])
+  }
   
   mod.rs {
     // Component exports
@@ -872,7 +942,9 @@ Modal dialogs for GUI.
 
 ```sudo
 interface UiDialogsModule {
-  constraint: Feature-gated (#[cfg(feature = "gui")])
+  constraint {
+    Feature-gated (#[cfg(feature = "gui")])
+  }
   
   mod.rs {
     // Dialog exports
@@ -1004,7 +1076,9 @@ Main application tabs for GUI.
 
 ```sudo
 interface UiTabsModule {
-  constraint: Feature-gated (#[cfg(feature = "gui")])
+  constraint {
+    Feature-gated (#[cfg(feature = "gui")])
+  }
   
   mod.rs {
     // Tab exports
@@ -1015,7 +1089,9 @@ interface UiTabsModule {
     struct PlatformTab { vms: Vec<Vm>, selected: Option<String> }
     fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
     
-    constraint: Sends PlatformCommand to actor, receives PlatformEvent
+    constraint {
+      Sends PlatformCommand to actor, receives PlatformEvent
+    }
   }
   
   platform_stt.rs {
@@ -1027,7 +1103,9 @@ interface UiTabsModule {
     struct SshTab { hosts: Vec<SshHost>, selected: Option<String> }
     fn show(ui: &mut Ui, viewmodel: &ViewModel, profile: &ProfileContext)
     
-    constraint: Sends SshCommand to actor, receives SshEvent
+    constraint {
+      Sends SshCommand to actor, receives SshEvent
+    }
   }
   
   ssh_stt.rs {
@@ -1066,9 +1144,11 @@ Actor-based MVVM layer coordinating business logic and UI.
 
 ```sudo
 interface ViewModelModule {
-  constraint: Actor-based with smol async runtime
-  constraint: Profile-scoped operations
-  constraint: UI → ViewModel (actors) → Calc/Api (no direct UI → Calc/Api calls)
+  constraint {
+    Actor-based with smol async runtime
+    Profile-scoped operations
+    UI → ViewModel (actors) → Calc/Api (no direct UI → Calc/Api calls)
+  }
   
   mod.rs {
     // ViewModel coordinator
@@ -1088,7 +1168,9 @@ interface ViewModelModule {
     fn send_command(&self, cmd: Command)
     fn poll_events(&mut self) -> Vec<ViewModelEvent>
     
-    constraint: Spawns actor threads, routes commands, aggregates events
+    constraint {
+      Spawns actor threads, routes commands, aggregates events
+    }
   }
   
   common.rs {
@@ -1117,7 +1199,9 @@ interface ViewModelModule {
   
   platform/ {
     // Platform actor: GCP VM management + billing drawer
-    constraint: Drawer UI pattern (operations + logs tabs)
+    constraint {
+      Drawer UI pattern (operations + logs tabs)
+    }
     
     mod.rs {
       pub use actor::PlatformActor;
@@ -1143,8 +1227,10 @@ interface ViewModelModule {
       // Commands: ListVms, CreateVm, DeleteVm, StartVm, StopVm, RestartVm,
       //           GetFirewallRules, UpdateFirewallRule, GetSshStatus
       
-      constraint: Calls api::gcp::* (compute, billing, dns)
-      constraint: Stores state in calc::db
+      constraint {
+        Calls api::gcp::* (compute, billing, dns)
+        Stores state in calc::db
+      }
     }
     
     commands.rs {
@@ -1206,7 +1292,9 @@ interface ViewModelModule {
   
   ssh/ {
     // SSH actor: host/container management + operations drawer
-    constraint: Drawer UI pattern (operations + logs tabs)
+    constraint {
+      Drawer UI pattern (operations + logs tabs)
+    }
     
     mod.rs {
       pub use actor::SshActor;
@@ -1231,8 +1319,10 @@ interface ViewModelModule {
       //           ExecuteCommand, DeployContainer, ListContainers,
       //           StartContainer, StopContainer, GetLogs
       
-      constraint: Calls calc::ssh::* (connect, execute, upload)
-      constraint: Calls calc::docker::* (deploy, list, control)
+      constraint {
+        Calls calc::ssh::* (connect, execute, upload)
+        Calls calc::docker::* (deploy, list, control)
+      }
     }
     
     commands.rs {
@@ -1280,7 +1370,9 @@ interface ViewModelModule {
   
   logs/ {
     // Logs actor: unified operation logging for all tabs
-    constraint: Used by platform, ssh, mycart, dns for operation tracking
+    constraint {
+      Used by platform, ssh, mycart, dns for operation tracking
+    }
     
     mod.rs {
       pub use actor::{LogsActor, LogsCommand, LogsEvent};
@@ -1313,7 +1405,9 @@ interface ViewModelModule {
       
       fn spawn() -> (Sender<OpsLogCommand>, Receiver<OpsLogEvent>)
       
-      constraint: Per-tab operation logging (platform, ssh, mycart, dns)
+      constraint {
+        Per-tab operation logging (platform, ssh, mycart, dns)
+      }
     }
     
     opslog_commands.rs {
@@ -1344,8 +1438,10 @@ interface ViewModelModule {
   mycart/ {
     // Mycart actor: remote backend API + SSH log fetching
     // Status: PLANNED (not implemented)
-    constraint: Drawer UI pattern (operations + logs tabs)
-    constraint: Dual mode - REST API + SSH logs
+    constraint {
+      Drawer UI pattern (operations + logs tabs)
+      Dual mode - REST API + SSH logs
+    }
     
     mod.rs {
       // pub use actor::MycartActor;
@@ -1362,15 +1458,19 @@ interface ViewModelModule {
     //         ProductCreated(Product), OrdersListed(Vec<Order>),
     //         LogsFetched(String), LogsStreaming(String)
     
-    constraint: REST API - https://mycart.dure.app/api/_/*
-    constraint: SSH logs - /var/log/mycart/app.log, nginx, syslog
+    constraint {
+      REST API - https://mycart.dure.app/api/_/*
+      SSH logs - /var/log/mycart/app.log, nginx, syslog
+    }
   }
   
   dns/ {
     // DNS actor: Cloudflare DNS management
     // Status: PLANNED (not implemented)
-    constraint: Drawer UI pattern (operations + logs tabs)
-    constraint: Cloudflare API only (extracted from ui_tabs/ssh)
+    constraint {
+      Drawer UI pattern (operations + logs tabs)
+      Cloudflare API only (extracted from ui_tabs/ssh)
+    }
     
     mod.rs {
       // pub use actor::DnsActor;
@@ -1386,7 +1486,9 @@ interface ViewModelModule {
     //         RecordCreated(DnsRecord), RecordUpdated(DnsRecord),
     //         RecordDeleted(String)
     
-    constraint: Uses api::cloudflare::dns (zone mgmt, record CRUD)
+    constraint {
+      Uses api::cloudflare::dns (zone mgmt, record CRUD)
+    }
   }
 }
 ```
@@ -1413,7 +1515,9 @@ FileCounts {
     root: 17
   }
   
-  constraint: All files profile-scoped except entry points and platform utilities
+  constraint {
+    All files profile-scoped except entry points and platform utilities
+  }
 }
 ```
 
@@ -1423,7 +1527,9 @@ FileCounts {
 
 ```sudo
 OnCodeChange {
-  constraint: Update this document when adding/removing/renaming files
+  constraint {
+    Update this document when adding/removing/renaming files
+  }
   
   AddNewFile {
     1. Create file in appropriate module
@@ -1457,8 +1563,10 @@ OnCodeChange {
 
 ```sudo
 Relationship {
-  constraint: ARCH.sudolang.md = high-level architecture
-  constraint: SUDOLANG.md (this) = code-level structure
+  constraint {
+    ARCH.sudolang.md = high-level architecture
+    SUDOLANG.md (this) = code-level structure
+  }
   
   ARCH.sudolang.md {
     // Shows: layers, actors, data flow, patterns

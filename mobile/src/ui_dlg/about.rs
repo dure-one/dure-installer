@@ -79,8 +79,8 @@ impl DlgAbout {
                 // Website
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!("{}: ", website_label));
-                    if ui.button("https://dure.pages.dev").clicked() {
-                        if let Err(e) = webbrowser::open("https://dure.pages.dev") {
+                    if ui.button("https://installer.dure.app").clicked() {
+                        if let Err(e) = webbrowser::open("https://installer.dure.app") {
                             dure_error!("Failed to open website URL: {}", e);
                         }
                     }
@@ -99,26 +99,63 @@ impl DlgAbout {
 
                 ui.heading(tr!("about-reference-projects"));
                 ui.add_space(4.0);
-                ui.label("• bevy_game_template");
+
+                // bevy_game_template
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("• ");
+                    if ui.link("bevy_game_template").clicked() {
+                        if let Err(e) = webbrowser::open("https://github.com/NiklasEi/bevy_game_template") {
+                            dure_error!("Failed to open URL: {}", e);
+                        }
+                    }
+                });
                 ui.label("  Template for Bevy game projects");
                 ui.label("  License: MIT/Apache-2.0");
                 ui.add_space(2.0);
-                ui.label("• chatGPTBox");
-                ui.label("  ChatGPT browser extension");
-                ui.label("  License: MIT");
-                ui.add_space(2.0);
-                ui.label("• android-activity");
-                ui.label("  Android activity glue crate");
+
+                // android-activity
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("• ");
+                    if ui.link("android-activity").clicked() {
+                        if let Err(e) = webbrowser::open("https://github.com/rust-mobile/android-activity") {
+                            dure_error!("Failed to open URL: {}", e);
+                        }
+                    }
+                });
+                ui.label("  Android activity glue for Rust apps");
                 ui.label("  License: MIT/Apache-2.0");
+                ui.add_space(2.0);
+
+                // outline-apps
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("• ");
+                    if ui.link("outline-apps").clicked() {
+                        if let Err(e) = webbrowser::open("https://github.com/OutlineFoundation/outline-apps") {
+                            dure_error!("Failed to open URL: {}", e);
+                        }
+                    }
+                });
+                ui.label("  VPN client applications");
+                ui.label("  License: Apache-2.0");
 
                 ui.add_space(12.0);
                 ui.heading(tr!("about-rust-libraries"));
                 ui.add_space(4.0);
+
+                // UI Framework
                 ui.add(
                     egui::Label::new("• egui - Immediate mode GUI library (MIT/Apache-2.0)").wrap(),
                 );
                 ui.add(
-                    egui::Label::new("• diesel - Type-safe ORM and query builder (MIT/Apache-2.0)")
+                    egui::Label::new("• eframe - Framework for egui apps (MIT/Apache-2.0)")
+                        .wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• winit - Cross-platform window creation (Apache-2.0)")
+                        .wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• egui-material3 - Material3 theme for egui (MIT/Apache-2.0)")
                         .wrap(),
                 );
                 ui.add(
@@ -127,9 +164,47 @@ impl DlgAbout {
                     )
                     .wrap(),
                 );
+
+                ui.add_space(4.0);
+
+                // Async Runtime & Networking
+                ui.add(
+                    egui::Label::new("• smol - Lightweight async runtime (MIT/Apache-2.0)").wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• russh - Pure Rust SSH implementation (MIT/Apache-2.0)")
+                        .wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• ureq - Minimal HTTP client (MIT/Apache-2.0)").wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• rustls - Modern TLS library (Apache-2.0/ISC/MIT)").wrap(),
+                );
+
+                ui.add_space(4.0);
+
+                // Database & Storage
+                ui.add(
+                    egui::Label::new("• diesel - Type-safe ORM and query builder (MIT/Apache-2.0)")
+                        .wrap(),
+                );
+                ui.add(
+                    egui::Label::new("• keepass - KeePass database library (MIT)").wrap(),
+                );
+
+                ui.add_space(4.0);
+
+                // Cryptography
                 ui.add(
                     egui::Label::new(
-                        "• winit - Cross-platform window creation and management (Apache-2.0)",
+                        "• x25519-dalek - X25519 key exchange (BSD-3-Clause)",
+                    )
+                    .wrap(),
+                );
+                ui.add(
+                    egui::Label::new(
+                        "• chacha20poly1305 - Authenticated encryption (MIT/Apache-2.0)",
                     )
                     .wrap(),
                 );
