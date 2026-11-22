@@ -33,7 +33,8 @@ impl DlgAbout {
         self.do_check_update = false;
         self.do_perform_update = false;
 
-        let version = env!("CARGO_PKG_VERSION");
+        // Use APP_VERSION from build.rs (git tag or master-{hash})
+        let version = option_env!("APP_VERSION").unwrap_or("0.0.0-dev");
         let git_describe = option_env!("GIT_DESCRIBE").unwrap_or(version);
         let git_commit = option_env!("GIT_COMMIT").unwrap_or("unknown");
         let build_date = option_env!("BUILD_DATE").unwrap_or("unknown");

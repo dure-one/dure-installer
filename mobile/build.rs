@@ -158,9 +158,9 @@ fn validate_translations() {
 }
 
 fn inject_git_version() {
-    // Get git describe output (version + commit hash)
-    let git_describe = std::process::Command::new("git")
-        .args(["describe", "--tags", "--always", "--dirty"])
+    // Try to get the latest git tag
+    let git_tag = std::process::Command::new("git")
+        .args(["describe", "--tags", "--exact-match", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -170,11 +170,9 @@ fn inject_git_version() {
                 None
             }
         })
-        .unwrap_or_else(|| "unknown".to_string())
-        .trim()
-        .to_string();
+        .map(|s| s.trim().to_string());
 
-    // Get commit hash
+    // Get commit hash (short)
     let git_commit = std::process::Command::new("git")
         .args(["rev-parse", "--short=8", "HEAD"])
         .output()
@@ -190,9 +188,35 @@ fn inject_git_version() {
         .trim()
         .to_string();
 
+    // Determine app version
+    let app_version = if let Some(tag) = git_tag {
+        // Tagged build: use tag (remove 'v' prefix if present)
+        tag.strip_prefix('v').unwrap_or(&tag).to_string()
+    } else {
+        // Untagged build: use master-{hash}
+        format!("master-{}", git_commit)
+    };
+
+    // Get git describe for additional info
+    let git_describe = std::process::Command::new("git")
+        .args(["describe", "--tags", "--always", "--dirty"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| format!("master-{}", git_commit))
+        .trim()
+        .to_string();
+
     // Get build date (UTC)
     let build_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
+    println!("cargo:rustc-env=APP_VERSION={}", app_version);
     println!("cargo:rustc-env=GIT_DESCRIBE={}", git_describe);
     println!("cargo:rustc-env=GIT_COMMIT={}", git_commit);
     println!("cargo:rustc-env=BUILD_DATE={}", build_date);
