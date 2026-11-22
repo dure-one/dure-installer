@@ -76,17 +76,20 @@ impl MycartActor {
             MycartCommand::LoadMycartLogs {
                 site_address,
                 limit,
-            } => self.load_mycart_logs(site_address, limit).await,
+                profile_kdbx,
+            } => self.load_mycart_logs(site_address, limit, profile_kdbx).await,
 
             MycartCommand::LoadXMPPProxyLogs {
                 site_address,
                 limit,
-            } => self.load_xmppproxy_logs(site_address, limit).await,
+                profile_kdbx,
+            } => self.load_xmppproxy_logs(site_address, limit, profile_kdbx).await,
 
             MycartCommand::LoadFail2BanRSLogs {
                 site_address,
                 limit,
-            } => self.load_fail2banrs_logs(site_address, limit).await,
+                profile_kdbx,
+            } => self.load_fail2banrs_logs(site_address, limit, profile_kdbx).await,
 
             MycartCommand::ListCrontab { site_address } => self.list_crontab(site_address).await,
 
@@ -141,6 +144,7 @@ impl MycartActor {
         &mut self,
         site_address: String,
         _limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Mycart logs for {}", site_address);
 
@@ -167,8 +171,7 @@ impl MycartActor {
             host_config.host
         );
 
-        // ponytail: keyring loading - pass None for now, SSH uses password from config
-        let logs = mycart::get_duremycart_logs(host_config, None).await?;
+        let logs = mycart::get_duremycart_logs(host_config, profile_kdbx.as_ref()).await?;
 
         self.send_event(MycartEvent::MycartLogsLoaded { site_address, logs })
             .await;
@@ -180,6 +183,7 @@ impl MycartActor {
         &mut self,
         site_address: String,
         _limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading XMPPProxy logs for {}", site_address);
 
@@ -200,8 +204,7 @@ impl MycartActor {
             host_config.host
         );
 
-        // ponytail: keyring loading - pass None for now, SSH uses password from config
-        let logs = mycart::get_xmppproxy_logs(host_config, None).await?;
+        let logs = mycart::get_xmppproxy_logs(host_config, profile_kdbx.as_ref()).await?;
 
         self.send_event(MycartEvent::XMPPProxyLogsLoaded { site_address, logs })
             .await;
@@ -213,6 +216,7 @@ impl MycartActor {
         &mut self,
         site_address: String,
         _limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
         dure_info!("[MycartActor] Loading Fail2BanRS logs for {}", site_address);
 
@@ -233,8 +237,7 @@ impl MycartActor {
             host_config.host
         );
 
-        // ponytail: keyring loading - pass None for now, SSH uses password from config
-        let logs = mycart::get_fail2banrs_logs(host_config, None).await?;
+        let logs = mycart::get_fail2banrs_logs(host_config, profile_kdbx.as_ref()).await?;
 
         self.send_event(MycartEvent::Fail2BanRSLogsLoaded { site_address, logs })
             .await;

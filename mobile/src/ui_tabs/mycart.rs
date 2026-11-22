@@ -321,6 +321,7 @@ impl MycartTab {
         current_profile: &Option<ProfileContext>,
         ui: &mut egui::Ui,
         mut vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         // Poll for ViewModel events
         if let Some(ref mut viewmodel) = vm {
@@ -377,7 +378,7 @@ impl MycartTab {
 
         // Data table
         let table_height = ui.available_height() - 20.0;
-        self.render_table(current_profile, ui, table_height, vm.as_deref_mut());
+        self.render_table(current_profile, ui, table_height, vm.as_deref_mut(), current_profile_kdbx);
 
         // Dialogs
         if self.show_add_dialog {
@@ -413,9 +414,10 @@ impl MycartTab {
                                 enabled,
                             },
                             None,
+                            current_profile_kdbx,
                         );
                         // Reload crontab to show updated state
-                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None);
+                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None, current_profile_kdbx);
                     }
                     CrontabAction::SetInterval { job_id, interval } => {
                         self.handle_action(
@@ -426,9 +428,10 @@ impl MycartTab {
                                 interval,
                             },
                             None,
+                            current_profile_kdbx,
                         );
                         // Reload crontab to show updated state
-                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None);
+                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None, current_profile_kdbx);
                     }
                     CrontabAction::UpdateJob { job_id, patch } => {
                         dure_info!(
@@ -444,9 +447,10 @@ impl MycartTab {
                                 patch,
                             },
                             None,
+                            current_profile_kdbx,
                         );
                         // Reload crontab to show updated state
-                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None);
+                        self.handle_action(current_profile, MycartAction::OpenCrontabDialog(site), None, current_profile_kdbx);
                     }
                 }
             }
@@ -555,6 +559,7 @@ impl MycartTab {
         ui: &mut egui::Ui,
         _height: f32,
         vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         // Calculate responsive column widths
         let available_width = ui.available_width() - 40.0;
@@ -610,7 +615,7 @@ impl MycartTab {
             ui.data(|d| d.get_temp::<MycartAction>(egui::Id::new("mycart_pending_action")))
         {
             ui.data_mut(|d| d.remove::<MycartAction>(egui::Id::new("mycart_pending_action")));
-            self.handle_action(current_profile, action, vm);
+            self.handle_action(current_profile, action, vm, current_profile_kdbx);
         }
     }
 
@@ -859,6 +864,7 @@ impl MycartTab {
         current_profile: &Option<ProfileContext>,
         action: MycartAction,
         vm: Option<&mut crate::viewmodel::ViewModel>,
+        current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) {
         match action {
             MycartAction::OpenDrawer(site) => {
@@ -1082,7 +1088,7 @@ impl MycartTab {
                         };
                     }
                     if let Some(ref vm) = vm {
-                        let _ = vm.load_mycart_logs(site.clone(), 100);
+                        let _ = vm.load_mycart_logs(site.clone(), 100, (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "Mycart check triggered for {}", site);
                     }
                 }
@@ -1098,7 +1104,7 @@ impl MycartTab {
                         };
                     }
                     if let Some(ref vm) = vm {
-                        let _ = vm.load_xmppproxy_logs(site.clone(), 100);
+                        let _ = vm.load_xmppproxy_logs(site.clone(), 100, (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "XMPPProxy check triggered for {}", site);
                     }
                 }
@@ -1114,7 +1120,7 @@ impl MycartTab {
                         };
                     }
                     if let Some(ref vm) = vm {
-                        let _ = vm.load_fail2banrs_logs(site.clone(), 100);
+                        let _ = vm.load_fail2banrs_logs(site.clone(), 100, (*current_profile_kdbx).clone());
                         dure_info!(project_id = site, "Fail2BanRS check triggered for {}", site);
                     }
                 }

@@ -657,9 +657,12 @@ impl DureApp {
                         self.tab_dns.ui(ui, profile)
                     }
                 }
-                Tab::Mycart => self
-                    .tab_mycart
-                    .ui(&self.current_profile, ui, self.viewmodel.as_mut()),
+                Tab::Mycart => self.tab_mycart.ui(
+                    &self.current_profile,
+                    ui,
+                    self.viewmodel.as_mut(),
+                    &self.current_profile_kdbx,
+                ),
             },
         );
 

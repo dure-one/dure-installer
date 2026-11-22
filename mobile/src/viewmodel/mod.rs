@@ -1446,29 +1446,47 @@ impl ViewModel {
 
     // Phase 5: Removed old LoadLogs - now use service-specific commands via drawer auto-refresh
 
-    pub fn load_mycart_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+    pub fn load_mycart_logs(
+        &self,
+        site_address: String,
+        limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         self.mycart_tx
             .send_blocking(mycart::MycartCommand::LoadMycartLogs {
                 site_address,
                 limit,
+                profile_kdbx,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn load_xmppproxy_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+    pub fn load_xmppproxy_logs(
+        &self,
+        site_address: String,
+        limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         self.mycart_tx
             .send_blocking(mycart::MycartCommand::LoadXMPPProxyLogs {
                 site_address,
                 limit,
+                profile_kdbx,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
-    pub fn load_fail2banrs_logs(&self, site_address: String, limit: usize) -> anyhow::Result<()> {
+    pub fn load_fail2banrs_logs(
+        &self,
+        site_address: String,
+        limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
         self.mycart_tx
             .send_blocking(mycart::MycartCommand::LoadFail2BanRSLogs {
                 site_address,
                 limit,
+                profile_kdbx,
             })
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }

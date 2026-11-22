@@ -25,16 +25,19 @@ pub enum MycartCommand {
     LoadMycartLogs {
         site_address: String,
         limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     LoadXMPPProxyLogs {
         site_address: String,
         limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     LoadFail2BanRSLogs {
         site_address: String,
         limit: usize,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     },
 
     // Phase 4: Crontab management commands
