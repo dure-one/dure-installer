@@ -249,7 +249,7 @@ async fn handle_tunnel_connection(
     let ssh_stream = channel.into_stream().compat();
 
     // Bidirectional copy
-    use futures::{AsyncReadExt as FutAsyncReadExt, AsyncWriteExt as FutAsyncWriteExt};
+    use futures::io::{AsyncReadExt as FutAsyncReadExt, AsyncWriteExt as FutAsyncWriteExt};
     use smol::io::{AsyncReadExt as SmolAsyncReadExt, AsyncWriteExt as SmolAsyncWriteExt};
 
     let (mut local_read, mut local_write) = local_stream.split();
