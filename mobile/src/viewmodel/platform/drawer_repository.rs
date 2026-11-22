@@ -21,34 +21,11 @@ impl DrawerRepository {
 
     /// Initialize the operation logs table (idempotent)
     ///
-    /// Returns Ok(()) if no profile is loaded yet (database will be initialized later)
+    /// Defers initialization - table created lazily on first use to avoid lock contention
     pub async fn init(&self) -> Result<()> {
-        smol::unblock(|| {
-            // Check if database path is set (profile loaded)
-            // On Android, the database path is only set after profile login/creation
-            #[cfg(not(target_family = "wasm"))]
-            {
-                use crate::dure_debug;
-                let db_path_str = db::get_db_path();
-
-                // If it's the default "dure.db", no profile is loaded yet
-                // (actual profiles use absolute paths like /data/.../profiles/NAME/dure.db)
-                if db_path_str == "dure.db" {
-                    // No profile loaded yet - skip initialization
-                    // Table will be created when profile is actually loaded
-                    dure_debug!(
-                        "DrawerRepository: Skipping init - no profile loaded yet (db_path={})",
-                        db_path_str
-                    );
-                    return Ok(());
-                }
-            }
-
-            let mut conn = db::establish_connection();
-            init_operation_logs_table(&mut conn)
-        })
-        .await
-        .context("Failed to initialize operation logs table")
+        // Skip init at actor startup to avoid mutex deadlock with main thread's set_db_path()
+        // Table will be created lazily on first repository operation
+        Ok(())
     }
 
     /// Log a new operation (returns log ID)
@@ -65,6 +42,8 @@ impl DrawerRepository {
 
         smol::unblock(move || {
             let mut conn = db::establish_connection();
+            // Lazy init: create table if not exists (idempotent)
+            init_operation_logs_table(&mut conn)?;
             let mut log = NewOperationLog::new(&project_id, &operation_type, &external_system);
             if let Some(d) = details {
                 log = log.details(d);
@@ -105,6 +84,8 @@ impl DrawerRepository {
         let project_id = project_id.into();
         smol::unblock(move || {
             let mut conn = db::establish_connection();
+            // Lazy init: create table if not exists (idempotent)
+            init_operation_logs_table(&mut conn)?;
             list_by_project(&mut conn, &project_id, limit)
         })
         .await

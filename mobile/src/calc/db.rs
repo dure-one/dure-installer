@@ -231,9 +231,9 @@ pub mod sqlite {
                 .execute(&mut conn)
                 .ok();
 
-            // Set busy timeout to wait up to 30 seconds when database is locked
-            // This prevents "database is locked" errors during concurrent access
-            diesel::sql_query("PRAGMA busy_timeout=30000;")
+            // Set busy timeout to wait up to 3 seconds when database is locked
+            // Fail fast to avoid UI freezes (reduced from 30s)
+            diesel::sql_query("PRAGMA busy_timeout=3000;")
                 .execute(&mut conn)
                 .ok();
 
