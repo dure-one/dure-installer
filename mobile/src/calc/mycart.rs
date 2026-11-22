@@ -176,7 +176,6 @@ pub async fn get_site_logs(
         "fail2ban-rs-stdout.log",
         "xmpp-proxy-stdout.log",
         "xmpp-proxy-stderr.log",
-        "prosody.log",
     ];
 
     let mut logs = HashMap::new();
@@ -251,11 +250,10 @@ pub async fn get_xmppproxy_logs(
 ) -> Result<std::collections::HashMap<String, Vec<String>>> {
     let mut logs_map = std::collections::HashMap::new();
 
-    // stdout, stderr, prosody (3 files)
+    // stdout, stderr (2 files)
     for (key, filename) in [
         ("stdout", "xmpp-proxy-stdout.log"),
         ("stderr", "xmpp-proxy-stderr.log"),
-        ("prosody", "prosody.log"),
     ] {
         match mycart::read_log_file(host_config, filename, 1000, profile_keyring).await {
             Ok(content) => {
@@ -1035,7 +1033,6 @@ mod tests {
                 let logs = result.unwrap();
                 assert!(logs.contains_key("xmpp-proxy-stdout.log"));
                 assert!(logs.contains_key("xmpp-proxy-stderr.log"));
-                assert!(logs.contains_key("prosody.log"));
             }
         });
     }

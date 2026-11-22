@@ -1,7 +1,7 @@
 pub use super::add_host_dialog_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::dialog;
+use egui_material3::{dialog, MaterialInput};
 use std::cell::Cell;
 
 impl AddHostDialog {
@@ -51,25 +51,34 @@ impl AddHostDialog {
             ui.label(tr!("ssh-dialog-add-heading"));
             ui.add_space(8.0);
 
-            ui.label(tr!("ssh-dialog-add-host-label"));
-            ui.text_edit_singleline(&mut self.host);
+            ui.add(
+                MaterialInput::outlined(&mut self.host)
+                    .label(&tr!("ssh-dialog-add-host-label")),
+            );
             ui.add_space(8.0);
 
-            ui.label(tr!("ssh-dialog-add-port-label"));
-            ui.text_edit_singleline(&mut self.port);
+            ui.add(
+                MaterialInput::outlined(&mut self.port)
+                    .label(&tr!("ssh-dialog-add-port-label")),
+            );
             ui.add_space(8.0);
 
             ui.checkbox(&mut self.use_password, &tr!("ssh-dialog-add-use-password"));
             if self.use_password {
-                ui.label(tr!("ssh-dialog-add-password-label"));
-                ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
+                ui.add(
+                    MaterialInput::outlined(&mut self.password)
+                        .label(&tr!("ssh-dialog-add-password-label"))
+                        .password(true),
+                );
             }
             ui.add_space(8.0);
 
             ui.checkbox(&mut self.use_private_key, &tr!("ssh-dialog-add-use-key"));
             if self.use_private_key {
-                ui.label(tr!("ssh-dialog-add-key-path-label"));
-                ui.text_edit_singleline(&mut self.private_key_path);
+                ui.add(
+                    MaterialInput::outlined(&mut self.private_key_path)
+                        .label(&tr!("ssh-dialog-add-key-path-label")),
+                );
             }
         })
         .action(tr!("button-cancel"), || {

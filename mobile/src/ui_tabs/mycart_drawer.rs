@@ -237,7 +237,7 @@ fn render_xmppproxy_tab(
         return;
     }
 
-    // Sub-tabs: stdout | stderr | prosody
+    // Sub-tabs: stdout | stderr
     let mut active_subtab = ui
         .data(|d| d.get_temp::<usize>(egui::Id::new("xmppproxy_log_subtab")))
         .unwrap_or(0);
@@ -247,8 +247,7 @@ fn render_xmppproxy_tab(
             .id_salt("xmppproxy_log_subtabs")
             .height(32.0)
             .tab("stdout")
-            .tab("stderr")
-            .tab("prosody"),
+            .tab("stderr"),
     );
     ui.data_mut(|d| d.insert_temp(egui::Id::new("xmppproxy_log_subtab"), active_subtab));
 
@@ -258,7 +257,6 @@ fn render_xmppproxy_tab(
     let selected_file = match active_subtab {
         0 => "stdout",
         1 => "stderr",
-        2 => "prosody",
         _ => "stdout",
     };
 

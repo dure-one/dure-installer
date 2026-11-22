@@ -641,6 +641,7 @@ platform-delete-vm-manage-ips = Manage IPs in GCP Console
 platform-select-project-heading = Select Project
 platform-select-project-none = No projects found
 platform-select-project-button = Select
+platform-create-new-project = Create New Project
 
 # Platform tab - Drawer
 platform-drawer-no-vms = This platform has no VMs configured.

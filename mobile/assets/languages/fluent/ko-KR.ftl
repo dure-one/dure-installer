@@ -641,6 +641,7 @@ platform-delete-vm-manage-ips = GCP 콘솔에서 IP 관리
 platform-select-project-heading = 프로젝트 선택
 platform-select-project-none = 프로젝트를 찾을 수 없음
 platform-select-project-button = 선택
+platform-create-new-project = 새 프로젝트 만들기
 
 # Platform tab - Drawer
 platform-drawer-no-vms = 이 플랫폼에 구성된 VM이 없습니다.

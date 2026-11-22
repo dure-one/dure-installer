@@ -1,7 +1,7 @@
 pub use super::profile_create_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{dialog, MaterialButton};
+use egui_material3::{dialog, MaterialButton, MaterialInput};
 use std::cell::Cell;
 
 impl DlgProfileCreate {
@@ -152,11 +152,10 @@ impl DlgProfileCreate {
             }
 
             // Profile name input
-            ui.label(tr!("profile-name"));
             let response = ui.add(
-                egui::TextEdit::singleline(&mut self.profile_name)
-                    .hint_text(tr!("profile-name-hint"))
-                    .desired_width(ui.available_width() - 40.0),
+                MaterialInput::filled(&mut self.profile_name)
+                    .label(&tr!("profile-name"))
+                    .placeholder(&tr!("profile-name-hint")),
             );
 
             #[cfg(target_os = "android")]
@@ -178,12 +177,11 @@ impl DlgProfileCreate {
             ui.add_space(8.0);
 
             // Password input
-            ui.label(tr!("password"));
             let response = ui.add(
-                egui::TextEdit::singleline(&mut self.password)
+                MaterialInput::filled(&mut self.password)
+                    .label(&tr!("password"))
                     .password(true)
-                    .hint_text(tr!("password-hint"))
-                    .desired_width(ui.available_width() - 40.0),
+                    .placeholder(&tr!("password-hint")),
             );
 
             #[cfg(target_os = "android")]
@@ -201,12 +199,11 @@ impl DlgProfileCreate {
             ui.add_space(8.0);
 
             // Password confirmation input
-            ui.label(tr!("password-confirm"));
             let response = ui.add(
-                egui::TextEdit::singleline(&mut self.password_confirm)
+                MaterialInput::filled(&mut self.password_confirm)
+                    .label(&tr!("password-confirm"))
                     .password(true)
-                    .hint_text(tr!("password-confirm-hint"))
-                    .desired_width(ui.available_width() - 40.0),
+                    .placeholder(&tr!("password-confirm-hint")),
             );
 
             #[cfg(target_os = "android")]

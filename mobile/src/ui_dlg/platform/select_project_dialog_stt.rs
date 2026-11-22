@@ -12,6 +12,9 @@ pub enum SelectProjectAction {
         platform_name: String,
         project_id: String,
     },
+    CreateNew {
+        platform_name: String,
+    },
     Cancel,
     None,
 }

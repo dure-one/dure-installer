@@ -1,7 +1,7 @@
 pub use super::profile_login_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{dialog, MaterialButton};
+use egui_material3::{dialog, MaterialButton, MaterialInput};
 use std::cell::Cell;
 
 impl DlgProfileLogin {
@@ -93,12 +93,11 @@ impl DlgProfileLogin {
             }
 
             // Password input
-            ui.label(tr!("password"));
             let response = ui.add(
-                egui::TextEdit::singleline(&mut self.password)
+                MaterialInput::filled(&mut self.password)
+                    .label(&tr!("password"))
                     .password(true)
-                    .hint_text(tr!("password-hint"))
-                    .desired_width(ui.available_width() - 40.0),
+                    .placeholder(&tr!("password-hint")),
             );
 
             #[cfg(target_os = "android")]

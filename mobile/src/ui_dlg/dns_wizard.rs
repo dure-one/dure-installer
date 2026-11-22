@@ -9,7 +9,7 @@
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::MaterialButton;
+use egui_material3::{ListItem, MaterialButton, MaterialList, VisualDensity};
 use poll_promise::Promise;
 use serde::{Deserialize, Serialize};
 
@@ -441,13 +441,14 @@ impl DnsWizard {
 
             ui.add_space(4.0);
 
-            // Account ID input
-            ui.horizontal(|ui| {
-                ui.label(tr!("dns-wizard-step1-account-id"));
-                ui.text_edit_singleline(&mut self.cloudflare_account_id);
-            });
-
-            if self.cloudflare_account_id.is_empty() {
+            // Account ID display (read-only)
+            if !self.cloudflare_account_id.is_empty() {
+                ui.label(format!(
+                    "{}: {}",
+                    tr!("dns-wizard-step1-account-id"),
+                    self.cloudflare_account_id
+                ));
+            } else {
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 193, 7), // Warning amber
                     "Warning: Account ID required to continue",
@@ -642,7 +643,7 @@ impl DnsWizard {
         ui.separator();
         ui.add_space(4.0);
 
-        // Domain dropdown from Cloudflare account
+        // Domain list from Cloudflare account
         ui.horizontal(|ui| {
             ui.label("Select domain to use:");
 
@@ -658,29 +659,31 @@ impl DnsWizard {
         });
         ui.add_space(4.0);
 
-        egui::ComboBox::from_label("")
-            .selected_text(
-                self.selected_domain
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("Select a domain"),
-            )
-            .show_ui(ui, |ui| {
-                for domain in &self.domains_list {
-                    let domain_name = &domain.name;
-                    let zone_id = &domain.id;
-                    if ui
-                        .selectable_label(
-                            self.selected_domain.as_ref() == Some(domain_name),
-                            domain_name,
-                        )
-                        .clicked()
-                    {
-                        self.selected_domain = Some(domain_name.clone());
-                        self.selected_zone_id = Some(zone_id.clone());
+        // Material Design list for domain selection (Compact style)
+        if self.domains_list.is_empty() {
+            ui.label("No domains found. Click Refresh to load domains.");
+        } else {
+            egui::ScrollArea::vertical()
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    for domain in &self.domains_list {
+                        let domain_name = &domain.name;
+                        let zone_id = &domain.id;
+                        let is_selected = self.selected_domain.as_ref() == Some(domain_name);
+
+                        if ui
+                            .selectable_label(
+                                is_selected,
+                                format!("{}\n{}", domain_name, zone_id),
+                            )
+                            .clicked()
+                        {
+                            self.selected_domain = Some(domain_name.clone());
+                            self.selected_zone_id = Some(zone_id.clone());
+                        }
                     }
-                }
-            });
+                });
+        }
 
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             // Bottom padding (rendered first = appears at bottom)

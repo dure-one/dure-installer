@@ -65,6 +65,7 @@ impl SelectProjectDialog {
                 egui::ScrollArea::vertical()
                     .max_height(300.0)
                     .show(ui, |ui| {
+                        // Existing projects
                         for (idx, (project_id, project_name)) in
                             self.project_list.iter().enumerate()
                         {
@@ -78,6 +79,23 @@ impl SelectProjectDialog {
                             {
                                 self.selected = Some(idx);
                             }
+                        }
+
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+
+                        // "Create New Project" option at end
+                        let create_new_idx = self.project_list.len();
+                        let is_create_selected = self.selected == Some(create_new_idx);
+                        if ui
+                            .selectable_label(
+                                is_create_selected,
+                                format!("+ {}", tr!("platform-create-new-project")),
+                            )
+                            .clicked()
+                        {
+                            self.selected = Some(create_new_idx);
                         }
                     });
             }
@@ -95,10 +113,18 @@ impl SelectProjectDialog {
         if select_clicked.get() && self.selected.is_some() {
             if let Some(idx) = self.selected {
                 if idx < self.project_list.len() {
+                    // Selected existing project
                     let (project_id, _) = &self.project_list[idx];
                     let result = SelectProjectAction::Select {
                         platform_name: self.platform_name.clone(),
                         project_id: project_id.clone(),
+                    };
+                    self.close();
+                    return result;
+                } else if idx == self.project_list.len() {
+                    // Selected "Create New Project"
+                    let result = SelectProjectAction::CreateNew {
+                        platform_name: self.platform_name.clone(),
                     };
                     self.close();
                     return result;
