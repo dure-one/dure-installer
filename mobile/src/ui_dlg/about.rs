@@ -34,6 +34,10 @@ impl DlgAbout {
         self.do_perform_update = false;
 
         let version = env!("CARGO_PKG_VERSION");
+        let git_describe = option_env!("GIT_DESCRIBE").unwrap_or(version);
+        let git_commit = option_env!("GIT_COMMIT").unwrap_or("unknown");
+        let build_date = option_env!("BUILD_DATE").unwrap_or("unknown");
+
         let description = tr!("about-description");
         let website_label = tr!("about-website");
         let credits_label = tr!("about-credits");
@@ -49,11 +53,26 @@ impl DlgAbout {
             .content(|ui, _open| {
                 ui.heading(tr!("app-title"));
                 ui.add_space(8.0);
+
+                // Version info with git metadata
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!("{}: {}", tr!("about-version"), version));
+                });
 
-                    ui.add_space(8.0);
+                // Show git metadata for dev builds (when version differs from git describe)
+                if git_describe != version && !git_describe.is_empty() && git_describe != "unknown" {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!("Build: {} ({})", git_describe, build_date));
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!("Commit: {}", git_commit));
+                    });
+                }
 
+                ui.add_space(4.0);
+
+                // Update check button
+                ui.horizontal_wrapped(|ui| {
                     if update_checking {
                         ui.spinner();
                         ui.label(tr!("checking-update"));

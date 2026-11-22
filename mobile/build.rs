@@ -9,6 +9,9 @@ fn main() {
         res.compile().unwrap();
     }
 
+    // Inject git version info for dev builds
+    inject_git_version();
+
     // Embed OAuth credentials at compile time
     // Load from .env file if it exists (development)
     // Or from environment variables (CI/CD with GitHub Secrets)
@@ -152,4 +155,47 @@ fn validate_translations() {
         }
         panic!("Build failed: {} missing translation keys", missing_keys.len());
     }
+}
+
+fn inject_git_version() {
+    // Get git describe output (version + commit hash)
+    let git_describe = std::process::Command::new("git")
+        .args(["describe", "--tags", "--always", "--dirty"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+        .trim()
+        .to_string();
+
+    // Get commit hash
+    let git_commit = std::process::Command::new("git")
+        .args(["rev-parse", "--short=8", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+        .trim()
+        .to_string();
+
+    // Get build date (UTC)
+    let build_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    println!("cargo:rustc-env=GIT_DESCRIBE={}", git_describe);
+    println!("cargo:rustc-env=GIT_COMMIT={}", git_commit);
+    println!("cargo:rustc-env=BUILD_DATE={}", build_date);
+    println!("cargo:rerun-if-changed=../.git/HEAD");
+    println!("cargo:rerun-if-changed=../.git/refs/");
 }

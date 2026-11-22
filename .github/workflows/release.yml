@@ -151,15 +151,20 @@ jobs:
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
             echo "Detected version: $VERSION"
-            # Update version in Cargo.toml (compatible with both GNU and BSD sed)
+            # Update version in workspace Cargo.toml (compatible with both GNU and BSD sed)
             sed -i.bak "s/^version = .*/version = \"$VERSION\"/" ./Cargo.toml && rm -f ./Cargo.toml.bak
+            # Also update versioncode for Android builds
+            sed -i.bak "s/^versioncode = .*/versioncode = \"$VERSION\"/" ./Cargo.toml && rm -f ./Cargo.toml.bak
             echo "Updated Cargo.toml with version $VERSION"
             grep "^version = " ./Cargo.toml
+            grep "^versioncode = " ./Cargo.toml
           else
             echo "Not a tag build, skipping version update"
             VERSION=$(git describe --tags --always --dirty)
             echo "Build version: $VERSION"
           fi
+          # Export version for later steps
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@nightly
