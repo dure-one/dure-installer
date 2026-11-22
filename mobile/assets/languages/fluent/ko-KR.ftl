@@ -299,23 +299,59 @@ password-hint = 비밀번호 입력
 
 # Profile Create Dialog
 profile-create-title = 새 프로필 생성
-profile-create-heading = 새로운 프로필 생성
-profile-name = 프로필 이름:
-profile-name-hint = 프로필 이름 입력 (a-z, A-Z, 0-9, -, _)
-password-confirm = 비밀번호 확인:
-password-confirm-hint = 비밀번호 확인
-create = 생성
 
-# Delete Platform Dialog
-delete-platform-title = 플랫폼 삭제
-delete-platform-heading = 플랫폼 삭제 확인
-delete = 삭제
-remove = 제거
+# DNS Wizard Dialog
+dns-wizard-redirect-message = Cloudflare로 리디렉션되어 액세스를 승인합니다.
+dns-wizard-account-connected = 계정 연결됨
+dns-wizard-account-id-required = 경고: 계속하려면 계정 ID가 필요합니다
+dns-wizard-restart-verification = 인증 재시작
+dns-wizard-restarting-verification = OAuth 인증 재시작 중...
+dns-wizard-oauth-tooltip = OAuth 인증을 위해 브라우저를 엽니다
+dns-wizard-step2-title = 2단계: 도메인 선택
+dns-wizard-step2-have-domain = 도메인 보유
+dns-wizard-step2-label-domain = 도메인:
+dns-wizard-button-add = 추가
+dns-wizard-step2-register-domain = 도메인 등록 희망
+dns-wizard-button-search = 검색
+dns-wizard-opened-dashboard = Cloudflare 대시보드 열림
+dns-wizard-select-domain = 사용할 도메인 선택:
+dns-wizard-no-domains = 도메인을 찾을 수 없습니다. 새로고침을 클릭하여 도메인을 로드하세요.
+dns-wizard-step3-title = 3단계: VM 선택
+dns-wizard-step3-select-vm = DNS와 연결할 VM 선택:
+dns-wizard-step3-no-platforms = 사용 가능한 플랫폼이 없습니다. 먼저 플랫폼 탭에서 플랫폼을 추가하세요.
+dns-wizard-step4-title = 4단계: DNS 설정
+dns-wizard-step4-status = DNS 설정 상태:
+dns-wizard-button-setup-dns = DNS 설정
+dns-wizard-step4-overwrite-warning = DNS 설정은 도메인의 다음 값을 덮어씁니다.
+dns-wizard-starting-setup = DNS 설정 시작 중...
+dns-wizard-verified-success = DNS 레코드 확인됨 - 모든 설정이 올바릅니다
+dns-wizard-verified-missing = DNS 레코드 누락 또는 잘못됨 - 설정이 필요합니다
+dns-wizard-created-success = DNS 레코드가 성공적으로 생성 또는 업데이트되었습니다
+dns-wizard-already-exists = DNS 레코드가 이미 존재합니다 (변경 불필요)
+dns-wizard-verifying = DNS 레코드 확인 중...
+dns-wizard-setting-up = DNS 레코드 설정 중...
+dns-wizard-loading-domains = 도메인 로드 중...
+dns-wizard-adding-domain = 도메인 추가 중...
+dns-wizard-connected-label = 연결됨:
 
-# Add Platform Dialog
-add-platform-title = 플랫폼 추가
-add-platform-heading = 클라우드 플랫폼 추가
-add = 추가
+# DNS/Mycart Drawer
+drawer-operation-history = 작업 기록
+
+# Mycart Tab
+mycart-heading = 두레-마이카트
+mycart-description = Mycart API 액세스로 Mycart 관리자 설정을 관리합니다.
+mycart-button-add = Mycart 추가
+mycart-button-refresh = 새로고침
+mycart-no-profile = 프로필이 선택되지 않았습니다
+mycart-verifying = 자격 증명 확인 중...
+mycart-wasm-unavailable = WASM에서 Mycart 관리를 사용할 수 없습니다
+mycart-table-col-site = 사이트
+mycart-table-col-operations = 작업
+mycart-button-crontab = Crontab
+mycart-button-delete = 삭제
+mycart-button-check-mycart = Mycart 확인
+mycart-button-check-xmpp = XMPPProxy 확인
+mycart-button-check-fail2ban = Fail2BanRS 확인
 
 # Re-authenticate Platform Dialog
 reauth-platform-title = 플랫폼 재인증

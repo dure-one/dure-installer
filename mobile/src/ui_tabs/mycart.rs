@@ -5,6 +5,7 @@ use crate::ui_dlg::mycart_crontab::{CrontabAction, CrontabDialog};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use crate::storage::models::opslog::{NewOperationLog, OperationStatus};
 use eframe::egui;
+use egui_i18n::tr;
 use egui_material3::{data_table, dialog, MaterialButton};
 use std::cell::Cell;
 
@@ -160,13 +161,13 @@ fn render_operations_column(
         // Row 1: Crontab and Delete
         ui.horizontal(|ui| {
             if ui
-                .add(MaterialButton::outlined("Crontab").small())
+                .add(MaterialButton::outlined(&tr!("mycart-button-crontab")).small())
                 .clicked()
             {
                 *action_trigger = Some(MycartAction::OpenCrontabDialog(row.site_address.clone()));
             }
 
-            if ui.add(MaterialButton::outlined("Delete").small()).clicked() {
+            if ui.add(MaterialButton::outlined(&tr!("mycart-button-delete")).small()).clicked() {
                 *action_trigger = Some(MycartAction::Delete(row.site_address.clone()));
             }
         });
@@ -174,21 +175,21 @@ fn render_operations_column(
         // Row 2: Service check buttons
         ui.horizontal(|ui| {
             if ui
-                .add(MaterialButton::outlined("Check Mycart").small())
+                .add(MaterialButton::outlined(&tr!("mycart-button-check-mycart")).small())
                 .clicked()
             {
                 *action_trigger = Some(MycartAction::CheckDureMycart(row.site_address.clone()));
             }
 
             if ui
-                .add(MaterialButton::outlined("Check XMPPProxy").small())
+                .add(MaterialButton::outlined(&tr!("mycart-button-check-xmpp")).small())
                 .clicked()
             {
                 *action_trigger = Some(MycartAction::CheckXmppProxy(row.site_address.clone()));
             }
 
             if ui
-                .add(MaterialButton::outlined("Check Fail2BanRS").small())
+                .add(MaterialButton::outlined(&tr!("mycart-button-check-fail2ban")).small())
                 .clicked()
             {
                 *action_trigger = Some(MycartAction::CheckFail2BanRS(row.site_address.clone()));
@@ -326,27 +327,27 @@ impl MycartTab {
         }
 
         if current_profile.is_none() {
-            ui.label("No profile selected");
+            ui.label(tr!("mycart-no-profile"));
             return;
         }
 
         // Store config path for async operations
         self.config_path = Some(current_profile.as_ref().unwrap().config_file.clone());
 
-        ui.heading("Dure-Mycart");
+        ui.heading(tr!("mycart-heading"));
         ui.add_space(4.0);
-        ui.label("Manage Mycart admin settings with mycart API access.");
+        ui.label(tr!("mycart-description"));
         ui.add_space(8.0);
 
         // Action buttons
         ui.horizontal(|ui| {
-            if ui.add(MaterialButton::filled("Add Mycart")).clicked() {
+            if ui.add(MaterialButton::filled(tr!("mycart-button-add"))).clicked() {
                 let mut dialog = AddMycartDialog::new();
                 dialog.open();
                 self.add_dialog = Some(dialog);
             }
 
-            if ui.add(MaterialButton::outlined("Refresh")).clicked() {
+            if ui.add(MaterialButton::outlined(tr!("mycart-button-refresh"))).clicked() {
                 self.loaded = false;
                 self.load_error = None;
             }
@@ -397,7 +398,7 @@ impl MycartTab {
             } => {
                 if let Some(ref mut dialog) = self.add_dialog {
                     dialog.set_in_progress(true);
-                    dialog.set_status("Verifying credentials...".to_string());
+                    dialog.set_status(tr!("mycart-verifying"));
                 }
 
                 // Execute async add operation
@@ -611,7 +612,7 @@ impl MycartTab {
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.load_error = Some("Mycart management not available on WASM".to_string());
+            self.load_error = Some(tr!("mycart-wasm-unavailable"));
         }
     }
 
@@ -637,8 +638,8 @@ impl MycartTab {
             .allow_drawer(true)
             .min_row_height(80.0)
             .drawer_row_height(500.0)
-            .column("Site", col1_width, false)
-            .column("Operations", col2_width, false);
+            .column(&tr!("mycart-table-col-site"), col1_width, false)
+            .column(&tr!("mycart-table-col-operations"), col2_width, false);
 
         for row in self.rows.iter() {
             let row_for_site = row.clone();

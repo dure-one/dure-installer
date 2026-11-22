@@ -317,6 +317,59 @@ add-platform-title = Add Platform
 add-platform-heading = Add Cloud Platform
 add = Add
 
+# DNS Wizard Dialog
+dns-wizard-redirect-message = You will be redirected to Cloudflare to authorize access.
+dns-wizard-account-connected = Account connected
+dns-wizard-account-id-required = Warning: Account ID required to continue
+dns-wizard-restart-verification = Restart Verification
+dns-wizard-restarting-verification = Restarting OAuth verification...
+dns-wizard-oauth-tooltip = Opens browser for OAuth authentication
+dns-wizard-step2-title = Step 2: Domain Selection
+dns-wizard-step2-have-domain = I have domain
+dns-wizard-step2-label-domain = Domain:
+dns-wizard-button-add = Add
+dns-wizard-step2-register-domain = I want to register domain
+dns-wizard-button-search = Search
+dns-wizard-opened-dashboard = Opened Cloudflare dashboard
+dns-wizard-select-domain = Select domain to use:
+dns-wizard-no-domains = No domains found. Click Refresh to load domains.
+dns-wizard-step3-title = Step 3: VM Selection
+dns-wizard-step3-select-vm = Select VM to bind with DNS:
+dns-wizard-step3-no-platforms = No platforms available. Please add a platform in Platform tab first.
+dns-wizard-step4-title = Step 4: DNS Setup
+dns-wizard-step4-status = Status of DNS settings:
+dns-wizard-button-setup-dns = Setup DNS
+dns-wizard-step4-overwrite-warning = setup dns will overwrite to next values for your domain.
+dns-wizard-starting-setup = Starting DNS setup...
+dns-wizard-verified-success = DNS records verified - all settings correct
+dns-wizard-verified-missing = DNS records missing or incorrect - setup required
+dns-wizard-created-success = DNS records created or updated successfully
+dns-wizard-already-exists = DNS records already exist (no changes needed)
+dns-wizard-verifying = Verifying DNS records...
+dns-wizard-setting-up = Setting up DNS records...
+dns-wizard-loading-domains = Loading domains...
+dns-wizard-adding-domain = Adding domain...
+dns-wizard-connected-label = Connected:
+
+# DNS/Mycart Drawer
+drawer-operation-history = Operation History
+
+# Mycart Tab
+mycart-heading = Dure-Mycart
+mycart-description = Manage Mycart admin settings with mycart API access.
+mycart-button-add = Add Mycart
+mycart-button-refresh = Refresh
+mycart-no-profile = No profile selected
+mycart-verifying = Verifying credentials...
+mycart-wasm-unavailable = Mycart management not available on WASM
+mycart-table-col-site = Site
+mycart-table-col-operations = Operations
+mycart-button-crontab = Crontab
+mycart-button-delete = Delete
+mycart-button-check-mycart = Check Mycart
+mycart-button-check-xmpp = Check XMPPProxy
+mycart-button-check-fail2ban = Check Fail2BanRS
+
 # Re-authenticate Platform Dialog
 reauth-platform-title = Re-authenticate Platform
 reauth-platform-heading = Re-authenticate to Google Cloud

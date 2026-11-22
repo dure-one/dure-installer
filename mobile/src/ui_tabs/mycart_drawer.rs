@@ -482,7 +482,7 @@ fn render_operations_tab(
         return;
     }
 
-    ui.heading("Operation History");
+    ui.heading(tr!("drawer-operation-history"));
     ui.add_space(8.0);
 
     let renderer = crate::ui_components::drawer::OperationsRenderer::new().max_height(500.0);

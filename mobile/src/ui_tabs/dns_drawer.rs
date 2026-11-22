@@ -233,7 +233,7 @@ fn render_operations_tab(ui: &mut egui::Ui, drawer_state: &DnsDrawerState, domai
         });
     }
 
-    ui.heading("Operation History");
+    ui.heading(tr!("drawer-operation-history"));
     ui.add_space(8.0);
 
     if drawer_state.loading {

@@ -416,21 +416,22 @@ impl DnsWizard {
             // Not started OAuth yet
             if ui
                 .add(MaterialButton::filled(tr!("dns-wizard-oauth-button")))
-                .on_hover_text("Opens browser for OAuth authentication")
+                .on_hover_text(&tr!("dns-wizard-oauth-tooltip"))
                 .clicked()
             {
                 self.start_oauth();
             }
 
             ui.add_space(4.0);
-            ui.label("You will be redirected to Cloudflare to authorize access.");
+            ui.label(tr!("dns-wizard-redirect-message"));
         } else {
             // OAuth complete
             ui.label(format!(
-                "Connected: {}",
+                "{} {}",
+                tr!("dns-wizard-connected-label"),
                 self.connected_email
                     .as_ref()
-                    .unwrap_or(&"Account connected".to_string())
+                    .unwrap_or(&tr!("dns-wizard-account-connected"))
             ));
 
             if self.api_connection_ok {
@@ -451,7 +452,7 @@ impl DnsWizard {
             } else {
                 ui.colored_label(
                     egui::Color32::from_rgb(255, 193, 7), // Warning amber
-                    "Warning: Account ID required to continue",
+                    tr!("dns-wizard-account-id-required"),
                 );
             }
 
@@ -459,7 +460,7 @@ impl DnsWizard {
             if !self.api_connection_ok {
                 ui.add_space(4.0);
                 if ui
-                    .add(MaterialButton::outlined("Restart Verification"))
+                    .add(MaterialButton::outlined(&tr!("dns-wizard-restart-verification")))
                     .clicked()
                 {
                     // Clear OAuth state and restart flow
@@ -468,7 +469,7 @@ impl DnsWizard {
                     self.api_connection_ok = false;
                     self.cloudflare_account_id.clear();
                     self.progress_log
-                        .push("Restarting OAuth verification...".to_string());
+                        .push(tr!("dns-wizard-restarting-verification"));
                     dure_info!("Restarting OAuth verification flow");
                 }
             }
@@ -541,7 +542,7 @@ impl DnsWizard {
         }
 
         // ui starts
-        ui.heading("Step 2: Domain Selection");
+        ui.heading(tr!("dns-wizard-step2-title"));
         ui.add_space(4.0);
 
         // Handle fetch domains promise
@@ -562,7 +563,7 @@ impl DnsWizard {
                 }
             } else {
                 ui.spinner();
-                ui.label("Loading domains...");
+                ui.label(tr!("dns-wizard-loading-domains"));
                 ui.ctx().request_repaint();
                 self.fetch_domains_promise = Some(promise);
             }
@@ -586,24 +587,24 @@ impl DnsWizard {
                 }
             } else {
                 ui.spinner();
-                ui.label("Adding domain...");
+                ui.label(tr!("dns-wizard-adding-domain"));
                 ui.ctx().request_repaint();
                 self.add_domain_promise = Some(promise);
             }
         }
 
         // I have domain section
-        ui.heading("I have domain");
+        ui.heading(tr!("dns-wizard-step2-have-domain"));
         ui.add_space(4.0);
 
         ui.horizontal(|ui| {
-            ui.label("Domain:");
+            ui.label(tr!("dns-wizard-step2-label-domain"));
             ui.text_edit_singleline(&mut self.domain_name);
 
             ui.add_space(4.0);
             let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
             if ui
-                .add_enabled(can_add, MaterialButton::filled("Add").small())
+                .add_enabled(can_add, MaterialButton::filled(&tr!("dns-wizard-button-add")).small())
                 .clicked()
             {
                 self.add_domain_to_account(&self.domain_name.clone());
@@ -614,14 +615,14 @@ impl DnsWizard {
         ui.add_space(4.0);
 
         // I want to register domain section
-        ui.heading("I want to register domain");
+        ui.heading(tr!("dns-wizard-step2-register-domain"));
         ui.add_space(4.0);
 
         ui.horizontal(|ui| {
-            ui.label("Domain:");
+            ui.label(tr!("dns-wizard-step2-label-domain"));
             ui.text_edit_singleline(&mut self.search_query);
 
-            if ui.add(MaterialButton::filled("Search").small()).clicked() {
+            if ui.add(MaterialButton::filled(&tr!("dns-wizard-button-search")).small()).clicked() {
                 if !self.search_query.is_empty() {
                     let url = format!(
                         "https://dash.cloudflare.com/{}/domains/registrations/purchase?query={}",
@@ -633,7 +634,7 @@ impl DnsWizard {
                             .push(format!("Error: Failed to open browser: {}", e));
                     } else {
                         self.progress_log
-                            .push("Opened Cloudflare dashboard".to_string());
+                            .push(tr!("dns-wizard-opened-dashboard"));
                     }
                 }
             }
@@ -645,7 +646,7 @@ impl DnsWizard {
 
         // Domain list from Cloudflare account
         ui.horizontal(|ui| {
-            ui.label("Select domain to use:");
+            ui.label(tr!("dns-wizard-select-domain"));
 
             ui.add_space(8.0);
 
@@ -661,7 +662,7 @@ impl DnsWizard {
 
         // Material Design list for domain selection (Compact style)
         if self.domains_list.is_empty() {
-            ui.label("No domains found. Click Refresh to load domains.");
+            ui.label(tr!("dns-wizard-no-domains"));
         } else {
             egui::ScrollArea::vertical()
                 .max_height(300.0)
@@ -779,16 +780,16 @@ impl DnsWizard {
 
             // Content (reversed in bottom_up)
             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.heading("Step 3: VM Selection");
+                ui.heading(tr!("dns-wizard-step3-title"));
                 ui.add_space(4.0);
 
-                ui.label("Select VM to bind with DNS:");
+                ui.label(tr!("dns-wizard-step3-select-vm"));
                 ui.add_space(4.0);
 
                 // Platform list with dense styling
                 if self.available_platforms.is_empty() {
                     ui.label(
-                        "No platforms available. Please add a platform in Platform tab first.",
+                        tr!("dns-wizard-step3-no-platforms"),
                     );
                 } else {
                     egui::ScrollArea::vertical()
@@ -871,11 +872,11 @@ impl DnsWizard {
                         self.dns_verified = Some(*verified);
                         if *verified {
                             self.dns_operation_log
-                                .push("DNS records verified - all settings correct".to_string());
+                                .push(tr!("dns-wizard-verified-success"));
                             self.ns_records_configured = true;
                         } else {
                             self.dns_operation_log.push(
-                                "DNS records missing or incorrect - setup required".to_string(),
+                                tr!("dns-wizard-verified-missing"),
                             );
                         }
                         ui.ctx().request_repaint();
@@ -888,7 +889,7 @@ impl DnsWizard {
                 }
             } else {
                 ui.spinner();
-                ui.label("Verifying DNS records...");
+                ui.label(tr!("dns-wizard-verifying"));
                 ui.ctx().request_repaint();
                 self.verify_dns_promise = Some(promise);
                 return;
@@ -903,7 +904,7 @@ impl DnsWizard {
                         self.ns_records_configured = true;
                         self.dns_verified = Some(true);
                         self.dns_operation_log
-                            .push("DNS records created or updated successfully".to_string());
+                            .push(tr!("dns-wizard-created-success"));
                         ui.ctx().request_repaint();
                     }
                     Err(err) => {
@@ -911,7 +912,7 @@ impl DnsWizard {
                             self.ns_records_configured = true;
                             self.dns_verified = Some(true);
                             self.dns_operation_log
-                                .push("DNS records already exist (no changes needed)".to_string());
+                                .push(tr!("dns-wizard-already-exists"));
                         } else {
                             self.dns_operation_log
                                 .push(format!("Error: Failed to setup DNS records: {}", err));
@@ -921,7 +922,7 @@ impl DnsWizard {
                 }
             } else {
                 ui.spinner();
-                ui.label("Setting up DNS records...");
+                ui.label(tr!("dns-wizard-setting-up"));
                 ui.ctx().request_repaint();
                 self.create_dns_promise = Some(promise);
                 return;
@@ -929,24 +930,24 @@ impl DnsWizard {
         }
 
         // ui starts
-        ui.heading("Step 4: DNS Setup");
+        ui.heading(tr!("dns-wizard-step4-title"));
         ui.add_space(4.0);
 
-        ui.label("Status of DNS settings:");
+        ui.label(tr!("dns-wizard-step4-status"));
         ui.add_space(4.0);
 
         let dns_needs_setup = self.dns_verified != Some(true);
         let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
 
-        let setup_btn = ui.add_enabled(can_setup, MaterialButton::filled("Setup DNS").small());
+        let setup_btn = ui.add_enabled(can_setup, MaterialButton::filled(&tr!("dns-wizard-button-setup-dns")).small());
         if setup_btn.clicked() {
             self.dns_operation_log
-                .push("Starting DNS setup...".to_string());
+                .push(tr!("dns-wizard-starting-setup"));
             self.create_dns_records();
         }
 
         ui.add_space(4.0);
-        ui.label("setup dns will overwrite to next values for your domain.");
+        ui.label(tr!("dns-wizard-step4-overwrite-warning"));
         ui.add_space(4.0);
 
         ui.group(|ui| {
