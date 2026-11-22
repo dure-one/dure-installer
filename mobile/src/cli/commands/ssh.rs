@@ -150,16 +150,8 @@ pub fn execute_ssh_add(
         host: host.clone(),
         password: pass,
         private_key_path,
-        keyring_domain: None,
         port,
-        initialized: false,
-        last_status: None,
-        platform_id: None,
-        docker_containers: Vec::new(),
-        last_ssh_check: None,
-        last_host_check: None,
-        last_docker_check: None,
-        last_dure_check: None,
+        ..Default::default()
     };
 
     // Test connection before adding (russh uses tokio, wrap with async-compat)

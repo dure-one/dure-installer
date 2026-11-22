@@ -1537,18 +1537,10 @@ impl GcpWizard {
                         if let Some(external_ip) = &instance.external_ip {
                             let ssh_host = crate::config::SshHostConfig {
                                 host: format!("root@{}", external_ip),
-                                password: None,
-                                private_key_path: None,
                                 keyring_domain: Some(ssh_key_name.clone()),
-                                port: 22,
                                 initialized: true,
-                                last_status: None,
                                 platform_id: Some(self.platform_name.clone()),
-                                docker_containers: Vec::new(),
-                                last_ssh_check: None,
-                                last_host_check: None,
-                                last_docker_check: None,
-                                last_dure_check: None,
+                                ..Default::default()
                             };
 
                             // Check if SSH host already exists

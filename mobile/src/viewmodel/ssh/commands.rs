@@ -170,4 +170,22 @@ pub enum SshCommand {
         host: String,
         limit: usize,
     },
+
+    // SSH Tunnel Operations
+    /// Enable SSH tunnel for host
+    EnableTunnel {
+        host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    },
+    /// Disable SSH tunnel for host
+    DisableTunnel {
+        host: String,
+    },
+    /// Get tunnel status for host
+    GetTunnelStatus {
+        host: String,
+    },
 }

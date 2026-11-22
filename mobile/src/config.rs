@@ -272,6 +272,20 @@ pub struct SshHostConfig {
     /// Last Dure service check result
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_dure_check: Option<crate::ui_tabs::ssh::DureCheckResult>,
+
+    // SSH Tunnel configuration
+    /// Enable SSH tunnel for this host
+    #[serde(default)]
+    pub tunnel_enabled: bool,
+    /// Local port for tunnel (e.g., 8080)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tunnel_local_port: Option<u16>,
+    /// Remote host to forward to (e.g., "127.0.0.1" or "example.com")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tunnel_remote_host: Option<String>,
+    /// Remote port to forward to (e.g., 80, 443)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tunnel_remote_port: Option<u16>,
 }
 
 fn default_ssh_port() -> u16 {
@@ -311,6 +325,10 @@ impl Default for SshHostConfig {
             last_host_check: None,
             last_docker_check: None,
             last_dure_check: None,
+            tunnel_enabled: false,
+            tunnel_local_port: None,
+            tunnel_remote_host: None,
+            tunnel_remote_port: None,
         }
     }
 }

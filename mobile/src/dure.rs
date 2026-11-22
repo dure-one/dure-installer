@@ -440,7 +440,11 @@ impl eframe::App for DureApp {
 
         // Auto-refresh for SSH tab log updates (5-second window after operations)
         if self.tab_ssh.needs_refresh() {
-            ctx.request_repaint();
+            // Poll rapidly during refresh window (10 FPS)
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        } else {
+            // Poll slowly when idle to catch async events (1 FPS)
+            ctx.request_repaint_after(std::time::Duration::from_millis(1000));
         }
     }
 }

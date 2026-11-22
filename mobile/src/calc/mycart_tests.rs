@@ -10,18 +10,9 @@ mod tests {
     fn create_test_ssh_host(host: &str, platform_id: Option<&str>) -> SshHostConfig {
         SshHostConfig {
             host: host.to_string(),
-            password: None,
-            private_key_path: None,
-            keyring_domain: None,
-            port: 22,
             initialized: true,
-            last_status: None,
             platform_id: platform_id.map(String::from),
-            docker_containers: Vec::new(),
-            last_ssh_check: None,
-            last_host_check: None,
-            last_docker_check: None,
-            last_dure_check: None,
+            ..Default::default()
         }
     }
 

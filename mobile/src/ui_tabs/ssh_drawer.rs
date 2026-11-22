@@ -15,6 +15,7 @@ pub fn render_drawer(
     row: &SshRow,
     drawer_state: &DrawerState,
     on_tab_switch: &mut Option<DrawerTab>,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
 ) {
     // Tab bar (Material3 compact tabs)
     let mut temp_selected = drawer_state.active_tab.to_index();
@@ -39,7 +40,7 @@ pub fn render_drawer(
     egui::ScrollArea::vertical()
         .max_height(500.0)
         .show(ui, |ui| match drawer_state.active_tab {
-            DrawerTab::Status => render_status_tab(ui, row),
+            DrawerTab::Status => render_status_tab(ui, row, current_profile_kdbx),
             DrawerTab::Logs => render_logs_tab(ui, drawer_state),
             DrawerTab::Operations => render_operations_tab(ui, drawer_state),
             DrawerTab::Host => render_host_tab(ui, drawer_state),
@@ -48,8 +49,17 @@ pub fn render_drawer(
         });
 }
 
+/// Extract IP/domain from "username@host" format
+fn extract_ip_from_host(host: &str) -> &str {
+    host.split('@').nth(1).unwrap_or(host)
+}
+
 /// Render Status tab
-fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
+fn render_status_tab(
+    ui: &mut egui::Ui,
+    row: &SshRow,
+    current_profile_kdbx: &Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+) {
     use crate::ui_components::ActionMenu;
 
     ui.add_space(8.0);
@@ -141,6 +151,108 @@ fn render_status_tab(ui: &mut egui::Ui, row: &SshRow) {
         dure_line = dure_line.warning();
     }
     dure_line.show(ui);
+
+    // SSH Tunnel Status
+    if row.tunnel_enabled {
+        let tunnel_info = if let (Some(local_port), Some(remote_host), Some(remote_port)) = (
+            row.tunnel_local_port,
+            &row.tunnel_remote_host,
+            row.tunnel_remote_port,
+        ) {
+            format!("localhost:{} → {}:{}", local_port, remote_host, remote_port)
+        } else {
+            "Enabled (config incomplete)".to_string()
+        };
+
+        // Show tunnel status and SSH button inline
+        ui.horizontal(|ui| {
+            let mut tunnel_line = StatusLine::new("Tunnel", &tunnel_info);
+            tunnel_line = match &row.tunnel_status {
+                crate::viewmodel::ssh::TunnelStatus::Active => tunnel_line,
+                crate::viewmodel::ssh::TunnelStatus::Inactive => tunnel_line.warning(),
+                crate::viewmodel::ssh::TunnelStatus::Error(err) => tunnel_line.error(),
+            };
+            tunnel_line.show(ui);
+
+            // SSH action menu inline (match platform tab pattern)
+            if matches!(
+                row.tunnel_status,
+                crate::viewmodel::ssh::TunnelStatus::Active
+            ) {
+                // Extract IP from host string
+                let external_ip = extract_ip_from_host(&row.host);
+
+                if let (Some(platform_id), Some(keyring_domain), Some(local_port)) = (
+                    &row.platform_id,
+                    &row.keyring_domain,
+                    row.tunnel_local_port,
+                ) {
+                    // Cache key to avoid repeated loads
+                    let cache_key = format!("ssh_key_{}_{}", platform_id, keyring_domain);
+                    let cache_id = egui::Id::new(&cache_key);
+
+                    let cached_key: Option<String> = ui.data(|d| d.get_temp(cache_id));
+
+                    let private_key = if let Some(key) = cached_key {
+                        Some(key)
+                    } else if let Some(handle) = current_profile_kdbx {
+                        let (loaded_key, _) = crate::ui_tabs::platform::load_ssh_key_from_keyring(
+                            platform_id,
+                            &Some(keyring_domain.clone()),
+                            &Some(handle.clone()),
+                        );
+
+                        if let Some(ref key) = loaded_key {
+                            ui.data_mut(|d| d.insert_temp(cache_id, key.clone()));
+                        }
+
+                        loaded_key
+                    } else {
+                        None
+                    };
+
+                    if let Some(private_key) = private_key {
+                        // SSH command via tunnel: connect to localhost:port
+                        let ssh_command = format!(
+                            "K=$(mktemp) && cat > $K <<'EOF'\n{}\nEOF\nchmod 600 $K && ssh -i $K -p {} root@localhost && rm $K",
+                            private_key.trim(),
+                            local_port
+                        );
+
+                        let mut menu = ActionMenu::new("💻SSH");
+                        menu.add_action(&tr!("ssh-drawer-menu-copy-ssh"));
+                        menu.add_action(&tr!("ssh-drawer-menu-copy-key"));
+                        menu.add_action(&tr!("ssh-drawer-menu-copy-ip"));
+
+                        if let Some(action_idx) = menu.show(ui) {
+                            let text_to_copy = match action_idx {
+                                0 => ssh_command.as_str(),
+                                1 => private_key.as_str(),
+                                2 => external_ip,
+                                _ => return,
+                            };
+                            ui.ctx().copy_text(text_to_copy.to_string());
+                        }
+                    } else {
+                        // No key available - show warning (match platform pattern)
+                    StatusLine::new(
+                        &tr!("ssh-drawer-ssh-key-label"),
+                        &tr!("ssh-drawer-ssh-not-found"),
+                    )
+                    .warning()
+                    .show(ui);
+                }
+            }
+        }
+        });
+
+        // Show error if present
+        if let crate::viewmodel::ssh::TunnelStatus::Error(err) = &row.tunnel_status {
+            ui.label(format!("  Error: {}", err));
+        }
+    } else {
+        StatusLine::new("Tunnel", "Disabled").show(ui);
+    }
 
     ui.add_space(8.0);
 
@@ -375,4 +487,18 @@ fn render_dure_container_logs_subtab(
         ui.label("No logs available");
     }
     false
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_ip_from_host() {
+        assert_eq!(extract_ip_from_host("root@35.212.193.170"), "35.212.193.170");
+        assert_eq!(extract_ip_from_host("ubuntu@dure.co"), "dure.co");
+        assert_eq!(extract_ip_from_host("35.212.193.170"), "35.212.193.170");
+        assert_eq!(extract_ip_from_host("admin@192.168.1.1"), "192.168.1.1");
+    }
 }

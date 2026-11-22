@@ -313,4 +313,38 @@ pub enum SshEvent {
         host: String,
         logs: Vec<OperationLog>,
     },
+
+    // SSH Tunnel Events
+    /// Tunnel enabled successfully
+    TunnelEnabled {
+        host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+    },
+    /// Tunnel disabled successfully
+    TunnelDisabled {
+        host: String,
+    },
+    /// Tunnel status changed
+    TunnelStatusChanged {
+        host: String,
+        status: TunnelStatus,
+    },
+    /// Tunnel operation failed
+    TunnelError {
+        host: String,
+        error: String,
+    },
+}
+
+/// SSH tunnel status
+#[derive(Debug, Clone, PartialEq)]
+pub enum TunnelStatus {
+    /// Tunnel is active and accepting connections
+    Active,
+    /// Tunnel is inactive
+    Inactive,
+    /// Tunnel encountered an error
+    Error(String),
 }

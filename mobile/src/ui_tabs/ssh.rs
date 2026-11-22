@@ -120,6 +120,7 @@ pub struct SshRow {
     pub host: String, // IP address (row key)
     pub port: u16,
     pub platform_id: Option<String>, // Connected platform ID (if applicable)
+    pub keyring_domain: Option<String>, // Keyring domain for SSH key lookup
     pub username: Option<String>,    // Username extracted from host config
     pub domain: Option<String>,      // Domain or hostname if different from IP
 
@@ -146,6 +147,13 @@ pub struct SshRow {
     pub last_host_check: Option<HostCheckResult>,
     pub last_docker_check: Option<DockerCheckResult>,
     pub last_dure_check: Option<DureCheckResult>,
+
+    // SSH Tunnel state
+    pub tunnel_enabled: bool,
+    pub tunnel_local_port: Option<u16>,
+    pub tunnel_remote_host: Option<String>,
+    pub tunnel_remote_port: Option<u16>,
+    pub tunnel_status: crate::viewmodel::ssh::TunnelStatus,
 }
 
 /// Actions that can be triggered from SSH table rows
@@ -163,6 +171,7 @@ enum SshAction {
     CheckDure(String),     // host
     InstallDure(String),   // host (triggers .env dialog)
     RemoveDure(String),    // host
+    ToggleTunnel(String),  // host
 }
 
 /// Render operations column with 3 rows of conditional buttons
@@ -216,6 +225,25 @@ fn render_operations_column(
                 .clicked()
             {
                 *action_trigger = Some(SshAction::Delete(row.host.clone()));
+            }
+
+            // Tunnel toggle
+            let tunnel_label = if row.tunnel_enabled {
+                "Tunnel: ON"
+            } else {
+                "Tunnel: OFF"
+            };
+            let tunnel_button = if row.tunnel_enabled {
+                MaterialButton::filled(tunnel_label).small()
+            } else {
+                MaterialButton::outlined(tunnel_label).small()
+            };
+            if ui
+                .add(tunnel_button)
+                .on_hover_text("Toggle SSH tunnel")
+                .clicked()
+            {
+                *action_trigger = Some(SshAction::ToggleTunnel(row.host.clone()));
             }
         });
 
@@ -443,6 +471,10 @@ pub struct SshTab {
     /// Install Dure wizard dialog
     #[cfg_attr(feature = "serde", serde(skip))]
     install_dure_dialog: Option<crate::ui_dlg::ssh::install_dure::InstallDure>,
+
+    /// Track if initial tunnel cleanup has been done
+    #[cfg_attr(feature = "serde", serde(skip))]
+    initial_tunnel_cleanup_done: bool,
 }
 
 impl Default for SshTab {
@@ -462,6 +494,7 @@ impl Default for SshTab {
             remove_docker_confirm_dialog: crate::ui_dlg::ssh::RemoveDockerConfirmDialog::new(),
             refresh_until: None,
             install_dure_dialog: None,
+            initial_tunnel_cleanup_done: false,
         }
     }
 }
@@ -496,12 +529,27 @@ impl SshTab {
         #[cfg(not(target_arch = "wasm32"))]
         {
             match load_config(profile) {
-                Ok((app_config, config_path)) => {
+                Ok((mut app_config, config_path)) => {
                     // Cache config file metadata
                     if let Ok(metadata) = std::fs::metadata(&config_path) {
                         if let Ok(modified) = metadata.modified() {
                             self.config_last_modified = Some(modified);
                         }
+                    }
+
+                    // ponytail: tunnels don't survive restart, clear stale state from config (once)
+                    if !self.initial_tunnel_cleanup_done {
+                        let mut config_changed = false;
+                        for host_cfg in &mut app_config.ssh_hosts {
+                            if host_cfg.tunnel_enabled {
+                                host_cfg.tunnel_enabled = false;
+                                config_changed = true;
+                            }
+                        }
+                        if config_changed {
+                            let _ = app_config.save(&config_path);
+                        }
+                        self.initial_tunnel_cleanup_done = true;
                     }
 
                     for host_config in &app_config.ssh_hosts {
@@ -519,10 +567,19 @@ impl SshTab {
                             (None, None)
                         };
 
+                        // Use tunnel state from config (cleared on first load only)
+                        let tunnel_enabled = host_config.tunnel_enabled;
+                        let tunnel_status = if host_config.tunnel_enabled {
+                            crate::viewmodel::ssh::TunnelStatus::Active
+                        } else {
+                            crate::viewmodel::ssh::TunnelStatus::Inactive
+                        };
+
                         self.rows.push(SshRow {
                             host: host_config.host.clone(), // Keep original format for lookups
                             port: host_config.port,
                             platform_id: host_config.platform_id.clone(),
+                            keyring_domain: host_config.keyring_domain.clone(),
                             username,
                             domain,
                             ssh_connected: host_config
@@ -553,6 +610,11 @@ impl SshTab {
                             last_host_check: host_config.last_host_check.clone(),
                             last_docker_check: host_config.last_docker_check.clone(),
                             last_dure_check: host_config.last_dure_check.clone(),
+                            tunnel_enabled,
+                            tunnel_local_port: host_config.tunnel_local_port,
+                            tunnel_remote_host: host_config.tunnel_remote_host.clone(),
+                            tunnel_remote_port: host_config.tunnel_remote_port,
+                            tunnel_status,
                         });
                     }
                     self.loaded = true;
@@ -1341,6 +1403,49 @@ impl SshTab {
                 }
             }
 
+            ViewModelEvent::Ssh(SshEvent::TunnelEnabled {
+                host,
+                local_port,
+                remote_host,
+                remote_port,
+            }) => {
+                dure_info!("[EVENT] TunnelEnabled for host: {}", host);
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+                    row.tunnel_enabled = true;
+                    row.tunnel_local_port = Some(local_port);
+                    row.tunnel_remote_host = Some(remote_host.clone());
+                    row.tunnel_remote_port = Some(remote_port);
+                    row.tunnel_status = crate::viewmodel::ssh::TunnelStatus::Active;
+                    dure_info!("[EVENT] Row updated: tunnel_enabled={}, status={:?}", row.tunnel_enabled, row.tunnel_status);
+                } else {
+                    dure_warn!("[EVENT] Row not found for host: {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::TunnelDisabled { host }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    self.refresh_until = Some(Instant::now() + Duration::from_secs(5));
+                    row.tunnel_enabled = false;
+                    row.tunnel_status = crate::viewmodel::ssh::TunnelStatus::Inactive;
+                    dure_info!("Tunnel disabled for {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::TunnelStatusChanged { host, status }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.tunnel_status = status;
+                    dure_info!("Tunnel status changed for {}", host);
+                }
+            }
+
+            ViewModelEvent::Ssh(SshEvent::TunnelError { host, error }) => {
+                if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
+                    row.tunnel_status = crate::viewmodel::ssh::TunnelStatus::Error(error.clone());
+                    dure_error!("Tunnel error for {}: {}", host, error);
+                }
+            }
+
             _ => {}
         }
     }
@@ -1454,6 +1559,7 @@ impl SshTab {
             let row_for_actions = row.clone();
 
             let row_for_ops = row.clone();
+            let kdbx_for_drawer = current_profile_kdbx.clone();
             let mut action_trigger: Option<SshAction> = None;
 
             table = table.row(move |r| {
@@ -1477,6 +1583,7 @@ impl SshTab {
                         &row_for_drawer,
                         &row_for_drawer.drawer_state,
                         &mut tab_switch,
+                        &kdbx_for_drawer,
                     );
 
                     if let Some(new_tab) = tab_switch {
@@ -1717,6 +1824,34 @@ impl SshTab {
                     self.remove_dure_dialog.open(host.clone());
                     dure_info!("Opening remove Dure dialog for {}", host);
                 }
+                SshAction::ToggleTunnel(host) => {
+                    if let Some(row) = self.rows.iter().find(|r| r.host == host) {
+                        if row.tunnel_enabled {
+                            // Disable tunnel
+                            if let Some(ref vm) = vm {
+                                let _ = vm.disable_tunnel(host.clone());
+                                dure_info!("Disabling tunnel for {}", host);
+                            }
+                        } else {
+                            // Enable tunnel - ponytail: random dynamic port + SSH, add config dialog later
+                            use rand::Rng;
+                            let local_port = rand::thread_rng().gen_range(49152..=65535);
+                            let remote_host = "127.0.0.1".to_string();
+                            let remote_port = 22; // SSH port
+                            if let Some(ref vm) = vm {
+                                let _ = vm.enable_tunnel(
+                                    host.clone(),
+                                    local_port,
+                                    remote_host,
+                                    remote_port,
+                                    (*current_profile_kdbx).clone(),
+                                );
+                                dure_info!("Enabling tunnel for {}: localhost:{} -> {}:{}",
+                                    host, local_port, "127.0.0.1", remote_port);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1899,16 +2034,8 @@ impl SshTab {
                         host: host.clone(),
                         password: if use_password { Some(password) } else { None },
                         private_key_path: if use_private_key { Some(private_key_path) } else { None },
-                        keyring_domain: None,
                         port,
-                        initialized: false,
-                        last_status: None,
-                        platform_id: None,
-                        docker_containers: Vec::new(),
-                        last_ssh_check: None,
-                        last_host_check: None,
-                        last_docker_check: None,
-                        last_dure_check: None,
+                        ..Default::default()
                     };
 
                     app_config.ssh_hosts.push(host_config);
@@ -2379,12 +2506,17 @@ mod operation_state_tests {
             drawer_state,
             operation_state: OperationState::Idle,
             last_ssh_check: None,
-            last_base_check: None,
+            last_host_check: None,
             last_docker_check: None,
             last_dure_check: None,
+            tunnel_enabled: false,
+            tunnel_local_port: None,
+            tunnel_remote_host: None,
+            tunnel_remote_port: None,
+            tunnel_status: crate::viewmodel::ssh::TunnelStatus::Inactive,
         };
 
-        assert_eq!(row.host, "192.168.1.1");
+        assert_eq!(row.host, "root@192.168.1.1");
         assert_eq!(row.port, 22);
         assert!(row.platform_id.is_none());
         assert_eq!(row.operation_state, OperationState::Idle);
@@ -2426,9 +2558,14 @@ mod operation_state_tests {
                 completed_at: 1234567890,
             },
             last_ssh_check: Some(ssh_check),
-            last_base_check: None,
+            last_host_check: None,
             last_docker_check: Some(docker_check),
             last_dure_check: None,
+            tunnel_enabled: false,
+            tunnel_local_port: None,
+            tunnel_remote_host: None,
+            tunnel_remote_port: None,
+            tunnel_status: crate::viewmodel::ssh::TunnelStatus::Inactive,
         };
 
         assert!(row.last_ssh_check.is_some());
@@ -2553,6 +2690,11 @@ mod operation_state_tests {
             last_host_check: None,
             last_docker_check: None,
             last_dure_check: None,
+            tunnel_enabled: false,
+            tunnel_local_port: None,
+            tunnel_remote_host: None,
+            tunnel_remote_port: None,
+            tunnel_status: crate::viewmodel::ssh::TunnelStatus::Inactive,
         };
 
         // Host field must keep "username@ip" format (not just "ip")

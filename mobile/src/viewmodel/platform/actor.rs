@@ -2764,18 +2764,8 @@ impl PlatformActor {
             // Build SSH host config
             let host_config = crate::config::SshHostConfig {
                 host: format!("root@{}", external_ip),
-                password: None,
-                private_key_path: None,
                 keyring_domain,
-                port: 22,
-                initialized: false,
-                last_status: None,
-                platform_id: None,
-                docker_containers: Vec::new(),
-                last_ssh_check: None,
-                last_host_check: None,
-                last_docker_check: None,
-                last_dure_check: None,
+                ..Default::default()
             };
 
             // Run test connection with profile keyring

@@ -18,3 +18,6 @@ pub mod profile;
 pub mod session;
 pub mod site;
 pub mod ssh;
+#[cfg(test)]
+mod ssh_tests;
+pub mod ssh_tunnel;

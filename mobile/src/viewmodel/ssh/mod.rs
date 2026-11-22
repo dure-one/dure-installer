@@ -14,4 +14,4 @@ pub use drawer_types::{
     ContainerInfo, DockerStatus, DrawerCommand, DrawerEvent, DrawerState, DrawerTab, DureStatus,
     HostInfo,
 };
-pub use events::{DockerContainer, OperationLog, SshEvent, SshHostInfo};
+pub use events::{DockerContainer, OperationLog, SshEvent, SshHostInfo, TunnelStatus};

@@ -1149,6 +1149,33 @@ impl ViewModel {
             .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
     }
 
+    /// Enable SSH tunnel
+    pub fn enable_tunnel(
+        &self,
+        host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::EnableTunnel {
+                host,
+                local_port,
+                remote_host,
+                remote_port,
+                profile_kdbx,
+            })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
+    /// Disable SSH tunnel
+    pub fn disable_tunnel(&self, host: String) -> anyhow::Result<()> {
+        self.ssh_tx
+            .send_blocking(ssh::SshCommand::DisableTunnel { host })
+            .map_err(|e| anyhow::anyhow!("Send failed: {}", e))
+    }
+
     /// Get logs for SSH host (uses host_id)
     pub fn get_ssh_logs(&self, host: String) -> anyhow::Result<()> {
         self.logs_tx

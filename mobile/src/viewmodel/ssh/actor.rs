@@ -8,12 +8,15 @@ use crate::config::{DockerContainerConfig, SshHostConfig};
 use crate::viewmodel::{runtime, ViewModelEvent};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use smol::channel::{Receiver, Sender};
+use std::collections::HashMap;
 
 pub struct SshActor {
     command_rx: Receiver<SshCommand>,
     event_tx: Sender<ViewModelEvent>,
     profile: Option<ProfileContext>,
     repository: crate::viewmodel::platform::DrawerRepository,
+    /// Active SSH tunnels (host IP -> tunnel handle)
+    tunnels: HashMap<String, crate::calc::ssh_tunnel::TunnelHandle>,
 }
 
 impl SshActor {
@@ -27,6 +30,7 @@ impl SshActor {
             event_tx,
             profile,
             repository: crate::viewmodel::platform::DrawerRepository::new(),
+            tunnels: HashMap::new(),
         }
     }
 
@@ -236,6 +240,9 @@ impl SshActor {
             SshCommand::ListHosts => None,
             SshCommand::Drawer(_) => None,
             SshCommand::GetOperationLogs { host, .. } => Some(host.clone()),
+            SshCommand::EnableTunnel { host, .. } => Some(host.clone()),
+            SshCommand::DisableTunnel { host } => Some(host.clone()),
+            SshCommand::GetTunnelStatus { host } => Some(host.clone()),
         }
     }
 
@@ -524,6 +531,18 @@ impl SshActor {
             SshCommand::GetOperationLogs { host, limit } => {
                 self.get_operation_logs(host, limit).await
             }
+            SshCommand::EnableTunnel {
+                host,
+                local_port,
+                remote_host,
+                remote_port,
+                profile_kdbx,
+            } => {
+                self.handle_enable_tunnel(host, local_port, remote_host, remote_port, profile_kdbx)
+                    .await
+            }
+            SshCommand::DisableTunnel { host } => self.handle_disable_tunnel(host).await,
+            SshCommand::GetTunnelStatus { host } => self.handle_get_tunnel_status(host).await,
 
             // Catch-all for cfg-gated commands on Android/WASM
             #[cfg(any(target_os = "android", target_arch = "wasm32"))]
@@ -583,6 +602,10 @@ impl SshActor {
                     last_host_check: None,
                     last_docker_check: None,
                     last_dure_check: None,
+                    tunnel_enabled: false,
+                    tunnel_local_port: None,
+                    tunnel_remote_host: None,
+                    tunnel_remote_port: None,
                 };
 
                 app_config.ssh_hosts.push(ssh_host);
@@ -1775,6 +1798,26 @@ impl SshActor {
             SshEvent::OperationLogsRetrieved { host, logs } => {
                 format!("OperationLogsRetrieved({}, {} logs)", host, logs.len())
             }
+            SshEvent::TunnelEnabled {
+                host,
+                local_port,
+                remote_host,
+                remote_port,
+            } => {
+                format!(
+                    "TunnelEnabled({}, localhost:{} -> {}:{})",
+                    host, local_port, remote_host, remote_port
+                )
+            }
+            SshEvent::TunnelDisabled { host } => {
+                format!("TunnelDisabled({})", host)
+            }
+            SshEvent::TunnelStatusChanged { host, status } => {
+                format!("TunnelStatusChanged({}, {:?})", host, status)
+            }
+            SshEvent::TunnelError { host, error } => {
+                format!("TunnelError({}, {})", host, error)
+            }
         }
     }
 
@@ -2859,6 +2902,137 @@ impl SshActor {
         if let Some(id) = log_id {
             self.repository.mark_failed(id, &error_msg).await?;
         }
+        Ok(())
+    }
+
+    // SSH Tunnel handlers
+
+    async fn handle_enable_tunnel(
+        &mut self,
+        host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+        profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
+    ) -> anyhow::Result<()> {
+        dure_info!(
+            "Enabling tunnel for {}: localhost:{} -> {}:{}",
+            host,
+            local_port,
+            remote_host,
+            remote_port
+        );
+
+        // Load host config
+        let host_config = self.load_host_config(&host)?;
+
+        // Check if tunnel already exists
+        if self.tunnels.contains_key(&host) {
+            dure_warn!("Tunnel already active for {}, stopping old tunnel", host);
+            if let Some(old_tunnel) = self.tunnels.remove(&host) {
+                old_tunnel.stop().await.ok();
+            }
+        }
+
+        // Start tunnel
+        match crate::calc::ssh_tunnel::start_tunnel(
+            &host_config,
+            local_port,
+            remote_host.clone(),
+            remote_port,
+            profile_kdbx.as_ref(),
+        )
+        .await
+        {
+            Ok(handle) => {
+                self.tunnels.insert(host.clone(), handle);
+
+                // Update config
+                let (mut config, config_path) = self.get_config_and_path()?;
+                if let Some(host_cfg) = config.ssh_hosts.iter_mut().find(|h| h.host == host) {
+                    host_cfg.tunnel_enabled = true;
+                    host_cfg.tunnel_local_port = Some(local_port);
+                    host_cfg.tunnel_remote_host = Some(remote_host.clone());
+                    host_cfg.tunnel_remote_port = Some(remote_port);
+                    config.save(&config_path)?;
+                }
+
+                // Emit success event
+                self.event_tx
+                    .send(ViewModelEvent::Ssh(SshEvent::TunnelEnabled {
+                        host,
+                        local_port,
+                        remote_host,
+                        remote_port,
+                    }))
+                    .await
+                    .ok();
+
+                Ok(())
+            }
+            Err(e) => {
+                dure_error!("Failed to start tunnel: {}", e);
+                self.event_tx
+                    .send(ViewModelEvent::Ssh(SshEvent::TunnelError {
+                        host,
+                        error: e.to_string(),
+                    }))
+                    .await
+                    .ok();
+                Err(e)
+            }
+        }
+    }
+
+    async fn handle_disable_tunnel(&mut self, host: String) -> anyhow::Result<()> {
+        dure_info!("Disabling tunnel for {}", host);
+
+        // Remove and stop tunnel if exists
+        if let Some(tunnel) = self.tunnels.remove(&host) {
+            tunnel.stop().await?;
+            dure_info!("Stopped active tunnel for {}", host);
+        } else {
+            dure_warn!("No active tunnel for {}, updating config anyway", host);
+        }
+
+        // Update config regardless of tunnel state
+        let (mut config, config_path) = self.get_config_and_path()?;
+        if let Some(host_cfg) = config.ssh_hosts.iter_mut().find(|h| h.host == host) {
+            host_cfg.tunnel_enabled = false;
+            host_cfg.tunnel_local_port = None;
+            host_cfg.tunnel_remote_host = None;
+            host_cfg.tunnel_remote_port = None;
+            config.save(&config_path)?;
+        }
+
+        // Always emit event to sync UI
+        self.event_tx
+            .send(ViewModelEvent::Ssh(SshEvent::TunnelDisabled {
+                host,
+            }))
+            .await
+            .ok();
+
+        Ok(())
+    }
+
+    async fn handle_get_tunnel_status(&self, host: String) -> anyhow::Result<()> {
+        let status = if self.tunnels.contains_key(&host) {
+            use super::events::TunnelStatus;
+            TunnelStatus::Active
+        } else {
+            use super::events::TunnelStatus;
+            TunnelStatus::Inactive
+        };
+
+        self.event_tx
+            .send(ViewModelEvent::Ssh(SshEvent::TunnelStatusChanged {
+                host,
+                status,
+            }))
+            .await
+            .ok();
+
         Ok(())
     }
 }

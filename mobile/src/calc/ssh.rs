@@ -1247,6 +1247,34 @@ pub async fn check_dure_mycart(
 ) -> Result<(bool, bool, Vec<String>)> {
     Ok((false, false, vec![]))
 }
+/// Load SSH private key content from file path
+///
+/// Returns None if file doesn't exist or can't be read
+pub fn load_ssh_key_content_from_path(key_path: &str) -> Option<String> {
+    std::fs::read_to_string(key_path).ok()
+}
+
+/// Load SSH private key from keyring
+///
+/// Looks up key in keyring database by host
+pub fn load_ssh_key_content_from_keyring(
+    _host: &str,
+    _keyring: &crate::calc::keyring::DatabaseHandle,
+) -> Option<String> {
+    // ponytail: keyring lookup not implemented yet, placeholder for future
+    None
+}
+
+/// Generate SSH command to connect through tunnel
+///
+/// Creates a command that embeds the private key inline and connects to localhost:{local_port}
+pub fn generate_tunnel_ssh_command(private_key: &str, local_port: u16) -> String {
+    format!(
+        "ssh -i <(cat <<'EOF'\n{}\nEOF\n) -p {} localhost",
+        private_key.trim(),
+        local_port
+    )
+}
 
 #[cfg(test)]
 mod tests {

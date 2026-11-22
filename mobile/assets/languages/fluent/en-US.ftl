@@ -829,6 +829,13 @@ ssh-host-placeholder = Click 'Check Base' to retrieve system status
 ssh-docker-placeholder = Click 'Check Docker' to retrieve container status
 ssh-dure-placeholder = Click 'Check Dure' to retrieve compose logs
 
+## SSH Drawer Menu Actions (match platform pattern)
+ssh-drawer-menu-copy-ssh = Copy SSH Command
+ssh-drawer-menu-copy-key = Copy Private Key
+ssh-drawer-menu-copy-ip = Copy IP Address
+ssh-drawer-ssh-key-label = SSH Key
+ssh-drawer-ssh-not-found = Not found in keyring
+
 ## Operations Table (used in Platform, SSH, DNS drawers)
 ops-col-date = Date
 ops-col-operation = Operation

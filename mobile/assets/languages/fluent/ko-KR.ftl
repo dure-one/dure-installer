@@ -825,6 +825,13 @@ ssh-host-placeholder = '기본 확인'을 클릭하여 시스템 상태 조회
 ssh-docker-placeholder = 'Docker 확인'을 클릭하여 컨테이너 상태 조회
 ssh-dure-placeholder = 'Dure 확인'을 클릭하여 compose 로그 조회
 
+## SSH Drawer Menu Actions (match platform pattern)
+ssh-drawer-menu-copy-ssh = SSH 명령 복사
+ssh-drawer-menu-copy-key = 개인 키 복사
+ssh-drawer-menu-copy-ip = IP 주소 복사
+ssh-drawer-ssh-key-label = SSH 키
+ssh-drawer-ssh-not-found = 키링에서 찾을 수 없음
+
 ## Operations Table (used in Platform, SSH, DNS drawers)
 ops-col-date = 날짜
 ops-col-operation = 작업
