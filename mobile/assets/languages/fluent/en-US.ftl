@@ -953,3 +953,19 @@ dns-create-success = Domain Created Successfully
 
 # SSH Operations
 ssh-operation-base-check = Base Check
+
+# Mycart Operations
+mycart-add-title = Add Mycart Site
+mycart-add-heading = Add a new mycart site with admin credentials
+mycart-add-site-label = Site Address
+mycart-add-email-label = Admin Email
+mycart-add-password-label = Password
+mycart-add-ssh-label = SSH Host
+mycart-add-platform-label = Platform ID
+mycart-add-ssh-placeholder = Select SSH host...
+mycart-add-status-required = All fields are required
+mycart-add-status-ssh-required = Please select an SSH host
+mycart-add-status-no-profile = No profile selected
+mycart-add-status-success = ✓ Site added successfully
+mycart-add-status-failed = ✗ Failed: { $error }
+mycart-add-verifying = Verifying credentials...

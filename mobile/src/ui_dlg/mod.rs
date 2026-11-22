@@ -5,6 +5,7 @@ pub mod db_debugger;
 pub mod db_debugger_stt;
 pub mod dns;
 pub mod domain;
+pub mod mycart;
 pub mod mycart_crontab;
 pub mod platform;
 pub mod profile_create;

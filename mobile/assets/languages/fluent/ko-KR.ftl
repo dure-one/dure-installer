@@ -949,3 +949,19 @@ dns-create-success = 도메인이 성공적으로 생성됨
 
 # SSH Operations
 ssh-operation-base-check = 기본 확인
+
+# Mycart Operations
+mycart-add-title = Mycart 사이트 추가
+mycart-add-heading = 관리자 자격 증명으로 새 mycart 사이트 추가
+mycart-add-site-label = 사이트 주소
+mycart-add-email-label = 관리자 이메일
+mycart-add-password-label = 비밀번호
+mycart-add-ssh-label = SSH 호스트
+mycart-add-platform-label = 플랫폼 ID
+mycart-add-ssh-placeholder = SSH 호스트 선택...
+mycart-add-status-required = 모든 필드가 필요합니다
+mycart-add-status-ssh-required = SSH 호스트를 선택하세요
+mycart-add-status-no-profile = 프로필이 선택되지 않음
+mycart-add-status-success = ✓ 사이트가 성공적으로 추가되었습니다
+mycart-add-status-failed = ✗ 실패: { $error }
+mycart-add-verifying = 자격 증명 확인 중...

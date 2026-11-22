@@ -1,5 +1,6 @@
 //! Mycart tab - Mycart admin settings management with data_table + drawer
 
+use crate::ui_dlg::mycart::AddMycartDialog;
 use crate::ui_dlg::mycart_crontab::{CrontabAction, CrontabDialog};
 use crate::{dure_debug, dure_error, dure_info, dure_warn};
 use eframe::egui;
@@ -274,21 +275,7 @@ pub struct MycartTab {
 
     // Add dialog
     #[cfg_attr(feature = "serde", serde(skip))]
-    show_add_dialog: bool,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_site: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_email: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_password: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_platform_id: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_ssh_host: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_status: String,
-    #[cfg_attr(feature = "serde", serde(skip))]
-    add_in_progress: bool,
+    add_dialog: Option<AddMycartDialog>,
 
     // Crontab dialog (Phase 3)
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -302,14 +289,7 @@ impl Default for MycartTab {
             loaded: false,
             load_error: None,
             config_path: None,
-            show_add_dialog: false,
-            add_site: String::new(),
-            add_email: String::new(),
-            add_password: String::new(),
-            add_platform_id: String::new(),
-            add_ssh_host: String::new(),
-            add_status: String::new(),
-            add_in_progress: false,
+            add_dialog: None,
             crontab_dialog: None,
         }
     }
@@ -350,11 +330,9 @@ impl MycartTab {
         // Action buttons
         ui.horizontal(|ui| {
             if ui.add(MaterialButton::filled("Add Mycart")).clicked() {
-                self.show_add_dialog = true;
-                self.add_site.clear();
-                self.add_email.clear();
-                self.add_password.clear();
-                self.add_status.clear();
+                let mut dialog = AddMycartDialog::new();
+                dialog.open();
+                self.add_dialog = Some(dialog);
             }
 
             if ui.add(MaterialButton::outlined("Refresh")).clicked() {
@@ -380,9 +358,83 @@ impl MycartTab {
         let table_height = ui.available_height() - 20.0;
         self.render_table(current_profile, ui, table_height, vm.as_deref_mut(), current_profile_kdbx);
 
-        // Dialogs
-        if self.show_add_dialog {
-            self.render_add_dialog(ui.ctx());
+        // Add Mycart dialog
+        #[cfg(not(target_arch = "wasm32"))]
+        let add_action = if let Some(ref mut dialog) = self.add_dialog {
+            let ssh_hosts = if let Some(config_path) = &self.config_path {
+                let config = AppConfig::load_or_default(&config_path.to_path_buf());
+                config.ssh_hosts
+            } else {
+                Vec::new()
+            };
+            dialog.show(ui.ctx(), &ssh_hosts)
+        } else {
+            crate::ui_dlg::mycart::AddMycartAction::None
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let add_action = crate::ui_dlg::mycart::AddMycartAction::None;
+
+        // Handle add dialog actions
+        match add_action {
+            crate::ui_dlg::mycart::AddMycartAction::Add {
+                site_address,
+                email,
+                password,
+                ssh_host,
+                platform_id,
+            } => {
+                if let Some(ref mut dialog) = self.add_dialog {
+                    dialog.set_in_progress(true);
+                    dialog.set_status("Verifying credentials...".to_string());
+                }
+
+                // Execute async add operation
+                if let Some(ref config_path) = self.config_path {
+                    use crate::calc::mycart;
+                    let platform_id_opt = if !platform_id.is_empty() {
+                        Some(platform_id.as_str())
+                    } else {
+                        None
+                    };
+                    let ssh_host_opt = if !ssh_host.is_empty() {
+                        Some(ssh_host.as_str())
+                    } else {
+                        None
+                    };
+
+                    let result = smol::block_on(mycart::add_mycart_site(
+                        config_path,
+                        &site_address,
+                        &email,
+                        &password,
+                        platform_id_opt,
+                        ssh_host_opt,
+                    ));
+
+                    if let Some(ref mut dialog) = self.add_dialog {
+                        dialog.set_in_progress(false);
+                        match result {
+                            Ok(_) => {
+                                dialog.set_status(format!("✓ Site '{}' added successfully", site_address));
+                                self.loaded = false; // Trigger reload
+                                // Close dialog after short delay
+                                smol::block_on(async {
+                                    smol::Timer::after(std::time::Duration::from_secs(1)).await;
+                                });
+                                self.add_dialog = None;
+                            }
+                            Err(e) => {
+                                dialog.set_status(format!("✗ Error: {}", e));
+                            }
+                        }
+                    }
+                }
+            }
+            crate::ui_dlg::mycart::AddMycartAction::Cancel => {
+                self.add_dialog = None;
+            }
+            crate::ui_dlg::mycart::AddMycartAction::None => {}
         }
 
         // Crontab dialog (Phase 3)
@@ -619,193 +671,6 @@ impl MycartTab {
         }
     }
 
-    fn render_add_dialog(&mut self, ctx: &egui::Context) {
-        let add_clicked = Cell::new(false);
-        let cancel_clicked = Cell::new(false);
-
-        let window_width = ctx.viewport_rect().width();
-        let window_height = ctx.viewport_rect().height();
-
-        // Load config to populate SSH hosts dropdown
-        let ssh_hosts = if let Some(config_path) = &self.config_path {
-            let config = AppConfig::load_or_default(&config_path.to_path_buf());
-            config.ssh_hosts
-        } else {
-            Vec::new()
-        };
-
-        dialog(
-            "add_mycart_dialog",
-            "Add Mycart Site",
-            &mut self.show_add_dialog,
-        )
-        .min_width(400.0)
-        .max_width(window_width - 120.0)
-        .max_height(window_height - 120.0)
-        .scrollable(true)
-        .content(|ui, _open| {
-            ui.label("Add a new mycart site with admin credentials:");
-            ui.add_space(8.0);
-
-            ui.horizontal(|ui| {
-                ui.label("Site Address:");
-                ui.text_edit_singleline(&mut self.add_site);
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Admin Email:");
-                ui.text_edit_singleline(&mut self.add_email);
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Password:");
-                ui.add(egui::TextEdit::singleline(&mut self.add_password).password(true));
-            });
-
-            // SSH Host dropdown (replaces text input)
-            ui.horizontal(|ui| {
-                ui.label("SSH Host:");
-
-                let prev_ssh_host = self.add_ssh_host.clone();
-                let selected_text = if self.add_ssh_host.is_empty() {
-                    "Select SSH host...".to_string()
-                } else {
-                    self.add_ssh_host.clone()
-                };
-
-                egui::ComboBox::from_id_salt("add_mycart_ssh_host")
-                    .selected_text(selected_text)
-                    .show_ui(ui, |ui| {
-                        for host_config in &ssh_hosts {
-                            ui.selectable_value(
-                                &mut self.add_ssh_host,
-                                host_config.host.clone(),
-                                &host_config.host,
-                            );
-                        }
-                    });
-
-                // Auto-fill platform_id when ssh_host changes
-                if self.add_ssh_host != prev_ssh_host && !self.add_ssh_host.is_empty() {
-                    if let Some(selected_host) =
-                        ssh_hosts.iter().find(|h| h.host == self.add_ssh_host)
-                    {
-                        self.add_platform_id =
-                            selected_host.platform_id.clone().unwrap_or_default();
-                    }
-                }
-            });
-
-            // Platform ID (read-only, auto-filled from SSH host)
-            ui.horizontal(|ui| {
-                ui.label("Platform ID:");
-                if self.add_platform_id.is_empty() {
-                    ui.label(
-                        egui::RichText::new("(auto-filled from SSH host)")
-                            .italics()
-                            .color(egui::Color32::GRAY),
-                    );
-                } else {
-                    ui.label(egui::RichText::new(&self.add_platform_id).strong());
-                }
-            });
-
-            if !self.add_status.is_empty() {
-                ui.add_space(8.0);
-                let color = if self.add_status.contains("success") {
-                    egui::Color32::from_rgb(0, 200, 0)
-                } else {
-                    egui::Color32::from_rgb(255, 0, 0)
-                };
-                ui.colored_label(color, &self.add_status);
-            }
-
-            if self.add_in_progress {
-                ui.add_space(8.0);
-                ui.spinner();
-                ui.label("Verifying credentials...");
-            }
-        })
-        .action("Cancel", || {
-            cancel_clicked.set(true);
-        })
-        .primary_action("Add", || {
-            if !self.add_in_progress {
-                add_clicked.set(true);
-            }
-        })
-        .show(ctx);
-
-        if add_clicked.get() && !self.add_in_progress {
-            self.execute_add_site();
-        }
-
-        if cancel_clicked.get() {
-            self.show_add_dialog = false;
-        }
-    }
-
-    fn execute_add_site(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if self.add_site.is_empty() || self.add_email.is_empty() || self.add_password.is_empty()
-            {
-                self.add_status = "All fields are required".to_string();
-                return;
-            }
-
-            if self.add_ssh_host.is_empty() {
-                self.add_status = "Please select an SSH host".to_string();
-                return;
-            }
-
-            let Some(config_path) = &self.config_path else {
-                self.add_status = "No profile selected".to_string();
-                return;
-            };
-
-            let config_path = config_path.clone();
-            let site = self.add_site.clone();
-            let email = self.add_email.clone();
-            let password = self.add_password.clone();
-            let platform_id =
-                (!self.add_platform_id.is_empty()).then(|| self.add_platform_id.as_str());
-            let ssh_host = (!self.add_ssh_host.is_empty()).then(|| self.add_ssh_host.as_str());
-
-            self.add_in_progress = true;
-            self.add_status.clear();
-
-            // Spawn async task
-            let result = smol::block_on(mycart::add_mycart_site(
-                &config_path,
-                &site,
-                &email,
-                &password,
-                platform_id,
-                ssh_host,
-            ));
-
-            self.add_in_progress = false;
-
-            match result {
-                Ok(()) => {
-                    self.add_status = "✓ Site added successfully".to_string();
-                    self.loaded = false; // Trigger reload
-                                         // Clear form fields
-                    self.add_site.clear();
-                    self.add_email.clear();
-                    self.add_password.clear();
-                    self.add_platform_id.clear();
-                    self.add_ssh_host.clear();
-                    // Auto-close after success
-                    self.show_add_dialog = false;
-                }
-                Err(e) => {
-                    self.add_status = format!("✗ Failed: {}", e);
-                }
-            }
-        }
-    }
 
     fn handle_event(
         &mut self,
