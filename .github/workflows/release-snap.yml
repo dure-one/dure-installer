@@ -1,10 +1,8 @@
 name: Release to Snapstore
 
+# Snap Store publishing is disabled for automatic releases.
+# It can still be triggered manually if needed.
 on:
-  workflow_run:
-    workflows: ["Build and Release"]
-    types:
-      - completed
   workflow_dispatch:
 
 jobs:

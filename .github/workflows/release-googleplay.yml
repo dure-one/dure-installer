@@ -36,7 +36,7 @@ jobs:
           workflow: release.yml
           run_id: ${{ github.event.workflow_run.id }}
           workflow_conclusion: success
-          name: dure-all.aab
+          name: dure-installer-all.aab
           path: ./artifacts
           github_token: ${{ secrets.GITHUB_TOKEN }}
           check_artifacts: true
@@ -50,7 +50,7 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: app.dure.installer
-          releaseFiles: ./artifacts/dure-all.aab
+          releaseFiles: ./artifacts/dure-installer-all.aab
           tracks: ${{ github.event.inputs.track || secrets.GOOGLEPLAY_TRACK || 'production' }}
           status: completed
           inAppUpdatePriority: 2
