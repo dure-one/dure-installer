@@ -10,6 +10,7 @@ use smol::channel::{Receiver, Sender};
 pub struct OpsLogActor {
     command_rx: Receiver<LogsCommand>,
     event_tx: Sender<ViewModelEvent>,
+    database_initialized: bool,
 }
 
 impl OpsLogActor {
@@ -17,16 +18,12 @@ impl OpsLogActor {
         Self {
             command_rx,
             event_tx,
+            database_initialized: false,
         }
     }
 
     pub async fn run(mut self) {
         dure_info!("OpsLogActor started");
-
-        // Initialize database table
-        if let Err(e) = self.init_database().await {
-            dure_error!("OpsLogActor: failed to initialize database: {}", e);
-        }
 
         loop {
             match self.command_rx.recv().await {
@@ -61,6 +58,20 @@ impl OpsLogActor {
             LogsCommand::GetLogStats { .. } => "get_log_stats",
             LogsCommand::PurgeLogs { .. } => "purge_logs",
         };
+
+        if !self.database_initialized {
+            if let Err(e) = self.init_database().await {
+                let error = e.to_string();
+                dure_error!("{} failed: {}", operation, error);
+                self.send_event(LogsEvent::Error {
+                    operation: operation.to_string(),
+                    error,
+                })
+                .await;
+                return Err(e);
+            }
+            self.database_initialized = true;
+        }
 
         let result = match cmd {
             LogsCommand::CreateLog {

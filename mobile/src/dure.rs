@@ -280,8 +280,11 @@ impl eframe::App for DureApp {
             self.scrolling_selected
         );
 
-        // Initialize ViewModel on first update (lazy initialization)
-        if self.viewmodel.is_none() {
+        // Initialize the ViewModel only after a profile supplies its database path.
+        if Self::should_initialize_viewmodel(
+            self.current_profile.is_some(),
+            self.viewmodel.is_some(),
+        ) {
             info!("🔥 Initializing ViewModel");
             self.viewmodel = Some(crate::viewmodel::ViewModel::new(
                 ctx.clone(),
@@ -450,6 +453,10 @@ impl eframe::App for DureApp {
 }
 
 impl DureApp {
+    fn should_initialize_viewmodel(has_profile: bool, has_viewmodel: bool) -> bool {
+        has_profile && !has_viewmodel
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui) {
         dure_trace!(
             "🔥 UI CALLED - scrolling: {}, active_tab: {:?}",
@@ -1621,6 +1628,19 @@ impl DureApp {
         self.scrolling_selected = 0;
 
         dure_info!("Screen cleared and ready for profile reload");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DureApp;
+
+    #[test]
+    fn viewmodel_initialization_requires_a_loaded_profile() {
+        assert!(!DureApp::should_initialize_viewmodel(false, false));
+        assert!(!DureApp::should_initialize_viewmodel(false, true));
+        assert!(DureApp::should_initialize_viewmodel(true, false));
+        assert!(!DureApp::should_initialize_viewmodel(true, true));
     }
 }
 

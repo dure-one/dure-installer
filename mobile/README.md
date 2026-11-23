@@ -36,6 +36,9 @@ https://easyappicon.com/
 
 **Quick Start**: Use the automated script to generate all keys at once:
 
+Download app public key(encryption_public_key.pem) from : https://play.google.com/console/u/0/developers/app/protect-with-play
+* on this instruction we don't share upload key. upload key and release key is per app.
+
 ```bash
 ./googleplaykey.sh /path/to/encryption_public_key.pem [password]
 ```
@@ -47,31 +50,6 @@ This script:
 - Exports `upload_certificate.pem`
 - Downloads pepk.jar
 - Creates encrypted .zip for Play Console
-
-If you prefer manual steps, see sections below.
-
-### Create Upload Keystore (Shared Across All Apps) - Manual
-
-Generate a single keystore in ./mobile/app dir:
-```bash
-cd mobile/app
-~/.local/jdk-24.0.1/bin/keytool -genkey -v \
-  -keystore release.keystore \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias upload \
-  -storepass <UPLOAD_PASSWORD> \
-  -keypass <UPLOAD_PASSWORD>
-```
-
-Create keystore.properties in ./mobile/app dir:
-```bash
-storePassword=<UPLOAD_PASSWORD>
-keyPassword=<UPLOAD_PASSWORD>
-keyAlias=upload
-storeFile=release.keystore
-```
-
-This key is used by gradle to sign APKs locally before upload. Shared across all your apps.
 
 ### Android keystore for github workflow
 
@@ -86,80 +64,36 @@ Set GitHub secrets:
 - `KEY_PASSWORD=<UPLOAD_PASSWORD>`
 - `KEY_ALIAS=upload`
 
-### Create App Signing Key for Google Play
-
-**IMPORTANT**: Upload key (above) must differ from app signing key.
-
-For each app, create a unique keystore:
-```bash
-cd mobile/app
-~/.local/jdk-24.0.1/bin/keytool -genkey -v \
-  -keystore app-dure-installer-signing.keystore \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias app-signing \
-  -storepass <APP_SIGNING_PASSWORD> \
-  -keypass <APP_SIGNING_PASSWORD>
-```
-
 ### Upload signing key on google play
 
-**Step 1: Download encryption public key from Play Console**
+**Download encryption public key from Play Console**
 - Go to App Integrity > App Signing
 - Download encryption_public_key.pem to ./mobile/app/
 
-**Step 2: Encrypt the app signing keystore**
-```bash
-cd mobile/app
-wget https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
-
-java -jar pepk.jar \
-  --keystore=app-dure-installer-signing.keystore \
-  --alias=app-signing \
-  --output=app-dure-installer-signing-play-generated.zip \
-  --include-cert --rsa-aes-encryption \
-  --encryption-key-path=encryption_public_key.pem
-```
-
-**Step 3: Upload to Play Console**
+**Upload to Play Console**
 - Go to App Integrity > App Signing
 - Upload the generated .zip file
 
 **Key Summary**:
-- **Upload Key** (`release.keystore`): Shared, signs APK locally
+- **Upload Key** (`release.keystore`): signs APK locally
 - **App Signing Keys** (one per app): Unique, managed by Google Play
 
 ### Reset Upload Key on Google Play Console
 
 When changing upload key (security update, key compromise, or new keystore):
 
-**Step 1: Export upload key certificate**
-```bash
-cd mobile/app
-keytool -export -rfc \
-  -keystore release.keystore \
-  -alias upload \
-  -file upload_certificate.pem \
-  -storepass <UPLOAD_PASSWORD>
-```
-
-**Step 2: Upload to Play Console**
+**Upload to Play Console**
 - Go to App Integrity > Change Signing Key
 - Select "Reset Upload Key"
 - Choose reason (e.g., "분실됨" / "Lost", "손상됨" / "Compromised", "비밀번호를 잊어버림" / "Forgot password")
 - Upload `upload_certificate.pem`
 - Submit and wait for approval
 
-**Step 3: Confirm**
-Once approved, only this `release.keystore` can be used to sign new releases.
-
-
-
 ### Submit app to Google Playstore
 1. register google play console
-2. create unique app signing key for each app (see "Upload signing key" section above)
-3. add credentials to github repository secrets (use shared `release.keystore` as KEYSTORE_BASE64)
+2. create unique upload key, app signing key for each app (see "Upload signing key" section above)
+3. add service account and upload key to github repository secrets.
 4. run github workflow
-
 
 ### App testing
 * Closed Testing Service Provider
@@ -176,6 +110,15 @@ https://play.google.com/console/u/1/developers/8469971848379081167/app/497607944
 ```
 
 ### Publish to Snapstore
+```
+$ sudo apt update && sudo apt install -y snapd
+$ sudo systemctl enable --now snapd.socket
+$ sudo snap install snapd
+$ sudo snap install snapcraft --classic
+$ sudo snap refresh snapd snapcraft
+
+```
+
 1. register snap name in https://snapcraft.io/snaps
 2. update app settings in https://snapcraft.io/dure/releases
 
