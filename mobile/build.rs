@@ -9,6 +9,9 @@ fn main() {
         res.compile().unwrap();
     }
 
+    // Font subsetting: Material Symbols (reduce 9.2MB → ~50KB)
+    subset_material_symbols().expect("Failed to subset Material Symbols font");
+
     // Inject git version info for dev builds
     inject_git_version();
 
@@ -158,6 +161,46 @@ fn validate_translations() {
             missing_keys.len()
         );
     }
+}
+
+fn subset_material_symbols() -> Result<(), Box<dyn std::error::Error>> {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::path::Path;
+
+    let source_font = Path::new("resources/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf");
+    let subset_font = Path::new("resources/MaterialSymbolsOutlined_subset.ttf");
+
+    // Load original font binary data
+    let font_data = fs::read(source_font)?;
+
+    // Define Material Icons used in the app
+    // To add more icons:
+    // 1. Find icon name at https://fonts.google.com/icons
+    // 2. Get Unicode codepoint from Material Symbols reference
+    // 3. Add '\u{XXXX}' here
+    let chars_to_keep: HashSet<char> = [
+        '\u{E8B8}', // settings
+        '\u{E5D2}', // menu
+        '\u{E88E}', // info
+        '\u{E838}', // star
+        '\u{F06F}', // star_outline
+        '\u{E14B}', // block
+    ]
+    .iter()
+    .copied()
+    .collect();
+
+    // Perform font subsetting using fontcull (no OpenType features needed)
+    let subsetted_bytes = fontcull::subset_font_data(&font_data, &chars_to_keep, &[])?;
+
+    // Write the subsetted font
+    fs::write(subset_font, subsetted_bytes)?;
+
+    // Rebuild if source font changes
+    println!("cargo:rerun-if-changed={}", source_font.display());
+
+    Ok(())
 }
 
 fn inject_git_version() {
