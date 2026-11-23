@@ -23,6 +23,8 @@ import hashlib
 import requests
 from pathlib import Path
 
+MAX_RATE_LIMIT_RETRIES = 3
+
 
 def compute_sha256(file_path):
     """Compute SHA256 hash of a file."""
@@ -33,14 +35,53 @@ def compute_sha256(file_path):
     return sha256_hash.hexdigest()
 
 
-def upload_file(api_key, file_path):
+def get_upload_url(api_key, retry_count=0):
+    """Get the upload URL required by VirusTotal for files larger than 32 MiB."""
+    url = "https://www.virustotal.com/api/v3/files/upload_url"
+    headers = {"x-apikey": api_key}
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        if response.status_code == 200:
+            upload_url = response.json().get("data")
+            if upload_url:
+                return upload_url
+            print("  ✗ Upload URL response did not contain a URL")
+            return None
+        if response.status_code == 429:
+            if retry_count >= MAX_RATE_LIMIT_RETRIES:
+                print("  ✗ Rate limit retry exhausted while getting upload URL")
+                return None
+            print("  ⚠ Rate limit exceeded (429). Waiting 60 seconds...")
+            time.sleep(60)
+            return get_upload_url(api_key, retry_count + 1)
+
+        print(f"  ✗ Could not get large-file upload URL: HTTP {response.status_code}")
+        print(f"  Response: {response.text}")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"  ✗ Upload URL request failed: {e}")
+        return None
+
+
+def upload_file(api_key, file_path, retry_count=0):
     """
     Upload file to VirusTotal or fetch existing report.
 
     Returns:
         str: Analysis URL or None on error
     """
-    url = "https://www.virustotal.com/api/v3/files"
+    file_size = os.path.getsize(file_path)
+    if file_size > 32 * 1024 * 1024:
+        url = get_upload_url(api_key)
+        if not url:
+            return None
+        print(f"  Using large-file upload endpoint for {file_size} bytes")
+        request_rate = int(os.environ.get("VT_REQUEST_RATE", "4"))
+        delay_between_requests = 60.0 / request_rate if request_rate > 0 else 15.0
+        time.sleep(delay_between_requests)
+    else:
+        url = "https://www.virustotal.com/api/v3/files"
     headers = {"x-apikey": api_key}
 
     print(f"Processing {file_path}...")
@@ -73,11 +114,14 @@ def upload_file(api_key, file_path):
             return fetch_existing_report(api_key, file_hash)
 
         elif response.status_code == 429:
+            if retry_count >= MAX_RATE_LIMIT_RETRIES:
+                print("  ✗ Rate limit retry exhausted while uploading file")
+                return None
             # Rate limit exceeded
             print(f"  ⚠ Rate limit exceeded (429). Waiting 60 seconds...")
             time.sleep(60)
             # Retry upload
-            return upload_file(api_key, file_path)
+            return upload_file(api_key, file_path, retry_count + 1)
 
         else:
             # Other error
@@ -92,7 +136,7 @@ def upload_file(api_key, file_path):
         return fetch_existing_report(api_key, file_hash)
 
 
-def fetch_existing_report(api_key, file_hash):
+def fetch_existing_report(api_key, file_hash, retry_count=0):
     """
     Fetch existing VirusTotal report by file hash.
 
@@ -117,11 +161,14 @@ def fetch_existing_report(api_key, file_hash):
             return None
 
         elif response.status_code == 429:
+            if retry_count >= MAX_RATE_LIMIT_RETRIES:
+                print("  ✗ Rate limit retry exhausted while fetching existing report")
+                return None
             # Rate limit exceeded
             print(f"  ⚠ Rate limit exceeded (429). Waiting 60 seconds...")
             time.sleep(60)
             # Retry fetch
-            return fetch_existing_report(api_key, file_hash)
+            return fetch_existing_report(api_key, file_hash, retry_count + 1)
 
         else:
             print(f"  ✗ Fetch failed: HTTP {response.status_code}")
@@ -149,13 +196,13 @@ def main():
     print(f"Delay between requests: {delay_between_requests:.2f} seconds\n")
 
     results = []
-    skipped = []
+    failed = []
 
     for i, file_path in enumerate(files):
         # Check if file exists
         if not os.path.isfile(file_path):
             print(f"✗ File not found: {file_path}")
-            skipped.append(file_path)
+            failed.append(file_path)
             continue
 
         # Upload or fetch existing report
@@ -163,6 +210,8 @@ def main():
 
         if analysis_url:
             results.append(f"{file_path}={analysis_url}")
+        else:
+            failed.append(file_path)
 
         # Rate limiting: wait between requests (except for last file)
         if i < len(files) - 1:
@@ -178,10 +227,10 @@ def main():
     print("="*80)
     print(f"Successfully scanned: {len(results)}/{len(files)} files")
 
-    if skipped:
-        print(f"\nSkipped {len(skipped)} file(s) (not found):")
-        for s in skipped:
-            print(f"  - {s}")
+    if failed:
+        print(f"\nFailed to scan {len(failed)} file(s):")
+        for failed_file in failed:
+            print(f"  - {failed_file}")
     print()
 
     # Set GitHub Actions output
@@ -193,9 +242,8 @@ def main():
     else:
         print(f"Output: {output}")
 
-    # Exit with error if no files were scanned successfully
-    if len(results) == 0:
-        print("\n✗ ERROR: No files were scanned successfully")
+    if failed:
+        print("\n✗ ERROR: One or more release files could not be scanned")
         sys.exit(1)
 
     print("\n✓ SUCCESS")

@@ -40,6 +40,11 @@ jobs:
             build-args: "--release"
             platform_type: linux
 
+          - name: Linux aarch64
+            target: aarch64-unknown-linux-musl
+            build-args: "--release"
+            platform_type: linux
+
           # Disabled - reduce build time
           # - name: Linux x86
           #   target: i686-unknown-linux-musl
@@ -123,14 +128,6 @@ jobs:
           sudo apt-get install -y musl-tools libgtk-3-dev libxdo-dev libappindicator3-dev libglib2.0-dev libgdk-pixbuf-2.0-dev libwayland-dev libcairo2-dev libpixman-1-dev libpango1.0-dev libxdo-dev librust-glib-sys-dev librust-gio-sys-dev librust-gobject-sys-dev librust-gdk-sys-dev libwebkit2gtk-4.1-dev librust-gdk-pixbuf-sys-dev librust-cairo-sys-rs-dev librust-pango-sys-dev librust-atk-sys-dev libgdk-pixbuf2.0-dev libatk1.0-dev musl-dev
           export PKG_CONFIG_ALLOW_CROSS=1
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-musl/pkgconfig"
-
-      - name: Linux aarch64 - Download musl toolchain
-        if: matrix.platform.target == 'aarch64-unknown-linux-musl'
-        run: |
-          wget -q https://github.com/troglobit/misc/releases/download/11-20211120/aarch64-linux-musl-cross.tgz
-          tar -xzf aarch64-linux-musl-cross.tgz -C "$HOME"
-          echo "$HOME/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=$HOME/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc" >> "$GITHUB_ENV"
 
       - name: Android - Install Build Dependencies
         if: contains(matrix.platform.target, 'android')
@@ -220,7 +217,6 @@ jobs:
           PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
           RUSTFLAGS: ${{ matrix.platform.rustflags }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ env.CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER }}
         uses: actions-rs/cargo@v1
         with:
           command: build
@@ -424,7 +420,9 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl/${{ env.BIN_NAME }} \
             ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
+            ./artifacts/dure-installer-all.aab/dure-installer-all.aab \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe; do
@@ -453,7 +451,6 @@ jobs:
 
       - name: VirusTotal Scan
         id: vt_scan
-        continue-on-error: true
         env:
           VT_REQUEST_RATE: 4
         run: |
@@ -462,7 +459,9 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-aarch64-apple-darwin/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-apple-darwin/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-linux-musl/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-linux-musl/${{ env.BIN_NAME }} \
             ./artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk \
+            ./artifacts/dure-installer-all.aab/dure-installer-all.aab \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}-x86_64.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}-i686.exe \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-pc-windows-msvc/${{ env.BIN_NAME }}-aarch64.exe
@@ -551,9 +550,9 @@ jobs:
               fi
 
               # Extract identifier from path
-              # For .exe and .apk files, use the filename
-              # For other files (binaries), use the parent directory name which contains platform info
-              if [[ "$file" == *.exe ]] || [[ "$file" == *.apk ]]; then
+              # For packaged and Windows files, use the filename.
+              # For other files (binaries), use the parent directory name which contains platform info.
+              if [[ "$file" == *.exe ]] || [[ "$file" == *.apk ]] || [[ "$file" == *.aab ]]; then
                 identifier=$(basename "$file")
               else
                 identifier=$(basename "$(dirname "$file")")
@@ -604,8 +603,9 @@ jobs:
           do
               if [ -d "$i" ]
               then
-                  # Handle APK separately
+                  # Handle Android packages separately
                   [[ "$i" == *"dure-installer-all-signed.apk"* ]] && cp artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk distbin/dure-installer-all-signed.apk && continue
+                  [[ "$i" == *"dure-installer-all.aab"* ]] && cp artifacts/dure-installer-all.aab/dure-installer-all.aab distbin/dure-installer-all.aab && continue
 
                   # Handle Windows executables
                   if [[ "$i" == *"x86_64-pc-windows-msvc"* ]]; then
