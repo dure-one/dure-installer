@@ -59,10 +59,7 @@ impl DeletePlatformConfirmDialog {
             if self.vm_count > 0 {
                 ui.colored_label(
                     egui_material3::theme::get_global_color("error"),
-                    format!(
-                        "This will also remove {} VM(s) from config!",
-                        self.vm_count
-                    ),
+                    format!("This will also remove {} VM(s) from config!", self.vm_count),
                 );
                 ui.add_space(4.0);
                 ui.colored_label(
@@ -86,10 +83,7 @@ impl DeletePlatformConfirmDialog {
 
             // Delete options
             ui.checkbox(&mut self.delete_vms, "Delete VMs from GCP");
-            ui.checkbox(
-                &mut self.delete_project,
-                "Delete GCP project",
-            );
+            ui.checkbox(&mut self.delete_project, "Delete GCP project");
 
             ui.add_space(12.0);
         })

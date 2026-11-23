@@ -52,14 +52,12 @@ impl AddHostDialog {
             ui.add_space(8.0);
 
             ui.add(
-                MaterialInput::outlined(&mut self.host)
-                    .label(&tr!("ssh-dialog-add-host-label")),
+                MaterialInput::outlined(&mut self.host).label(&tr!("ssh-dialog-add-host-label")),
             );
             ui.add_space(8.0);
 
             ui.add(
-                MaterialInput::outlined(&mut self.port)
-                    .label(&tr!("ssh-dialog-add-port-label")),
+                MaterialInput::outlined(&mut self.port).label(&tr!("ssh-dialog-add-port-label")),
             );
             ui.add_space(8.0);
 

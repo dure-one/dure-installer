@@ -12,25 +12,102 @@ pub use types::{LogBuffer, LogCommand, LogEvent, LogLevel};
 
 use smol::channel::Sender;
 use std::cell::RefCell;
-use std::sync::RwLock;
+use std::collections::VecDeque;
+use std::sync::Mutex;
 
-static LOG_SENDER: RwLock<Option<Sender<LogCommand>>> = RwLock::new(None);
+const PENDING_LOG_CAPACITY: usize = 1000;
+
+struct LogRouter {
+    sender: Option<Sender<LogCommand>>,
+    pending: VecDeque<LogCommand>,
+    generation: u64,
+    current_generation: u64,
+}
+
+impl LogRouter {
+    const fn new() -> Self {
+        Self {
+            sender: None,
+            pending: VecDeque::new(),
+            generation: 0,
+            current_generation: 0,
+        }
+    }
+
+    fn register(&mut self, sender: Sender<LogCommand>) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        self.current_generation = self.generation;
+        self.sender = Some(sender);
+        self.flush_pending();
+        self.current_generation
+    }
+
+    fn unregister(&mut self, generation: u64) {
+        if self.current_generation == generation {
+            self.sender = None;
+        }
+    }
+
+    fn route(&mut self, command: LogCommand) {
+        let Some(sender) = self.sender.clone() else {
+            self.queue(command);
+            return;
+        };
+
+        if let Err(error) = sender.try_send(command) {
+            self.sender = None;
+            self.queue(error.into_inner());
+        }
+    }
+
+    fn flush_pending(&mut self) {
+        let Some(sender) = self.sender.clone() else {
+            return;
+        };
+
+        while let Some(command) = self.pending.pop_front() {
+            if let Err(error) = sender.try_send(command) {
+                self.pending.push_front(error.into_inner());
+                self.sender = None;
+                break;
+            }
+        }
+    }
+
+    fn queue(&mut self, command: LogCommand) {
+        if self.pending.len() == PENDING_LOG_CAPACITY {
+            self.pending.pop_front();
+        }
+        self.pending.push_back(command);
+    }
+}
+
+static LOG_ROUTER: Mutex<LogRouter> = Mutex::new(LogRouter::new());
 
 thread_local! {
     static HOST_CONTEXT: RefCell<Option<String>> = RefCell::new(None);
 }
 
-pub fn init_log_sender(sender: Sender<LogCommand>) {
-    if let Ok(mut guard) = LOG_SENDER.write() {
-        *guard = Some(sender);
-        log::debug!("[LOG_INIT] Log sender initialized/updated");
-    } else {
-        log::error!("[LOG_INIT] Failed to acquire write lock for log sender");
-    }
+pub fn init_log_sender(sender: Sender<LogCommand>) -> u64 {
+    LOG_ROUTER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .register(sender)
+}
+
+pub fn clear_log_sender(registration: u64) {
+    LOG_ROUTER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unregister(registration);
 }
 
 pub fn get_log_sender() -> Option<Sender<LogCommand>> {
-    LOG_SENDER.read().ok().and_then(|guard| guard.clone())
+    LOG_ROUTER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .sender
+        .clone()
 }
 
 pub fn set_host_context(host_id: impl Into<String>) {
@@ -55,110 +132,98 @@ pub fn get_host_context() -> Option<String> {
 }
 
 pub fn append_log(host_id_override: Option<String>, level: LogLevel, message: String) {
-    log::debug!(
-        "[APPEND_LOG] Called with override={:?}, message='{}'",
-        host_id_override,
-        message
-    );
-
-    let host_id = match host_id_override {
-        Some(id) => {
-            log::debug!("[APPEND_LOG] Using override host_id: '{}'", id);
-            id
-        }
-        None => {
-            let ctx = get_host_context().unwrap_or_else(|| "unknown".to_string());
-            log::debug!("[APPEND_LOG] Using context host_id: '{}'", ctx);
-            ctx
-        }
+    let host_id = host_id_override
+        .or_else(get_host_context)
+        .unwrap_or_else(|| "unknown".to_string());
+    let command = LogCommand::AppendLog {
+        host_id,
+        level,
+        message,
     };
 
-    if let Some(sender) = get_log_sender() {
-        log::debug!(
-            "[APPEND_LOG] Sending AppendLog command - host_id='{}', level={:?}, msg='{}'",
-            host_id,
-            level,
-            message
-        );
-        let cmd = LogCommand::AppendLog {
-            host_id: host_id.clone(),
-            level,
-            message: message.clone(),
-        };
-        match sender.try_send(cmd) {
-            Ok(_) => log::debug!(
-                "[APPEND_LOG] ✓ Command sent successfully for host '{}'",
-                host_id
-            ),
-            Err(e) => log::error!("[APPEND_LOG] ✗ Failed to send command: {}", e),
-        }
-    } else {
-        log::warn!("[APPEND_LOG] ⚠ Log sender not initialized - logs will not appear in drawer");
-    }
+    LOG_ROUTER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .route(command);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_init_log_sender_and_append() {
-        smol::block_on(async {
-            let (tx, rx) = smol::channel::unbounded();
-            init_log_sender(tx);
-
-            append_log("test-proj", LogLevel::Info, "test msg");
-
-            // Small delay for message to be sent
-            smol::Timer::after(std::time::Duration::from_millis(10)).await;
-
-            let cmd = rx.try_recv().unwrap();
-            match cmd {
-                LogCommand::AppendLog {
-                    project_id,
-                    level,
-                    message,
-                } => {
-                    assert_eq!(project_id, "test-proj");
-                    assert_eq!(level, LogLevel::Info);
-                    assert_eq!(message, "test msg");
-                }
-                _ => panic!("Expected AppendLog command"),
-            }
-        });
+    fn append_command(host: &str, message: &str) -> LogCommand {
+        LogCommand::AppendLog {
+            host_id: host.to_string(),
+            level: LogLevel::Info,
+            message: message.to_string(),
+        }
     }
 
     #[test]
-    fn test_log_sender_reinitialization() {
-        smol::block_on(async {
-            // First initialization
-            let (tx1, rx1) = smol::channel::unbounded();
-            init_log_sender(tx1);
+    fn queues_and_flushes_logs_in_fifo_order() {
+        let mut router = LogRouter::new();
+        router.route(append_command("first", "one"));
+        router.route(append_command("second", "two"));
 
-            append_log("test-1", LogLevel::Info, "msg 1");
-            smol::Timer::after(std::time::Duration::from_millis(10)).await;
+        let (tx, rx) = smol::channel::unbounded();
+        router.register(tx);
 
-            let cmd1 = rx1.try_recv().unwrap();
-            assert!(matches!(cmd1, LogCommand::AppendLog { .. }));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            LogCommand::AppendLog { host_id, message, .. }
+                if host_id == "first" && message == "one"
+        ));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            LogCommand::AppendLog { host_id, message, .. }
+                if host_id == "second" && message == "two"
+        ));
+    }
 
-            // Re-initialization (simulating profile switch)
-            let (tx2, rx2) = smol::channel::unbounded();
-            init_log_sender(tx2);
+    #[test]
+    fn routes_only_to_latest_sender() {
+        let mut router = LogRouter::new();
+        let (old_tx, old_rx) = smol::channel::unbounded();
+        router.register(old_tx);
 
-            append_log("test-2", LogLevel::Info, "msg 2");
-            smol::Timer::after(std::time::Duration::from_millis(10)).await;
+        let (new_tx, new_rx) = smol::channel::unbounded();
+        router.register(new_tx);
+        router.route(append_command("host", "new"));
 
-            // Should receive on new channel
-            let cmd2 = rx2.try_recv().unwrap();
-            match cmd2 {
-                LogCommand::AppendLog { project_id, .. } => {
-                    assert_eq!(project_id, "test-2");
-                }
-                _ => panic!("Expected AppendLog on new channel"),
-            }
+        assert!(old_rx.try_recv().is_err());
+        assert!(matches!(
+            new_rx.try_recv().unwrap(),
+            LogCommand::AppendLog { message, .. } if message == "new"
+        ));
+    }
 
-            // Old channel should be empty
-            assert!(rx1.try_recv().is_err());
-        });
+    #[test]
+    fn stale_registration_cannot_unregister_latest_sender() {
+        let mut router = LogRouter::new();
+        let (first_tx, _) = smol::channel::unbounded();
+        let first_registration = router.register(first_tx);
+        let (second_tx, second_rx) = smol::channel::unbounded();
+        router.register(second_tx);
+
+        router.unregister(first_registration);
+        router.route(append_command("host", "still active"));
+
+        assert!(second_rx.try_recv().is_ok());
+    }
+
+    #[test]
+    fn pending_queue_drops_oldest_log_at_capacity() {
+        let mut router = LogRouter::new();
+        for index in 0..=PENDING_LOG_CAPACITY {
+            router.route(append_command("host", &index.to_string()));
+        }
+
+        let (tx, rx) = smol::channel::unbounded();
+        router.register(tx);
+
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            LogCommand::AppendLog { message, .. } if message == "1"
+        ));
     }
 }

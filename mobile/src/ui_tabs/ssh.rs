@@ -366,7 +366,7 @@ fn render_operations_column(
 
 /// Render host column with platform badge
 fn render_host_column(ui: &mut egui::Ui, row: &SshRow) {
-    use egui_material3::{badge, BadgeColor, BadgeSize, theme::get_global_color};
+    use egui_material3::{badge, theme::get_global_color, BadgeColor, BadgeSize};
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 2.0;
@@ -527,8 +527,14 @@ impl SshTab {
     fn load_rows(&mut self, profile: &Option<crate::calc::profile::ProfileContext>) {
         // Preserve existing drawer states and open status before clearing rows
         let mut existing_drawer_states: std::collections::HashMap<String, (DrawerState, bool)> =
-            self.rows.iter()
-                .map(|row| (row.host.clone(), (row.drawer_state.clone(), row.drawer_open)))
+            self.rows
+                .iter()
+                .map(|row| {
+                    (
+                        row.host.clone(),
+                        (row.drawer_state.clone(), row.drawer_open),
+                    )
+                })
                 .collect();
 
         self.rows.clear();
@@ -634,7 +640,8 @@ impl SshTab {
                     self.loaded = true;
                 }
                 Err(e) => {
-                    self.error_dialog.open(format!("Failed to load config: {}", e));
+                    self.error_dialog
+                        .open(format!("Failed to load config: {}", e));
                     self.loaded = true;
                 }
             }
@@ -1343,7 +1350,10 @@ impl SshTab {
                 error,
                 focus_tab,
             }) => {
-                dure_info!("[UI::SSH] 🎯 Handling DureRemoveCompleted for host={}", host);
+                dure_info!(
+                    "[UI::SSH] 🎯 Handling DureRemoveCompleted for host={}",
+                    host
+                );
                 if let Some(row) = self.rows.iter_mut().find(|r| r.host == host) {
                     dure_info!("[UI::SSH] ✅ Found row for host {} - updating state", host);
                     // Auto-focus drawer tab if specified
@@ -1431,7 +1441,11 @@ impl SshTab {
                     row.tunnel_remote_host = Some(remote_host.clone());
                     row.tunnel_remote_port = Some(remote_port);
                     row.tunnel_status = crate::viewmodel::ssh::TunnelStatus::Active;
-                    dure_info!("[EVENT] Row updated: tunnel_enabled={}, status={:?}", row.tunnel_enabled, row.tunnel_status);
+                    dure_info!(
+                        "[EVENT] Row updated: tunnel_enabled={}, status={:?}",
+                        row.tunnel_enabled,
+                        row.tunnel_status
+                    );
                 } else {
                     dure_warn!("[EVENT] Row not found for host: {}", host);
                 }
@@ -1500,8 +1514,23 @@ impl SshTab {
         // Add host dialog
         use crate::ui_dlg::ssh::AddHostAction;
         match self.add_dialog.show(ui.ctx()) {
-            AddHostAction::Add { host, port, use_password, password, use_private_key, private_key_path } => {
-                self.handle_add_host(profile, host, port, use_password, password, use_private_key, private_key_path);
+            AddHostAction::Add {
+                host,
+                port,
+                use_password,
+                password,
+                use_private_key,
+                private_key_path,
+            } => {
+                self.handle_add_host(
+                    profile,
+                    host,
+                    port,
+                    use_password,
+                    password,
+                    use_private_key,
+                    private_key_path,
+                );
             }
             _ => {}
         }
@@ -1509,8 +1538,25 @@ impl SshTab {
         // Edit host dialog
         use crate::ui_dlg::ssh::EditHostAction;
         match self.edit_dialog.show(ui.ctx()) {
-            EditHostAction::Save { original_host, host, port, use_password, password, use_private_key, private_key_path } => {
-                self.handle_edit_host(profile, original_host, host, port, use_password, password, use_private_key, private_key_path);
+            EditHostAction::Save {
+                original_host,
+                host,
+                port,
+                use_password,
+                password,
+                use_private_key,
+                private_key_path,
+            } => {
+                self.handle_edit_host(
+                    profile,
+                    original_host,
+                    host,
+                    port,
+                    use_password,
+                    password,
+                    use_private_key,
+                    private_key_path,
+                );
             }
             _ => {}
         }
@@ -1561,11 +1607,7 @@ impl SshTab {
             .min_row_height(100.0)
             .drawer_row_height(500.0)
             .column(&tr!("ssh-drawer-tab-host"), col1_width, false)
-            .column(
-                &tr!("ssh-drawer-tab-operations"),
-                col2_width,
-                false,
-            );
+            .column(&tr!("ssh-drawer-tab-operations"), col2_width, false);
 
         for row in self.rows.iter() {
             let row_for_cells = row.clone();
@@ -1716,7 +1758,10 @@ impl SshTab {
                     }
                 }
                 SshAction::RemoveDocker(host) => {
-                    dure_info!("Remove Docker button clicked for '{}' - showing confirmation", host);
+                    dure_info!(
+                        "Remove Docker button clicked for '{}' - showing confirmation",
+                        host
+                    );
                     self.remove_docker_confirm_dialog.open(host);
                 }
                 SshAction::CheckDure(host) => {
@@ -1860,8 +1905,13 @@ impl SshTab {
                                     remote_port,
                                     (*current_profile_kdbx).clone(),
                                 );
-                                dure_info!("Enabling tunnel for {}: localhost:{} -> {}:{}",
-                                    host, local_port, "127.0.0.1", remote_port);
+                                dure_info!(
+                                    "Enabling tunnel for {}: localhost:{} -> {}:{}",
+                                    host,
+                                    local_port,
+                                    "127.0.0.1",
+                                    remote_port
+                                );
                             }
                         }
                     }
@@ -2037,9 +2087,8 @@ impl SshTab {
                 Ok((mut app_config, config_path)) => {
                     // Check for duplicates
                     if app_config.ssh_hosts.iter().any(|h| h.host == host) {
-                        self.error_dialog.open(
-                            tr!("ssh-error-host-exists", {host: host.clone()})
-                        );
+                        self.error_dialog
+                            .open(tr!("ssh-error-host-exists", {host: host.clone()}));
                         return;
                     }
 
@@ -2047,7 +2096,11 @@ impl SshTab {
                     let host_config = SshHostConfig {
                         host: host.clone(),
                         password: if use_password { Some(password) } else { None },
-                        private_key_path: if use_private_key { Some(private_key_path) } else { None },
+                        private_key_path: if use_private_key {
+                            Some(private_key_path)
+                        } else {
+                            None
+                        },
                         port,
                         ..Default::default()
                     };
@@ -2056,9 +2109,8 @@ impl SshTab {
 
                     // Save config
                     if let Err(e) = app_config.save(&config_path) {
-                        self.error_dialog.open(
-                            tr!("ssh-error-save-config", {error: e.to_string()})
-                        );
+                        self.error_dialog
+                            .open(tr!("ssh-error-save-config", {error: e.to_string()}));
                         return;
                     }
 
@@ -2068,7 +2120,8 @@ impl SshTab {
                     self.loaded = false;
                 }
                 Err(e) => {
-                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.error_dialog
+                        .open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -2098,7 +2151,8 @@ impl SshTab {
                     }
                 }
                 Err(e) => {
-                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.error_dialog
+                        .open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -2138,12 +2192,15 @@ impl SshTab {
                         host_config.host = host.clone();
                         host_config.port = port;
                         host_config.password = if use_password { Some(password) } else { None };
-                        host_config.private_key_path = if use_private_key { Some(private_key_path) } else { None };
+                        host_config.private_key_path = if use_private_key {
+                            Some(private_key_path)
+                        } else {
+                            None
+                        };
 
                         if let Err(e) = app_config.save(&config_path) {
-                            self.error_dialog.open(
-                                tr!("ssh-error-save-config", {error: e.to_string()})
-                            );
+                            self.error_dialog
+                                .open(tr!("ssh-error-save-config", {error: e.to_string()}));
                             return;
                         }
 
@@ -2152,7 +2209,8 @@ impl SshTab {
                     }
                 }
                 Err(e) => {
-                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.error_dialog
+                        .open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }
@@ -2173,7 +2231,11 @@ impl SshTab {
                 (host.clone(), delete_data),
             );
         });
-        dure_info!("Scheduled remove Dure for {} (delete_data: {})", host, delete_data);
+        dure_info!(
+            "Scheduled remove Dure for {} (delete_data: {})",
+            host,
+            delete_data
+        );
     }
 
     /// Reset edit dialog fields
@@ -2206,9 +2268,8 @@ impl SshTab {
                     app_config.ssh_hosts.retain(|h| h.host != host);
 
                     if let Err(e) = app_config.save(&config_path) {
-                        self.error_dialog.open(
-                            tr!("ssh-error-save-config", {error: e.to_string()})
-                        );
+                        self.error_dialog
+                            .open(tr!("ssh-error-save-config", {error: e.to_string()}));
                         return;
                     }
 
@@ -2217,7 +2278,8 @@ impl SshTab {
                     self.loaded = false;
                 }
                 Err(e) => {
-                    self.error_dialog.open(tr!("ssh-error-load-config", {error: e.to_string()}));
+                    self.error_dialog
+                        .open(tr!("ssh-error-load-config", {error: e.to_string()}));
                 }
             }
         }

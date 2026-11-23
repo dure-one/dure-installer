@@ -32,27 +32,23 @@ impl RestartVmConfirmDialog {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog(
-            "restart_vm_confirm",
-            "Confirm Restart",
-            &mut self.open,
-        )
-        .min_width(400.0)
-        .max_width(window_width - 120.0)
-        .max_height(window_height - 120.0)
-        .scrollable(true)
-        .content(|ui, _open| {
-            ui.label(format!("Restart VM '{}'?", self.vm_name));
-            ui.add_space(8.0);
-            ui.label("The VM will be temporarily unavailable during restart.");
-        })
-        .action("Cancel", || {
-            cancelled.set(true);
-        })
-        .primary_action("Restart", || {
-            confirmed.set(true);
-        })
-        .show(ctx);
+        dialog("restart_vm_confirm", "Confirm Restart", &mut self.open)
+            .min_width(400.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
+            .scrollable(true)
+            .content(|ui, _open| {
+                ui.label(format!("Restart VM '{}'?", self.vm_name));
+                ui.add_space(8.0);
+                ui.label("The VM will be temporarily unavailable during restart.");
+            })
+            .action("Cancel", || {
+                cancelled.set(true);
+            })
+            .primary_action("Restart", || {
+                confirmed.set(true);
+            })
+            .show(ctx);
 
         if confirmed.get() {
             let result = RestartVmConfirmAction::Restart {

@@ -6,10 +6,7 @@ pub struct RestartVmConfirmDialog {
 }
 
 pub enum RestartVmConfirmAction {
-    Restart {
-        vm_name: String,
-        platform: String,
-    },
+    Restart { vm_name: String, platform: String },
     Cancel,
     None,
 }

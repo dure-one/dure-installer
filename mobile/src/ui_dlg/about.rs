@@ -61,7 +61,8 @@ impl DlgAbout {
                 });
 
                 // Show git metadata for dev builds (when version differs from git describe)
-                if git_describe != version && !git_describe.is_empty() && git_describe != "unknown" {
+                if git_describe != version && !git_describe.is_empty() && git_describe != "unknown"
+                {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(format!("Build: {} ({})", git_describe, build_date));
                     });
@@ -124,7 +125,9 @@ impl DlgAbout {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("• ");
                     if ui.link("bevy_game_template").clicked() {
-                        if let Err(e) = webbrowser::open("https://github.com/NiklasEi/bevy_game_template") {
+                        if let Err(e) =
+                            webbrowser::open("https://github.com/NiklasEi/bevy_game_template")
+                        {
                             dure_error!("Failed to open URL: {}", e);
                         }
                     }
@@ -137,7 +140,9 @@ impl DlgAbout {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("• ");
                     if ui.link("android-activity").clicked() {
-                        if let Err(e) = webbrowser::open("https://github.com/rust-mobile/android-activity") {
+                        if let Err(e) =
+                            webbrowser::open("https://github.com/rust-mobile/android-activity")
+                        {
                             dure_error!("Failed to open URL: {}", e);
                         }
                     }
@@ -150,7 +155,9 @@ impl DlgAbout {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("• ");
                     if ui.link("outline-apps").clicked() {
-                        if let Err(e) = webbrowser::open("https://github.com/OutlineFoundation/outline-apps") {
+                        if let Err(e) =
+                            webbrowser::open("https://github.com/OutlineFoundation/outline-apps")
+                        {
                             dure_error!("Failed to open URL: {}", e);
                         }
                     }
@@ -167,16 +174,17 @@ impl DlgAbout {
                     egui::Label::new("• egui - Immediate mode GUI library (MIT/Apache-2.0)").wrap(),
                 );
                 ui.add(
-                    egui::Label::new("• eframe - Framework for egui apps (MIT/Apache-2.0)")
-                        .wrap(),
+                    egui::Label::new("• eframe - Framework for egui apps (MIT/Apache-2.0)").wrap(),
                 );
                 ui.add(
                     egui::Label::new("• winit - Cross-platform window creation (Apache-2.0)")
                         .wrap(),
                 );
                 ui.add(
-                    egui::Label::new("• egui-material3 - Material3 theme for egui (MIT/Apache-2.0)")
-                        .wrap(),
+                    egui::Label::new(
+                        "• egui-material3 - Material3 theme for egui (MIT/Apache-2.0)",
+                    )
+                    .wrap(),
                 );
                 ui.add(
                     egui::Label::new(
@@ -195,9 +203,7 @@ impl DlgAbout {
                     egui::Label::new("• russh - Pure Rust SSH implementation (MIT/Apache-2.0)")
                         .wrap(),
                 );
-                ui.add(
-                    egui::Label::new("• ureq - Minimal HTTP client (MIT/Apache-2.0)").wrap(),
-                );
+                ui.add(egui::Label::new("• ureq - Minimal HTTP client (MIT/Apache-2.0)").wrap());
                 ui.add(
                     egui::Label::new("• rustls - Modern TLS library (Apache-2.0/ISC/MIT)").wrap(),
                 );
@@ -209,18 +215,13 @@ impl DlgAbout {
                     egui::Label::new("• diesel - Type-safe ORM and query builder (MIT/Apache-2.0)")
                         .wrap(),
                 );
-                ui.add(
-                    egui::Label::new("• keepass - KeePass database library (MIT)").wrap(),
-                );
+                ui.add(egui::Label::new("• keepass - KeePass database library (MIT)").wrap());
 
                 ui.add_space(4.0);
 
                 // Cryptography
                 ui.add(
-                    egui::Label::new(
-                        "• x25519-dalek - X25519 key exchange (BSD-3-Clause)",
-                    )
-                    .wrap(),
+                    egui::Label::new("• x25519-dalek - X25519 key exchange (BSD-3-Clause)").wrap(),
                 );
                 ui.add(
                     egui::Label::new(

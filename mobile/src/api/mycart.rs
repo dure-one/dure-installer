@@ -323,11 +323,7 @@ pub async fn read_log_file(
         tail_lines, log_path
     );
 
-    log::debug!(
-        "read_log_file: host={}, cmd={}",
-        host_config.host,
-        cmd
-    );
+    log::debug!("read_log_file: host={}, cmd={}", host_config.host, cmd);
 
     let result = ssh::execute_command(host_config, &cmd, profile_keyring).await;
 
@@ -348,7 +344,10 @@ pub async fn read_log_file(
         }
     }
 
-    result.context(format!("Failed to read {} from {}", log_path, host_config.host))
+    result.context(format!(
+        "Failed to read {} from {}",
+        log_path, host_config.host
+    ))
 }
 
 /// Get crontab jobs list
@@ -483,7 +482,11 @@ pub async fn patch_crontab(
                     .into_json()
                     .context("Failed to parse crontab update response")?;
 
-                log::debug!("PATCH response: success={}, message={}", api_response.success, api_response.message);
+                log::debug!(
+                    "PATCH response: success={}, message={}",
+                    api_response.success,
+                    api_response.message
+                );
 
                 if api_response.success {
                     Ok(())

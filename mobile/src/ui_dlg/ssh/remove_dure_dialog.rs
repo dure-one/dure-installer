@@ -33,36 +33,32 @@ impl RemoveDureDialog {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog(
-            "remove_dure_dialog",
-            "Remove Dure",
-            &mut self.open,
-        )
-        .min_width(350.0)
-        .max_width(window_width - 120.0)
-        .max_height(window_height - 120.0)
-        .scrollable(true)
-        .content(|ui, _open| {
-            ui.label(format!("Remove Dure from host: {}", self.host));
-            ui.add_space(12.0);
+        dialog("remove_dure_dialog", "Remove Dure", &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
+            .scrollable(true)
+            .content(|ui, _open| {
+                ui.label(format!("Remove Dure from host: {}", self.host));
+                ui.add_space(12.0);
 
-            ui.checkbox(
-                &mut self.delete_data,
-                "Delete data directories (/srv/dure-mycart and /srv/data)",
-            );
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new("Warning: Deleting data cannot be undone!")
-                    .color(egui::Color32::from_rgb(211, 47, 47)),
-            );
-        })
-        .action(tr!("button-cancel"), || {
-            cancel_requested.set(true);
-        })
-        .primary_action(&tr!("remove"), || {
-            remove_requested.set(true);
-        })
-        .show(ctx);
+                ui.checkbox(
+                    &mut self.delete_data,
+                    "Delete data directories (/srv/dure-mycart and /srv/data)",
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("Warning: Deleting data cannot be undone!")
+                        .color(egui::Color32::from_rgb(211, 47, 47)),
+                );
+            })
+            .action(tr!("button-cancel"), || {
+                cancel_requested.set(true);
+            })
+            .primary_action(&tr!("remove"), || {
+                remove_requested.set(true);
+            })
+            .show(ctx);
 
         if remove_requested.get() {
             let result = RemoveDureAction::Remove {

@@ -67,10 +67,32 @@ pub fn render_drawer(
         .show(ui, |ui| match active_tab {
             DrawerTab::Status => render_status_tab(ui, site, stats, seller),
             DrawerTab::Logs => render_logs_tab(ui, logs, logs_loading, site),
-            DrawerTab::Operations => render_operations_tab(ui, operations, operations_loading, site),
-            DrawerTab::Mycart => render_mycart_tab(ui, mycart_logs, mycart_loading, mycart_config, mycart_config_loading),
-            DrawerTab::XMPPProxy => render_xmppproxy_tab(ui, xmppproxy_logs, xmppproxy_loading, xmppproxy_config, xmppproxy_config_loading),
-            DrawerTab::Fail2BanRS => render_fail2banrs_tab(ui, fail2banrs_logs, fail2banrs_loading, fail2banrs_config, fail2banrs_config_loading, fail2banrs_nft, fail2banrs_nft_loading),
+            DrawerTab::Operations => {
+                render_operations_tab(ui, operations, operations_loading, site)
+            }
+            DrawerTab::Mycart => render_mycart_tab(
+                ui,
+                mycart_logs,
+                mycart_loading,
+                mycart_config,
+                mycart_config_loading,
+            ),
+            DrawerTab::XMPPProxy => render_xmppproxy_tab(
+                ui,
+                xmppproxy_logs,
+                xmppproxy_loading,
+                xmppproxy_config,
+                xmppproxy_config_loading,
+            ),
+            DrawerTab::Fail2BanRS => render_fail2banrs_tab(
+                ui,
+                fail2banrs_logs,
+                fail2banrs_loading,
+                fail2banrs_config,
+                fail2banrs_config_loading,
+                fail2banrs_nft,
+                fail2banrs_nft_loading,
+            ),
         });
 }
 
@@ -249,7 +271,11 @@ fn render_mycart_tab(
                 return;
             }
 
-            let selected_file = if active_subtab == 1 { "stderr" } else { "stdout" };
+            let selected_file = if active_subtab == 1 {
+                "stderr"
+            } else {
+                "stdout"
+            };
 
             if let Some(lines) = logs.get(selected_file) {
                 egui::ScrollArea::vertical()
@@ -328,7 +354,11 @@ fn render_xmppproxy_tab(
                 return;
             }
 
-            let selected_file = if active_subtab == 1 { "stderr" } else { "stdout" };
+            let selected_file = if active_subtab == 1 {
+                "stderr"
+            } else {
+                "stdout"
+            };
 
             if let Some(lines) = logs.get(selected_file) {
                 egui::ScrollArea::vertical()
@@ -429,7 +459,11 @@ fn render_fail2banrs_tab(
                 return;
             }
 
-            let selected_file = if active_subtab == 2 { "stderr" } else { "stdout" };
+            let selected_file = if active_subtab == 2 {
+                "stderr"
+            } else {
+                "stdout"
+            };
 
             if let Some(lines) = logs.get(selected_file) {
                 egui::ScrollArea::vertical()

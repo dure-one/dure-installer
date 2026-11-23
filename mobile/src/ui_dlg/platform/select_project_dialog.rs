@@ -56,10 +56,7 @@ impl SelectProjectDialog {
                     tr!("platform-select-project-none"),
                 ); // Warning amber
             } else {
-                ui.label(format!(
-                    "Found {} projects:",
-                    self.project_list.len()
-                ));
+                ui.label(format!("Found {} projects:", self.project_list.len()));
                 ui.add_space(8.0);
 
                 egui::ScrollArea::vertical()

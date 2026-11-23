@@ -487,9 +487,7 @@ impl DnsTab {
                     {
                         if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
                             match crate::storage::models::opslog::get_dns_operations(
-                                &mut conn,
-                                &domain,
-                                100,
+                                &mut conn, &domain, 100,
                             ) {
                                 Ok(ops) => row.drawer_state.set_operations(ops),
                                 Err(e) => {
@@ -1001,13 +999,18 @@ impl DnsTab {
 
     fn handle_dns_setup(&mut self) {
         let setup_data = self.selected_domain.as_ref().and_then(|domain| {
-            self.domain_rows.iter().find(|r| &r.domain == domain).and_then(|row| {
-                let zone_id = row.zone_id.clone()?;
-                let vm_ip = row.vm_external_ip.clone()?;
-                let token = row.oauth_access_token.clone()
-                    .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))?;
-                Some((domain.clone(), zone_id, vm_ip, token))
-            })
+            self.domain_rows
+                .iter()
+                .find(|r| &r.domain == domain)
+                .and_then(|row| {
+                    let zone_id = row.zone_id.clone()?;
+                    let vm_ip = row.vm_external_ip.clone()?;
+                    let token = row.oauth_access_token.clone().or(self
+                        .dns_oauth_result
+                        .as_ref()
+                        .map(|r| r.access_token.clone()))?;
+                    Some((domain.clone(), zone_id, vm_ip, token))
+                })
         });
 
         if let Some((domain, zone_id, vm_ip, token)) = setup_data {
@@ -1017,11 +1020,25 @@ impl DnsTab {
 
     fn handle_wizard_completion(
         &mut self,
-        completed_domain: (String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<u64>),
-        platform_info: (Option<String>, Option<String>, Option<String>, Option<String>),
+        completed_domain: (
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<u64>,
+        ),
+        platform_info: (
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        ),
         profile: &ProfileContext,
     ) {
-        let (provider, domain, zone_id, account_id, access_token, refresh_token, expires_at) = completed_domain;
+        let (provider, domain, zone_id, account_id, access_token, refresh_token, expires_at) =
+            completed_domain;
         let (platform_id, platform_name, vm_name, vm_external_ip) = platform_info;
 
         if let Some(existing_row) = self.domain_rows.iter_mut().find(|r| r.domain == domain) {
@@ -1029,7 +1046,10 @@ impl DnsTab {
             existing_row.oauth_refresh_token = refresh_token.clone();
             existing_row.oauth_token_expiry = expires_at;
             existing_row.oauth_refresh_failed = false;
-            dure_info!(project_id = domain, "Updated OAuth tokens for existing domain");
+            dure_info!(
+                project_id = domain,
+                "Updated OAuth tokens for existing domain"
+            );
 
             Self::save_domain_to_config(
                 &profile.config_file,
@@ -1144,7 +1164,9 @@ impl DnsTab {
 
         // Verify new refresh_token was returned (per Cloudflare OAuth conventions)
         if oauth_result.refresh_token.is_none() {
-            return Err("Token refresh failed: Cloudflare did not return new refresh_token".to_string());
+            return Err(
+                "Token refresh failed: Cloudflare did not return new refresh_token".to_string(),
+            );
         }
 
         dure_info!("✓ OAuth token refreshed successfully");
@@ -1765,13 +1787,15 @@ impl DnsTab {
                             #[cfg(not(target_arch = "wasm32"))]
                             if let Some(domain) = &self.selected_domain {
                                 dure_info!(project_id = domain, "DNS records created successfully");
-                                if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                                    let _ = crate::storage::models::opslog::complete_latest_operation(
-                                        &mut conn,
-                                        domain,
-                                        "dns",
-                                        OperationStatus::Success,
-                                    );
+                                if let Ok(mut conn) = crate::calc::db::establish_connection_result()
+                                {
+                                    let _ =
+                                        crate::storage::models::opslog::complete_latest_operation(
+                                            &mut conn,
+                                            domain,
+                                            "dns",
+                                            OperationStatus::Success,
+                                        );
                                 }
                             }
 
@@ -1786,20 +1810,25 @@ impl DnsTab {
                             // Update operation status to failed
                             #[cfg(not(target_arch = "wasm32"))]
                             if let Some(domain) = &self.selected_domain {
-                                dure_error!(project_id = domain, "DNS records creation failed: {}", e);
-                                if let Ok(mut conn) = crate::calc::db::establish_connection_result() {
-                                    let _ = crate::storage::models::opslog::complete_latest_operation(
-                                        &mut conn,
-                                        domain,
-                                        "dns",
-                                        OperationStatus::Failed,
-                                    ).map(|log_id| {
-                                        crate::storage::models::opslog::set_error_message(
+                                dure_error!(
+                                    project_id = domain,
+                                    "DNS records creation failed: {}",
+                                    e
+                                );
+                                if let Ok(mut conn) = crate::calc::db::establish_connection_result()
+                                {
+                                    let _ =
+                                        crate::storage::models::opslog::complete_latest_operation(
                                             &mut conn,
-                                            log_id,
-                                            &e,
+                                            domain,
+                                            "dns",
+                                            OperationStatus::Failed,
                                         )
-                                    });
+                                        .map(|log_id| {
+                                            crate::storage::models::opslog::set_error_message(
+                                                &mut conn, log_id, &e,
+                                            )
+                                        });
                                 }
                             }
                         }
@@ -1812,13 +1841,18 @@ impl DnsTab {
 
             // Update dialog state
             self.dns_settings_dialog.domain = self.selected_domain.clone();
-            self.dns_settings_dialog.has_oauth_token = self.selected_domain
+            self.dns_settings_dialog.has_oauth_token = self
+                .selected_domain
                 .as_ref()
                 .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
                 .and_then(|r| r.oauth_access_token.clone())
-                .or(self.dns_oauth_result.as_ref().map(|r| r.access_token.clone()))
+                .or(self
+                    .dns_oauth_result
+                    .as_ref()
+                    .map(|r| r.access_token.clone()))
                 .is_some();
-            self.dns_settings_dialog.vm_ip = self.selected_domain
+            self.dns_settings_dialog.vm_ip = self
+                .selected_domain
                 .as_ref()
                 .and_then(|d| self.domain_rows.iter().find(|r| &r.domain == d))
                 .and_then(|r| r.vm_external_ip.clone());
@@ -1990,7 +2024,10 @@ impl DnsTab {
         if let Err(e) = config.save(&config_file.to_path_buf()) {
             dure_error!("Failed to save DNS domain to config: {}", e);
         } else {
-            dure_info!(project_id = domain, "Saved DNS domain with OAuth tokens to config");
+            dure_info!(
+                project_id = domain,
+                "Saved DNS domain with OAuth tokens to config"
+            );
         }
     }
 
@@ -2013,7 +2050,10 @@ impl DnsTab {
             if let Err(e) = config.save(&profile.config_file) {
                 dure_error!("Failed to save config after deleting domain: {}", e);
             } else {
-                dure_info!(project_id = domain, "Successfully deleted DNS domain from config");
+                dure_info!(
+                    project_id = domain,
+                    "Successfully deleted DNS domain from config"
+                );
             }
         } else {
             dure_warn!("Domain {} not found in config", domain);

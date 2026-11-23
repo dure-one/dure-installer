@@ -1,7 +1,6 @@
 //! Responsive status grid component
 
 use crate::ui_components::emoji_loader::SvgEmoji;
-use egui_twemoji::EmojiLabel;
 
 /// Item state for visual indicators
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +100,7 @@ impl StatusGrid {
                         }
                         None => egui::RichText::new(&item.value).color(text_color),
                     };
-                    EmojiLabel::new(value_text).show(ui);
+                    ui.label(value_text);
 
                     // End row after filling columns
                     if (idx + 1) % columns == 0 {

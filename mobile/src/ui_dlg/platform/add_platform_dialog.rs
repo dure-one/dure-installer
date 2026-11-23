@@ -225,7 +225,10 @@ impl AddPlatformDialog {
                     } else if self.create_new {
                         self.new_project_id.clone()
                     } else if let Some(idx) = self.selected_project {
-                        self.project_list.get(idx).map(|(id, _)| id.clone()).unwrap_or_default()
+                        self.project_list
+                            .get(idx)
+                            .map(|(id, _)| id.clone())
+                            .unwrap_or_default()
                     } else {
                         String::new()
                     };

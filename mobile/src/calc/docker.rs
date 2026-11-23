@@ -214,8 +214,12 @@ pub async fn remove_docker_daemon(
     let _ = ssh::execute_command(host_config, "sudo systemctl stop docker", profile_keyring).await;
 
     progress.push("Disabling Docker service...".to_string());
-    let _ =
-        ssh::execute_command(host_config, "sudo systemctl disable docker", profile_keyring).await;
+    let _ = ssh::execute_command(
+        host_config,
+        "sudo systemctl disable docker",
+        profile_keyring,
+    )
+    .await;
 
     // Detect Docker package type (Debian 13 always has apt)
     progress.push("Detecting Docker package...".to_string());
@@ -251,9 +255,12 @@ pub async fn remove_docker_daemon(
 
     progress.push("Removing Docker data directories...".to_string());
     let _ = ssh::execute_command(host_config, "sudo rm -rf /var/lib/docker", profile_keyring).await;
-    let _ =
-        ssh::execute_command(host_config, "sudo rm -rf /var/lib/containerd", profile_keyring)
-            .await;
+    let _ = ssh::execute_command(
+        host_config,
+        "sudo rm -rf /var/lib/containerd",
+        profile_keyring,
+    )
+    .await;
 
     progress.push("Docker removed successfully".to_string());
 

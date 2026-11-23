@@ -3007,9 +3007,7 @@ impl SshActor {
 
         // Always emit event to sync UI
         self.event_tx
-            .send(ViewModelEvent::Ssh(SshEvent::TunnelDisabled {
-                host,
-            }))
+            .send(ViewModelEvent::Ssh(SshEvent::TunnelDisabled { host }))
             .await
             .ok();
 

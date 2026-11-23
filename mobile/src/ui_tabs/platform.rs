@@ -7,7 +7,6 @@ use egui_material3::{
     badge, data_table, dialog, linear_progress, notification, BadgeColor, BadgeSize, DataTableCell,
     MaterialButton, NotificationAlign,
 };
-use egui_twemoji::EmojiLabel;
 use std::cell::Cell;
 
 use crate::api::gcp::bigquery::BillingRecord;
@@ -1095,7 +1094,9 @@ impl PlatformTab {
                         );
 
                         // Check if this is for the firewall dialog
-                        if self.firewall_dialog.open && self.firewall_dialog.platform == platform_name {
+                        if self.firewall_dialog.open
+                            && self.firewall_dialog.platform == platform_name
+                        {
                             dure_info!(
                                 "[UI::PLATFO] Updating UI with {} firewall rules",
                                 rules.len()
@@ -1126,7 +1127,9 @@ impl PlatformTab {
                             && (operation == "create" || operation == "delete");
 
                         // Refresh firewall data to show updated state
-                        if self.firewall_dialog.open && self.firewall_dialog.platform == platform_name {
+                        if self.firewall_dialog.open
+                            && self.firewall_dialog.platform == platform_name
+                        {
                             dure_info!("[UI::PLATFO] Triggering firewall data refresh after {} operation (force={})",
                                 operation, force_refresh);
                             let profile_config_path = current_profile.config_file.clone();
@@ -1304,7 +1307,7 @@ impl PlatformTab {
 
                                 if let Err(e) = app_config.save(&config_path) {
                                     self.error_dialog.open(
-                                        tr!("platform-error-save-config", {error: e.to_string()})
+                                        tr!("platform-error-save-config", {error: e.to_string()}),
                                     );
                                 } else {
                                     dure_info!("✅ Config updated, refreshing table");
@@ -1349,7 +1352,8 @@ impl PlatformTab {
                         dure_debug!("✅ VMs listed for {}: {} VMs", platform_name, vms.len());
 
                         // Check if this is for the bind VM dialog
-                        if self.bind_vm_dialog.open && self.bind_vm_dialog.platform == platform_name {
+                        if self.bind_vm_dialog.open && self.bind_vm_dialog.platform == platform_name
+                        {
                             let vm_list: Vec<_> = vms
                                 .into_iter()
                                 .map(|vm| {
@@ -1397,7 +1401,8 @@ impl PlatformTab {
                             self.billing_dialog.error = Some(error);
                             self.billing_dialog.loading = false;
                         } else if operation == "update_firewall" {
-                            self.error_dialog.open(format!("Failed to update firewall: {}", error));
+                            self.error_dialog
+                                .open(format!("Failed to update firewall: {}", error));
                         } else if operation == "create_firewall_rule"
                             || operation == "delete_firewall_rule"
                         {
@@ -1405,9 +1410,11 @@ impl PlatformTab {
                             self.add_firewall_dialog.save_error = Some(error);
                             self.add_firewall_dialog.save_in_progress = false;
                         } else if operation == "restart_vm" {
-                            self.error_dialog.open(format!("Failed to restart VM: {}", error));
+                            self.error_dialog
+                                .open(format!("Failed to restart VM: {}", error));
                         } else if operation == "delete_vm" {
-                            self.error_dialog.open(format!("Failed to delete VM: {}", error));
+                            self.error_dialog
+                                .open(format!("Failed to delete VM: {}", error));
                         } else if operation == "list_vms" {
                             dure_error!("Failed to list VMs: {}", error);
                             self.bind_vm_dialog.loading = false;
@@ -1617,14 +1624,13 @@ impl PlatformTab {
                 .next()
             {
                 use egui_material3::theme::get_global_color;
-                EmojiLabel::new(
+                ui.label(
                     egui::RichText::new(format!(
                         "⚠️ Error in {}: {}",
                         error.operation, error.error
                     ))
                     .color(get_global_color("error")),
-                )
-                .show(ui);
+                );
                 ui.add_space(4.0);
             }
         }
@@ -1775,16 +1781,8 @@ impl PlatformTab {
                 .allow_drawer(true)
                 .min_row_height(68.0)
                 .drawer_row_height(500.0)
-                .column(
-                    &tr!("platform-table-col-project"),
-                    col1_width,
-                    false,
-                )
-                .column(
-                    &tr!("platform-table-col-operations"),
-                    col2_width,
-                    false,
-                );
+                .column(&tr!("platform-table-col-project"), col1_width, false)
+                .column(&tr!("platform-table-col-operations"), col2_width, false);
 
             for (idx, row) in self.rows.iter().enumerate() {
                 let row_for_cells = row.clone();
@@ -2403,11 +2401,12 @@ impl PlatformTab {
                             .find(|p| p.gcp_selected_project_id.as_ref() == Some(&platform_name))
                         {
                             if let Some(vm_config) = platform.vms.first() {
-                                dure_info!("Restart VM button clicked for '{}' - showing confirmation", vm_config.name);
-                                self.restart_vm_confirm_dialog.open(
-                                    vm_config.name.clone(),
-                                    platform_name.clone(),
+                                dure_info!(
+                                    "Restart VM button clicked for '{}' - showing confirmation",
+                                    vm_config.name
                                 );
+                                self.restart_vm_confirm_dialog
+                                    .open(vm_config.name.clone(), platform_name.clone());
                             }
                         }
                     }
@@ -2461,7 +2460,8 @@ impl PlatformTab {
                     match result {
                         Ok(oauth_result) => {
                             self.add_platform_dialog.oauth_result = Some(oauth_result.clone());
-                            self.add_platform_dialog.connected_email = Some("Connected Account".to_string());
+                            self.add_platform_dialog.connected_email =
+                                Some("Connected Account".to_string());
                             self.add_platform_dialog.oauth_promise = None;
                         }
                         Err(e) => {
@@ -2486,7 +2486,6 @@ impl PlatformTab {
                     }
                 }
             }
-
         }
 
         // Add Platform Wizard
@@ -2519,7 +2518,12 @@ impl PlatformTab {
                 platform_name,
                 project_id,
             } => {
-                self.handle_select_project(current_profile, platform_name, project_id, vm.as_deref_mut());
+                self.handle_select_project(
+                    current_profile,
+                    platform_name,
+                    project_id,
+                    vm.as_deref_mut(),
+                );
             }
             _ => {}
         }
@@ -2532,7 +2536,14 @@ impl PlatformTab {
                 force,
                 release_ip,
             } => {
-                self.handle_delete_vm(current_profile, vm_name, zone, force, release_ip, vm.as_deref_mut());
+                self.handle_delete_vm(
+                    current_profile,
+                    vm_name,
+                    zone,
+                    force,
+                    release_ip,
+                    vm.as_deref_mut(),
+                );
             }
             _ => {}
         }
@@ -2554,7 +2565,10 @@ impl PlatformTab {
         }
 
         // Firewall dialog (skip if Add/Edit or Delete confirmation is open to maintain z-order)
-        if self.firewall_dialog.open && !self.add_firewall_dialog.open && !self.delete_firewall_confirm_dialog.open {
+        if self.firewall_dialog.open
+            && !self.add_firewall_dialog.open
+            && !self.delete_firewall_confirm_dialog.open
+        {
             match self.firewall_dialog.show(ui.ctx()) {
                 crate::ui_dlg::platform::FirewallAction::AddIp => {
                     self.handle_firewall_add_ip(current_profile, vm.as_deref_mut());
@@ -2562,10 +2576,16 @@ impl PlatformTab {
                 crate::ui_dlg::platform::FirewallAction::AddRule => {
                     self.handle_firewall_add_rule();
                 }
-                crate::ui_dlg::platform::FirewallAction::EditRule { rule_data, rule_idx } => {
+                crate::ui_dlg::platform::FirewallAction::EditRule {
+                    rule_data,
+                    rule_idx,
+                } => {
                     self.handle_firewall_edit_rule(rule_data, rule_idx);
                 }
-                crate::ui_dlg::platform::FirewallAction::DeleteRule { rule_name, rule_idx } => {
+                crate::ui_dlg::platform::FirewallAction::DeleteRule {
+                    rule_name,
+                    rule_idx,
+                } => {
                     self.handle_firewall_delete_rule(rule_name, rule_idx);
                 }
                 crate::ui_dlg::platform::FirewallAction::Reset => {
@@ -2617,11 +2637,12 @@ impl PlatformTab {
 
         // Restart VM confirmation dialog
         match self.restart_vm_confirm_dialog.show(ui.ctx()) {
-            crate::ui_dlg::platform::RestartVmConfirmAction::Restart {
-                vm_name,
-                platform,
-            } => {
-                dure_info!("Restart confirmed for VM '{}' on platform '{}'", vm_name, platform);
+            crate::ui_dlg::platform::RestartVmConfirmAction::Restart { vm_name, platform } => {
+                dure_info!(
+                    "Restart confirmed for VM '{}' on platform '{}'",
+                    vm_name,
+                    platform
+                );
 
                 // Optimistic update
                 if let Some(row) = self.rows.iter_mut().find(|r| r.project_id == platform) {
@@ -3014,7 +3035,8 @@ impl PlatformTab {
                     self.loaded = true;
                 }
                 Err(e) => {
-                    self.error_dialog.open(format!("Failed to load config: {}", e));
+                    self.error_dialog
+                        .open(format!("Failed to load config: {}", e));
                     self.loaded = true; // Still mark as loaded to show error
                 }
             }
@@ -3022,7 +3044,8 @@ impl PlatformTab {
 
         #[cfg(target_arch = "wasm32")]
         {
-            self.error_dialog.open("WASM platform not supported".to_string());
+            self.error_dialog
+                .open("WASM platform not supported".to_string());
             self.loaded = true;
         }
     }
@@ -3089,13 +3112,17 @@ impl PlatformTab {
                         oauth_result.access_token,
                         oauth_result.refresh_token,
                         oauth_result.expires_at as i64,
-                        self.add_platform_dialog.connected_email.clone().unwrap_or_default(),
+                        self.add_platform_dialog
+                            .connected_email
+                            .clone()
+                            .unwrap_or_default(),
                     ) {
                         Ok(_) => {
                             dure_info!("Platform OAuth update command sent");
                         }
                         Err(e) => {
-                            self.error_dialog.open(format!("Failed to update platform OAuth: {}", e));
+                            self.error_dialog
+                                .open(format!("Failed to update platform OAuth: {}", e));
                         }
                     }
                 } else {
@@ -3113,14 +3140,14 @@ impl PlatformTab {
                             dure_info!("Platform add command sent");
                         }
                         Err(e) => {
-                            self.error_dialog.open(format!("Failed to add platform: {}", e));
+                            self.error_dialog
+                                .open(format!("Failed to add platform: {}", e));
                         }
                     }
                 }
             }
         }
     }
-
 
     /// Render add platform wizard dialog
     fn render_add_platform_wizard(
@@ -3226,7 +3253,8 @@ impl PlatformTab {
                         let access_token = oauth_result.access_token.clone();
 
                         self.add_platform_dialog.oauth_result = Some(oauth_result.clone());
-                        self.add_platform_dialog.connected_email = Some("Connected Account".to_string());
+                        self.add_platform_dialog.connected_email =
+                            Some("Connected Account".to_string());
                         self.add_platform_dialog.oauth_promise = None;
 
                         // Fetch projects using OAuth token directly
@@ -3310,7 +3338,8 @@ impl PlatformTab {
 
         ui.label(format!(
             "Email: {}",
-            self.add_platform_dialog.connected_email
+            self.add_platform_dialog
+                .connected_email
                 .as_ref()
                 .unwrap_or(&"Not connected".to_string())
         ));
@@ -3326,7 +3355,8 @@ impl PlatformTab {
             ));
         } else {
             let project_info = self
-                .add_platform_dialog.selected_project
+                .add_platform_dialog
+                .selected_project
                 .and_then(|idx| self.add_platform_dialog.project_list.get(idx))
                 .map(|(id, name)| format!("{} ({})", name, id))
                 .unwrap_or_else(|| "Not selected".to_string());
@@ -3393,7 +3423,8 @@ impl PlatformTab {
                             let project_id = if self.add_platform_dialog.create_new {
                                 self.add_platform_dialog.new_project_id.clone()
                             } else {
-                                self.add_platform_dialog.selected_project
+                                self.add_platform_dialog
+                                    .selected_project
                                     .and_then(|idx| self.add_platform_dialog.project_list.get(idx))
                                     .map(|(id, _)| id.clone())
                                     .unwrap_or_default()
@@ -3540,12 +3571,14 @@ impl PlatformTab {
             // Send command to ViewModel with profile-specific config path
             let profile_config_path = profile.config_file.clone();
             if let Err(e) = vm.restart_vm(profile_config_path, platform_name, vm_name, zone) {
-                self.error_dialog.open(format!("Failed to start VM restart: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start VM restart: {}", e));
             }
             // Note: UI will be updated by event processing when VMRestarted event arrives
         } else {
             // Fallback: no ViewModel available
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -3574,12 +3607,14 @@ impl PlatformTab {
                             return;
                         }
                     } else {
-                        self.error_dialog.open(format!("Platform not found: {}", platform_name));
+                        self.error_dialog
+                            .open(format!("Platform not found: {}", platform_name));
                         return;
                     }
                 }
                 Err(e) => {
-                    self.error_dialog.open(format!("Failed to load config: {}", e));
+                    self.error_dialog
+                        .open(format!("Failed to load config: {}", e));
                     return;
                 }
             };
@@ -3592,11 +3627,13 @@ impl PlatformTab {
                 zone,
                 profile_kdbx,
             ) {
-                self.error_dialog.open(format!("Failed to start VM regeneration: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start VM regeneration: {}", e));
             }
             // Result will be delivered via VMRegenerated event
         } else {
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -3621,16 +3658,20 @@ impl PlatformTab {
                 }
                 Err(e) => {
                     dure_error!("Failed to get current IP: {}", e);
-                    self.error_dialog.open(format!("Failed to get current IP: {}", e));
+                    self.error_dialog
+                        .open(format!("Failed to get current IP: {}", e));
                     return;
                 }
             };
 
             // Send command to ViewModel
             let config_path = get_config_path(&Some(current_profile.clone())).unwrap_or_default();
-            if let Err(e) = vm.update_firewall(config_path, platform_name.clone(), current_ip.clone()) {
+            if let Err(e) =
+                vm.update_firewall(config_path, platform_name.clone(), current_ip.clone())
+            {
                 dure_error!("Failed to send firewall update command: {}", e);
-                self.error_dialog.open(format!("Failed to start firewall update: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start firewall update: {}", e));
             } else {
                 dure_info!(" Firewall update command sent successfully");
             }
@@ -3638,7 +3679,8 @@ impl PlatformTab {
         } else {
             // Fallback: no ViewModel available
             dure_error!("ViewModel not available for firewall update");
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -3654,12 +3696,14 @@ impl PlatformTab {
 
             // Send command to ViewModel with profile-specific config path
             if let Err(e) = vm.scan_existing_vms(profile_config_path, platform_name) {
-                self.error_dialog.open(format!("Failed to start VM scan: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start VM scan: {}", e));
             }
             // Note: UI will be updated when VMsScanned event arrives
         } else {
             // Fallback: no ViewModel available
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -3679,13 +3723,15 @@ impl PlatformTab {
         if let Some(vm) = vm {
             let config_path = get_config_path(&Some(current_profile.clone())).unwrap_or_default();
             if let Err(e) = vm.list_projects(config_path, platform_name.clone()) {
-                self.error_dialog.open(format!("Failed to start project listing: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start project listing: {}", e));
                 self.select_project_dialog.loading = false;
             }
             // Dialog will be shown when ProjectsListed event arrives
         } else {
             // Fallback: No ViewModel available, show error
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
             self.select_project_dialog.loading = false;
         }
     }
@@ -3762,7 +3808,6 @@ impl PlatformTab {
         }
     }
 
-
     #[cfg(not(target_arch = "wasm32"))]
     fn handle_delete_vm(
         &mut self,
@@ -3785,7 +3830,8 @@ impl PlatformTab {
                 force,
                 release_ip,
             ) {
-                self.error_dialog.open(format!("Failed to start VM deletion: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to start VM deletion: {}", e));
                 return;
             }
 
@@ -3815,7 +3861,8 @@ impl PlatformTab {
                 }
             }
         } else {
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -4126,12 +4173,11 @@ impl PlatformTab {
             }
         };
 
-        self.delete_platform_confirm_dialog.open(platform_name, vm_count);
+        self.delete_platform_confirm_dialog
+            .open(platform_name, vm_count);
     }
 
-
     #[cfg(not(target_arch = "wasm32"))]
-
     #[cfg(not(target_arch = "wasm32"))]
     fn handle_select_project(
         &mut self,
@@ -4143,11 +4189,13 @@ impl PlatformTab {
         if let Some(vm) = vm {
             let config_path = current_profile.config_file.clone();
             if let Err(e) = vm.select_project(config_path, platform_name, project_id) {
-                self.error_dialog.open(format!("Failed to select project: {}", e));
+                self.error_dialog
+                    .open(format!("Failed to select project: {}", e));
             }
             // Result will be delivered via ProjectSelected event
         } else {
-            self.error_dialog.open("ViewModel not available".to_string());
+            self.error_dialog
+                .open("ViewModel not available".to_string());
         }
     }
 
@@ -4171,7 +4219,8 @@ impl PlatformTab {
                     dure_info!(" Platform delete command sent");
                 }
                 Err(e) => {
-                    self.error_dialog.open(format!("Failed to delete platform: {}", e));
+                    self.error_dialog
+                        .open(format!("Failed to delete platform: {}", e));
                 }
             }
         }
@@ -4282,7 +4331,9 @@ impl PlatformTab {
 
                 // Trigger async discovery via actor
                 let config_path = get_config_path(&Some(profile.clone())).unwrap_or_default();
-                if let Err(e) = vm.discover_billing_table(config_path, project_id.clone(), project_id.clone()) {
+                if let Err(e) =
+                    vm.discover_billing_table(config_path, project_id.clone(), project_id.clone())
+                {
                     dure_error!("[BILLING] Failed to start billing discovery: {}", e);
                     self.billing_dialog.error = Some(format!("Failed to start discovery: {}", e));
                     self.billing_dialog.loading = false;
@@ -4377,7 +4428,6 @@ impl PlatformTab {
         }
     }
 
-
     fn fetch_firewall_data(
         &mut self,
         profile_config_path: std::path::PathBuf,
@@ -4429,7 +4479,6 @@ impl PlatformTab {
         self.firewall_dialog.last_refresh_time = Some(std::time::Instant::now());
         self.fetch_firewall_data(profile_config_path, platform_name, vm);
     }
-
 
     fn handle_add_firewall_save(
         &mut self,
@@ -4555,11 +4604,7 @@ impl PlatformTab {
         self.add_firewall_dialog.open = true;
     }
 
-    fn handle_firewall_edit_rule(
-        &mut self,
-        rule_data: FirewallRule,
-        rule_idx: usize,
-    ) {
+    fn handle_firewall_edit_rule(&mut self, rule_data: FirewallRule, rule_idx: usize) {
         use crate::dure_info;
 
         dure_info!("Edit firewall rule at index {}", rule_idx);
@@ -4569,11 +4614,7 @@ impl PlatformTab {
         self.add_firewall_dialog.open = true;
     }
 
-    fn handle_firewall_delete_rule(
-        &mut self,
-        rule_name: String,
-        rule_idx: Option<usize>,
-    ) {
+    fn handle_firewall_delete_rule(&mut self, rule_name: String, rule_idx: Option<usize>) {
         use crate::dure_info;
 
         dure_info!(
@@ -4622,7 +4663,6 @@ impl PlatformTab {
             }
         }
     }
-
 }
 
 #[cfg(test)]

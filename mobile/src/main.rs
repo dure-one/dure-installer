@@ -355,9 +355,43 @@ fn main() -> Result<()> {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
+fn show_opengl_instructions() {
+    eprintln!("\nUnable to start the Dure graphical interface.");
+    eprintln!("The window system or Mesa/OpenGL driver may be unavailable.");
+    eprintln!("Install or reinstall a Mesa/OpenGL driver, then restart Dure:");
+
+    #[cfg(target_os = "linux")]
+    {
+        eprintln!("  Debian/Ubuntu: sudo apt install mesa-utils libgl1-mesa-dri");
+        eprintln!("  Fedora/RHEL:   sudo dnf install mesa-dri-drivers mesa-libGL");
+        eprintln!("  Arch Linux:    sudo pacman -S mesa mesa-utils");
+    }
+
+    #[cfg(target_os = "openbsd")]
+    eprintln!("  OpenBSD:       doas pkg_add mesa mesa-demos");
+
+    #[cfg(target_os = "windows")]
+    eprintln!("  Windows:       install the latest GPU driver or a Mesa3D OpenGL 2.0+ driver");
+
+    #[cfg(target_os = "macos")]
+    eprintln!("  macOS:         install the latest graphics driver and macOS updates");
+
+    #[cfg(any(target_os = "linux", target_os = "openbsd"))]
+    eprintln!("Also verify that DISPLAY is set in a graphical X11 login session.");
+
+    eprintln!("On a terminal-only system, run Dure without --gui to use CLI mode.\n");
+}
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "gui"))]
 fn run_gui_mode() -> Result<()> {
-    // Initialize i18n system before creating window
-    dure::i18n::init_i18n("Auto")?;
+    // eframe may panic before it can return a window initialization error.
+    {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |panic_info| {
+            default_hook(panic_info);
+            show_opengl_instructions();
+        }));
+    }
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -372,7 +406,7 @@ fn run_gui_mode() -> Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    let result = eframe::run_native(
         egui_i18n::tr!("app-title-full").as_ref(),
         options,
         Box::new(|cc| {
@@ -414,8 +448,13 @@ fn run_gui_mode() -> Result<()> {
 
             Ok(Box::<DureApp>::default())
         }),
-    )
-    .map_err(|e| anyhow::anyhow!("eframe error: {}", e))?;
+    );
+
+    if result.is_err() {
+        show_opengl_instructions();
+    }
+
+    result.map_err(|error| anyhow::anyhow!("eframe error: {error}"))?;
 
     Ok(())
 }

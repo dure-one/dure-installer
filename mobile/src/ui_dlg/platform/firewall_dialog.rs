@@ -56,97 +56,101 @@ impl FirewallDialog {
         let window_width = ctx.viewport_rect().width();
         let window_height = ctx.viewport_rect().height();
 
-        dialog(
-            "firewall_dialog",
-            "Manage Firewall Rules",
-            &mut self.open,
-        )
-        .min_width(350.0)
-        .max_width(window_width - 120.0)
-        .max_height(window_height - 120.0)
-        .scrollable(true)
-        .content(|ui, _open| {
-            // Current IP display
-            if let Some(ip) = &self.current_ip {
-                ui.label(format!("Current IP: {}", ip));
-            } else if self.rule_list.is_empty() {
-                ui.label("Fetching current IP...");
-            }
-
-            ui.add_space(8.0);
-
-            // Action buttons
-            ui.horizontal(|ui| {
-                if ui.add(MaterialButton::filled(tr!("firewall-button-add-row"))).clicked() {
-                    add_requested.set(true);
+        dialog("firewall_dialog", "Manage Firewall Rules", &mut self.open)
+            .min_width(350.0)
+            .max_width(window_width - 120.0)
+            .max_height(window_height - 120.0)
+            .scrollable(true)
+            .content(|ui, _open| {
+                // Current IP display
+                if let Some(ip) = &self.current_ip {
+                    ui.label(format!("Current IP: {}", ip));
+                } else if self.rule_list.is_empty() {
+                    ui.label("Fetching current IP...");
                 }
-                if ui.add(MaterialButton::text(tr!("firewall-button-reset"))).clicked() {
-                    reset_requested.set(true);
-                }
-            });
 
-            ui.add_space(8.0);
+                ui.add_space(8.0);
 
-            // Rules list
-            if self.rule_list.is_empty() {
-                ui.label("No firewall rules found");
-            } else {
-                ui.label(format!("{} firewall rules", self.rule_list.len()));
-                ui.add_space(4.0);
-
-                let mut list = MaterialList::new().id("firewall_rules_list");
-
-                for (idx, rule) in self.rule_list.iter().enumerate() {
-                    // Build secondary text with rule details
-                    let mut secondary_parts = vec![
-                        format!("Direction: {} | Priority: {}", rule.direction, rule.priority)
-                    ];
-
-                    if !rule.source_ranges.is_empty() {
-                        secondary_parts.push(format!("Sources: {}", rule.source_ranges.join(", ")));
+                // Action buttons
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(MaterialButton::filled(tr!("firewall-button-add-row")))
+                        .clicked()
+                    {
+                        add_requested.set(true);
                     }
-
-                    if !rule.allowed.is_empty() {
-                        secondary_parts.push(format!("Allowed: {}", rule.allowed.join(", ")));
+                    if ui
+                        .add(MaterialButton::text(tr!("firewall-button-reset")))
+                        .clicked()
+                    {
+                        reset_requested.set(true);
                     }
+                });
 
-                    let secondary_text = secondary_parts.join("\n");
+                ui.add_space(8.0);
 
-                    // Clone Arc for use in closure
-                    let edit_idx_clone = Arc::clone(&edit_idx);
-                    let delete_idx_clone = Arc::clone(&delete_idx);
+                // Rules list
+                if self.rule_list.is_empty() {
+                    ui.label("No firewall rules found");
+                } else {
+                    ui.label(format!("{} firewall rules", self.rule_list.len()));
+                    ui.add_space(4.0);
 
-                    let item = ListItem::new(&rule.name)
-                        .secondary_text(&secondary_text)
-                        .trailing_widget(move |ui| {
-                            ui.horizontal(|ui| {
-                                ui.spacing_mut().item_spacing.x = 8.0;
+                    let mut list = MaterialList::new().id("firewall_rules_list");
 
-                                if ui.add(MaterialButton::filled("Edit").small()).clicked() {
-                                    if let Ok(mut edit) = edit_idx_clone.lock() {
-                                        *edit = Some(idx);
+                    for (idx, rule) in self.rule_list.iter().enumerate() {
+                        // Build secondary text with rule details
+                        let mut secondary_parts = vec![format!(
+                            "Direction: {} | Priority: {}",
+                            rule.direction, rule.priority
+                        )];
+
+                        if !rule.source_ranges.is_empty() {
+                            secondary_parts
+                                .push(format!("Sources: {}", rule.source_ranges.join(", ")));
+                        }
+
+                        if !rule.allowed.is_empty() {
+                            secondary_parts.push(format!("Allowed: {}", rule.allowed.join(", ")));
+                        }
+
+                        let secondary_text = secondary_parts.join("\n");
+
+                        // Clone Arc for use in closure
+                        let edit_idx_clone = Arc::clone(&edit_idx);
+                        let delete_idx_clone = Arc::clone(&delete_idx);
+
+                        let item = ListItem::new(&rule.name)
+                            .secondary_text(&secondary_text)
+                            .trailing_widget(move |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 8.0;
+
+                                    if ui.add(MaterialButton::filled("Edit").small()).clicked() {
+                                        if let Ok(mut edit) = edit_idx_clone.lock() {
+                                            *edit = Some(idx);
+                                        }
                                     }
-                                }
 
-                                let delete_idx_clone2 = Arc::clone(&delete_idx_clone);
-                                if ui.add(MaterialButton::filled("Delete").small()).clicked() {
-                                    if let Ok(mut delete) = delete_idx_clone2.lock() {
-                                        *delete = Some(idx);
+                                    let delete_idx_clone2 = Arc::clone(&delete_idx_clone);
+                                    if ui.add(MaterialButton::filled("Delete").small()).clicked() {
+                                        if let Ok(mut delete) = delete_idx_clone2.lock() {
+                                            *delete = Some(idx);
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
 
-                    list = list.item(item);
+                        list = list.item(item);
+                    }
+
+                    ui.add(list);
                 }
-
-                ui.add(list);
-            }
-        })
-        .primary_action("Close", || {
-            // Dialog will close automatically
-        })
-        .show(ctx);
+            })
+            .primary_action("Close", || {
+                // Dialog will close automatically
+            })
+            .show(ctx);
 
         // Handle actions
         if add_requested.get() {
@@ -173,7 +177,10 @@ impl FirewallDialog {
                         target_tags: rule.target_tags.clone(),
                         target_service_accounts: rule.target_service_accounts.clone(),
                     };
-                    return FirewallAction::EditRule { rule_data, rule_idx: idx };
+                    return FirewallAction::EditRule {
+                        rule_data,
+                        rule_idx: idx,
+                    };
                 }
             }
 

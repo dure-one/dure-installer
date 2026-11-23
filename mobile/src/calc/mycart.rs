@@ -218,7 +218,10 @@ pub async fn get_duremycart_logs(
             dure_error!("Failed to read mycart-stderr.log: {}", e);
             logs_map.insert(
                 "stderr".to_string(),
-                vec![format!("Failed to read /srv/data/logs/mycart-stderr.log: {}", e)],
+                vec![format!(
+                    "Failed to read /srv/data/logs/mycart-stderr.log: {}",
+                    e
+                )],
             );
         }
     }
@@ -236,7 +239,10 @@ pub async fn get_duremycart_logs(
             dure_error!("Failed to read mycart-stdout.log: {}", e);
             logs_map.insert(
                 "stdout".to_string(),
-                vec![format!("Failed to read /srv/data/logs/mycart-stdout.log: {}", e)],
+                vec![format!(
+                    "Failed to read /srv/data/logs/mycart-stdout.log: {}",
+                    e
+                )],
             );
         }
     }
@@ -370,13 +376,9 @@ pub async fn get_fail2banrs_nft(
     profile_keyring: Option<&Arc<DatabaseHandle>>,
 ) -> Result<String> {
     dure_info!("Reading nftables rules");
-    let nft_rules = ssh::execute_command(
-        host_config,
-        "nft list ruleset",
-        profile_keyring,
-    )
-    .await
-    .context("Failed to read nftables ruleset")?;
+    let nft_rules = ssh::execute_command(host_config, "nft list ruleset", profile_keyring)
+        .await
+        .context("Failed to read nftables ruleset")?;
     Ok(nft_rules)
 }
 

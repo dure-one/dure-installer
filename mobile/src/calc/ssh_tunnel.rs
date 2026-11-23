@@ -103,9 +103,14 @@ pub async fn start_tunnel(
             .context("Failed to connect to SSH server")?;
 
         // Authenticate
-        authenticate_tunnel(&mut handle, &username, &host_config_clone, profile_keyring.as_ref())
-            .await
-            .context("SSH authentication failed")?;
+        authenticate_tunnel(
+            &mut handle,
+            &username,
+            &host_config_clone,
+            profile_keyring.as_ref(),
+        )
+        .await
+        .context("SSH authentication failed")?;
 
         Ok::<_, anyhow::Error>(handle)
     })
@@ -167,15 +172,10 @@ async fn run_tunnel_acceptor(
 
         // Accept with timeout to check cancel periodically
         let timeout = std::time::Duration::from_millis(500);
-        let accept_result = smol::future::or(
-            async {
-                listener.accept().await.map(Some)
-            },
-            async {
-                smol::Timer::after(timeout).await;
-                Ok::<Option<_>, std::io::Error>(None)
-            },
-        )
+        let accept_result = smol::future::or(async { listener.accept().await.map(Some) }, async {
+            smol::Timer::after(timeout).await;
+            Ok::<Option<_>, std::io::Error>(None)
+        })
         .await;
 
         match accept_result {
@@ -238,11 +238,7 @@ async fn handle_tunnel_connection(
     })
     .await?;
 
-    dure_debug!(
-        "Tunnel: opened channel to {}:{}",
-        target_host,
-        target_port
-    );
+    dure_debug!("Tunnel: opened channel to {}:{}", target_host, target_port);
 
     // Convert russh channel to futures-io compatible stream
     use async_compat::CompatExt;
@@ -333,8 +329,7 @@ fn load_private_key_from_keyring(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("SSH key not found in keyring entry"))?;
 
-    String::from_utf8(ssh_key_bytes.clone())
-        .context("Invalid UTF-8 in SSH key")
+    String::from_utf8(ssh_key_bytes.clone()).context("Invalid UTF-8 in SSH key")
 }
 
 /// Authenticate SSH session (reused from calc/ssh.rs pattern)

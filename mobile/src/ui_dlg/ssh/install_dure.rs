@@ -226,10 +226,7 @@ impl InstallDure {
             });
         }
 
-        if matches!(
-            current_step,
-            InstallStep::Complete | InstallStep::Error(_)
-        ) {
+        if matches!(current_step, InstallStep::Complete | InstallStep::Error(_)) {
             builder = builder.action("Reset", || {
                 reset_clicked.set(true);
             });
@@ -537,7 +534,6 @@ impl InstallDure {
             ui.colored_label(egui::Color32::from_rgb(200, 50, 50), error);
         });
     }
-
 
     /// Update env fields when ACME provider changes
     fn update_env_fields_for_provider(&mut self) {

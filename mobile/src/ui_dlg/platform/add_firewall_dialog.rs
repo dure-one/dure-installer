@@ -145,11 +145,20 @@ impl AddFirewallDialog {
                         .error_text("Must be INGRESS or EGRESS"),
                 );
 
-                ui.add(MaterialInput::filled(&mut priority_str).label("Priority (e.g., 1000 - lower = higher priority)"));
+                ui.add(
+                    MaterialInput::filled(&mut priority_str)
+                        .label("Priority (e.g., 1000 - lower = higher priority)"),
+                );
 
-                ui.add(MaterialInput::filled(&mut src_ranges_str).label("Source IP Ranges (e.g., 203.0.113.0/24, 198.51.100.42/32)"));
+                ui.add(
+                    MaterialInput::filled(&mut src_ranges_str)
+                        .label("Source IP Ranges (e.g., 203.0.113.0/24, 198.51.100.42/32)"),
+                );
 
-                ui.add(MaterialInput::filled(&mut dest_ranges_str).label("Destination Ranges (e.g., 0.0.0.0/0)"));
+                ui.add(
+                    MaterialInput::filled(&mut dest_ranges_str)
+                        .label("Destination Ranges (e.g., 0.0.0.0/0)"),
+                );
 
                 ui.add(
                     MaterialInput::filled(&mut allowed_str)
@@ -164,13 +173,26 @@ impl AddFirewallDialog {
                         .is_error(allowed_denied_error.get()),
                 );
 
-                ui.add(MaterialInput::filled(&mut src_tags_str).label("Source Tags (e.g., web-server, api-backend)"));
+                ui.add(
+                    MaterialInput::filled(&mut src_tags_str)
+                        .label("Source Tags (e.g., web-server, api-backend)"),
+                );
 
-                ui.add(MaterialInput::filled(&mut src_svc_str).label("Source Service Account (e.g., app@project.iam.gserviceaccount.com)"));
+                ui.add(
+                    MaterialInput::filled(&mut src_svc_str).label(
+                        "Source Service Account (e.g., app@project.iam.gserviceaccount.com)",
+                    ),
+                );
 
-                ui.add(MaterialInput::filled(&mut target_tags_str).label("Target Tags (e.g., http-server, https-server)"));
+                ui.add(
+                    MaterialInput::filled(&mut target_tags_str)
+                        .label("Target Tags (e.g., http-server, https-server)"),
+                );
 
-                ui.add(MaterialInput::filled(&mut target_svc_str).label("Target Service Account (e.g., vm@project.iam.gserviceaccount.com)"));
+                ui.add(
+                    MaterialInput::filled(&mut target_svc_str)
+                        .label("Target Service Account (e.g., vm@project.iam.gserviceaccount.com)"),
+                );
 
                 ui.add_space(12.0);
                 ui.separator();
@@ -178,7 +200,8 @@ impl AddFirewallDialog {
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let button_text = if is_edit { "Save" } else { "Create" };
-                    let save_button = MaterialButton::filled(button_text).enabled(!self.save_in_progress);
+                    let save_button =
+                        MaterialButton::filled(button_text).enabled(!self.save_in_progress);
                     if ui.add(save_button).clicked() {
                         // Parse string inputs
                         if let Ok(val) = priority_str.parse::<u32>() {

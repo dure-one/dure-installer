@@ -153,7 +153,10 @@ fn validate_translations() {
         for (file, key) in &missing_keys {
             eprintln!("  {} → \"{}\"", file, key);
         }
-        panic!("Build failed: {} missing translation keys", missing_keys.len());
+        panic!(
+            "Build failed: {} missing translation keys",
+            missing_keys.len()
+        );
     }
 }
 

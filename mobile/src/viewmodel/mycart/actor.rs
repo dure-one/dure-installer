@@ -77,19 +77,28 @@ impl MycartActor {
                 site_address,
                 limit,
                 profile_kdbx,
-            } => self.load_mycart_logs(site_address, limit, profile_kdbx).await,
+            } => {
+                self.load_mycart_logs(site_address, limit, profile_kdbx)
+                    .await
+            }
 
             MycartCommand::LoadXMPPProxyLogs {
                 site_address,
                 limit,
                 profile_kdbx,
-            } => self.load_xmppproxy_logs(site_address, limit, profile_kdbx).await,
+            } => {
+                self.load_xmppproxy_logs(site_address, limit, profile_kdbx)
+                    .await
+            }
 
             MycartCommand::LoadFail2BanRSLogs {
                 site_address,
                 limit,
                 profile_kdbx,
-            } => self.load_fail2banrs_logs(site_address, limit, profile_kdbx).await,
+            } => {
+                self.load_fail2banrs_logs(site_address, limit, profile_kdbx)
+                    .await
+            }
 
             MycartCommand::LoadMycartConfig {
                 site_address,
@@ -104,7 +113,10 @@ impl MycartActor {
             MycartCommand::LoadFail2BanRSConfig {
                 site_address,
                 profile_kdbx,
-            } => self.load_fail2banrs_config(site_address, profile_kdbx).await,
+            } => {
+                self.load_fail2banrs_config(site_address, profile_kdbx)
+                    .await
+            }
 
             MycartCommand::LoadFail2BanRSNFT {
                 site_address,
@@ -186,10 +198,7 @@ impl MycartActor {
         let host_config = mycart::resolve_ssh_host_for_site(&config, site)
             .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
 
-        dure_info!(
-            "[MycartActor] Using SSH host: {}",
-            host_config.host
-        );
+        dure_info!("[MycartActor] Using SSH host: {}", host_config.host);
 
         let logs = mycart::get_duremycart_logs(host_config, profile_kdbx.as_ref()).await?;
 
@@ -219,10 +228,7 @@ impl MycartActor {
         let host_config = mycart::resolve_ssh_host_for_site(&config, site)
             .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
 
-        dure_info!(
-            "[MycartActor] Using SSH host: {}",
-            host_config.host
-        );
+        dure_info!("[MycartActor] Using SSH host: {}", host_config.host);
 
         let logs = mycart::get_xmppproxy_logs(host_config, profile_kdbx.as_ref()).await?;
 
@@ -252,10 +258,7 @@ impl MycartActor {
         let host_config = mycart::resolve_ssh_host_for_site(&config, site)
             .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
 
-        dure_info!(
-            "[MycartActor] Using SSH host: {}",
-            host_config.host
-        );
+        dure_info!("[MycartActor] Using SSH host: {}", host_config.host);
 
         let logs = mycart::get_fail2banrs_logs(host_config, profile_kdbx.as_ref()).await?;
 
@@ -301,7 +304,10 @@ impl MycartActor {
         site_address: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Loading XMPPProxy config for {}", site_address);
+        dure_info!(
+            "[MycartActor] Loading XMPPProxy config for {}",
+            site_address
+        );
 
         let config_path = self.get_config_path()?;
         let config = AppConfig::load_or_default(&config_path);
@@ -315,7 +321,8 @@ impl MycartActor {
         let host_config = mycart::resolve_ssh_host_for_site(&config, site)
             .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
 
-        let config_content = mycart::get_xmppproxy_config(host_config, profile_kdbx.as_ref()).await?;
+        let config_content =
+            mycart::get_xmppproxy_config(host_config, profile_kdbx.as_ref()).await?;
 
         self.send_event(MycartEvent::XMPPProxyConfigLoaded {
             site_address,
@@ -331,7 +338,10 @@ impl MycartActor {
         site_address: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Loading Fail2BanRS config for {}", site_address);
+        dure_info!(
+            "[MycartActor] Loading Fail2BanRS config for {}",
+            site_address
+        );
 
         let config_path = self.get_config_path()?;
         let config = AppConfig::load_or_default(&config_path);
@@ -345,7 +355,8 @@ impl MycartActor {
         let host_config = mycart::resolve_ssh_host_for_site(&config, site)
             .ok_or_else(|| anyhow::anyhow!("No SSH host found for site: {}", site_address))?;
 
-        let config_content = mycart::get_fail2banrs_config(host_config, profile_kdbx.as_ref()).await?;
+        let config_content =
+            mycart::get_fail2banrs_config(host_config, profile_kdbx.as_ref()).await?;
 
         self.send_event(MycartEvent::Fail2BanRSConfigLoaded {
             site_address,
@@ -361,7 +372,10 @@ impl MycartActor {
         site_address: String,
         profile_kdbx: Option<std::sync::Arc<crate::calc::keyring::DatabaseHandle>>,
     ) -> anyhow::Result<()> {
-        dure_info!("[MycartActor] Loading Fail2BanRS NFT rules for {}", site_address);
+        dure_info!(
+            "[MycartActor] Loading Fail2BanRS NFT rules for {}",
+            site_address
+        );
 
         let config_path = self.get_config_path()?;
         let config = AppConfig::load_or_default(&config_path);

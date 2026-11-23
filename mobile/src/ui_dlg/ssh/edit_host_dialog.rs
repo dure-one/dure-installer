@@ -12,7 +12,14 @@ impl EditHostDialog {
         }
     }
 
-    pub fn open(&mut self, original_host: String, host: String, port: u16, password: Option<String>, private_key_path: Option<String>) {
+    pub fn open(
+        &mut self,
+        original_host: String,
+        host: String,
+        port: u16,
+        password: Option<String>,
+        private_key_path: Option<String>,
+    ) {
         self.original_host = original_host;
         self.host = host;
         self.port = port.to_string();
@@ -60,14 +67,12 @@ impl EditHostDialog {
             ui.add_space(8.0);
 
             ui.add(
-                MaterialInput::outlined(&mut self.host)
-                    .label(&tr!("ssh-dialog-add-host-label")),
+                MaterialInput::outlined(&mut self.host).label(&tr!("ssh-dialog-add-host-label")),
             );
             ui.add_space(8.0);
 
             ui.add(
-                MaterialInput::outlined(&mut self.port)
-                    .label(&tr!("ssh-dialog-add-port-label")),
+                MaterialInput::outlined(&mut self.port).label(&tr!("ssh-dialog-add-port-label")),
             );
             ui.add_space(8.0);
 

@@ -20,11 +20,19 @@ pub struct FirewallDialog {
 
 pub enum FirewallAction {
     AddIp,
-    RemoveIp { ip_list: Vec<String> },
+    RemoveIp {
+        ip_list: Vec<String>,
+    },
     Flush,
     AddRule,
-    EditRule { rule_data: FirewallRule, rule_idx: usize },
-    DeleteRule { rule_name: String, rule_idx: Option<usize> },
+    EditRule {
+        rule_data: FirewallRule,
+        rule_idx: usize,
+    },
+    DeleteRule {
+        rule_name: String,
+        rule_idx: Option<usize>,
+    },
     Reset,
     Close,
     None,

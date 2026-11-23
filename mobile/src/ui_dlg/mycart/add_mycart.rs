@@ -1,7 +1,7 @@
 pub use super::add_mycart_stt::*;
 use eframe::egui;
 use egui_i18n::tr;
-use egui_material3::{dialog, MaterialButton, MaterialInput, select, SelectVariant};
+use egui_material3::{dialog, select, MaterialButton, MaterialInput, SelectVariant};
 use std::cell::Cell;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -49,9 +49,8 @@ impl AddMycartDialog {
         let window_height = ctx.viewport_rect().height();
 
         // Track selected SSH host index
-        let mut selected_ssh_idx: Option<usize> = ssh_hosts
-            .iter()
-            .position(|h| h.host == self.ssh_host);
+        let mut selected_ssh_idx: Option<usize> =
+            ssh_hosts.iter().position(|h| h.host == self.ssh_host);
 
         let prev_ssh_host = self.ssh_host.clone();
 
@@ -70,15 +69,13 @@ impl AddMycartDialog {
 
             // Site Address
             ui.add(
-                MaterialInput::filled(&mut self.site_address)
-                    .label(&tr!("mycart-add-site-label")),
+                MaterialInput::filled(&mut self.site_address).label(&tr!("mycart-add-site-label")),
             );
             ui.add_space(8.0);
 
             // Admin Email
             ui.add(
-                MaterialInput::filled(&mut self.admin_email)
-                    .label(&tr!("mycart-add-email-label")),
+                MaterialInput::filled(&mut self.admin_email).label(&tr!("mycart-add-email-label")),
             );
             ui.add_space(8.0);
 

@@ -26,6 +26,7 @@ pub struct ViewModel {
     drawer_tx: Sender<platform::DrawerCommand>,
     ssh_tx: Sender<ssh::SshCommand>,
     logs_tx: Sender<logs::LogCommand>,
+    log_registration: u64,
     opslog_tx: Sender<logs::LogsCommand>,
     dns_tx: Sender<dns::DnsCommand>,
     mycart_tx: Sender<mycart::MycartCommand>,
@@ -45,6 +46,12 @@ pub struct ViewModel {
 
     // Profile context (for profile-aware operations)
     profile: Option<ProfileContext>,
+}
+
+impl Drop for ViewModel {
+    fn drop(&mut self) {
+        logs::clear_log_sender(self.log_registration);
+    }
 }
 
 enum RuntimeHandle {
@@ -94,7 +101,7 @@ impl ViewModel {
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
-        logs::init_log_sender(logs_tx.clone());
+        let log_registration = logs::init_log_sender(logs_tx.clone());
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
@@ -146,6 +153,7 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            log_registration,
             opslog_tx,
             dns_tx,
             mycart_tx,
@@ -170,7 +178,7 @@ impl ViewModel {
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
-        logs::init_log_sender(logs_tx.clone());
+        let log_registration = logs::init_log_sender(logs_tx.clone());
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
@@ -218,6 +226,7 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            log_registration,
             opslog_tx,
             dns_tx,
             mycart_tx,
@@ -246,7 +255,7 @@ impl ViewModel {
         let (event_tx, event_rx) = smol::channel::unbounded();
 
         // Initialize global log sender
-        logs::init_log_sender(logs_tx.clone());
+        let log_registration = logs::init_log_sender(logs_tx.clone());
 
         // Clone for closure (logs_tx is moved into Self at the end)
         let logs_tx_for_drawer = logs_tx.clone();
@@ -293,6 +302,7 @@ impl ViewModel {
             drawer_tx,
             ssh_tx,
             logs_tx,
+            log_registration,
             opslog_tx,
             dns_tx,
             mycart_tx,

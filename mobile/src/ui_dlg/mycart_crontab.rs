@@ -131,9 +131,9 @@ impl CrontabDialog {
     fn render_job_list(&self, ui: &mut egui::Ui) -> Option<String> {
         let list_id = "crontab_jobs_list";
         let state = ui
-            .data_mut(|d| d.get_persisted::<egui_material3::MaterialListState>(
-                egui::Id::new(list_id)
-            ))
+            .data_mut(|d| {
+                d.get_persisted::<egui_material3::MaterialListState>(egui::Id::new(list_id))
+            })
             .unwrap_or_default();
 
         #[derive(Clone)]
@@ -150,7 +150,11 @@ impl CrontabDialog {
             let action_clone = Arc::clone(&action_signal);
             let job_id = job.job_id.clone();
             let is_open = state.drawer_open_items.contains(&index);
-            let indicator = if is_open { "Collapse ▼" } else { "Expand ▶" };
+            let indicator = if is_open {
+                "Collapse ▼"
+            } else {
+                "Expand ▶"
+            };
 
             let category = Self::get_category(&job.job_id);
             let enabled = job.enabled;
@@ -229,38 +233,44 @@ impl CrontabDialog {
         let save_clicked = Arc::new(Mutex::new(false));
         let save_clone = Arc::clone(&save_clicked);
 
-        let job_name = self.editing_job_id.as_ref()
+        let job_name = self
+            .editing_job_id
+            .as_ref()
             .and_then(|id| self.jobs.iter().find(|j| &j.job_id == id))
             .map(|j| j.name.as_str())
             .unwrap_or("Unknown");
 
-        dialog("edit_crontab_dialog", "Edit Crontab Job", &mut self.edit_dialog_open)
-            .max_width(560.0)
-            .content(|ui, _open| {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Job:");
-                        ui.label(egui::RichText::new(job_name).strong());
-                    });
-                    ui.add_space(8.0);
-
-                    ui.checkbox(&mut self.edit_enabled, "Enabled");
-                    ui.add_space(8.0);
-
-                    ui.horizontal(|ui| {
-                        ui.label("Interval:");
-                        ui.text_edit_singleline(&mut self.edit_interval);
-                    });
-                    ui.label("Example: 0 0 * * * (daily at midnight)");
+        dialog(
+            "edit_crontab_dialog",
+            "Edit Crontab Job",
+            &mut self.edit_dialog_open,
+        )
+        .max_width(560.0)
+        .content(|ui, _open| {
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Job:");
+                    ui.label(egui::RichText::new(job_name).strong());
                 });
-            })
-            .action("Cancel", || {})
-            .primary_action("Save", move || {
-                if let Ok(mut clicked) = save_clone.lock() {
-                    *clicked = true;
-                }
-            })
-            .show(ctx);
+                ui.add_space(8.0);
+
+                ui.checkbox(&mut self.edit_enabled, "Enabled");
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    ui.label("Interval:");
+                    ui.text_edit_singleline(&mut self.edit_interval);
+                });
+                ui.label("Example: 0 0 * * * (daily at midnight)");
+            });
+        })
+        .action("Cancel", || {})
+        .primary_action("Save", move || {
+            if let Ok(mut clicked) = save_clone.lock() {
+                *clicked = true;
+            }
+        })
+        .show(ctx);
 
         // Commit changes only if Save was clicked
         if was_open && !self.edit_dialog_open {
@@ -289,9 +299,18 @@ impl CrontabDialog {
 /// Actions from crontab dialog
 #[derive(Debug, Clone)]
 pub enum CrontabAction {
-    ToggleJob { job_id: String, enabled: bool },
-    SetInterval { job_id: String, interval: String },
-    UpdateJob { job_id: String, patch: crate::api::mycart::CrontabPatch },
+    ToggleJob {
+        job_id: String,
+        enabled: bool,
+    },
+    SetInterval {
+        job_id: String,
+        interval: String,
+    },
+    UpdateJob {
+        job_id: String,
+        patch: crate::api::mycart::CrontabPatch,
+    },
 }
 
 #[cfg(test)]
@@ -342,7 +361,10 @@ mod tests {
         assert_eq!(CrontabDialog::get_category("xmpp_check_job"), "Monitoring");
         assert_eq!(CrontabDialog::get_category("backup_daily"), "Backup");
         assert_eq!(CrontabDialog::get_category("other_task"), "System");
-        assert_eq!(CrontabDialog::get_category("maintenance_weekly"), "Maintenance");
+        assert_eq!(
+            CrontabDialog::get_category("maintenance_weekly"),
+            "Maintenance"
+        );
         assert_eq!(CrontabDialog::get_category("monitor_health"), "Monitoring");
     }
 

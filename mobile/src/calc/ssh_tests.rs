@@ -9,7 +9,8 @@ mod tests {
     fn test_load_ssh_key_content_from_path() {
         // Arrange: Create temp file with test key
         let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        let test_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        let test_key =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
         temp_file
             .write_all(test_key.as_bytes())
             .expect("Failed to write test key");
@@ -38,7 +39,8 @@ mod tests {
     #[test]
     fn test_generate_tunnel_ssh_command() {
         // Arrange
-        let test_key = "-----BEGIN RSA PRIVATE KEY-----\ntest_key_content\n-----END RSA PRIVATE KEY-----";
+        let test_key =
+            "-----BEGIN RSA PRIVATE KEY-----\ntest_key_content\n-----END RSA PRIVATE KEY-----";
         let local_port = 54321;
 
         // Act

@@ -121,8 +121,14 @@ impl DnsSettingsDialog {
                         ui.group(|ui| {
                             ui.label(format!("A    {}  →  {}", domain, vm_ip));
                             ui.label(format!("CNAME    conference.{}  →  {}", domain, domain));
-                            ui.label(format!("SRV    _xmpp-client._tcp.{}  →  {}", domain, domain));
-                            ui.label(format!("SRV    _xmpp-server._tcp.{}  →  {}", domain, domain));
+                            ui.label(format!(
+                                "SRV    _xmpp-client._tcp.{}  →  {}",
+                                domain, domain
+                            ));
+                            ui.label(format!(
+                                "SRV    _xmpp-server._tcp.{}  →  {}",
+                                domain, domain
+                            ));
                         });
                     }
 

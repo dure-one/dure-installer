@@ -16,13 +16,11 @@ gui = [
     "dep:egui",
     "dep:eframe",
     "dep:egui_extras",
-    "dep:egui-twemoji",
     "dep:egui-material3",
     "dep:egui-i18n",
     "dep:image",
     "dep:tao",
     "dep:tray-icon",
-    "dep:gtk",
 ]
 # UI features (requires gui feature)
 spreadsheet = ["gui", "egui-material3?/spreadsheet"]
@@ -57,7 +55,6 @@ eframe = { version = "0.33", default-features = false, features = [
     "android-native-activity",
 ], optional = true }
 egui_extras = { version = "0.33", default-features = false, features = ["image", "svg", "default", "all_loaders"], optional = true }
-egui-twemoji = { version = "0.8.0", optional = true }
 egui-material3 = { git = "https://github.com/nikescar/egui-material3/", default-features = false, features = ["spreadsheet", "svg_solar"], optional = true }
 # egui-material3 = { path = "../reference/egui-material3", default-features = false, features = ["spreadsheet"], optional = true }
 
@@ -138,9 +135,6 @@ async-fs = "2.1"  # Async filesystem operations
 futures-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }  # rustls-based TLS for futures-based runtimes
 async-lock = "3.4"  # Async synchronization primitives for smol
 async-compat = "0.2"  # Compatibility layer for tokio futures in smol runtime
-# OpenAPI / Swagger UI
-utoipa = { version="5.4.0", features = ["macros"] }
-utoipa-swagger-ui = { version="9.0.2", features = ["vendored"] }
 # WebSocket support with smol (using async-std runtime compatibility)
 async-tungstenite = { version = "0.28", features = ["async-std-runtime"] }
 futures = "0.3"
@@ -205,7 +199,6 @@ eframe = { version = "0.33", default-features = false, features = ["default_font
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = { version = "0.18", optional = true }
 eframe = { version = "0.33", default-features = false, features = ["default_fonts","glow","x11", "wayland"], optional = true }
 
 # WASM-specific dependencies

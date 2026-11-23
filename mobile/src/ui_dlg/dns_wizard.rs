@@ -460,7 +460,9 @@ impl DnsWizard {
             if !self.api_connection_ok {
                 ui.add_space(4.0);
                 if ui
-                    .add(MaterialButton::outlined(&tr!("dns-wizard-restart-verification")))
+                    .add(MaterialButton::outlined(&tr!(
+                        "dns-wizard-restart-verification"
+                    )))
                     .clicked()
                 {
                     // Clear OAuth state and restart flow
@@ -604,7 +606,10 @@ impl DnsWizard {
             ui.add_space(4.0);
             let can_add = !self.domain_name.is_empty() && self.add_domain_promise.is_none();
             if ui
-                .add_enabled(can_add, MaterialButton::filled(&tr!("dns-wizard-button-add")).small())
+                .add_enabled(
+                    can_add,
+                    MaterialButton::filled(&tr!("dns-wizard-button-add")).small(),
+                )
                 .clicked()
             {
                 self.add_domain_to_account(&self.domain_name.clone());
@@ -622,7 +627,10 @@ impl DnsWizard {
             ui.label(tr!("dns-wizard-step2-label-domain"));
             ui.text_edit_singleline(&mut self.search_query);
 
-            if ui.add(MaterialButton::filled(&tr!("dns-wizard-button-search")).small()).clicked() {
+            if ui
+                .add(MaterialButton::filled(&tr!("dns-wizard-button-search")).small())
+                .clicked()
+            {
                 if !self.search_query.is_empty() {
                     let url = format!(
                         "https://dash.cloudflare.com/{}/domains/registrations/purchase?query={}",
@@ -633,8 +641,7 @@ impl DnsWizard {
                         self.progress_log
                             .push(format!("Error: Failed to open browser: {}", e));
                     } else {
-                        self.progress_log
-                            .push(tr!("dns-wizard-opened-dashboard"));
+                        self.progress_log.push(tr!("dns-wizard-opened-dashboard"));
                     }
                 }
             }
@@ -673,10 +680,7 @@ impl DnsWizard {
                         let is_selected = self.selected_domain.as_ref() == Some(domain_name);
 
                         if ui
-                            .selectable_label(
-                                is_selected,
-                                format!("{}\n{}", domain_name, zone_id),
-                            )
+                            .selectable_label(is_selected, format!("{}\n{}", domain_name, zone_id))
                             .clicked()
                         {
                             self.selected_domain = Some(domain_name.clone());
@@ -788,9 +792,7 @@ impl DnsWizard {
 
                 // Platform list with dense styling
                 if self.available_platforms.is_empty() {
-                    ui.label(
-                        tr!("dns-wizard-step3-no-platforms"),
-                    );
+                    ui.label(tr!("dns-wizard-step3-no-platforms"));
                 } else {
                     egui::ScrollArea::vertical()
                         .max_height(300.0)
@@ -875,9 +877,8 @@ impl DnsWizard {
                                 .push(tr!("dns-wizard-verified-success"));
                             self.ns_records_configured = true;
                         } else {
-                            self.dns_operation_log.push(
-                                tr!("dns-wizard-verified-missing"),
-                            );
+                            self.dns_operation_log
+                                .push(tr!("dns-wizard-verified-missing"));
                         }
                         ui.ctx().request_repaint();
                     }
@@ -939,7 +940,10 @@ impl DnsWizard {
         let dns_needs_setup = self.dns_verified != Some(true);
         let can_setup = dns_needs_setup && self.create_dns_promise.is_none();
 
-        let setup_btn = ui.add_enabled(can_setup, MaterialButton::filled(&tr!("dns-wizard-button-setup-dns")).small());
+        let setup_btn = ui.add_enabled(
+            can_setup,
+            MaterialButton::filled(&tr!("dns-wizard-button-setup-dns")).small(),
+        );
         if setup_btn.clicked() {
             self.dns_operation_log
                 .push(tr!("dns-wizard-starting-setup"));

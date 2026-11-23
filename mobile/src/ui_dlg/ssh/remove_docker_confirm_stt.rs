@@ -5,9 +5,7 @@ pub struct RemoveDockerConfirmDialog {
 }
 
 pub enum RemoveDockerConfirmAction {
-    Remove {
-        host: String,
-    },
+    Remove { host: String },
     Cancel,
     None,
 }

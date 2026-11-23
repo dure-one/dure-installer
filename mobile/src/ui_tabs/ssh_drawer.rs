@@ -489,14 +489,16 @@ fn render_dure_container_logs_subtab(
     false
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_extract_ip_from_host() {
-        assert_eq!(extract_ip_from_host("root@35.212.193.170"), "35.212.193.170");
+        assert_eq!(
+            extract_ip_from_host("root@35.212.193.170"),
+            "35.212.193.170"
+        );
         assert_eq!(extract_ip_from_host("ubuntu@dure.co"), "dure.co");
         assert_eq!(extract_ip_from_host("35.212.193.170"), "35.212.193.170");
         assert_eq!(extract_ip_from_host("admin@192.168.1.1"), "192.168.1.1");

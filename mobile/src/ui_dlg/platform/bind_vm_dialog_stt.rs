@@ -8,9 +8,7 @@ pub struct BindVmDialog {
 }
 
 pub enum BindVmAction {
-    Bind {
-        platform: String,
-    },
+    Bind { platform: String },
     Cancel,
     None,
 }

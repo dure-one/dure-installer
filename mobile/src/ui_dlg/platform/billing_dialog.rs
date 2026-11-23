@@ -161,7 +161,10 @@ impl BillingDialog {
                                         egui::Color32::from_rgb(76, 175, 80),
                                         format!(
                                             "{} (credit)",
-                                            format_currency(record.total_net_cost, &record.currency)
+                                            format_currency(
+                                                record.total_net_cost,
+                                                &record.currency
+                                            )
                                         ),
                                     )
                                 } else if record.total_net_cost == 0.0 {
