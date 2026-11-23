@@ -130,6 +130,8 @@ else
     info "pepk.jar already exists"
 fi
 
+base64 release.keystore > release.keystore.base64
+
 # Step 5: Encrypt app signing keystore with pepk
 info "Step 5/5: Encrypting app signing keystore (requires password input)..."
 info "When prompted, enter keystore password: $PASSWORD"

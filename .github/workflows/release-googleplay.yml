@@ -6,16 +6,26 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      track:
+        description: "Release track (alpha, beta, production)"
+        required: false
+        default: "production"
+        type: choice
+        options:
+          - alpha
+          - beta
+          - production
 
 jobs:
   publish-googleplay:
     name: Publish to Google Play
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     if: ${{ (github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch') && github.event.workflow_run.head_branch != 'test' }}
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
@@ -35,12 +45,13 @@ jobs:
 
       - name: Publish to Google Play
         # https://github.com/marketplace/actions/upload-android-release-to-play-store
-        continue-on-error: true
+        # Latest version uses node24 and supports tracks parameter
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: app.dure.installer
           releaseFiles: ./artifacts/dure-all.aab
-          track: production # alpha/beta/production
+          tracks: ${{ github.event.inputs.track || secrets.GOOGLEPLAY_TRACK || 'production' }}
           status: completed
           inAppUpdatePriority: 2
+          changesNotSentForReview: false

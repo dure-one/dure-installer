@@ -63,6 +63,12 @@ Set GitHub secrets:
 - `STORE_PASSWORD=<UPLOAD_PASSWORD>`
 - `KEY_PASSWORD=<UPLOAD_PASSWORD>`
 - `KEY_ALIAS=upload`
+- `GOOGLEPLAY_TRACK=qa`
+
+for GOOGLEPLAY_TRACK, qa is internal track, alpha, beta are testing tracks, production is production track.
+
+Create Service Account for Google Play autoupload
+[Create Service Account](https://github.com/r0adkll/upload-google-play/tree/master#configure-access-via-service-accoun<Find>t)
 
 ### Upload signing key on google play
 
@@ -116,7 +122,6 @@ $ sudo systemctl enable --now snapd.socket
 $ sudo snap install snapd
 $ sudo snap install snapcraft --classic
 $ sudo snap refresh snapd snapcraft
-
 ```
 
 1. register snap name in https://snapcraft.io/snaps
