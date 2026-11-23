@@ -32,60 +32,134 @@ $ adb logcat -s Dure > uadcat.log
 ### Android Mipmap icons generation
 https://easyappicon.com/
 
-### Create Upload Keystore
+### Google Play Keys (Automated)
 
-generate keystore file in ./mobile/app dir
+**Quick Start**: Use the automated script to generate all keys at once:
+
 ```bash
-$ ~/.local/jdk-24.0.1/bin/keytool -genkey -v -keystore release.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+./googleplaykey.sh /path/to/encryption_public_key.pem [password]
 ```
 
-check key password
+This script:
+- Checks for existing keystores (prevents overwrite)
+- Generates `release.keystore` (upload key)
+- Generates `app-dure-installer-signing.keystore` (app signing key)
+- Exports `upload_certificate.pem`
+- Downloads pepk.jar
+- Creates encrypted .zip for Play Console
+
+If you prefer manual steps, see sections below.
+
+### Create Upload Keystore (Shared Across All Apps) - Manual
+
+Generate a single keystore in ./mobile/app dir:
 ```bash
-$ ~/.local/jdk-24.0.1/bin/keytool -list -v -keystore release.keystore -storepass <STOREPASSWORD> -alias upload -keypass <STOREPASSWORD>
+cd mobile/app
+~/.local/jdk-24.0.1/bin/keytool -genkey -v \
+  -keystore release.keystore \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias upload \
+  -storepass <UPLOAD_PASSWORD> \
+  -keypass <UPLOAD_PASSWORD>
 ```
 
-create keystore.properties file in ./mobile/app dir
+Create keystore.properties in ./mobile/app dir:
 ```bash
-storePassword=<STOREPASSWORD>
-keyPassword=<STOREPASSWORD>
+storePassword=<UPLOAD_PASSWORD>
+keyPassword=<UPLOAD_PASSWORD>
 keyAlias=upload
 storeFile=release.keystore
 ```
 
-### Android keystore for github workflow 
+This key is used by gradle to sign APKs locally before upload. Shared across all your apps.
 
-Set github secrets on -Repository *Settings > -Security > -Secrets and variables > *Actions > -Repository secrets.
+### Android keystore for github workflow
 
-Export keystore to github vars.
+Export to base64 for CI/CD:
 ```bash
-$ base64 release.keystore > release.keystore.base64
-# KEYSTORE_BASE64=<ENCODED_KEY>
-# STORE_PASSWORD=<STOREPASSWORD>
-# KEY_PASSWORD=<STOREPASSWORD>
-# KEY_ALIAS=upload
+base64 release.keystore > release.keystore.base64
+```
+
+Set GitHub secrets:
+- `KEYSTORE_BASE64=<output from above>`
+- `STORE_PASSWORD=<UPLOAD_PASSWORD>`
+- `KEY_PASSWORD=<UPLOAD_PASSWORD>`
+- `KEY_ALIAS=upload`
+
+### Create App Signing Key for Google Play
+
+**IMPORTANT**: Upload key (above) must differ from app signing key.
+
+For each app, create a unique keystore:
+```bash
+cd mobile/app
+~/.local/jdk-24.0.1/bin/keytool -genkey -v \
+  -keystore app-dure-installer-signing.keystore \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias app-signing \
+  -storepass <APP_SIGNING_PASSWORD> \
+  -keypass <APP_SIGNING_PASSWORD>
 ```
 
 ### Upload signing key on google play
 
-To upload java singing keystore to google play. You need download upload-encryption key from store.
+**Step 1: Download encryption public key from Play Console**
+- Go to App Integrity > App Signing
+- Download encryption_public_key.pem to ./mobile/app/
 
-App Integrity > Change Signing key > Export and upload a key(not using Java Keystore) > Download encryption public key
-move it to ```./android/app/```.
-
+**Step 2: Encrypt the app signing keystore**
 ```bash
-$ cd android/app
-$ wget https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
-$ java -jar pepk.jar --keystore=release.keystore --alias=upload --output=release-signing-play-generated.zip --include-cert --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem
-$ keytool -export -rfc -keystore release.keystore -alias upload -file upload_certificate.pem
+cd mobile/app
+wget https://www.gstatic.com/play-apps-publisher-rapid/signing-tool/prod/pepk.jar
+
+java -jar pepk.jar \
+  --keystore=app-dure-installer-signing.keystore \
+  --alias=app-signing \
+  --output=app-dure-installer-signing-play-generated.zip \
+  --include-cert --rsa-aes-encryption \
+  --encryption-key-path=encryption_public_key.pem
 ```
-- upload key reset with created ```upload_certificate.pem``` file.
-- upload app signing with created ```release-signing-play-generated.zip``` file.
+
+**Step 3: Upload to Play Console**
+- Go to App Integrity > App Signing
+- Upload the generated .zip file
+
+**Key Summary**:
+- **Upload Key** (`release.keystore`): Shared, signs APK locally
+- **App Signing Keys** (one per app): Unique, managed by Google Play
+
+### Reset Upload Key on Google Play Console
+
+When changing upload key (security update, key compromise, or new keystore):
+
+**Step 1: Export upload key certificate**
+```bash
+cd mobile/app
+keytool -export -rfc \
+  -keystore release.keystore \
+  -alias upload \
+  -file upload_certificate.pem \
+  -storepass <UPLOAD_PASSWORD>
+```
+
+**Step 2: Upload to Play Console**
+- Go to App Integrity > Change Signing Key
+- Select "Reset Upload Key"
+- Choose reason (e.g., "분실됨" / "Lost", "손상됨" / "Compromised", "비밀번호를 잊어버림" / "Forgot password")
+- Upload `upload_certificate.pem`
+- Submit and wait for approval
+
+**Step 3: Confirm**
+Once approved, only this `release.keystore` can be used to sign new releases.
+
+
 
 ### Submit app to Google Playstore
 1. register google play console
-2. internal testing and pass 14 days with published testing
-3. add credentials to github repository secrets
+2. create unique app signing key for each app (see "Upload signing key" section above)
+3. add credentials to github repository secrets (use shared `release.keystore` as KEYSTORE_BASE64)
 4. run github workflow
+
 
 ### App testing
 * Closed Testing Service Provider
