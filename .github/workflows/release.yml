@@ -607,7 +607,7 @@ jobs:
                   # Handle APK separately
                   [[ "$i" == *"dure-installer-all-signed.apk"* ]] && cp artifacts/dure-installer-all-signed.apk/dure-installer-all-signed.apk distbin/dure-installer-all-signed.apk && continue
 
-                  # Handle Windows executables - already named by architecture from the build job
+                  # Handle Windows executables
                   if [[ "$i" == *"x86_64-pc-windows-msvc"* ]]; then
                       cp "$i"/${{ env.BIN_NAME }}-x86_64.exe distbin/${{ env.BIN_NAME }}-x86_64.exe 2>/dev/null || true
                       continue
@@ -619,15 +619,25 @@ jobs:
                       continue
                   fi
 
-                  # Handle other platforms - tar compress
-                  cp LICENSE* "$i" 2>/dev/null || true
-                  cp README.md "$i" 2>/dev/null || true
-                  rm "$i/${{ env.BIN_NAME }}.d" 1>/dev/null 2>&1 || true
-                  chmod +x "$i/${{ env.BIN_NAME }}" 1>/dev/null 2>&1 || true
-                  tar -cvpzf "${i}.tar.gz" --directory=${i} .
+                  # Handle Linux binaries
+                  if [[ "$i" == *"x86_64-unknown-linux-musl"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }} distbin/${{ env.BIN_NAME }}-x86_64-linux 2>/dev/null || true
+                      continue
+                  elif [[ "$i" == *"aarch64-unknown-linux-musl"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }} distbin/${{ env.BIN_NAME }}-aarch64-linux 2>/dev/null || true
+                      continue
+                  fi
+
+                  # Handle macOS binaries
+                  if [[ "$i" == *"x86_64-apple-darwin"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }} distbin/${{ env.BIN_NAME }}-x86_64-macos 2>/dev/null || true
+                      continue
+                  elif [[ "$i" == *"aarch64-apple-darwin"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }} distbin/${{ env.BIN_NAME }}-aarch64-macos 2>/dev/null || true
+                      continue
+                  fi
               fi
           done
-          cp artifacts/*.tar.gz distbin/ 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
