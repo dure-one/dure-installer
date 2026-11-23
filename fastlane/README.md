@@ -1,118 +1,82 @@
-# Fastlane Metadata for F-Droid
+# Fastlane Metadata
 
-This directory contains the fastlane metadata structure for F-Droid submission of Dure - a distributed e-commerce platform.
+This directory contains the Android app-store metadata used for Dure Installer.
+It is intentionally documentation-focused: source-of-truth project details live in
+[`../CLAUDE.md`](../CLAUDE.md), [`../README.md`](../README.md), and
+[`../SUDOLANG.md`](../SUDOLANG.md).
+
+## Current Scope
+
+Dure Installer is a Rust/egui application for small shop owners to deploy and manage
+the Mycart and Prosody backend infrastructure. Its main responsibilities are GCP VM
+management, DNS, SSH, security hardening, and remote store operations. The customer
+shopping client is the separate `dure-sijang` project and is not part of this app.
 
 ## Directory Structure
 
-```
+```text
 fastlane/
 └── metadata/
     └── android/
-        └── en-US/                              # Required fallback locale
-            ├── title.txt                       # App name: "Dure"
-            ├── short_description.txt           # Brief description (max 80 chars)
-            ├── full_description.txt            # Detailed description (max 4000 chars, HTML allowed)
-            ├── images/
-            │   ├── icon.png                    # App icon (512x512px)
-            │   ├── phoneScreenshots/           # Phone screenshots
-            │   │   ├── 1.png                   # First screenshot
-            │   │   ├── mobile1.png             # Mobile screenshot 1
-            │   │   ├── mobile2.png             # Mobile screenshot 2
-            │   │   ├── mobile3.png             # Mobile screenshot 3
-            │   │   ├── mobile4.png             # Mobile screenshot 4
-            │   │   └── mobile5.png             # Mobile screenshot 5
-            │   └── README.md                   # Instructions for graphics
-            └── changelogs/                     # Version-specific changelogs
-                └── 1.txt                       # Changelog for versionCode 1
+        └── en-US/
+            ├── title.txt
+            ├── short_description.txt
+            ├── full_description.txt
+            ├── changelogs/
+            │   ├── 1.txt
+            │   └── 8.txt
+            └── images/
+                ├── README.md
+                ├── icon.png
+                ├── logo.svg
+                ├── logo110.png
+                └── logo1024.png
 ```
 
-## Files Included
+There are currently no `phoneScreenshots/` or feature graphics in the repository.
+Add them only when they depict the current installer UI and workflows.
 
-### Required Files ✅
-- **title.txt**: "Dure"
-- **short_description.txt**: Distributed e-commerce platform description
-- **full_description.txt**: Comprehensive app description with features, hosting options, and supported platforms
+## Metadata Files
 
-### Recommended Files ✅
-- **images/icon.png**: 512x512px app icon
-- **images/phoneScreenshots/**: Multiple mobile screenshots showcasing e-commerce features
+- `title.txt`: user-facing app name.
+- `short_description.txt`: concise installer summary, kept within the 80-character limit.
+- `full_description.txt`: current capabilities, supported platforms, and technology.
+- `changelogs/<versionCode>.txt`: release notes for the exact Android `versionCode`.
+- `images/icon.png`: 512×512 app icon.
+- `images/logo*.png` and `images/logo.svg`: source/auxiliary branding assets; not all are
+  standard Fastlane listing images.
 
-### Optional Files ✅
-- **changelogs/1.txt**: Initial release changelog for versionCode 1
+## Android App Facts
 
-## Missing Graphics (Optional)
+- Application ID: `app.dure.installer`
+- UI: native Android client built with Rust, egui, and eframe
+- GUI/runtime stack: egui 0.33, Material3 styling, smol, russh, ureq, and rustls
+- Runtime access: network access is required for GCP, DNS, SSH, and Mycart operations
+- Desktop counterparts support Linux, macOS, and Windows; WASM is reserved for guest/store-front use
+- No Google Play Services are required by the app source
 
-To enhance the F-Droid listing, consider adding:
-- **featureGraphic.png**: 1024x500px or 512x250px landscape banner for app description header
-- **promoGraphic.png**: 180x120px promotional graphic (rarely used)
-- **tvBanner.png**: 1280x720px TV banner (for Android TV)
+## Release Checklist
 
-## F-Droid Compliance
+1. Update the description if the installer capabilities or product boundary change.
+2. Add or update `changelogs/<versionCode>.txt` using the generated Android version code.
+3. Keep each changelog at or below 500 bytes and use plain text.
+4. Add current phone screenshots when available; remove stale screenshots rather than
+   showing unsupported customer-shopping features.
+5. Verify `icon.png` remains 512×512.
+6. Review the Android app ID and version values in the Gradle build configuration.
+7. Commit metadata with the matching release tag so store tooling reads consistent data.
 
-The Dure project is compliant with F-Droid inclusion policy:
+## Build and Technology Notes
 
-### ✅ License Requirements
-- Uses dual MIT/Apache-2.0 licensing (both FLOSS-approved)
-- All dependencies are FLOSS (egui, eframe, tokio, etc.)
-
-### ✅ Build Requirements
-- No Google Play Services dependencies (optional Firebase/Supabase are user-configured backends)
-- No proprietary analytics libraries
-- Uses standard build tools (Rust/Cargo, Gradle)
-- Built with egui framework for cross-platform UI
-
-### ✅ Privacy & Security
-- No user tracking or telemetry
-- No auto-updates bypassing F-Droid
-- Cryptographic identity management (private/public keys)
-- User controls their own hosting infrastructure
-- Proper application ID: app.dure.installer
-
-### ✅ Source Code
-- Publicly available on GitHub: https://github.com/dure-one/dure-installer
-- Maintained and up-to-date
-- Clear version tags recommended for releases
-
-## App Description Summary
-
-Dure is a distributed e-commerce platform enabling small shop owners to run e-commerce operations without centralized servers:
-
-**Core Features:**
-- Identity Management (cryptographic keys, attestation)
-- Guest Front & Store Front (WASM-based)
-- Hosting Management (DNS, Database, Site deployment)
-- Store Management (Products, Orders, Shipments, Accounts)
-- Payment Integration (Portone, KakaoPay)
-
-**Hosting Options:**
-- Firebase + Firestore
-- Supabase
-- Google Compute Engine (GCE)
-- Cafe24 VPS
-
-**Three Modes:**
-- Server Mode (--serv): WebSocket server
-- GUI Mode (--tray): Material3 design interface
-- CLI Mode: Command-line automation
-
-## Updating for New Releases
-
-1. **Before creating a release tag:**
-   - Add new changelog file: `changelogs/<versionCode>.txt`
-   - Update screenshots if UI changed significantly
-   - Review and update feature descriptions
-   - Commit fastlane changes
-
-2. **Version Code Mapping:**
-   - Changelog files must be named exactly with the versionCode
-   - Example: versionCode=2 → `changelogs/2.txt`
-   - Max 500 bytes, plain text (no HTML)
-
-3. **F-Droid picks up metadata from the same tag used to build the APK**
+The Android build is driven by `mobile/build.sh`: it compiles the Rust shared library
+with `cargo-ndk`, packages it with Gradle, and supports multiple Android ABIs in CI.
+This project requires Rust nightly and uses a pure-Rust networking/security stack
+without OpenSSL. Metadata does not establish F-Droid inclusion compliance by itself;
+that must be verified against the tagged source and the applicable F-Droid recipe.
 
 ## Resources
 
-- [F-Droid Fastlane Documentation](https://f-droid.org/docs/All_About_Descriptions_Graphics_and_Screenshots/#in-the-apps-source-repository)
-- [F-Droid Inclusion Policy](https://f-droid.org/docs/Inclusion_Policy)
-- [Fastlane Metadata Structure](https://gitlab.com/-/snippets/1895688)
-- [Dure Project Documentation](../../CLAUDE.md)
+- [F-Droid Fastlane documentation](https://f-droid.org/docs/All_About_Descriptions_Graphics_and_Screenshots/#in-the-apps-source-repository)
+- [F-Droid inclusion policy](https://f-droid.org/docs/Inclusion_Policy)
+- [Project README](../README.md)
+- [Project architecture](../SUDOLANG.md)

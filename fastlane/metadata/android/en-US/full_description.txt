@@ -1,34 +1,27 @@
-Dure is a distributed e-commerce platform that enables small shop owners to run e-commerce operations without traditional centralized server infrastructure.
+Dure Installer helps small shop owners deploy, configure, and manage the infrastructure for a Mycart e-commerce backend.
 
-<b>Key Features:</b>
-• <b>Identity Management:</b> Private/Public key for personal identity, Firebase/Supabase integration, Attestation for WASM/EGUI apps
-• <b>Guest Front (WASM):</b> Minimum guest identity for customers, product browsing and cart functionality
-• <b>Store Front (WASM):</b> Product listings, shopping cart, payment integration (Portone, KakaoPay)
-• <b>Hosting Management:</b> DNS management (octodns), Database setup (Firebase, Supabase), Site deployment
-• <b>Store Management:</b> Manage promotions, products, orders, shipments, accounts, and shared listings with other stores
+<b>Infrastructure Management</b>
+• Create and manage Google Compute Engine virtual machines
+• View GCP status and billing information
+• Manage DNS zones and records with Cloudflare, Google Cloud DNS, DuckDNS, and Porkbun
+• Manage SSH hosts and run remote operations
+• Configure security components including firewall rules and fail2ban-rs
 
-<b>Platform Support:</b>
-• <b>Android:</b> Full EGUI client via native-activity
-• <b>Linux:</b> Full EGUI client (X11, Wayland)
-• <b>Windows:</b> Full EGUI client
-• <b>macOS:</b> Full EGUI client
-• <b>WASM:</b> Guest & Store Front only (browser-based)
+<b>Store Operations</b>
+• Monitor Mycart service health and store statistics
+• Fetch remote application logs
+• Inspect and manage scheduled jobs
+• Deploy and manage Mycart and Prosody installations
 
-<b>Three Operation Modes:</b>
-• <b>Server Mode (--serv):</b> Run as WebSocket server for distributed hosting
-• <b>GUI Mode (--tray):</b> Full-featured graphical interface with Material3 design
-• <b>CLI Mode:</b> Command-line interface for automation and scripting
+<b>Security and Storage</b>
+• Profile-scoped configuration and data
+• Cryptographic identity and GitHub Sigstore attestation support
+• Secure key storage using the platform keyring where available
+• Pure-Rust TLS and SSH components with no OpenSSL dependency
 
-<b>Why Dure?</b>
-Unlike Shopify, Wix, or Magento which rely on centralized infrastructure:
-• <b>Zero Transaction Fees:</b> 0% transaction fees (Shopify charges 2%)
-• <b>Quick Setup:</b> Hours instead of days or weeks
-• <b>Distributed Architecture:</b> Reduced hacking risk with decentralized peer-to-peer communication
-• <b>Flexible Hosting:</b> Choose from Firebase, Supabase, GCE, or Cafe24 VPS
-• <b>Excellent Inventory Management:</b> Comprehensive product, order, and shipment tracking
-• <b>Cross-Platform:</b> Native Android app with desktop support (Linux, Windows, macOS)
+<b>Architecture</b>
+Dure Installer is a native Rust application using egui and eframe for its Material3-style interface. Operations are coordinated through an actor-based ViewModel and the smol async runtime, with Diesel for local database storage.
 
-<b>Security & Privacy:</b>
-All operations are secured with cryptographic identity management. Store owners maintain full control of their data and hosting infrastructure.
+The same project provides desktop clients for Linux, macOS, and Windows, plus headless CLI builds. WASM targets provide the guest and store-front experience. The customer shopping client is maintained separately as dure-sijang.
 
-<b>AI-Ready:</b> All operations support structured JSON output for AI-assisted management and automation.
+Dure Installer is dual-licensed under MIT or Apache-2.0.

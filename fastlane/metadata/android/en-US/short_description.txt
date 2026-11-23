@@ -1,1 +1,1 @@
-Distributed e-commerce client and hosting solution for small shop owners
+Install and manage Mycart with GCP, DNS, SSH, and security tools.

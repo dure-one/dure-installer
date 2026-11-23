@@ -1,0 +1,7 @@
+Updated Dure Installer release.
+• Native Rust interface built with egui and Material3 styling
+• GCP virtual machine and billing management
+• DNS, SSH host, and security configuration
+• Mycart and Prosody infrastructure management
+• Store health, statistics, logs, and scheduled-job operations
+• Profile-scoped storage and secure platform keyring support

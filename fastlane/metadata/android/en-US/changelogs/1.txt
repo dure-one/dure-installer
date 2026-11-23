@@ -1,12 +1,7 @@
-Initial release of Dure for Android
-• Distributed e-commerce platform for small shop owners
-• Zero transaction fees (0%) - unlike Shopify's 2%
-• Identity management with cryptographic keys (X25519, Ed25519)
-• Guest and Store Front support
-• Hosting management (DNS, Database, Site deployment)
-• Store management (Products, Orders, Shipments, Accounts)
-• Material3 design with egui framework
-• Support for Firebase, Supabase, GCE, Cafe24 VPS hosting
-• Payment integration (Portone, KakaoPay)
-• WebSocket-based peer-to-peer communication
-• AI-ready with JSON output for automation
+Initial Android release of Dure Installer.
+• Native Rust interface built with egui and Material3 styling
+• GCP virtual machine and billing management
+• DNS, SSH host, and security configuration
+• Mycart and Prosody infrastructure management
+• Store health, statistics, logs, and scheduled-job operations
+• Profile-scoped storage and secure platform keyring support
