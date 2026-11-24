@@ -786,54 +786,15 @@ impl DureApp {
     }
 
     fn apply_theme(&self, ctx: &egui::Context) {
-        // Apply Material Design 3 theme with proper color tokens
-        // UI components use get_global_color() for Material 3 tokens:
-        // - onSurface: primary text color
-        // - error: error messages
-        // - surfaceContainer: backgrounds and overlays
-        // - primaryContainer: selections and emphasis
-
-        // Determine theme mode from settings
+        // The library derives all egui visuals and Material tokens from the active
+        // theme; Auto resolves via its built-in OS detection.
         let theme_mode = match self.settings.theme_mode.as_str() {
             "Light" => ThemeMode::Light,
             "Dark" => ThemeMode::Dark,
             _ => ThemeMode::Auto,
         };
-
-        // Get base visuals for the theme mode
-        let mut visuals = match theme_mode {
-            ThemeMode::Light => egui::Visuals::light(),
-            ThemeMode::Dark => egui::Visuals::dark(),
-            ThemeMode::Auto => {
-                if ctx.style().visuals.dark_mode {
-                    egui::Visuals::dark()
-                } else {
-                    egui::Visuals::light()
-                }
-            }
-        };
-
-        // Sync dark_mode state to global theme so components can access it via get_global_color()
-        if let Ok(mut global_theme) = egui_material3::get_global_theme().lock() {
-            global_theme.set_dark_mode(visuals.dark_mode);
-        }
-
-        // Fetch Material Design 3 surface colors for backgrounds
-        let surface = egui_material3::get_global_color("surface");
-        let surface_container = egui_material3::get_global_color("surfaceContainer");
-        let surface_container_lowest = egui_material3::get_global_color("surfaceContainerLowest");
-
-        // Set background colors to Material 3 surface tokens
-        // This ensures dark mode shows dark backgrounds and light mode shows light backgrounds
-        visuals.window_fill = surface; // Main application surface
-        visuals.panel_fill = surface_container; // Mid-tier container for content sections
-        visuals.extreme_bg_color = surface_container_lowest; // Lowest tier for maximum depth
-
-        // Apply the visuals with Material 3 colors
-        ctx.set_visuals(visuals);
-
-        // Also apply theme with mode callback for other Material 3 components
-        egui_material3::theme::apply_theme(ctx, Some(|| theme_mode));
+        egui_material3::theme::set_theme_mode(theme_mode);
+        egui_material3::theme::apply_theme(ctx, None::<fn() -> ThemeMode>);
     }
 }
 
