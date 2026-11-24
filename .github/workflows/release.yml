@@ -41,6 +41,7 @@ jobs:
             platform_type: linux
 
           - name: Linux aarch64
+            os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             build-args: "--release"
             platform_type: linux
@@ -205,6 +206,16 @@ jobs:
           cp ./app/build/outputs/bundle/release/app-release.aab ./app/build/outputs/apk/release/dure-installer-all.aab
           popd
 
+      - name: Configure Linux aarch64 musl compiler
+        if: |
+          matrix.platform.target == 'aarch64-unknown-linux-musl' &&
+          (github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux' || github.event.inputs.platforms == '')
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          ln -sf "$(command -v musl-gcc)" "$HOME/.local/bin/aarch64-linux-musl-gcc"
+          ln -sf "$(command -v ar)" "$HOME/.local/bin/aarch64-linux-musl-ar"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Build Binary for ${{ matrix.platform.name }}
         if: |
           (contains(matrix.platform.target, 'x86_64') || contains(matrix.platform.target, 'i686') || contains(matrix.platform.target, 'aarch64') || contains(matrix.platform.target, 'armv7') || contains(matrix.platform.target, 'arm-')) &&
@@ -215,7 +226,6 @@ jobs:
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           CLOUDFLARE_OAUTH_CLIENT_ID: ${{ secrets.CLOUDFLARE_OAUTH_CLIENT_ID }}
           PKG_CONFIG_ALLOW_CROSS: 1
-          PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
           RUSTFLAGS: ${{ matrix.platform.rustflags }}
         uses: actions-rs/cargo@v1
         with:
